@@ -1,7 +1,7 @@
 # dbt Profile Template - Copy this file to ~/.dbt/profiles.yml
 # Uses environment variables from dbt_dental_practice/.dbt-env
 
-mdc_analytics:
+dbt_dental_clinic:
   # Default target environment. Can be set with DBT_TARGET env var
   target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
