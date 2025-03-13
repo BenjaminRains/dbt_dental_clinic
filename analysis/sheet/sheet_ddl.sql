@@ -1,0 +1,32 @@
+-- opendental_analytics_opendentalbackup_01_03_2025.sheet definition
+
+CREATE TABLE `sheet` (
+  `SheetNum` bigint(20) NOT NULL AUTO_INCREMENT,
+  `SheetType` int(11) NOT NULL,
+  `PatNum` bigint(20) NOT NULL,
+  `DateTimeSheet` datetime NOT NULL DEFAULT '0001-01-01 00:00:00',
+  `FontSize` float NOT NULL,
+  `FontName` varchar(255) DEFAULT NULL,
+  `Width` int(11) NOT NULL,
+  `Height` int(11) NOT NULL,
+  `IsLandscape` tinyint(4) NOT NULL,
+  `InternalNote` text DEFAULT NULL,
+  `Description` varchar(255) NOT NULL,
+  `ShowInTerminal` tinyint(4) NOT NULL,
+  `IsWebForm` tinyint(4) NOT NULL,
+  `IsMultiPage` tinyint(4) NOT NULL,
+  `IsDeleted` tinyint(4) NOT NULL,
+  `SheetDefNum` bigint(20) NOT NULL,
+  `DocNum` bigint(20) NOT NULL,
+  `ClinicNum` bigint(20) NOT NULL,
+  `DateTSheetEdited` datetime NOT NULL DEFAULT '0001-01-01 00:00:00',
+  `HasMobileLayout` tinyint(4) NOT NULL,
+  `RevID` int(11) NOT NULL,
+  `WebFormSheetID` bigint(20) NOT NULL,
+  PRIMARY KEY (`SheetNum`),
+  KEY `PatNum` (`PatNum`),
+  KEY `SheetDefNum` (`SheetDefNum`),
+  KEY `DocNum` (`DocNum`),
+  KEY `ClinicNum` (`ClinicNum`),
+  KEY `WebFormSheetID` (`WebFormSheetID`)
+) ENGINE=MyISAM AUTO_INCREMENT=7592 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
