@@ -7,7 +7,8 @@ profile: 'dbt_dental_clinic'
 
 # Paths configuration
 model-paths: ["models"]
-analysis-paths: ["analysis"]
+# Comment out analysis-paths since these are for DBeaver only
+# analysis-paths: ["analysis"]  
 test-paths: ["tests"]
 macro-paths: ["macros"]
 seed-paths: ["seeds"]
@@ -21,11 +22,11 @@ clean-targets:
 
 # Database/schema configuration
 models:
-  dbt_dental_practice:
+  dbt_dental_clinic:
     # MariaDB-specific configuration
     +persist_docs:
-      relation: true
-      columns: true
+      relation: false
+      columns: false
     
     # Configure materializations by folder
     staging:
