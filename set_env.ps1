@@ -1,11 +1,8 @@
-# set_env.ps1
-Get-Content .dbt-env | ForEach-Object {
+# Read the .env file and set environment variables
+Get-Content .env | ForEach-Object {
     if ($_ -match '^([^#][^=]+)=(.*)$') {
-        $name = $matches[1]
-        $value = $matches[2]
-        if ($name -eq "DBT_MYSQL_PORT") {
-            $value = [int]$value
-        }
-        [Environment]::SetEnvironmentVariable($name, $value)
+        $name = $matches[1].Trim()
+        $value = $matches[2].Trim()
+        [Environment]::SetEnvironmentVariable($name, $value, 'Process')
     }
 }
