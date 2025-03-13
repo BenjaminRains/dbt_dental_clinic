@@ -2,156 +2,174 @@
 
 ## Overview
 
-This document outlines the workflow for validating and implementing staging models in our dental practice analytics DBT project. This process ensures that each staging model is properly validated against source data, follows consistent patterns, and has appropriate tests and documentation.
+This document outlines our end-to-end workflow for developing and validating DBT staging models for 
+OpenDental data. The process moves through three distinct phases: Analysis, Testing, and 
+Implementation.
 
-## Development Progression
-
-The workflow follows a clear progression from analysis to final model:
-
-1. **Analysis Phase** (`analysis/`): Initial data exploration and pattern discovery
-2. **Validation Phase** (`tests/`): Business rule development and validation
-3. **Implementation Phase** (`models/`): Final, validated staging models
-
-## Directory Structure
-
-Our project follows this progression-based directory structure:
+## Project Structure
 
 ```
 dbt_dental_practice/
-├── analysis
-│   └── stg_<table_name>_dbeaver.sql        # Initial DBeaver exploratory SQL
-├── docs/
-│   └── validation_logs/
-│       └── staging/
-│           └── opendental/
-│               └── stg_opendental_<table_name>_validation.md  # Validation results
-├── models/
-│   ├── staging/
-│   │   └── opendental/
-│   │       ├── stg_<table_name>.sql                  # Initial unvalidated staging models
-│   │       ├── stg_opendental__<table_name>.sql      # Validated final staging models
-│   │       └── _stg_opendental__<table_name>.yml     # Model tests and documentation
-│   └── _opendental_sources.yml                       # Source definitions
+├── analysis/
+│   └── <table_name>/                    # One directory per source table
+│       ├── <table_name>_ddl.sql         # Source table DDL (ground truth)
+│       ├── <table_name>_analysis.sql    # Exploratory analysis queries
+│       ├── analysis_output.csv          # Analysis query results
+│       └── *.ipynb                      # Analysis notebooks
 ├── tests/
 │   └── staging/
-│       └── stg_<table_name>_validation.sql           # Validation test SQL scripts
-└── dbt_stg_models_plan.md                            # Overall staging model plan
+│       └── <table_name>_validation_rules.sql  # Validation rules
+├── models/
+│   └── staging/
+│       └── opendental/
+│           └── stg_opendental__<table_name>.sql  # Final staging model
 ```
 
-**Important**: For DBT tests, three files work together:
-1. `models/staging/opendental/stg_opendental__<table_name>.sql` - The model SQL
-2. `models/staging/opendental/_stg_opendental__<table_name>.yml` - Tests and documentation
-3. `models/_opendental_sources.yml` - Source definition
+## Phase 1: Analysis
 
-## Reference Documents
+### 1.1 DDL as Ground Truth
+- Each table analysis begins with its DDL file (`<table_name>_ddl.sql`)
+- DDL files serve as the source of truth for:
+  - Column names and data types
+  - Primary/foreign key relationships
+  - Constraints and default values
+  - Table-level documentation
 
-- **dbt_stg_models_plan.md**: Overall staging models plan with standards and validation requirements
-- **dbt_project.yml**: Project configuration with materialization settings
-- **_opendental_sources.yml**: Definition of all OpenDental source tables
-- **stg_opendental_payment_validation.md**: Example of validation results documentation
-- **sql_naming_conventions.md**: SQL naming conventions for consistency
+### 1.2 Exploratory Analysis
+The analysis phase follows an iterative process:
 
-## Validation Workflow
+1. **Initial Query Development**
+   - Create `<table_name>_analysis.sql` based on DDL structure
+   - Work with stakeholders to identify key metrics and patterns
+   - Focus on:
+     - Data distributions
+     - Value ranges
+     - Relationship validations
+     - Business rule discovery
 
-### Phase 1: Exploratory Analysis in DBeaver
+2. **Iterative Refinement**
+   - Export analysis results to CSV
+   - Further explore in notebooks
+   - Update analysis queries based on findings
+   - Repeat until patterns are well understood
 
-1. **Create exploratory SQL script** in DBeaver
-   - File location: `analysis/stg_<table_name>_dbeaver.sql`
-   - Start with data profiling to understand table structure
-   - Analyze field distributions and patterns
-   - Identify potential business rules and validation checks
+3. **Documentation**
+   - Record discovered patterns
+   - Document business rules
+   - Note data quality issues
+   - Track stakeholder decisions
 
-   ```sql
-   -- Example from stg_payment_dbeaver.sql
-   with current_payment_types as (
-       select 
-           PayType as payment_type_id,         -- CamelCase original DB column to snake_case
-           count(*) as payment_count,          -- Derived field in snake_case
-           round(avg(PayAmt), 2) as avg_amount, -- Derived field in snake_case
-           min(PayAmt) as min_amount,          -- Derived field in snake_case
-           max(PayAmt) as max_amount,          -- Derived field in snake_case
-           count(case when PayAmt < 0 then 1 end) as negative_count, -- Derived field in snake_case
-           min(PayDate) as first_seen,         -- Derived field in snake_case
-           max(PayDate) as last_seen           -- Derived field in snake_case
-       from opendental_analytics_opendentalbackup_02_28_2025.payment
-       where PayDate >= '2023-01-01'           -- CamelCase DB column reference
-           and PayDate <= current_date()
-       group by PayType                        -- CamelCase DB column reference
-       order by payment_count desc
-   )
-   select * from current_payment_types;        -- CamelCase CTE name
-   ```
+Example Analysis Query Structure:
+```sql
+-- Basic data profiling
+with DataProfile as (
+    select 
+        count(*) as total_records,
+        count(distinct column_name) as unique_values,
+        min(date_column) as earliest_date,
+        max(date_column) as latest_date
+    from source_table
+),
 
-2. **Identify validation rules** based on data patterns
-   - Document field constraints and expected ranges
-   - Note any business rules discovered (e.g., Type 0 payments must be $0)
-   - Identify any data quality issues to handle
+-- Business pattern analysis
+PatternAnalysis as (
+    select 
+        category_column,
+        count(*) as category_count,
+        avg(amount_column) as avg_amount
+    from source_table
+    group by category_column
+)
 
-3. **Document findings** for reference in DBT implementation
+select * from DataProfile;
+select * from PatternAnalysis;
+```
 
-### Phase 2: DBT Model Implementation
+## Phase 2: Validation Rules Development
 
-1. **Create initial staging model** with basic transformations
-   - Location: `models/staging/opendental/stg_<table_name>.sql` 
-   - Include standard field renaming and data type conversions
-   - Apply business rules identified in Phase 1
-   - Add field-level SQL comments for important transformations
+### 2.1 Converting Analysis to Tests
+- Create `<table_name>_validation_rules.sql` in tests/staging/
+- Transform discovered patterns into explicit validation rules
+- Focus on:
+  - Data integrity rules
+  - Business logic validation
+  - Edge case handling
 
-2. **Implement standard transformations** as defined in `dbt_stg_models_plan.md`:
-   - Convert 0 values to NULL for ID/reference fields
-   - Standardize boolean fields to true/false
-   - Ensure consistent date/timestamp formats
-   - Apply standardized column naming (snake_case for all output fields)
-   - Categorize fields (keys, dates, amounts, etc.)
-   - Follow SQL naming conventions (see dedicated section below)
+Example Validation Rules:
+```sql
+with ValidationChecks as (
+    select 
+        -- Basic data quality
+        count(case when primary_key is null then 1 end) as null_key_count,
+        
+        -- Business rules
+        count(case when amount < 0 and type != 'REFUND' then 1 end) as invalid_negative_amounts,
+        
+        -- Relationship validation
+        count(case when foreign_key not in (select id from reference_table) then 1 end) as orphaned_records
+    from source_table
+)
+```
 
-3. **Run initial dbt model** and verify against DBeaver SQL results
+## Phase 3: Staging Model Implementation
 
-### Phase 3: Test and Documentation Implementation
+### 3.1 Model Development
+- Create `stg_opendental__<table_name>.sql`
+- Implement standard transformations:
+  - Column naming standardization
+  - Data type conversions
+  - Business rule implementation
+  - Quality checks
 
-1. **Create model YAML file** with tests and documentation
-   - Location: `models/staging/opendental/_stg_opendental__<table_name>.yml`
-   - Include model description
-   - Document column descriptions and business context
-   - Add standard tests (uniqueness, not null, etc.)
-   - Add custom tests for business rules
+Example Staging Model:
+```sql
+with source as (
+    select * from {{ source('opendental', 'table_name') }}
+),
 
-   ```yaml
-   # Example from _stg_opendental__payment.yml
-   version: 2
-   
-   models:
-     - name: stg_opendental__payment
-       description: >
-         Staged payment data from OpenDental system.
-         Analysis based on 2023-current data.
-       tests:
-         - dbt_utils.expression_is_true:
-             expression: "payment_date >= '2023-01-01'"
-       columns:
-         - name: payment_id
-           description: Primary key for payments
-           tests:
-             - unique
-             - not_null
-   ```
+renamed as (
+    select
+        -- Primary keys
+        id as record_id,
+        
+        -- Standard transformations
+        case 
+            when amount = 0 then null 
+            else amount 
+        end as cleaned_amount,
+        
+        -- Add metadata
+        current_timestamp() as _loaded_at
+    from source
+)
 
-2. **Add business-specific tests** based on exploratory findings
-   - Document data patterns in column descriptions
-   - Implement custom tests for specific business rules
-   - Add warnings for potential data issues
+select * from renamed
+```
 
-### Phase 4: Final Validation and Documentation
+### 3.2 Testing and Documentation
+- Add model tests based on validation rules
+- Document transformations and business logic
+- Validate against original analysis findings
+- Get stakeholder sign-off
 
-1. **Create validation test SQL**
-   - Location: `tests/staging/stg_<table_name>_validation.sql`
-   - Implement specific validation logic
-   - Test business rules and data quality aspects
+## Best Practices
 
-2. **Run complete validation tests**
-   - Execute DBT tests: `dbt test --select stg_opendental__<table_name>`
-   - Document test results and any failures
-   - Update model if needed based on test results
+1. **Version Control**
+   - Commit DDL files first
+   - Track analysis query evolution
+   - Document major findings in commits
 
-3. **Create validation documentation**
-   - Location: `
+2. **Documentation**
+   - Link analysis findings to validation rules
+   - Document stakeholder decisions
+   - Maintain clear transformation logic
+
+3. **Testing**
+   - Start with DDL-based structural tests
+   - Add business rule validations
+   - Include data quality checks
+
+4. **Collaboration**
+   - Regular stakeholder reviews
+   - Clear documentation of decisions
+   - Traceable evolution of analysis
