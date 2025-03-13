@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='payment_id',
-    persist_docs={'relation': false}
+    unique_key='payment_id'
 ) }}
 
 with source as (
