@@ -1,55 +1,78 @@
-# DBT Dental Practice Project
+# DBT Dental Practice Analytics Platform
 
 ## Overview
 
-The DBT Dental Practice project is an analytics engineering initiative that transforms OpenDental operational data into validated, standardized datasets for analytics and machine learning. This project serves as the foundation for improving dental clinic operations, financial performance, patient care, and data-driven decision making.
+The DBT Dental Practice project is an analytics engineering initiative that transforms OpenDental operational data into validated, standardized datasets for analytics and machine learning applications. This project transforms OpenDental's operational (OLTP) database into an analytics-ready (OLAP) data platform using DBT. By restructuring the data model, we enable advanced analytics, machine learning, and business intelligence capabilities while maintaining data integrity and standardization. This project serves as the foundation for improving dental clinic operations, financial performance, patient care, and data-driven decision making.
 
-## Project Purpose
+## Why OLTP to OLAP Transformation?
 
-We are working with dental clinics to:
+### 1. Operational Benefits
+- **Performance Optimization**: Separate analytical queries from transactional systems
+- **Data Quality Improvement**: Standardized validation catches data entry issues early
+- **Historical Analysis**: Preserve full history of changes for trend analysis
+- **Cross-System Integration**: Enable unified view across multiple dental practices
+- **Validate database integrity** through comprehensive testing and documentation using dbt-core
 
-- **Validate database integrity** through comprehensive testing and documentation
-- **Standardize data models** for consistent reporting and analysis
-- **Improve data entry practices** by identifying patterns and inconsistencies
-- **Enable advanced analytics** for business intelligence and process optimization
-- **Support machine learning initiatives** for:
-  - Patient behavior prediction (appointment adherence, treatment acceptance)
-  - Treatment outcome forecasting
-  - Scheduling optimization
-  - Insurance processing efficiency
-  - Fee structure design and optimization
-  - Patient targeting and segmentation
+### 2. Business Process Enhancement
+- **Process Mining**: Identify bottlenecks and optimization opportunities
+- **Workflow Analysis**: Track end-to-end patient journeys
+- **Resource Utilization**: Optimize staff scheduling and equipment usage
+- **Revenue Cycle Management**: Improve financial forecasting and AR management
+
+### 3. Analytics Capabilities
+- **Predictive Analytics**:
+  - Patient no-show prediction
+  - Treatment plan acceptance likelihood
+  - Revenue forecasting
+  - Insurance claim processing time estimation
+- **Operational Analytics**:
+  - Chair time utilization
+  - Provider productivity metrics
+  - Procedure profitability analysis
+  - Patient acquisition cost analysis
+
+### 4. Data Quality & Standardization
+- **Consistent Data Entry**: Enforce standardized naming and coding conventions
+- **Validation Rules**: Automated checks for business rule compliance
+- **Error Detection**: Early identification of data quality issues
+- **Documentation**: Comprehensive data dictionary and lineage tracking
+
+### 5. Machine Learning Applications
+- **Patient Segmentation**: Personalized treatment and communication strategies
+- **Treatment Outcome Prediction**: Evidence-based treatment planning
+- **Dynamic Pricing**: Optimize fee schedules based on market factors
+- **Automated Coding**: Assist in procedure code assignment
+- **Risk Stratification**: Identify high-risk patients for preventive care
 
 ## Project Architecture
 
+### 1. Development Workflow
 The project follows the dbt (data build tool) methodology with a three-layer architecture:
+Our three-phase approach ensures data quality and business rule compliance:
 
-1. **Staging Layer**: Initial data validation and standardization
-   - Enforces data quality standards
-   - Standardizes naming conventions
-   - Documents data patterns and anomalies
-   - Implements basic business rules validation
+#### Phase 1: Analysis
+- Start with table DDL as ground truth
+- Iterative exploratory analysis in dedicated directories
+- Stakeholder collaboration for pattern identification
+- Documentation of business rules and data patterns
 
-2. **Intermediate Layer**: Business process modeling
-   - Aligns with the seven core business systems (see Process Flow section)
-   - Implements complex business logic
-   - Creates cross-system data connections
-   - Enables end-to-end process analysis
+#### Phase 2: Validation
+- Convert analysis findings to automated tests
+- Implement comprehensive validation rules
+- Verify data integrity and relationships
+- Document validation results
 
-3. **Marts Layer**: Business-specific analytical views
-   - Provider and production analytics
-   - Financial performance metrics
-   - Patient journey analytics
-   - Operational efficiency KPIs
+#### Phase 3: Implementation
+- Create standardized staging models
+- Apply business rules and transformations
+- Implement testing framework
+- Deploy to production
 
-## Business Process Flow
-
-Our data models are structured around seven interconnected business systems that represent the complete patient journey:
-
+Major Business Systems: 
 1. **System A: Fee Processing & Verification**
    - Setting and validating procedure fees
    - Managing fee schedules and contracted rates
-
+   
 2. **System B: Insurance Processing**
    - Claims creation and submission
    - Insurance payment estimation
@@ -99,6 +122,7 @@ The intermediate and marts layers are in the planning stage, with detailed speci
 - **dbt Core**: Data transformation framework
 - **DBeaver**: SQL development environment for exploratory analysis
 - **Git**: Version control for all models and documentation
+- **Python"" v3.8+ (for future ML components)
 
 ### Directory Structure
 
@@ -127,15 +151,6 @@ We follow a structured validation workflow for each source table:
 
 For detailed workflow steps, refer to `dbt_validation_workflow.md`.
 
-## Getting Started
-
-### Prerequisites
-
-- MariaDB v11.6 or compatible database
-- dbt Core installed
-- Access to OpenDental database backup
-- Python 3.8+ (for future ML components)
-
 ### Initial Setup
 
 1. Clone the repository:
@@ -144,15 +159,45 @@ git clone https://github.com/your-org/dbt_dental_practice.git
 cd dbt_dental_practice
 ```
 
-2. Install dependencies:
+2. Set up Python virtual environment and install dependencies:
+```bash
+# Install pipenv if you haven't already
+pip install pipenv
+
+# Create virtual environment and install dependencies
+pipenv install
+
+# Activate the virtual environment
+pipenv shell
+```
+
+3. Create and run the environment setup script:
+```powershell
+# Create set_env.ps1
+@"
+# Read the .env file and set environment variables
+Get-Content .env | ForEach-Object {
+    if ($_ -match '^([^#][^=]+)=(.*)$') {
+        $name = $matches[1].Trim()
+        $value = $matches[2].Trim()
+        [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+    }
+}
+"@ > set_env.ps1
+
+# Run the script to load environment variables
+. .\set_env.ps1
+```
+
+4. Install DBT packages:
 ```bash
 # Install dbt packages
 dbt deps
 ```
 
-3. Configure database connection in `profiles.yml`
+5. Configure database connection in `profiles.yml`
 
-4. Run the models:
+6. Run the models:
 ```bash
 # Run all staging models
 dbt run --models staging
@@ -161,7 +206,7 @@ dbt run --models staging
 dbt run --select stg_opendental__payment
 ```
 
-5. Run tests:
+7. Run tests:
 ```bash
 # Test all models
 dbt test
@@ -182,7 +227,8 @@ To understand the project better, review these key documents:
 
 ## Collaboration and Contribution
 
-This project is a collaborative effort between data engineers and dental practice domain experts. When contributing:
+This project is a collaborative effort between data engineers and dental practice domain experts. 
+When contributing:
 
 1. Follow the SQL naming conventions in `sql_naming_conventions.md`
 2. Document all validation findings in the appropriate logs
