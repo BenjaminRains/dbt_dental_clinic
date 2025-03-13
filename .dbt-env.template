@@ -1,0 +1,14 @@
+# Development environment
+DBT_TARGET=dev
+DBT_MYSQL_HOST=localhost
+DBT_MYSQL_PORT=3307
+DBT_MYSQL_DATABASE=your_database_name
+DBT_MYSQL_USER=your_username
+DBT_MYSQL_PASSWORD=your_password
+
+# Production environment
+# DBT_PROD_MYSQL_HOST=
+# DBT_PROD_MYSQL_PORT=
+# DBT_PROD_MYSQL_DATABASE=
+# DBT_PROD_MYSQL_USER=
+# DBT_PROD_MYSQL_PASSWORD= 

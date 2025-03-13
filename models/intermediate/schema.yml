@@ -1,0 +1,15 @@
+# version: 2
+
+# models:
+#   - name: int_patient_profile
+#     description: "Consolidated patient demographic information and contact details"
+#     meta:
+#       owner: "Clinical Team"
+#       refresh: "daily"
+#       business_system: "Core Patient Data"
+#     columns:
+#       - name: patient_id
+#         description: "Unique identifier for a patient"
+#         tests:
+#           - unique
+#           - not_null

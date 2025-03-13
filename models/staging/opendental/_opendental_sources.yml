@@ -1,0 +1,251 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental backup database schema containing dental practice records"
+    database: opendental_analytics_opendentalbackup_02_28_2025
+    schema: opendental_analytics_opendentalbackup_02_28_2025
+    tables:
+      # =========== PATIENT INFORMATION ===========
+      - name: patient
+        description: "Primary patient demographic and contact information"
+      
+      - name: patientlink
+        description: "Links between patients and their family groupings"
+      
+      - name: patientnote
+        description: "Clinical and administrative notes for patients"
+      
+      - name: zipcode
+        description: "Zip code reference information"
+      
+      - name: toothinitial
+        description: "Initial conditions of patient teeth"
+      
+      # =========== APPOINTMENTS & SCHEDULING ===========
+      - name: appointment
+        description: "Scheduled and completed patient appointments"
+      
+      - name: appointmenttype
+        description: "Categorization of appointment types and durations"
+      
+      - name: histappointment
+        description: "Historical appointment data"
+      
+      - name: recall
+        description: "Patient recall scheduling information"
+      
+      - name: recalltrigger
+        description: "Triggers for patient recalls"
+      
+      - name: recalltype
+        description: "Types of recall appointments"
+      
+      - name: schedule
+        description: "Provider schedule information"
+      
+      - name: scheduleop
+        description: "Schedule operation settings"
+
+      - name: task
+        description: "Tasks and to-do items"
+      
+      - name: timeadjust
+        description: "Time clock adjustments"
+
+      
+      # =========== CLINICAL PROCEDURES ===========
+      - name: procedurecode
+        description: "Dental procedure codes and descriptions"
+      
+      - name: procedurelog
+        description: "Record of clinical procedures performed on patients"
+      
+      - name: procgroupitem
+        description: "Procedure group item associations"
+      
+      - name: procmultivisit
+        description: "Multi-visit procedure tracking"
+      
+      - name: procnote
+        description: "Notes related to specific procedures"
+      
+      - name: proctp
+        description: "Procedure treatment plans"
+      
+      - name: perioexam
+        description: "Periodontal examination records"
+      
+      - name: periomeasure
+        description: "Periodontal measurements and assessments"
+      
+      - name: labcase
+        description: "Dental laboratory case tracking"
+      
+      # =========== INSURANCE & CLAIMS ===========
+      - name: carrier
+        description: "Insurance carrier information"
+      
+      - name: claim
+        description: "Insurance claims submitted"
+      
+      - name: claimpayment
+        description: "Payments received from insurance claims"
+      
+      - name: claimproc
+        description: "Procedures included in insurance claims"
+      
+      - name: claimtracking
+        description: "Tracking status of insurance claims"
+      
+      - name: insplan
+        description: "Insurance plan details"
+      
+      - name: inssub
+        description: "Insurance subscriber information"
+      
+      - name: insverify
+        description: "Insurance verification records"
+      
+      - name: insverifyhist
+        description: "Historical insurance verification data"
+      
+      - name: insbluebook
+        description: "Insurance fee schedules (bluebook)"
+      
+      - name: insbluebooklog
+        description: "Logs of insurance bluebook changes"
+      
+      - name: benefit
+        description: "Insurance benefit information"
+      
+      - name: patplan
+        description: "Patient-plan assignments and coverage"
+      
+      # =========== BILLING & PAYMENTS ===========
+      - name: adjustment
+        description: "Financial adjustments to patient accounts"
+      
+      - name: payment
+        description: "Patient payments for services"
+      
+      - name: payperiod
+        description: "Payment period information"
+      
+      - name: payplan
+        description: "Payment plans for spreading costs over time"
+      
+      - name: paysplit
+        description: "Payment splits across procedures"
+      
+      - name: statement
+        description: "Patient billing statements"
+      
+      - name: statementprod
+        description: "Statement production data"
+      
+      - name: famaging
+        description: "Family aging for accounts receivable"
+      
+      - name: fee
+        description: "Fee amounts for procedures"
+      
+      - name: feesched
+        description: "Fee schedules"
+      
+      - name: feeschedgroup
+        description: "Groupings of fee schedules"
+      
+      # =========== PROVIDERS & USERS ===========
+      - name: provider
+        description: "Dentists and other providers in the practice"
+      
+      - name: userod
+        description: "User information for OpenDental"
+      
+      - name: usergroup
+        description: "User security groups"
+      
+      - name: usergroupattach
+        description: "User-group assignments"
+      
+      # =========== TREATMENT PLANNING ===========
+      - name: treatplan
+        description: "Treatment plans for patients"
+      
+      - name: treatplanattach
+        description: "Attachments to treatment plans"
+      
+      - name: treatplanparam
+        description: "Treatment plan parameters"
+      
+      # =========== DOCUMENTATION & FORMS ===========
+      - name: document
+        description: "Documents attached to patient records"
+      
+      - name: sheet
+        description: "Custom forms and sheets"
+      
+      - name: sheetfield
+        description: "Field values for custom sheets"
+      
+      - name: sheetfielddef
+        description: "Field definitions for custom sheets"
+      
+      # =========== COMMUNICATION & REFERRALS ===========
+      - name: commlog
+        description: "Communication logs with patients"
+      
+      - name: referral
+        description: "Referral source information"
+      
+      - name: refattach
+        description: "Referral attachments"
+      
+      # =========== MEDICATIONS & PHARMACY ===========
+      - name: allergy
+        description: "Patient allergies"
+      
+      - name: allergydef
+        description: "Allergy definitions"
+      
+      - name: disease
+        description: "Patient diseases"
+      
+      - name: diseasedef
+        description: "Disease definitions"
+      
+      - name: pharmclinic
+        description: "Pharmacy-clinic relationships"
+      
+      - name: pharmacy
+        description: "Pharmacy information"
+      
+      - name: rxdef
+        description: "Prescription definitions"
+      
+      - name: rxnorm
+        description: "RxNorm medication codes"
+      
+      - name: rxpat
+        description: "Patient prescriptions"
+      
+      # =========== CODING & DEFINITIONS ===========
+      - name: autocode
+        description: "Automatic code assignments"
+      
+      - name: codegroup
+        description: "Groupings of dental codes"
+      
+      - name: cpt
+        description: "CPT procedure codes"
+      
+      - name: definition
+        description: "System definitions and configuration"
+      
+      # =========== ADMINISTRATION & CONFIGURATION ===========
+      - name: program
+        description: "Program configuration"
+      
+      - name: programproperty
+        description: "Program properties and settings"

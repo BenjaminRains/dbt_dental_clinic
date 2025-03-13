@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: stg_opendental__payment
+    description: >
+      Staged payment data from OpenDental system.
+      Analysis based on 2023-current data.
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "payment_date >= '2023-01-01'"
+      - dbt_utils.expression_is_true:
+          expression: "payment_date > '2000-01-01'"
+      - dbt_utils.expression_is_true:
+          expression: "payment_date <= current_date()"
+    columns:
+      - name: payment_id
+        description: Primary key for payments
+        tests:
+          - unique
+          - not_null
+      - name: patient_id
+        description: Foreign key to patients
+        tests:
+          - not_null
+      - name: payment_amount
+        description: Amount of the payment
+        tests:
+          - not_null
+      - name: payment_date
+        description: Date of the payment
+        tests:
+          - not_null
+      - name: payment_type_id
+        description: |
+          Type of payment. Current patterns (2023-present):
+          - 71: Most common type (8,335 payments), avg $293
+          - 0: Administrative entries (1,110 payments), must be $0
+          - 69: High value payments (965 payments), avg $1,036
+          - 70: Regular payments (609 payments), avg $348
+          - 391: High value (482 payments), avg $922
+          - 412: Newer payment type (187 payments), avg $199
+          - 72: Refunds (50 payments), always negative
+          - 634: New type since Sept 2024 (16 payments), avg $6,009
+          - 574: Very high value (6 payments), avg $26,071
+          - 417: Special cases (6 payments), avg $2,967
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+              config:
+                severity: warn  # Keep warning severity for flexibility

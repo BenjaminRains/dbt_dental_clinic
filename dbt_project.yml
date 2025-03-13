@@ -1,0 +1,46 @@
+name: 'dbt_dental_clinic'
+version: '1.0.0'
+config-version: 2
+
+# Make sure this matches exactly what's in your profiles.yml
+profile: 'dbt_dental_clinic'
+
+# Paths configuration
+model-paths: ["models"]
+analysis-paths: ["analysis"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+docs-paths: ["docs"]
+
+# Build artifacts location
+target-path: "target"
+clean-targets:
+    - "target"
+    - "dbt_packages"
+
+# Database/schema configuration
+models:
+  dbt_dental_practice:
+    # MariaDB-specific configuration
+    +persist_docs:
+      relation: true
+      columns: true
+    
+    # Configure materializations by folder
+    staging:
+      +materialized: view
+      +schema: opendental_analytics_opendentalbackup_02_28_2025
+    
+    intermediate:
+      +materialized: table
+      +schema: opendental_analytics_opendentalbackup_02_28_2025
+    
+    marts:
+      +materialized: table
+      +schema: opendental_analytics_opendentalbackup_02_28_2025
+
+# Add vars for flexible configuration
+vars:
+  # Set a variable for your dental practice database name
+  dental_database: opendental_analytics_opendentalbackup_02_28_2025

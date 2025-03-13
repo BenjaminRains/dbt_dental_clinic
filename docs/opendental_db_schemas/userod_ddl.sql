@@ -1,0 +1,32 @@
+-- opendental_analytics_opendentalbackup_02_28_2025.userod definition
+
+CREATE TABLE `userod` (
+  `UserNum` bigint(20) NOT NULL AUTO_INCREMENT,
+  `UserName` varchar(255) DEFAULT '',
+  `Password` varchar(255) DEFAULT '',
+  `UserGroupNum` bigint(20) NOT NULL,
+  `EmployeeNum` bigint(20) NOT NULL,
+  `ClinicNum` bigint(20) NOT NULL,
+  `ProvNum` bigint(20) NOT NULL,
+  `IsHidden` tinyint(1) NOT NULL,
+  `TaskListInBox` bigint(20) NOT NULL,
+  `AnesthProvType` int(2) NOT NULL DEFAULT 3,
+  `DefaultHidePopups` tinyint(4) NOT NULL,
+  `PasswordIsStrong` tinyint(4) NOT NULL,
+  `ClinicIsRestricted` tinyint(4) NOT NULL,
+  `InboxHidePopups` tinyint(4) NOT NULL,
+  `UserNumCEMT` bigint(20) NOT NULL,
+  `DateTFail` datetime /* mariadb-5.3 */ NOT NULL DEFAULT '0001-01-01 00:00:00',
+  `FailedAttempts` tinyint(3) unsigned NOT NULL,
+  `DomainUser` varchar(255) NOT NULL,
+  `IsPasswordResetRequired` tinyint(4) NOT NULL,
+  `MobileWebPin` varchar(255) NOT NULL,
+  `MobileWebPinFailedAttempts` tinyint(3) unsigned NOT NULL,
+  `DateTLastLogin` datetime /* mariadb-5.3 */ NOT NULL DEFAULT '0001-01-01 00:00:00',
+  `EClipboardClinicalPin` varchar(128) NOT NULL,
+  `BadgeId` varchar(255) NOT NULL,
+  PRIMARY KEY (`UserNum`),
+  KEY `UserGroupNum` (`UserGroupNum`),
+  KEY `ClinicNum` (`ClinicNum`),
+  KEY `ProvNum` (`ProvNum`)
+) ENGINE=MyISAM AUTO_INCREMENT=9285 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;

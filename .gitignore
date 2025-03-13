@@ -1,0 +1,81 @@
+# DBT specific
+target/
+dbt_packages/
+logs/
+.dbt-env
+dbt-env/
+.user.yml
+
+# Keep DBT YML files
+!models/**/*.yml
+!models/**/schema.yml
+!models/**/_*.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+
+# IDE settings
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.sublime-*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Data files
+*.csv
+*.parquet
+*.xlsx
+*.xls
+*.json
+!dbt_project.json
+!package.json
+*.xml
+*.txt
+!requirements.txt
+!mdc_process_flow_diagram.txt
+*.dat
+*.db
+*.sqlite*
+*.html
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+*.ipynb
+!notebooks/examples/*.ipynb
+
+# Credentials & sensitive information
+profiles.yml
+!profiles.yml.template
+credentials.json
+connection.json
+*.connection
+*.config
+!.sqlfluff
+!.sqlfluffignore
+
+# Documentation with sensitive business info
+# (add specific paths here)
+
+# Build and temp files
+dist/
+build/
+*.egg-info/
+tmp/
+temp/

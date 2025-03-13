@@ -1,0 +1,207 @@
+/*Jordan 2024-11-18
+This css is used exclusively by the pages in the Site folder that are auto-generated and have the Tree TOC.
+Those site pages also point to /css/common.css which has all the body styling.
+This css just has the styling for the header and TOC tree at left.
+Do not make changes to this file without consulting me.
+*/
+.LeftTree{
+    position:fixed;
+    width:383px;
+    top:0;
+    bottom:0;
+    height:100%;
+    overflow-x:hidden;
+    overflow-y:scroll;
+    display:none;/*for phones*/
+    border-right:1px solid gray;
+}
+.LeftTree img{
+    margin: 0px;
+}
+.LeftTree ul{
+    list-style-type:none;
+    padding-left:16px; /*default was 40*/
+    width:500px;/*keeps items from wrapping*/
+}
+.LeftTree li{
+	line-height:15pt;/*default was 12*/
+}
+#TocTreeSite {
+    margin-left:8px;
+    margin-top:5px;
+}
+.RightMain{
+    margin-left:0px;
+    margin-right:0px;
+	overflow-x:hidden;
+}
+@media screen and (min-width: 1100px) {/*When the viewport is huge*/
+    .LeftTree {
+        display:block;/*Show tree*/
+    }
+    .RightMain{
+        margin-left:384px;
+    }
+}
+.TopBarLeft {
+    position:relative;
+	height:60px;
+    width:100%;
+    background-color:rgb(65, 97, 106);
+}
+.TopBarLeft p{
+    position:absolute;
+    font-size:15pt;
+    color:white;
+    left:90px;
+    top:26px;
+}
+.TopBar{
+    position:relative;
+	height:60px;
+    width:100%;
+    background-color:rgb(65, 97, 106);
+}
+.TopBar2 {/*remember, this is for phone*/
+    position:relative;
+    height:29px;
+    width:100%;
+    background-color:rgb(234, 238, 238);
+    border-bottom:1px solid gray;
+}
+.TopBar2 p{/*remember, this is for phone*/
+    position:absolute;
+    left:6px;
+    top:10px;
+	width:1100px;/*extra big, so no wrap*/
+    font-size:14pt;
+    color:#153c4b;
+}
+.Logo{
+    position:absolute;
+    top:3px;
+    left:4px;
+    max-width:25%;
+    height:auto;
+}
+.Logo img{
+    position:relative;
+    z-index:1;/*position and z-index both need to be set for img to be clickable*/
+    max-width:100%;
+    height:auto;
+}
+.Logo a{
+    color:white;
+    text-decoration-line:none;
+}
+.TopBarLinks{/*Invisible.  Very similar to TopBar itself, but it stretches to the right differently.*/
+    display:block;
+    position:absolute;
+    width:100%;
+    height:60px;
+    max-width:935px;
+}
+.TopBarTitle{/*remember, this is for phone*/
+    display:block;
+    width:100%;
+    text-align:center;
+    font-size:12pt;
+    margin-top:22px;
+    color:white;
+}
+.TopBarVersion{/*being deprecated*/
+    display:inline;
+    font-size:8pt;
+}
+.TopBarVersionDrop{
+    display:inline;
+	vertical-align:2px;
+	margin-left: 5px;
+    font-size:8pt;
+}
+.TopBarHome,.TopBarSearch{
+    display:block;
+    position:absolute;
+    right:3px;
+    top:8px;
+    width: 70px;
+    height: 20px;
+    color:black;
+    background-color:rgb(219, 230, 230);    
+}
+.TopBarHome{
+    top:32px;
+}
+.TopBarHome:hover,.TopBarSearch:hover{
+    background-color:rgb(180,195,195);
+}
+.TopBarHome p,.TopBarSearch p{
+    margin:0px;
+    position:absolute;
+    right:3px;
+    top:2px;
+    color:black;
+    text-decoration:none;
+}
+.TopBarHome img, .TopBarSearch img{
+    position:absolute;
+    left:4px;
+    top:5px;
+}
+@media screen and (min-width: 1100px) {/*When the tree is showing*/
+    .TopBarHome{/*, .TopBarSearch { no longer hiding search*/
+        display: none;/*hide */
+    }
+}
+@media screen and (min-width: 610px) {/*any screen bigger than a phone*/
+   .Logo{
+        top:8px;
+        left:9px;
+   }
+   .TopBarTitle{
+       margin-top:20px;
+       font-size:18pt;
+   }
+   .TopBarVersion{
+       font-size:12pt;
+   }
+   .TopBarVersionDrop{
+       font-size:10pt;
+   }
+   .TopBarHome{
+       right:14px;
+   }
+   .TopBarSearch{
+       right:14px;
+   }
+   .TopBar2{
+       height:39px;
+   }
+   .TopBar2 p{
+       font-size:20pt;
+   }
+}
+.GeneralPageContent {
+    padding: 10px 10px; /*t/b r/l*/
+    max-width: 915px;/*Doesn't cut off any images*/
+}
+.expbut {
+    position:relative;
+    left:-17px;
+    top:2px;
+}
+.exptxt{
+    display:inline-block;
+    position:relative;
+    width:380px;/*Gray highlight should be as wide as nav panel, but not as wide as ul*/
+}
+.thisPage {
+    background-color:rgb(227, 227, 227);
+}
+@media print {
+	.Logo,
+	.TopBarSearch,
+	.TopBarHome {
+		display: none !important;
+	}
+}

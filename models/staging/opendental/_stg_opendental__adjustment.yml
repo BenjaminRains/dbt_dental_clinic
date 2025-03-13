@@ -1,0 +1,14 @@
+Version 2: 
+
+Models:
+  -name: stg_opendental__adjustment
+   description: >
+    Staged adjustment data from OpenDental system.
+    Analysis based on 2023 - current data.
+
+    Tests:
+      - dbt_utils.expression_is_true:
+          expression: "adjustment_date >= '2023-01-01'"
+          description: "All adjustments should be from 2023 onwards"
+          
+

@@ -1,0 +1,126 @@
+/*Jordan 2024-11-18
+This css is used by three sets of pages that are mostly auto-generated.
+1. Files in help### folders
+2. Files in site folder with TOC
+3. Files in site folder without TOC.
+Each of those kinds of page has another css to control styling of the header and TOC.
+This css just has the common styling for the body.
+Do not make changes to this file without consulting me.
+*/
+*{/*Reset styles, this helps values be more predictable.*/
+	border: 0;
+	margin: 0;
+	padding: 0;
+}
+.TempCursor{/*Used when editing pages to show position*/
+	background-color: rgb(255,255,150);
+}
+html{
+	overflow-y: scroll; /* Always show vertical scrollbar to prevent appearance of pages jumping left and right slightly.*/
+}
+body {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: .90rem;
+	line-height: 1.3rem;
+}
+p {
+	margin-top: 0px;
+	margin-bottom: 12px;
+}
+h2 {/*subheaders within page*/
+	font-size: 1.2rem;
+	color: rgb(0,100,138);
+	font-weight: bold;
+	margin-top: 0px;
+	margin-bottom: 0px;
+}
+h3 {
+	font-size: 1rem;
+	color: rgb(0,100,138);
+	font-weight: bold;
+	margin-top: 0px;
+	margin-bottom: 0px;
+}
+img{
+    max-width:100%;
+    height:auto;
+	margin-bottom: 10px;
+}
+a {
+	color: #343C83;
+	text-decoration: underline;
+}
+a:visited {
+	color: #343C83;
+}
+a:hover {
+	color: #CC0000;
+}
+/*These are to handle simulating lists within paragraphs*/
+.MarginBottomZero{/*for the new paragraph above the list*/
+	margin-bottom: 0px;
+}
+.MarginBottomGap{/*for the list, if it's at the bottom of the paragraph*/
+	margin-bottom: 12px;
+}
+.Note{
+	color: rgb(30,30,30);/*#004C62;*/
+	background: rgb(235,235,235);
+	border-width: 1px;
+	border-style: solid;
+	border-color: rgb(100,100,100);
+	border-radius:2px;
+	margin-top:2px;
+	margin-bottom:4px;
+	padding: 2px;
+	display:inline-block;
+	max-width:85%;
+}
+ul, ol {
+	margin-top: 0px;
+	margin-bottom: 0px;
+	padding-left:20px;/*default was 40.  This smaller number just leaves room for the bullets/numbers*/
+}
+.ImageInParagraph{/*This is to create whitespace above an image after a br tag.*/
+	margin-top: 10px;
+	/*margin-bottom: 0px;doesn't work*/
+}
+
+.codeblock{
+	font-family: monospace;
+	margin-top: 0px;
+	margin-bottom: 0px;
+    font-size:120%;
+}
+.redtext {
+	color: #900;
+}
+.redbold {
+	color: #900;
+	font-weight: bold;
+}
+.simpletable{
+	border-collapse: collapse;
+}
+.simpletable th, .simpletable td {/*tr is not included here yet*/
+	border: 1px solid black;
+	padding-left: 4px;
+}
+table {
+	border-collapse: collapse;
+}
+td {
+	border-width: 1px;
+	border-style: solid;
+	border-color: rgb(150,150,150);
+	padding: 4px;
+}
+hr {
+	border-top: 1px solid darkgray; 
+	margin-top: 10px;
+	margin-bottom: 10px;
+}
+
+
+
+
