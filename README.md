@@ -2,7 +2,13 @@
 
 ## Overview
 
-The DBT Dental Practice project is an analytics engineering initiative that transforms OpenDental operational data into validated, standardized datasets for analytics and machine learning applications. This project transforms OpenDental's operational (OLTP) database into an analytics-ready (OLAP) data platform using DBT. By restructuring the data model, we enable advanced analytics, machine learning, and business intelligence capabilities while maintaining data integrity and standardization. This project serves as the foundation for improving dental clinic operations, financial performance, patient care, and data-driven decision making.
+The DBT Dental Practice project is an analytics engineering initiative that transforms OpenDental 
+operational data into validated, standardized datasets for analytics and machine learning 
+applications. This project transforms OpenDental's operational (OLTP) database into an 
+analytics-ready (OLAP) data platform using DBT. By restructuring the data model, we enable advanced 
+analytics, machine learning, and business intelligence capabilities while maintaining data integrity
+ and standardization. This project serves as the foundation for improving dental clinic operations, 
+ financial performance, patient care, and data-driven decision making.
 
 ## Why OLTP to OLAP Transformation?
 
@@ -102,17 +108,20 @@ Major Business Systems:
    - Referral tracking and conversion
    - Schedule optimization
 
-These systems and their interconnections are visually represented in the `mdc_process_flow_diagram.md` document.
+These systems and their interconnections are visually represented in the 
+`mdc_process_flow_diagram.md` document.
 
 ## Current Status
 
-The project is currently focused on the **staging layer** with a systematic approach to validating all OpenDental source tables:
+The project is currently focused on the **staging layer** with a systematic approach to validating 
+all OpenDental source tables:
 
 - **Completed**: Payment module validation with comprehensive testing
 - **In Progress**: Core data entity validation (patients, procedures, appointments)
 - **Upcoming**: Insurance, claims, and provider data validation
 
-The intermediate and marts layers are in the planning stage, with detailed specifications available in `dbt_int_models_plan.md`.
+The intermediate and marts layers are in the planning stage, with detailed specifications available
+ in `dbt_int_models_plan.md`.
 
 ## Technical Implementation
 

@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+follow the sql conventions of this project when writing sql code:
+
+MariaDB sql is used for the initial raw data extracting. 
+PostGRE sql is used for the dbt project. data from mysql is loaded into postgre sql. All staging models, intermediate models, mart models are written using postgre sql.
+
+[sql_naming_conventions.md](mdc:docs/sql_naming_conventions.md)
+
+- You can @ files here
+- You can use markdown but dont have to

@@ -2,7 +2,10 @@
 
 ## Overview
 
-This document outlines the staging models in our dental practice analytics DBT project. The staging layer serves as the foundation of our data model, performing initial cleaning and standardization of raw OpenDental source data. All staging models enforce consistent naming conventions, data types, and basic data quality rules.
+This document outlines the staging models in our dental practice analytics DBT project. The staging 
+layer serves as the foundation of our data model, performing initial cleaning and standardization 
+of raw OpenDental source data. All staging models enforce consistent naming conventions, data 
+types, and basic data quality rules.
 
 ## Data Validation Scope
 

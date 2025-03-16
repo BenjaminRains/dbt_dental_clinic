@@ -1,0 +1,38 @@
+      # =========== APPOINTMENTS & SCHEDULING ===========
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental backup database schema containing dental practice records"
+    database: opendental_analytics_opendentalbackup_02_28_2025
+    # schema: opendental_analytics_opendentalbackup_02_28_2025
+    tables:
+      - name: appointment
+        description: "Scheduled and completed patient appointments"
+      
+      - name: appointmenttype
+        description: "Categorization of appointment types and durations"
+      
+      - name: histappointment
+        description: "Historical appointment data"
+      
+      - name: recall
+        description: "Patient recall scheduling information"
+      
+      - name: recalltrigger
+        description: "Triggers for patient recalls"
+      
+      - name: recalltype
+        description: "Types of recall appointments"
+      
+      - name: schedule
+        description: "Provider schedule information"
+      
+      - name: scheduleop
+        description: "Schedule operation settings"
+
+      - name: task
+        description: "Tasks and to-do items"
+      
+      - name: timeadjust
+        description: "Time clock adjustments"

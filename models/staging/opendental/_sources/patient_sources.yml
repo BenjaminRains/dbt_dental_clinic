@@ -1,0 +1,23 @@
+# =========== PATIENT INFORMATION ===========
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental backup database schema containing dental practice records"
+    database: opendental_analytics_opendentalbackup_02_28_2025
+    # schema: opendental_analytics_opendentalbackup_02_28_2025
+    tables:
+      - name: patient
+        description: "Primary patient demographic and contact information"
+      
+      - name: patientlink
+        description: "Links between patients and their family groupings"
+      
+      - name: patientnote
+        description: "Clinical and administrative notes for patients"
+      
+      - name: zipcode
+        description: "Zip code reference information"
+      
+      - name: toothinitial
+        description: "Initial conditions of patient teeth"

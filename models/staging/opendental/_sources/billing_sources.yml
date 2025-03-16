@@ -1,0 +1,55 @@
+# =========== BILLING & PAYMENTS ===========
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental backup database schema containing dental practice records"
+    database: opendental_analytics_opendentalbackup_02_28_2025
+    # schema: opendental_analytics_opendentalbackup_02_28_2025
+    tables:
+      - name: payment
+        description: "Patient payments for services"
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 8
+            tests_total: 8
+            quality_checks:
+              - test: "unique_payment_id"
+                status: "pass"
+              - test: "not_null_critical_fields"
+                status: "pass"
+                fields: ["payment_id", "patient_id", "payment_amount", "payment_date", "payment_type_id"]
+              - test: "payment_type_validation"
+                status: "pass"
+                valid_values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+                description: "Payment types validated with warning severity for flexibility"
+              - test: "payment_validation_rules"
+                status: "pass"
+      
+      - name: payperiod
+        description: "Payment period information"
+      
+      - name: payplan
+        description: "Payment plans for spreading costs over time"
+      
+      - name: paysplit
+        description: "Payment splits across procedures"
+      
+      - name: statement
+        description: "Patient billing statements"
+      
+      - name: statementprod
+        description: "Statement production data"
+      
+      - name: famaging
+        description: "Family aging for accounts receivable"
+      
+      - name: fee
+        description: "Fee amounts for procedures"
+      
+      - name: feesched
+        description: "Fee schedules"
+      
+      - name: feeschedgroup
+        description: "Groupings of fee schedules"

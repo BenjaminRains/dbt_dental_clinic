@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+Always show bash commands and terminal commands in Windows PS v7.5
+
+- You can @ files here
+- You can use markdown but dont have to

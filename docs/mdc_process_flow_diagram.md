@@ -1,6 +1,8 @@
 # Dental Practice Business Process Flow
 
-This document describes the business process flow represented in the Mermaid diagram (`mdc_process_flow_diagram.mmd`). The diagram visualizes the complete patient journey through our dental practice, from initial appointment to payment collection and account resolution.
+This document describes the business process flow represented in the Mermaid diagram 
+(`mdc_process_flow_diagram.mmd`). The diagram visualizes the complete patient journey through our 
+dental practice, from initial appointment to payment collection and account resolution.
 
 ## Process Overview
 
@@ -194,7 +196,8 @@ This process flow directly informs our data modeling approach:
 3. Critical paths inform our alerting and monitoring priorities
 4. Data store entities map to specific tables in our OpenDental schema
 
-The `mdc_process_flow_diagram.mmd` file provides the Mermaid syntax for visualizing this entire process.
+The `mdc_process_flow_diagram.mmd` file provides the Mermaid syntax for visualizing this entire 
+process.
 
 ## Relationship to DBT Models
 
@@ -204,4 +207,5 @@ Our DBT project structure mirrors this business process flow:
 2. **Intermediate Models**: System-specific data transformations
 3. **Mart Models**: Business-focused analytics views
 
-The intermediate models specifically align with the systems in this diagram, creating a direct mapping between our business processes and our data models.
+The intermediate models specifically align with the systems in this diagram, creating a direct 
+mapping between our business processes and our data models.
