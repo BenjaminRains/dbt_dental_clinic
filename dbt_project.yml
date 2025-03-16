@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_project.json
 name: 'dbt_dental_clinic'
 version: '1.0.0'
 config-version: 2
@@ -12,7 +13,7 @@ model-paths: ["models"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
 seed-paths: ["seeds"]
-docs-paths: ["docs"]
+docs-paths: ["dbt_docs"]
 
 # Build artifacts location
 target-path: "target"
@@ -31,15 +32,12 @@ models:
     # Configure materializations by folder
     staging:
       +materialized: view
-      +schema: opendental_analytics_opendentalbackup_02_28_2025
     
     intermediate:
       +materialized: table
-      +schema: opendental_analytics_opendentalbackup_02_28_2025
     
     marts:
       +materialized: table
-      +schema: opendental_analytics_opendentalbackup_02_28_2025
 
 # Add vars for flexible configuration
 vars:
