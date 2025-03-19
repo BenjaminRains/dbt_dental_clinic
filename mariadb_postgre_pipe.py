@@ -94,15 +94,22 @@ def convert_data_types(df: pd.DataFrame) -> pd.DataFrame:
                 # Convert None to NULL for strings
                 df.loc[:, col] = df[col].astype(str).replace('None', None)
                 
-                # Handle MySQL zero dates in string columns
+                # Handle MySQL zero dates and minimum dates in string columns
                 if isinstance(df[col], pd.Series):
                     df.loc[:, col] = df[col].replace('0000-00-00 00:00:00', None)
                     df.loc[:, col] = df[col].replace('0000-00-00', None)
+                    # Handle minimum dates (0001-01-01)
+                    df.loc[:, col] = df[col].replace('0001-01-01 00:00:00', None)
+                    df.loc[:, col] = df[col].replace('0001-01-01', None)
             
         # Handle binary data
         elif 'datetime' in str(df[col].dtype):
             # Ensure proper datetime format
             df.loc[:, col] = pd.to_datetime(df[col], errors='coerce')
+            
+            # Handle minimum date values in datetime columns
+            min_date = pd.Timestamp('0001-01-01')
+            df.loc[:, col] = df.loc[:, col].apply(lambda x: None if x == min_date else x)
             
         # Handle numeric conversions
         elif 'int' in str(df[col].dtype) or 'float' in str(df[col].dtype):
