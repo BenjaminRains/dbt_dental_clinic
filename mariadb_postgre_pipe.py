@@ -342,11 +342,27 @@ def is_numeric_type(mysql_type):
 def create_secondary_indexes(table_name: str) -> bool:
     """Create all secondary indexes from MariaDB to PostgreSQL."""
     try:
-        # Get indexes from MariaDB using a raw query to avoid SQLAlchemy quoting issues
-        index_query = f"SHOW INDEX FROM `{table_name}` WHERE Key_name != 'PRIMARY'"
+        # Get indexes from MariaDB using a more reliable query
+        index_query = text("""
+            SELECT 
+                INDEX_NAME as Key_name,
+                COLUMN_NAME as Column_name,
+                NON_UNIQUE,
+                SEQ_IN_INDEX
+            FROM INFORMATION_SCHEMA.STATISTICS 
+            WHERE TABLE_SCHEMA = :db_name 
+            AND TABLE_NAME = :table_name 
+            AND INDEX_NAME != 'PRIMARY'
+            ORDER BY INDEX_NAME, SEQ_IN_INDEX;
+        """)
         
         with mariadb_engine.connect() as maria_conn:
-            result = maria_conn.execute(text(index_query))
+            result = maria_conn.execute(
+                index_query.bindparams(
+                    db_name=os.getenv('DBT_MYSQL_DATABASE'),
+                    table_name=table_name
+                )
+            )
             indexes = result.fetchall()
         
         if not indexes:
@@ -356,24 +372,31 @@ def create_secondary_indexes(table_name: str) -> bool:
         # Group indexes by key name
         index_groups = {}
         for idx in indexes:
-            key_name = idx[2]  # Key_name is at position 2
-            column_name = idx[4]  # Column_name is at position 4
+            key_name = idx[0]  # Key_name
+            column_name = idx[1]  # Column_name
+            non_unique = idx[2]  # NON_UNIQUE flag
             
             if key_name not in index_groups:
-                index_groups[key_name] = []
+                index_groups[key_name] = {
+                    'columns': [],
+                    'non_unique': non_unique
+                }
                 
-            index_groups[key_name].append(column_name)
+            index_groups[key_name]['columns'].append(column_name)
         
         # Create each index
         with pg_engine.begin() as conn:
-            for key_name, columns in index_groups.items():
+            for key_name, index_info in index_groups.items():
                 # Use a naming convention for PostgreSQL indexes
                 index_name = f"{table_name}_{key_name}"
                 # Properly quote column names
-                column_list = ", ".join([f'"{col}"' for col in columns])
+                column_list = ", ".join([f'"{col}"' for col in index_info['columns']])
                 
-                # Determine index type - use BRIN for date columns on large tables
-                if len(columns) == 1 and ('date' in columns[0].lower() or 'time' in columns[0].lower()):
+                # Determine if index should be unique
+                unique_clause = "" if index_info['non_unique'] else "UNIQUE"
+                
+                # Determine index type
+                if len(index_info['columns']) == 1 and ('date' in index_info['columns'][0].lower() or 'time' in index_info['columns'][0].lower()):
                     # Check if table is large (over 1 million rows)
                     count_query = text(f"SELECT COUNT(*) FROM `{table_name}`")
                     with mariadb_engine.connect() as maria_conn:
@@ -382,17 +405,20 @@ def create_secondary_indexes(table_name: str) -> bool:
                     if row_count and row_count > 1000000:
                         # Use BRIN index for date columns on large tables
                         create_index_sql = f"""
-                        CREATE INDEX "{index_name}" ON "{table_name}" USING BRIN ({column_list});
+                        CREATE {unique_clause} INDEX IF NOT EXISTS "{index_name}" 
+                        ON "{table_name}" USING BRIN ({column_list});
                         """
                     else:
                         # Standard B-tree index
                         create_index_sql = f"""
-                        CREATE INDEX "{index_name}" ON "{table_name}" ({column_list});
+                        CREATE {unique_clause} INDEX IF NOT EXISTS "{index_name}" 
+                        ON "{table_name}" ({column_list});
                         """
                 else:
                     # Standard B-tree index
                     create_index_sql = f"""
-                    CREATE INDEX "{index_name}" ON "{table_name}" ({column_list});
+                    CREATE {unique_clause} INDEX IF NOT EXISTS "{index_name}" 
+                    ON "{table_name}" ({column_list});
                     """
                 
                 try:
