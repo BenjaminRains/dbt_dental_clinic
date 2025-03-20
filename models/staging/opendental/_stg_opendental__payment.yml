@@ -5,14 +5,14 @@ models:
     description: >
       Staged payment data from OpenDental system.
       Analysis based on 2023-current data.
-    # Temporarily comment out dbt_utils tests
-    # tests:
-    #   - dbt_utils.expression_is_true:
-    #       expression: "payment_date >= '2023-01-01'"
-    #   - dbt_utils.expression_is_true:
-    #       expression: "payment_date > '2000-01-01'"
-    #   - dbt_utils.expression_is_true:
-    #       expression: "payment_date <= current_date()"
+    tests:
+      - payment_validation_rules
+      - dbt_utils.expression_is_true:
+          expression: "payment_date >= '2023-01-01'"
+      - dbt_utils.expression_is_true:
+          expression: "payment_date > '2000-01-01'"
+      - dbt_utils.expression_is_true:
+          expression: "payment_date <= current_date"  # PostgreSQL syntax
     columns:
       - name: payment_id
         description: Primary key for payments
