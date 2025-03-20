@@ -66,9 +66,10 @@ def validate_connections() -> bool:
 
 # Modify the convert_data_types function to properly handle time columns in the apptview table
 
-def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame:
+def convert_data_types(df: pd.DataFrame, table_name: str = None) -> Tuple[pd.DataFrame, List[str]]:
     """Convert DataFrame types to be compatible with PostgreSQL, but be lenient with NULLs."""
     df = df.copy()
+    warnings = []  # New list to collect warnings
     
     # Get PostgreSQL column types
     pg_column_types = {}
@@ -129,30 +130,33 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
                 
             # Timestamp/Date types - allow NULLs and fix invalid dates
             elif target_type in ('timestamp without time zone', 'timestamp with time zone', 'timestamp', 'date'):
-                # First replace invalid date strings with None
-                if df[col].dtype == 'object':  # Only process string columns
-                    # Replace '0000-00-00' style dates with None
+                if df[col].dtype == 'object':
+                    # Track columns with zero dates
                     zero_date_mask = df[col].astype(str).str.contains(r'^0+[-/]0+[-/]0+', regex=True, na=False)
                     if zero_date_mask.any():
+                        zero_count = zero_date_mask.sum()
+                        warnings.append(f"Column '{col}' had {zero_count} zero dates replaced with NULL")
                         df.loc[zero_date_mask, col] = None
-                        logger.info(f"Replaced {zero_date_mask.sum()} zero dates in column {col}")
                 
                 # Now convert to datetime
                 df[col] = pd.to_datetime(df[col], errors='coerce')
                 
-                # If the entire column is NaT (not a valid time) after conversion, it may indicate
-                # a format that pandas couldn't interpret, so log a warning
+                # Track NaT conversions
                 if df[col].isna().all() and len(df) > 0:
-                    logger.warning(f"All values in column {col} converted to NaT. Check the original format.")
-                
+                    warnings.append(f"Column '{col}' has all invalid datetime values")
+            
             # Text types - convert NaN to NULL
             elif target_type in ('text', 'varchar', 'char'):
                 df[col] = df[col].astype(str).replace(['nan', 'None', ''], None)
                 
+            # Track unknown types
+            elif 'medium' in target_type.lower():
+                warnings.append(f"Unknown type {target_type} for column '{col}', using TEXT")
+                
         except Exception as e:
-            logger.error(f"Error converting column {col} to {target_type}: {str(e)}")
+            warnings.append(f"Error converting column '{col}' to {target_type}: {str(e)}")
             
-    return df
+    return df, warnings  # Return both the DataFrame and the warnings
 
 def is_bool_column(column_name: str, column_type: str) -> bool:
     """Determine if a column should be treated as boolean based on name and type."""
@@ -854,6 +858,8 @@ def sync_table_directly(table_name: str) -> bool:
     Uses proper SQL sanitization and transaction management.
     """
     try:
+        quality_warnings = []  # Initialize warnings list
+        
         # Initialize config
         config = ETLConfig()  # Get singleton instance
         
@@ -937,25 +943,32 @@ def sync_table_directly(table_name: str) -> bool:
                         chunk_df.loc[potential_invalid, column] = None
             
             # Process data types for PostgreSQL compatibility
-            chunk_df = convert_data_types(chunk_df, table_name)
+            processed_df, chunk_warnings = convert_data_types(chunk_df, table_name)  # Now unpacking both return values
+            quality_warnings.extend(chunk_warnings)  # Collect warnings
             
             # Use proper SQLAlchemy connection for to_sql to avoid warnings
             with pg_engine.connect() as sqlalchemy_connection:
-                # Start a transaction
                 with sqlalchemy_connection.begin():
-                    chunk_df.to_sql(
+                    processed_df.to_sql(  # Use the processed DataFrame
                         name=table_name,
                         con=sqlalchemy_connection,
                         if_exists=if_exists,
                         index=False,
                         chunksize=config.sub_chunk_size,
-                        method='multi'  # Use multi-row insert to improve performance
+                        method='multi'
                     )
             logger.info(f"Processed chunk {chunk_number + 1} ({rows_in_chunk} rows)")
             chunk_number += 1
         
         # Update sync status with row count
         update_sync_timestamp(table_name, total_rows)
+        
+        # Store quality warnings in a global dictionary
+        if quality_warnings:
+            if not hasattr(sync_table_directly, 'table_quality_issues'):
+                sync_table_directly.table_quality_issues = {}
+            sync_table_directly.table_quality_issues[table_name] = quality_warnings
+        
         return True
         
     except Exception as e:
