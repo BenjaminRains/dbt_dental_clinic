@@ -71,12 +71,7 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
     # Make a copy of the dataframe to avoid SettingWithCopyWarning
     df = df.copy()
     
-    # Get NOT NULL columns if table_name provided
-    not_null_columns = []
-    if table_name:
-        not_null_columns = get_not_null_columns(table_name)
-    
-    # Get PostgreSQL column types to properly convert boolean columns
+    # Get PostgreSQL column types to ensure proper conversion
     pg_column_types = {}
     try:
         with pg_engine.connect() as conn:
@@ -86,103 +81,63 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
                 WHERE table_name = :table_name
             """)
             result = conn.execute(query.bindparams(table_name=table_name))
-            pg_column_types = {row[0].lower(): row[1].lower() for row in result}
-    except:
-        pass  # If this fails, just continue with default conversions
+            pg_column_types = {row[0]: row[1].lower() for row in result}
+    except Exception as e:
+        logger.warning(f"Could not get PostgreSQL schema for {table_name}: {str(e)}")
     
-    # Known boolean columns to always force convert regardless of name
-    known_boolean_columns = [
-        'timelocked', 'isnewpatient', 'ishygiene', 'isdeleted', 'isreverse',
-        'isestimate', 'isinsurance', 'isactive', 'iscomplete'
-    ]
-    
-    # Special handling for apptview table time columns
-    if table_name == 'apptview':
-        time_columns = ['OnlySchedBeforeTime', 'OnlySchedAfterTime', 'ApptTimeScrollStart']
-        for col in time_columns:
-            if col in df.columns:
-                # Convert time values using proper Series creation
-                def convert_time_value(val):
-                    if pd.isna(val) or val == 'None' or val == '' or val is None:
-                        return None
-                    try:
-                        seconds = float(str(val))
-                        hours = int(seconds // 3600)
-                        minutes = int((seconds % 3600) // 60)
-                        secs = int(seconds % 60)
-                        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-                    except (ValueError, TypeError):
-                        return val
-                
-                # Create new series with converted values
-                df = df.assign(**{col: df[col].apply(convert_time_value)})
-                logger.info(f"Converted apptview time column {col} to proper time format")
-
-    # Handle TIME columns specifically
-    time_columns = [col for col in df.columns if 'time' in col.lower() and 'date' not in col.lower() 
-                   and col != 'TimePeriod'  # Exclude TimePeriod from time conversion
-                   and pd.api.types.is_integer_dtype(df[col].dtype)]
-    
-    for col in time_columns:
-        def int_to_time(seconds):
-            if pd.isna(seconds) or seconds is None:
-                return None
-            if seconds > 86400:  # If in nanoseconds format
-                seconds = seconds / 1000000000
-            hours = int(seconds // 3600)
-            minutes = int((seconds % 3600) // 60)
-            secs = int(seconds % 60)
-            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-        
-        # Create new series with converted time values
-        df = df.assign(**{col: df[col].apply(int_to_time)})
-        logger.info(f"Converted column {col} from integer to time format")
-    
-    # Process each column
+    # For each column in the dataframe, respect the target schema type
     for col in df.columns:
-        col_lower = col.lower()
-        
-        # Handle boolean columns
-        is_boolean_in_pg = pg_column_types.get(col_lower) == 'boolean'
-        is_known_boolean = col_lower in known_boolean_columns or is_bool_column(col, '')
-        
-        if is_boolean_in_pg or is_known_boolean:
-            # Create boolean series properly
-            bool_series = df[col].map(lambda x: (
-                pd.NA if pd.isna(x) or x == '' else
-                True if x in (True, 1, '1', 'Y', 'y', 'Yes', 'true', 'TRUE') else
-                False
-            ))
-            df = df.assign(**{col: pd.Series(bool_series, dtype="boolean")})
-            logger.info(f"Converted column {col} to boolean")
-            continue
-        
-        # Handle problematic data types
-        if df[col].dtype == 'object':
-            if 'date' in col.lower() or 'time' in col.lower():
-                # Handle date/time columns
-                # First replace empty strings with None
-                temp_series = df[col].replace('', pd.NA)
+        if col in pg_column_types:
+            target_type = pg_column_types[col]
+            
+            # Only convert to boolean if the target column is defined as boolean
+            if target_type == 'boolean':
+                # Force convert to boolean
+                bool_values = []
+                for val in df[col]:
+                    if pd.isna(val) or val == '':
+                        bool_values.append(pd.NA)
+                    elif val in (True, 1, '1', 'Y', 'y', 'Yes', 'true', 'TRUE'):
+                        bool_values.append(True)
+                    else:
+                        bool_values.append(False)
                 
+                df.loc[:, col] = pd.array(bool_values, dtype="boolean")
+                logger.info(f"Converted column {col} to boolean based on target schema")
+            
+            # Handle date/timestamp columns
+            elif 'timestamp' in target_type or 'date' in target_type:
+                df.loc[df[col] == '', col] = None
                 try:
-                    # Convert to datetime properly
-                    datetime_series = pd.to_datetime(temp_series, errors='coerce')
-                    # Handle minimum dates
-                    datetime_series = datetime_series.replace({
-                        '0000-00-00 00:00:00': pd.NaT,
-                        '0000-00-00': pd.NaT,
-                        '0001-01-01 00:00:00': pd.NaT,
-                        '0001-01-01': pd.NaT
-                    })
-                    df = df.assign(**{col: datetime_series})
+                    df.loc[:, col] = pd.to_datetime(df[col], errors='coerce')
                 except Exception as e:
                     logger.warning(f"Could not convert {col} to datetime: {str(e)}")
             
-            # Handle string columns
-            else:
-                # Convert None and empty strings to NULL properly
-                str_series = df[col].astype(str).replace({'None': None, '': None})
-                df = df.assign(**{col: str_series})
+            # Handle integer types including serial
+            elif 'int' in target_type or 'serial' in target_type:
+                try:
+                    df.loc[:, col] = pd.to_numeric(df[col], errors='coerce', downcast='integer')
+                except Exception as e:
+                    logger.warning(f"Could not convert {col} to integer: {str(e)}")
+            
+            # Handle numeric/decimal types
+            elif 'numeric' in target_type or 'decimal' in target_type:
+                try:
+                    df.loc[:, col] = pd.to_numeric(df[col], errors='coerce')
+                except Exception as e:
+                    logger.warning(f"Could not convert {col} to numeric: {str(e)}")
+            
+            # Handle float types
+            elif 'float' in target_type or 'double' in target_type or 'real' in target_type:
+                try:
+                    df.loc[:, col] = pd.to_numeric(df[col], errors='coerce', downcast='float')
+                except Exception as e:
+                    logger.warning(f"Could not convert {col} to float: {str(e)}")
+            
+            # Handle text types
+            elif 'text' in target_type or 'char' in target_type or 'varchar' in target_type:
+                # Convert to string, handling NaN and None properly
+                df.loc[:, col] = df[col].astype(str).replace({'nan': None, 'None': None})
     
     return df
 
