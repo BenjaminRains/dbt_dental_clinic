@@ -64,79 +64,180 @@ def validate_connections() -> bool:
         logger.error(f"[ERROR] Connection validation failed: {str(e)}")
         return False
 
-def convert_data_types(df: pd.DataFrame) -> pd.DataFrame:
+# Modify the convert_data_types function to properly handle time columns in the apptview table
+
+def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame:
     """Convert DataFrame types to be compatible with PostgreSQL."""
     # Make a copy of the dataframe to avoid SettingWithCopyWarning
     df = df.copy()
     
+    # Get NOT NULL columns if table_name provided
+    not_null_columns = []
+    if table_name:
+        not_null_columns = get_not_null_columns(table_name)
+    
+    # Get PostgreSQL column types to properly convert boolean columns
+    pg_column_types = {}
+    try:
+        with pg_engine.connect() as conn:
+            query = text("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = :table_name
+            """)
+            result = conn.execute(query.bindparams(table_name=table_name))
+            pg_column_types = {row[0].lower(): row[1].lower() for row in result}
+    except:
+        pass  # If this fails, just continue with default conversions
+    
+    # Known boolean columns to always force convert regardless of name
+    known_boolean_columns = [
+        'timelocked', 'isnewpatient', 'ishygiene', 'isdeleted', 'isreverse',
+        'isestimate', 'isinsurance', 'isactive', 'iscomplete'
+    ]
+    
+    # Special handling for apptview table time columns
+    if table_name == 'apptview':
+        time_columns = ['OnlySchedBeforeTime', 'OnlySchedAfterTime', 'ApptTimeScrollStart']
+        for col in time_columns:
+            if col in df.columns:
+                # Convert time values using proper Series creation
+                def convert_time_value(val):
+                    if pd.isna(val) or val == 'None' or val == '' or val is None:
+                        return None
+                    try:
+                        seconds = float(str(val))
+                        hours = int(seconds // 3600)
+                        minutes = int((seconds % 3600) // 60)
+                        secs = int(seconds % 60)
+                        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+                    except (ValueError, TypeError):
+                        return val
+                
+                # Create new series with converted values
+                df = df.assign(**{col: df[col].apply(convert_time_value)})
+                logger.info(f"Converted apptview time column {col} to proper time format")
+
+    # Handle TIME columns specifically
+    time_columns = [col for col in df.columns if 'time' in col.lower() and 'date' not in col.lower() 
+                   and col != 'TimePeriod'  # Exclude TimePeriod from time conversion
+                   and pd.api.types.is_integer_dtype(df[col].dtype)]
+    
+    for col in time_columns:
+        def int_to_time(seconds):
+            if pd.isna(seconds) or seconds is None:
+                return None
+            if seconds > 86400:  # If in nanoseconds format
+                seconds = seconds / 1000000000
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        
+        # Create new series with converted time values
+        df = df.assign(**{col: df[col].apply(int_to_time)})
+        logger.info(f"Converted column {col} from integer to time format")
+    
+    # Process each column
     for col in df.columns:
+        col_lower = col.lower()
+        
+        # Handle boolean columns
+        is_boolean_in_pg = pg_column_types.get(col_lower) == 'boolean'
+        is_known_boolean = col_lower in known_boolean_columns or is_bool_column(col, '')
+        
+        if is_boolean_in_pg or is_known_boolean:
+            # Create boolean series properly
+            bool_series = df[col].map(lambda x: (
+                pd.NA if pd.isna(x) or x == '' else
+                True if x in (True, 1, '1', 'Y', 'y', 'Yes', 'true', 'TRUE') else
+                False
+            ))
+            df = df.assign(**{col: pd.Series(bool_series, dtype="boolean")})
+            logger.info(f"Converted column {col} to boolean")
+            continue
+        
         # Handle problematic data types
         if df[col].dtype == 'object':
-            # Convert boolean-like values
-            if set(df[col].dropna().unique()).issubset({True, False, 'True', 'False', 1, 0, '1', '0'}):
-                # The issue is with the astype('boolean') not working properly
-                # Use pd.array with BooleanDtype explicitly
-                bool_map = {'True': True, 'False': False, '1': True, '0': False}
+            if 'date' in col.lower() or 'time' in col.lower():
+                # Handle date/time columns
+                # First replace empty strings with None
+                temp_series = df[col].replace('', pd.NA)
                 
-                # Convert to Python bool values first
-                bool_values = []
-                for val in df[col]:
-                    if pd.isna(val):
-                        bool_values.append(pd.NA)
-                    elif val in (True, 1, '1', 'True'):
-                        bool_values.append(True)
-                    else:
-                        bool_values.append(False)
-                        
-                # Create a boolean array with explicit dtype
-                df.loc[:, col] = pd.array(bool_values, dtype="boolean")
+                try:
+                    # Convert to datetime properly
+                    datetime_series = pd.to_datetime(temp_series, errors='coerce')
+                    # Handle minimum dates
+                    datetime_series = datetime_series.replace({
+                        '0000-00-00 00:00:00': pd.NaT,
+                        '0000-00-00': pd.NaT,
+                        '0001-01-01 00:00:00': pd.NaT,
+                        '0001-01-01': pd.NaT
+                    })
+                    df = df.assign(**{col: datetime_series})
+                except Exception as e:
+                    logger.warning(f"Could not convert {col} to datetime: {str(e)}")
+            
+            # Handle string columns
             else:
-                # Convert None to NULL for strings
-                df.loc[:, col] = df[col].astype(str).replace('None', None)
-                
-                # Handle MySQL zero dates and minimum dates in string columns
-                if isinstance(df[col], pd.Series):
-                    df.loc[:, col] = df[col].replace('0000-00-00 00:00:00', None)
-                    df.loc[:, col] = df[col].replace('0000-00-00', None)
-                    # Handle minimum dates (0001-01-01)
-                    df.loc[:, col] = df[col].replace('0001-01-01 00:00:00', None)
-                    df.loc[:, col] = df[col].replace('0001-01-01', None)
-            
-        # Handle binary data
-        elif 'datetime' in str(df[col].dtype):
-            # Ensure proper datetime format
-            df.loc[:, col] = pd.to_datetime(df[col], errors='coerce')
-            
-            # Handle minimum date values in datetime columns
-            min_date = pd.Timestamp('0001-01-01')
-            df.loc[:, col] = df.loc[:, col].apply(lambda x: None if x == min_date else x)
-            
-        # Handle numeric conversions
-        elif 'int' in str(df[col].dtype) or 'float' in str(df[col].dtype):
-            # Handle NaN values
-            df.loc[:, col] = pd.to_numeric(df[col], errors='coerce')
+                # Convert None and empty strings to NULL properly
+                str_series = df[col].astype(str).replace({'None': None, '': None})
+                df = df.assign(**{col: str_series})
     
     return df
 
-def get_postgres_type(pandas_dtype):
+def is_bool_column(column_name: str, column_type: str) -> bool:
+    """Determine if a column should be treated as boolean based on name and type."""
+    # Check for tinyint(1) which is typically boolean in MySQL/MariaDB
+    if str(column_type).lower() == 'tinyint(1)':
+        return True
+        
+    # Check for column names that typically indicate boolean values
+    bool_patterns = [
+        'is_', 'has_', 'show', 'use', 'allow', 'enable', 'disable',
+        'visible', 'active', 'hidden', 'locked', 'no', 'can', 
+        'is', 'has', 'flag', 'bool', 'boolean', 'timelocked'
+    ]
+    
+    column_lower = column_name.lower()
+    
+    # Direct exact matches for known boolean column names
+    known_boolean_columns = [
+        'timelocked', 'isnewpatient', 'ishygiene', 'isdeleted', 'isreverse',
+        'isestimate', 'isinsurance', 'isactive', 'iscomplete'
+    ]
+    
+    if column_lower in known_boolean_columns:
+        return True
+    
+    for pattern in bool_patterns:
+        if (column_lower.startswith(pattern) or 
+            f"_{pattern}" in column_lower or 
+            column_lower.endswith(f"_{pattern}")):
+            return True
+            
+    return False
+
+
+def get_postgres_type(pandas_dtype, column_name: str = '') -> str:
     """Map pandas dtype to PostgreSQL type."""
     dtype_str = str(pandas_dtype)
-    if 'int' in dtype_str:
+    if 'bool' in dtype_str:
+        return 'BOOLEAN'
+    elif column_name and is_bool_column(column_name, ''):  # Pass empty string as column_type since we don't have it here
+        return 'BOOLEAN'
+    elif 'int' in dtype_str:
         return 'BIGINT'
     elif 'float' in dtype_str:
         return 'DOUBLE PRECISION'
     elif 'datetime' in dtype_str:
         return 'TIMESTAMP'
-    elif 'bool' in dtype_str:
-        return 'BOOLEAN'
     else:
         return 'TEXT'
 
 def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
     """Improved schema validation with better case handling."""
     try:
-        safe_table = sanitize_identifier(table_name)
-        
         # Check if the table exists first
         check_table_exists = text("""
             SELECT EXISTS (
@@ -147,7 +248,7 @@ def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
         
         with pg_engine.connect() as conn:
             table_exists = conn.execute(
-                check_table_exists.bindparams(table_name=str(safe_table))
+                check_table_exists.bindparams(table_name=table_name)
             ).scalar()
         
         if not table_exists:
@@ -156,6 +257,7 @@ def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
             if not create_empty_target_table(table_name):
                 logger.error(f"Failed to create table {table_name} in PostgreSQL.")
                 return False
+            return True  # Return early since we've just created the table
         
         # Create case-insensitive column mappings
         df_columns = {col.lower(): col for col in df.columns}
@@ -167,7 +269,7 @@ def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
                 FROM information_schema.columns 
                 WHERE table_name = :table_name
             """)
-            result = conn.execute(query.bindparams(table_name=str(safe_table)))
+            result = conn.execute(query.bindparams(table_name=table_name))
             pg_columns = pd.DataFrame(result.fetchall(), columns=['column_name', 'data_type'])
         
         pg_column_map = {col.lower(): col for col in pg_columns['column_name']}
@@ -190,22 +292,15 @@ def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
             with pg_engine.begin() as conn:
                 for col_lower in missing_in_target:
                     orig_col = df_columns[col_lower]
-                    safe_col = sanitize_identifier(orig_col)
-                    col_type = get_postgres_type(df[orig_col].dtype)
+                    col_type = get_postgres_type(df[orig_col].dtype, orig_col)
                     
                     try:
-                        # Handle PostgreSQL reserved keywords
-                        alter_query = text(
-                            "ALTER TABLE :table ADD COLUMN :column :type"
-                        ).bindparams(
-                            table=safe_table,
-                            column=safe_col,
-                            type=col_type
-                        )
-                        conn.execute(alter_query)
-                        logger.info(f"Added column {safe_col} ({col_type})")
+                        # Handle PostgreSQL reserved keywords with proper quoting
+                        alter_query = f'ALTER TABLE "{table_name}" ADD COLUMN "{orig_col}" {col_type}'
+                        conn.execute(text(alter_query))
+                        logger.info(f"Added column {orig_col} ({col_type})")
                     except SQLAlchemyError as e:
-                        logger.warning(f"Could not add column {safe_col}: {str(e)}")
+                        logger.warning(f"Could not add column {orig_col}: {str(e)}")
                         # Continue with other columns even if one fails
         
         return True
@@ -213,20 +308,24 @@ def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
         logger.error(f"Schema validation error for {table_name}: {str(e)}")
         return False
 
-def map_type(mysql_type: str) -> str:
-    """Map MySQL types to PostgreSQL types with improved error handling."""
+
+def map_type(mysql_type: str, column_name: str = '') -> str:
+    """Map MySQL types to PostgreSQL types with improved boolean detection."""
     try:
         type_lower = str(mysql_type).lower()
         
+        # Improved boolean detection
+        if type_lower == 'tinyint(1)' or is_bool_column(column_name, mysql_type):
+            return 'BOOLEAN'
+            
         # Handle SET and ENUM types specially - convert to TEXT
         if type_lower.startswith('set(') or type_lower.startswith('enum('):
             return 'TEXT'
             
         # Integer types
-        if 'tinyint(1)' in type_lower:
-            return 'BOOLEAN'
-        elif 'int' in type_lower:
-            return 'INTEGER'
+        if 'int' in type_lower:
+            # Don't use SERIAL here - we'll handle auto_increment separately
+            return 'BIGINT'
             
         # String types
         elif 'varchar' in type_lower or 'char' in type_lower:
@@ -244,10 +343,12 @@ def map_type(mysql_type: str) -> str:
             return 'TEXT'
             
         # Date/time types
-        elif 'datetime' in type_lower or 'timestamp' in type_lower:
+        elif 'datetime' in type_lower:
+            return 'TIMESTAMP'
+        elif 'timestamp' in type_lower:
             return 'TIMESTAMP'
         elif 'date' in type_lower:
-            return 'DATE'
+            return 'DATE'  # Ensure DATE type is used for date columns
         elif 'time' in type_lower:
             return 'TIME'
             
@@ -286,8 +387,79 @@ def is_numeric_type(mysql_type):
     type_lower = mysql_type.lower()
     return any(t in type_lower for t in ['int', 'decimal', 'float', 'double', 'numeric'])
 
+def create_secondary_indexes(table_name: str) -> bool:
+    """Create all secondary indexes from MariaDB to PostgreSQL."""
+    try:
+        # Get indexes from MariaDB using a raw query to avoid SQLAlchemy quoting issues
+        index_query = f"SHOW INDEX FROM `{table_name}` WHERE Key_name != 'PRIMARY'"
+        
+        with mariadb_engine.connect() as maria_conn:
+            result = maria_conn.execute(text(index_query))
+            indexes = result.fetchall()
+        
+        if not indexes:
+            logger.info(f"No secondary indexes found for {table_name}")
+            return True
+            
+        # Group indexes by key name
+        index_groups = {}
+        for idx in indexes:
+            key_name = idx[2]  # Key_name is at position 2
+            column_name = idx[4]  # Column_name is at position 4
+            
+            if key_name not in index_groups:
+                index_groups[key_name] = []
+                
+            index_groups[key_name].append(column_name)
+        
+        # Create each index
+        with pg_engine.begin() as conn:
+            for key_name, columns in index_groups.items():
+                # Use a naming convention for PostgreSQL indexes
+                index_name = f"{table_name}_{key_name}"
+                # Properly quote column names
+                column_list = ", ".join([f'"{col}"' for col in columns])
+                
+                # Determine index type - use BRIN for date columns on large tables
+                if len(columns) == 1 and ('date' in columns[0].lower() or 'time' in columns[0].lower()):
+                    # Check if table is large (over 1 million rows)
+                    count_query = text(f"SELECT COUNT(*) FROM `{table_name}`")
+                    with mariadb_engine.connect() as maria_conn:
+                        row_count = maria_conn.execute(count_query).scalar()
+                    
+                    if row_count and row_count > 1000000:
+                        # Use BRIN index for date columns on large tables
+                        create_index_sql = f"""
+                        CREATE INDEX "{index_name}" ON "{table_name}" USING BRIN ({column_list});
+                        """
+                    else:
+                        # Standard B-tree index
+                        create_index_sql = f"""
+                        CREATE INDEX "{index_name}" ON "{table_name}" ({column_list});
+                        """
+                else:
+                    # Standard B-tree index
+                    create_index_sql = f"""
+                    CREATE INDEX "{index_name}" ON "{table_name}" ({column_list});
+                    """
+                
+                try:
+                    logger.info(f"Creating index with SQL: {create_index_sql}")
+                    conn.execute(text(create_index_sql))
+                    logger.info(f"Created index {key_name} on {table_name}")
+                except Exception as idx_error:
+                    logger.warning(f"Error creating index {key_name}: {str(idx_error)}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error creating secondary indexes for {table_name}: {str(e)}")
+        return False
+
+# Fix for the create_empty_target_table function - specifically the default values handling for timestamps
+
 def create_empty_target_table(table_name: str) -> bool:
-    """Create PostgreSQL table with proper type mappings and SQL injection protection."""
+    """Create PostgreSQL table with relaxed constraints for analytics."""
     try:
         safe_table = sanitize_identifier(table_name)
         
@@ -305,40 +477,76 @@ def create_empty_target_table(table_name: str) -> bool:
             mariadb_engine,
             params={
                 'db_name': os.getenv('DBT_MYSQL_DATABASE'),
-                'table_name': str(safe_table)
+                'table_name': table_name  # Use original table name here
             }
         )
         
         if len(schema_df) == 0:
-            logger.warning(f"No schema found for {safe_table}")
+            logger.warning(f"No schema found for {table_name}")
             return False
         
         # Build CREATE TABLE statement with proper sanitization
-        create_sql_parts = [f"CREATE TABLE IF NOT EXISTS {safe_table} ("]
+        create_sql_parts = [f'CREATE TABLE IF NOT EXISTS "{table_name}" (']
         primary_keys = []
         
         for _, row in schema_df.iterrows():
             try:
-                col_name = sanitize_identifier(row['COLUMN_NAME'])
-                col_type = map_type(row['COLUMN_TYPE'])
-                nullable = "NULL" if row['IS_NULLABLE'] == 'YES' else "NOT NULL"
+                col_name = row['COLUMN_NAME']  # Keep original column name
+                col_type = map_type(row['COLUMN_TYPE'], col_name)
+                
+                # For analytics, we might want to relax NOT NULL constraints
+                # to avoid data loading issues:
+                if row['COLUMN_KEY'] == 'PRI':
+                    # Primary keys must be NOT NULL
+                    nullable = "NOT NULL"
+                elif 'auto_increment' in str(row['EXTRA']).lower():
+                    # Auto-increment columns should also be NOT NULL
+                    nullable = "NOT NULL"
+                else:
+                    # For analytics purposes, make all other columns nullable
+                    nullable = "NULL"
                 
                 # Handle default values properly
                 default = ""
                 if pd.notna(row['COLUMN_DEFAULT']):
-                    # Handle timestamp default values - these often cause issues
-                    if ('datetime' in str(row['COLUMN_TYPE']).lower() or 
-                        'timestamp' in str(row['COLUMN_TYPE']).lower() or 
-                        'date' in str(row['COLUMN_TYPE']).lower()):
-                        # Use PostgreSQL standard default for dates
-                        default = "DEFAULT '1970-01-01 00:00:00'::timestamp"
-                    elif row['COLUMN_DEFAULT'] == 'CURRENT_TIMESTAMP':
-                        default = "DEFAULT CURRENT_TIMESTAMP"
+                    # Handle boolean defaults
+                    if col_type == 'BOOLEAN':
+                        # Handle default values for boolean columns
+                        if row['COLUMN_DEFAULT'] in ('1', 1, 'TRUE', 'true', 'True', 'Y', 'y', 'Yes'):
+                            default = "DEFAULT TRUE"
+                        else:
+                            default = "DEFAULT FALSE"
+                    # Handle DATE column type specifically
+                    elif col_type == 'DATE':
+                        # For DATE columns, add a more robust default value handling
+                        if row['COLUMN_DEFAULT'] == '' or row['COLUMN_DEFAULT'] == "''" or row['COLUMN_DEFAULT'] is None:
+                            default = "DEFAULT '0001-01-01'::date"
+                        elif row['COLUMN_DEFAULT'] == '0001-01-01' or row['COLUMN_DEFAULT'] == "'0001-01-01'":
+                            default = "DEFAULT '0001-01-01'::date"
+                        else:
+                            clean_default = str(row['COLUMN_DEFAULT']).strip("'")
+                            default = f"DEFAULT '{clean_default}'::date"
+                    # Handle timestamp default values
+                    elif ('datetime' in str(row['COLUMN_TYPE']).lower() or 
+                        'timestamp' in str(row['COLUMN_TYPE']).lower()):
+                        if 'current_timestamp' in str(row['COLUMN_DEFAULT']).lower() or row['COLUMN_DEFAULT'] == 'CURRENT_TIMESTAMP':
+                            default = "DEFAULT CURRENT_TIMESTAMP"
+                        elif row['COLUMN_DEFAULT'] == '0001-01-01 00:00:00' or pd.isna(row['COLUMN_DEFAULT']):
+                            default = "DEFAULT '0001-01-01 00:00:00'::timestamp"
+                        else:
+                            clean_default = str(row['COLUMN_DEFAULT']).strip("'")
+                            default = f"DEFAULT '{clean_default}'::timestamp"
+                    elif 'date' in str(row['COLUMN_TYPE']).lower() and col_type != 'DATE':
+                        if row['COLUMN_DEFAULT'] == '0001-01-01' or pd.isna(row['COLUMN_DEFAULT']):
+                            default = "DEFAULT '0001-01-01'::date"
+                        else:
+                            clean_default = str(row['COLUMN_DEFAULT']).strip("'")
+                            default = f"DEFAULT '{clean_default}'::date"
                     elif is_numeric_type(row['COLUMN_TYPE']):
                         default = f"DEFAULT {row['COLUMN_DEFAULT']}"
                     else:
                         # Handle other string defaults - remove extra quotes
-                        clean_default = row['COLUMN_DEFAULT'].strip("'")
+                        clean_default = str(row['COLUMN_DEFAULT']).strip("'")
                         # Additional safety check to prevent syntax errors
                         if all(c.isprintable() for c in clean_default):
                             default = f"DEFAULT '{clean_default}'"
@@ -346,20 +554,29 @@ def create_empty_target_table(table_name: str) -> bool:
                             # If non-printable characters, use empty string
                             default = "DEFAULT ''"
                             logger.warning(f"Non-printable characters in default value for {row['COLUMN_NAME']}, using empty string")
+                elif col_type == 'BOOLEAN':
+                    # Provide a safe default for boolean columns even when there's no default in the source
+                    default = "DEFAULT FALSE"
                 
-                # Handle auto increment
+                # Handle auto increment - IMPORTANT FIX HERE
+                auto_increment = False
                 if 'auto_increment' in str(row['EXTRA']).lower():
                     if 'int' in str(row['COLUMN_TYPE']).lower():
                         col_type = 'SERIAL'
                         nullable = ""  # SERIAL implies NOT NULL
-                        default = ""   # SERIAL handles default
+                        default = ""   # SERIAL handles default 
+                        auto_increment = True
                 
                 # Track primary keys
                 if row['COLUMN_KEY'] == 'PRI':
-                    primary_keys.append(str(col_name))
+                    primary_keys.append(f'"{col_name}"')
+                    
+                    # Make sure primary key is NOT NULL even if auto_increment is handled separately
+                    if not auto_increment and nullable != "NOT NULL":
+                        nullable = "NOT NULL"
                 
                 create_sql_parts.append(
-                    f"    {col_name} {col_type} {nullable} {default},"
+                    f'    "{col_name}" {col_type} {nullable} {default},'
                 )
                 
             except ValueError as e:
@@ -368,25 +585,39 @@ def create_empty_target_table(table_name: str) -> bool:
         
         # Add primary key constraint
         if primary_keys:
-            create_sql_parts.append(
-                f"    PRIMARY KEY ({', '.join(primary_keys)}),"
-            )
+            primary_key_line = f"    PRIMARY KEY ({', '.join(primary_keys)})"
+            create_sql_parts.append(primary_key_line)
+        else:
+            # Remove trailing comma from the last column definition
+            create_sql_parts[-1] = create_sql_parts[-1].rstrip(',')
         
         # Finalize statement
-        create_sql_parts[-1] = create_sql_parts[-1].rstrip(',')
         create_sql_parts.append(");")
         create_sql = "\n".join(create_sql_parts)
         
+        logger.info(f"SQL for table creation: \n{create_sql}")
+        
+        # Drop the table first if it exists
+        drop_sql = f'DROP TABLE IF EXISTS "{table_name}";'
+        
         # Execute creation
         with pg_engine.begin() as conn:
+            conn.execute(text(drop_sql))
             conn.execute(text(create_sql))
             
-        logger.info(f"Created table {safe_table} in PostgreSQL")
+        # Now we need to create the secondary indexes
+        create_indexes_result = create_secondary_indexes(table_name)
+        if create_indexes_result:
+            logger.info(f"Created table {table_name} with indexes in PostgreSQL")
+        else:
+            logger.warning(f"Created table {table_name} but failed to create some indexes")
+            
         return True
         
     except Exception as e:
-        logger.error(f"Error creating table {safe_table}: {str(e)}")
+        logger.error(f"Error creating table {table_name}: {str(e)}")
         return False
+    
 
 def fetch_table_names() -> List[str]:
     """Fetch all table names from MariaDB."""
@@ -550,13 +781,9 @@ def sanitize_identifier(identifier: str) -> quoted_name:
     if not identifier or not isinstance(identifier, str):
         raise ValueError(f"Invalid identifier: {identifier}")
     
-    # Remove any dangerous characters but preserve case
-    clean_identifier = ''.join(c for c in identifier if c.isalnum() or c == '_')
-    if not clean_identifier:
-        raise ValueError(f"Invalid identifier after cleaning: {identifier}")
-    
-    # Return a properly quoted identifier
-    return quoted_name(clean_identifier, quote=True)
+    # Instead of filtering out characters, preserve the original identifier
+    # but wrapped in SQLAlchemy's quoted_name to ensure proper quoting
+    return quoted_name(identifier, quote=True)
 
 def validate_env_vars() -> bool:
     """Validate all required environment variables are set."""
@@ -601,6 +828,9 @@ def main(specific_tables=None):
     """Main ETL process with improved configuration and validation."""
     config = ETLConfig()  # Single initialization using singleton pattern
     
+    # Force max_retries to 0 to eliminate retries completely
+    config.max_retries = 0
+    
     # Validate environment variables
     if not validate_env_vars():
         return
@@ -614,9 +844,8 @@ def main(specific_tables=None):
         logger.error("Failed to create/verify tracking table. Exiting.")
         return
     
-    # First attempt
+    # Process tables
     tables = specific_tables if specific_tables else fetch_table_names()
-    failed_tables = []
     results = {'success': [], 'failure': [], 'quality_issues': []}
     
     logger.info(f"Starting direct sync for {len(tables)} tables")
@@ -633,56 +862,17 @@ def main(specific_tables=None):
                     results['success'].append(table)
                 else:
                     results['quality_issues'].append(table)
-                    failed_tables.append(table)
             else:
                 results['failure'].append(table)
-                failed_tables.append(table)
         except Exception as e:
             logger.error(f"Error syncing {table}: {str(e)}")
             results['failure'].append(table)
-            failed_tables.append(table)
         
         # Log intermediate success rate every 10% progress
         if i % max(1, total // 10) == 0:
             current_success_rate = len(results['success']) / i * 100
             logger.info(f"Current success rate: {current_success_rate:.2f}%")
     
-    # Retry mechanism
-    if failed_tables:
-        logger.info(f"Attempting to retry {len(failed_tables)} failed tables")
-        
-        for retry in range(1, config.max_retries + 1):
-            if not failed_tables:
-                break
-                
-            logger.info(f"Retry attempt {retry}/{config.max_retries}")
-            still_failed = []
-            
-            for table in failed_tables:
-                try:
-                    logger.info(f"Retrying sync for {table}")
-                    if sync_table_directly(table):
-                        if verify_data_quality(table):
-                            logger.info(f"✅ Successfully synced {table} on retry {retry}")
-                            results['success'].append(table)
-                            if table in results['failure']:
-                                results['failure'].remove(table)
-                            if table in results['quality_issues']:
-                                results['quality_issues'].remove(table)
-                        else:
-                            still_failed.append(table)
-                    else:
-                        still_failed.append(table)
-                except Exception as e:
-                    logger.error(f"Error on retry {retry} for {table}: {str(e)}")
-                    still_failed.append(table)
-            
-            failed_tables = still_failed
-            
-            if not failed_tables:
-                logger.info("✅ All retries successful!")
-                break
-
     # Close all database connections
     mariadb_engine.dispose()
     pg_engine.dispose()
@@ -699,7 +889,7 @@ def main(specific_tables=None):
             logger.warning(f"- {table}")
 
     if results['failure']:
-        logger.error("\n❌ Failed Tables:")
+        logger.error("\nFAILED Tables:")
         for table in results['failure']:
             logger.error(f"- {table}")
             
@@ -719,25 +909,11 @@ def sync_table_directly(table_name: str) -> bool:
         
         logger.info(f"Starting direct sync for table: {table_name}")
         
-        # Get last sync timestamp
-        last_sync = fetch_last_sync(table_name)
-        
-        # Check if the table has a last_modified column
-        check_column_query = text("""
-            SELECT COUNT(*) 
-            FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = :db_name
-            AND TABLE_NAME = :table_name 
-            AND COLUMN_NAME = 'last_modified';
-        """)
-        
-        with mariadb_engine.connect() as maria_conn:
-            has_last_modified = maria_conn.execute(
-                check_column_query.bindparams(
-                    db_name=os.getenv('DBT_MYSQL_DATABASE'),
-                    table_name=table_name
-                )
-            ).scalar() > 0
+        # IMPORTANT: Force table recreation for analytics
+        logger.info(f"Analytics mode: Forcing recreation of table {table_name}")
+        if not create_empty_target_table(table_name):
+            logger.error(f"Failed to create table structure for {table_name}")
+            return False
         
         # Check if table is empty
         count_query = text(f"SELECT COUNT(*) FROM `{table_name}`")
@@ -745,61 +921,14 @@ def sync_table_directly(table_name: str) -> bool:
             row_count = maria_conn.execute(count_query).scalar()
             
         if row_count == 0:
-            logger.info(f"Table {table_name} has no data in source. Creating empty table.")
-            create_empty_target_table(table_name)
+            logger.info(f"Table {table_name} has no data in source. Empty table created.")
             update_sync_timestamp(table_name)
             return True
             
-        # Get primary key for incremental sync
-        pk_column = get_primary_key_safely(table_name)
-        
-        # Construct select query based on sync strategy
-        safe_table = str(sanitize_identifier(table_name))
-        if has_last_modified:
-            # Use %s for MariaDB parameter binding instead of named parameters
-            select_query = f"SELECT * FROM {safe_table} WHERE last_modified > %s"
-            params = (last_sync,)
-            logger.info(
-                f"Performing incremental sync for {table_name} "
-                f"using last_modified > {last_sync}"
-            )
-        else:
-            if pk_column:
-                # Check if target table exists and get max ID
-                check_pg_table_query = text("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_name = :table_name
-                    );
-                """)
-                
-                with pg_engine.connect() as postgres_conn:
-                    pg_table_exists = postgres_conn.execute(
-                        check_pg_table_query.bindparams(table_name=table_name)
-                    ).scalar()
-                
-                if pg_table_exists:
-                    safe_pk = str(sanitize_identifier(pk_column))
-                    # Ensure column name is properly quoted for PostgreSQL
-                    max_id_query = text(f'SELECT MAX("{pk_column}") FROM {safe_table}')
-                    with pg_engine.connect() as postgres_conn:
-                        max_id = postgres_conn.execute(max_id_query).scalar() or 0
-                    
-                    # Use %s for MariaDB parameter binding instead of named parameters
-                    select_query = f'SELECT * FROM {safe_table} WHERE {pk_column} > %s'
-                    params = (max_id,)
-                    logger.info(
-                        f"Performing incremental sync for {table_name} "
-                        f"using primary key {pk_column} > {max_id}"
-                    )
-                else:
-                    select_query = f"SELECT * FROM {safe_table}"
-                    params = {}
-                    logger.info(f"Target table doesn't exist. Full sync for {table_name}")
-            else:
-                select_query = f"SELECT * FROM {safe_table}"
-                params = {}
-                logger.info(f"No incremental capability. Full sync for {table_name}")
+        # For analytics database, always do a full sync
+        select_query = f"SELECT * FROM `{table_name}`"
+        params = {}
+        logger.info(f"Analytics mode: Performing full sync for {table_name}")
         
         # Execute query with chunking
         total_rows = 0
@@ -821,22 +950,23 @@ def sync_table_directly(table_name: str) -> bool:
             if len(chunk_df) == 0:
                 continue
                 
-            # For first chunk, setup the operation type
+            # Always use append mode since we created an empty table
             if_exists = "append"
-            if chunk_number == 0:
-                if not has_last_modified and not pk_column:
-                    if_exists = "replace"
-                    logger.info(f"Performing full replace for table {table_name}")
-                
+            
             rows_in_chunk = len(chunk_df)
             total_rows += rows_in_chunk
             
-            # Process data types for PostgreSQL compatibility
-            chunk_df = convert_data_types(chunk_df)
+            # Add special handling for date columns with empty strings
+            for column in chunk_df.columns:
+                if 'date' in column.lower():
+                    # Replace empty strings with NULL for date columns
+                    chunk_df.loc[chunk_df[column] == '', column] = None
+                    # For columns that should never be NULL, use a default date
+                    if column == 'DateAdverseReaction':
+                        chunk_df.loc[chunk_df[column].isnull(), column] = '0001-01-01'
             
-            # Validate schema before writing
-            if chunk_number == 0:
-                validate_schema(table_name, chunk_df)
+            # Process data types for PostgreSQL compatibility
+            chunk_df = convert_data_types(chunk_df, table_name)
             
             # Use proper SQLAlchemy connection for to_sql to avoid warnings
             with pg_engine.connect() as sqlalchemy_connection:
@@ -857,47 +987,12 @@ def sync_table_directly(table_name: str) -> bool:
         update_sync_timestamp(table_name, total_rows)
         return True
         
-    except SQLAlchemyError as e:
-        error_message = str(e)
-        logger.error(f"Database error syncing {table_name}: {error_message}")
-        
-        # If we have a date/time field overflow error, try to sync the table again
-        if "DatetimeFieldOverflow" in error_message or "date/time field value out of range" in error_message:
-            logger.info(f"Retrying sync for {table_name}")
-            # The convert_data_types function will now handle zero dates better on next attempt
-            try:
-                return sync_table_directly(table_name)
-            except Exception as retry_error:
-                logger.error(f"Retry failed for {table_name}: {str(retry_error)}")
-        
-        update_sync_failure(table_name, error_message)
-        return False
-        
-    except pd.io.sql.DatabaseError as e:
-        error_message = str(e)
-        logger.error(f"Pandas database error syncing {table_name}: {error_message}")
-        
-        # If we have a date/time field overflow error, try to sync the table again
-        if "DatetimeFieldOverflow" in error_message or "date/time field value out of range" in error_message:
-            logger.info(f"Retrying sync for {table_name}")
-            # The convert_data_types function will now handle zero dates better on next attempt
-            try:
-                return sync_table_directly(table_name)
-            except Exception as retry_error:
-                logger.error(f"Retry failed for {table_name}: {str(retry_error)}")
-        
-        update_sync_failure(table_name, error_message)
-        return False
-        
-    except ValueError as e:
-        logger.error(f"Value error in sync process: {str(e)}")
-        update_sync_failure(table_name, str(e))
-        return False
-        
     except Exception as e:
-        logger.error(f"Unexpected error syncing {table_name}: {str(e)}")
-        update_sync_failure(table_name, str(e))
+        error_message = str(e)
+        logger.error(f"Error syncing {table_name}: {error_message}")
+        update_sync_failure(table_name, error_message)
         return False
+    
 
 def verify_data_quality(table_name: str) -> bool:
     """
@@ -906,9 +1001,6 @@ def verify_data_quality(table_name: str) -> bool:
     try:
         # Initialize config
         config = ETLConfig()  # Get singleton instance
-        
-        # Get sanitized table name
-        safe_table = sanitize_identifier(table_name)
         
         # First check if target table exists in PostgreSQL
         check_table_exists_query = text("""
@@ -1079,6 +1171,32 @@ def get_primary_key_safely(table_name: str) -> str:
         except Exception as alt_e:
             logger.warning(f"Could not get primary key for {table_name} using alternative method: {str(alt_e)}")
             return None
+
+def get_not_null_columns(table_name: str) -> List[str]:
+    """Get columns with NOT NULL constraints in the target schema."""
+    try:
+        # Get schema from MariaDB
+        schema_query = text("""
+            SELECT COLUMN_NAME, IS_NULLABLE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = :db_name
+            AND TABLE_NAME = :table_name
+            AND IS_NULLABLE = 'NO';
+        """)
+        
+        schema_df = pd.read_sql(
+            schema_query, 
+            mariadb_engine,
+            params={
+                'db_name': os.getenv('DBT_MYSQL_DATABASE'),
+                'table_name': table_name
+            }
+        )
+        
+        return schema_df['COLUMN_NAME'].tolist() if not schema_df.empty else []
+    except Exception as e:
+        logger.error(f"Error getting NOT NULL columns for {table_name}: {str(e)}")
+        return []
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='MariaDB to PostgreSQL ETL pipeline')
