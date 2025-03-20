@@ -553,6 +553,16 @@ def create_empty_target_table(table_name: str) -> bool:
                     if not auto_increment and nullable != "NOT NULL":
                         nullable = "NOT NULL"
                 
+                # Special handling for TIME columns
+                if col_type == 'TIME':
+                    # For TIME columns, we want to preserve the NULL default behavior
+                    # from MariaDB exactly as it is
+                    if row['COLUMN_DEFAULT'] is None or pd.isna(row['COLUMN_DEFAULT']) or str(row['COLUMN_DEFAULT']).lower() == 'null':
+                        default = "DEFAULT NULL"  # Explicitly set DEFAULT NULL
+                    else:
+                        clean_default = str(row['COLUMN_DEFAULT']).strip("'")
+                        default = f"DEFAULT '{clean_default}'"
+                
                 create_sql_parts.append(
                     f'    "{col_name}" {col_type} {nullable} {default},'
                 )
