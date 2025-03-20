@@ -1,10 +1,15 @@
 # MariaDB to PostgreSQL ETL Pipeline
 
-A Python-based ETL (Extract, Transform, Load) pipeline for migrating data from MariaDB to PostgreSQL, specifically designed for analytics use cases in healthcare and dental clinic environments.
+A Python-based ETL (Extract, Transform, Load) pipeline for migrating data from MariaDB to 
+PostgreSQL, specifically designed for analytics use cases in healthcare and dental clinic 
+environments.
 
 ## Overview
 
-This script provides a robust solution for transferring data from a MariaDB source database to a PostgreSQL target database, with special considerations for analytics workflows. It handles schema conversion, data type mapping, and maintains a tracking system for synchronization status.
+This script provides a robust solution for transferring data from a MariaDB source database 
+to a PostgreSQL target database, with special considerations for analytics workflows. It 
+handles schema conversion, data type mapping, and maintains a tracking system for 
+synchronization status.
 
 ## Features
 
@@ -14,7 +19,8 @@ This script provides a robust solution for transferring data from a MariaDB sour
 - **Progress Tracking**: Maintains sync status and progress for each table
 - **Error Handling**: Comprehensive error catching and logging
 - **Analytics-First Design**: Relaxed constraints in raw layer for data exploration
-- **Special Date Handling**: Properly converts MySQL zero dates (`0000-00-00`) to NULL values in PostgreSQL
+- **Special Date Handling**: Properly converts MySQL zero dates (`0000-00-00`) to NULL values 
+                            in PostgreSQL
 
 ## Prerequisites
 
@@ -77,7 +83,8 @@ python mariadb_postgre_pipe.py --tables table1 table2 table3
 
 ### Date/Time Issues
 
-PostgreSQL is strict about date/time values, unlike MySQL which allows invalid dates like `0000-00-00`. This pipeline handles these differences by:
+PostgreSQL is strict about date/time values, unlike MySQL which allows invalid dates 
+like `0000-00-00`. This pipeline handles these differences by:
 
 1. Converting invalid dates to NULL values
 2. Special handling for common date columns in healthcare tables
@@ -91,11 +98,13 @@ Example tables requiring special handling:
 
 ### Boolean Type Handling
 
-The script automatically maps MySQL `tinyint(1)` to PostgreSQL `BOOLEAN` and provides special handling for columns with boolean-like names (is_*, has_*, etc.).
+The script automatically maps MySQL `tinyint(1)` to PostgreSQL `BOOLEAN` and provides 
+special handling for columns with boolean-like names (is_*, has_*, etc.).
 
 ### Character Set and Encoding
 
-By default, the pipeline assumes UTF-8 encoding. If you encounter character set issues, you may need to adjust encoding parameters in the database connection strings.
+By default, the pipeline assumes UTF-8 encoding. If you encounter character set issues, 
+you may need to adjust encoding parameters in the database connection strings.
 
 ## Data Quality Considerations
 
@@ -141,7 +150,8 @@ For large datasets, you can adjust the following parameters in your `.env` file:
 
 ### Customizing Type Mapping
 
-You can extend the `map_type()` function to handle specific columns or data types unique to your database:
+You can extend the `map_type()` function to handle specific columns or data types 
+unique to your database:
 
 ```python
 def map_type(mysql_type: str, column_name: str = '') -> str:
