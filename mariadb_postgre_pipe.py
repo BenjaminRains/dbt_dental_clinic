@@ -68,15 +68,14 @@ def validate_connections() -> bool:
 
 def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame:
     """Convert DataFrame types to be compatible with PostgreSQL."""
-    # Make a copy of the dataframe to avoid SettingWithCopyWarning
     df = df.copy()
     
-    # Get PostgreSQL column types to ensure proper conversion
+    # Get PostgreSQL column types
     pg_column_types = {}
     try:
         with pg_engine.connect() as conn:
             query = text("""
-                SELECT column_name, data_type 
+                SELECT column_name, data_type, udt_name
                 FROM information_schema.columns 
                 WHERE table_name = :table_name
             """)
@@ -85,59 +84,37 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
     except Exception as e:
         logger.warning(f"Could not get PostgreSQL schema for {table_name}: {str(e)}")
     
-    # For each column in the dataframe, respect the target schema type
+    # Process each column according to target schema type
     for col in df.columns:
         if col in pg_column_types:
             target_type = pg_column_types[col]
             
-            # Only convert to boolean if the target column is defined as boolean
-            if target_type == 'boolean':
-                # Force convert to boolean
-                bool_values = []
-                for val in df[col]:
-                    if pd.isna(val) or val == '':
-                        bool_values.append(pd.NA)
-                    elif val in (True, 1, '1', 'Y', 'y', 'Yes', 'true', 'TRUE'):
-                        bool_values.append(True)
-                    else:
-                        bool_values.append(False)
+            try:
+                if target_type == 'boolean':
+                    # Handle boolean conversion with proper null handling
+                    df[col] = pd.Series([
+                        True if val in (True, 1, '1', 'Y', 'y', 'Yes', 'true', 'TRUE')
+                        else False if pd.notna(val) and val != ''
+                        else None
+                        for val in df[col]
+                    ], index=df.index, dtype='boolean')
                 
-                df.loc[:, col] = pd.array(bool_values, dtype="boolean")
-                logger.info(f"Converted column {col} to boolean based on target schema")
-            
-            # Handle date/timestamp columns
-            elif 'timestamp' in target_type or 'date' in target_type:
-                df.loc[df[col] == '', col] = None
-                try:
-                    df.loc[:, col] = pd.to_datetime(df[col], errors='coerce')
-                except Exception as e:
-                    logger.warning(f"Could not convert {col} to datetime: {str(e)}")
-            
-            # Handle integer types including serial
-            elif 'int' in target_type or 'serial' in target_type:
-                try:
-                    df.loc[:, col] = pd.to_numeric(df[col], errors='coerce', downcast='integer')
-                except Exception as e:
-                    logger.warning(f"Could not convert {col} to integer: {str(e)}")
-            
-            # Handle numeric/decimal types
-            elif 'numeric' in target_type or 'decimal' in target_type:
-                try:
-                    df.loc[:, col] = pd.to_numeric(df[col], errors='coerce')
-                except Exception as e:
-                    logger.warning(f"Could not convert {col} to numeric: {str(e)}")
-            
-            # Handle float types
-            elif 'float' in target_type or 'double' in target_type or 'real' in target_type:
-                try:
-                    df.loc[:, col] = pd.to_numeric(df[col], errors='coerce', downcast='float')
-                except Exception as e:
-                    logger.warning(f"Could not convert {col} to float: {str(e)}")
-            
-            # Handle text types
-            elif 'text' in target_type or 'char' in target_type or 'varchar' in target_type:
-                # Convert to string, handling NaN and None properly
-                df.loc[:, col] = df[col].astype(str).replace({'nan': None, 'None': None})
+                elif target_type in ('integer', 'bigint', 'smallint'):
+                    df[col] = pd.to_numeric(df[col], errors='coerce', downcast='integer')
+                
+                elif target_type in ('numeric', 'decimal', 'real', 'double precision'):
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+                elif 'timestamp' in target_type or 'date' in target_type:
+                    df.loc[df[col] == '', col] = None
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                
+                elif target_type in ('text', 'character varying', 'varchar', 'char'):
+                    # Convert to string but handle nulls properly
+                    df[col] = df[col].astype(str).replace({'nan': None, 'None': None})
+                
+            except Exception as e:
+                logger.warning(f"Could not convert column {col} to {target_type}: {str(e)}")
     
     return df
 
@@ -265,21 +242,20 @@ def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
 
 
 def map_type(mysql_type: str, column_name: str = '') -> str:
-    """Map MySQL types to PostgreSQL types with improved boolean detection."""
+    """Map MySQL types to PostgreSQL types based solely on the actual type information."""
     try:
         type_lower = str(mysql_type).lower()
         
-        # Improved boolean detection
-        if type_lower == 'tinyint(1)' or is_bool_column(column_name, mysql_type):
+        # Only consider tinyint(1) as boolean (MySQL/MariaDB convention)
+        if type_lower == 'tinyint(1)':
             return 'BOOLEAN'
             
-        # Handle SET and ENUM types specially - convert to TEXT
+        # Handle SET and ENUM types
         if type_lower.startswith('set(') or type_lower.startswith('enum('):
             return 'TEXT'
             
         # Integer types
         if 'int' in type_lower:
-            # Don't use SERIAL here - we'll handle auto_increment separately
             return 'BIGINT'
             
         # String types
@@ -288,12 +264,7 @@ def map_type(mysql_type: str, column_name: str = '') -> str:
                 length = type_lower.split('(')[1].split(')')[0]
                 return f'VARCHAR({length})'
             except (IndexError, ValueError):
-                logger.warning(
-                    f"Could not extract length for {mysql_type}, "
-                    "defaulting to VARCHAR(255)"
-                )
                 return 'VARCHAR(255)'
-                
         elif 'text' in type_lower:
             return 'TEXT'
             
@@ -303,7 +274,7 @@ def map_type(mysql_type: str, column_name: str = '') -> str:
         elif 'timestamp' in type_lower:
             return 'TIMESTAMP'
         elif 'date' in type_lower:
-            return 'DATE'  # Ensure DATE type is used for date columns
+            return 'DATE'
         elif 'time' in type_lower:
             return 'TIME'
             
@@ -313,12 +284,7 @@ def map_type(mysql_type: str, column_name: str = '') -> str:
                 precision = type_lower.split('(')[1].split(')')[0]
                 return f'NUMERIC({precision})'
             except (IndexError, ValueError):
-                logger.warning(
-                    f"Could not extract precision for {mysql_type}, "
-                    "defaulting to NUMERIC(10,2)"
-                )
                 return 'NUMERIC(10,2)'
-                
         elif 'float' in type_lower:
             return 'REAL'
         elif 'double' in type_lower:
@@ -328,14 +294,13 @@ def map_type(mysql_type: str, column_name: str = '') -> str:
         elif 'blob' in type_lower or 'binary' in type_lower:
             return 'BYTEA'
             
-        # Default
         else:
             logger.warning(f"Unknown type {mysql_type}, defaulting to TEXT")
             return 'TEXT'
             
     except Exception as e:
         logger.error(f"Error mapping type {mysql_type}: {str(e)}")
-        return 'TEXT'  # Safe fallback
+        return 'TEXT'
 
 def is_numeric_type(mysql_type):
     """Check if MySQL type is numeric."""
