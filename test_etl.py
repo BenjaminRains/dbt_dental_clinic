@@ -95,6 +95,8 @@ def test_convert_data_types():
         'float_col': [1.1, None, 3.3],
         'bool_col': [True, False, None]
     })
+    
+    # Test without table_name parameter
     converted = convert_data_types(df)
     
     assert pd.api.types.is_numeric_dtype(converted['int_col'])
@@ -107,6 +109,26 @@ def test_convert_data_types():
     bool_values = converted['bool_col'].dropna().unique()
     assert all(isinstance(v, bool) for v in bool_values)
     assert converted['bool_col'].isna().sum() == 1  # None preserved
+    
+    # Test with table_name parameter
+    with patch('mariadb_postgre_pipe.get_not_null_columns') as mock_get_not_null_cols:
+        mock_get_not_null_cols.return_value = ['int_col', 'date_col']
+        
+        # Create a new DataFrame with some NULLs to test NOT NULL handling
+        df_with_nulls = pd.DataFrame({
+            'int_col': [1, None, 3],
+            'date_col': [pd.Timestamp('2021-01-01'), None, pd.Timestamp('2021-01-03')]
+        })
+        
+        converted_with_table = convert_data_types(df_with_nulls, 'test_table')
+        
+        # Check that NULLs were filled for NOT NULL columns
+        assert converted_with_table['int_col'].isna().sum() == 0
+        assert converted_with_table['date_col'].isna().sum() == 0
+        
+        # Check that proper default values were used
+        assert converted_with_table.loc[1, 'int_col'] == 0
+        assert converted_with_table.loc[1, 'date_col'] == pd.Timestamp('0001-01-01')
 
 def test_etl_config_singleton():
     with patch.dict(os.environ, {
@@ -246,7 +268,7 @@ def test_sync_table_directly(mock_logger, mock_update_sync, mock_convert_types, 
     mock_maria_conn.execute.side_effect = [
         create_mock_result(scalar_value=1),  # last_modified column check
         create_mock_result(scalar_value=10),  # row count check
-        create_mock_result([('id',)])        # primary key query result
+        create_mock_result([('id',)]),        # primary key query result
     ]
     
     # Create a real DataFrame for to_sql patching
@@ -281,6 +303,9 @@ def test_sync_table_directly(mock_logger, mock_update_sync, mock_convert_types, 
         
         # Verify convert_data_types was called
         mock_convert_types.assert_called()
+        
+        # Verify convert_data_types was called with the correct table name
+        mock_convert_types.assert_called_with(test_data, 'test_table')
         
         # Verify update_sync_timestamp was called
         mock_update_sync.assert_called()
