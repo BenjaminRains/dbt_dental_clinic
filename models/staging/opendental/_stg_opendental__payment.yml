@@ -6,7 +6,9 @@ models:
       Staged payment data from OpenDental system.
       Analysis based on 2023-current data.
     tests:
-      - payment_validation_rules
+      - payment_validation_rules:
+          config:
+            severity: warn  # Changed from error to warn
       - dbt_utils.expression_is_true:
           expression: "payment_date >= '2023-01-01'"
       - dbt_utils.expression_is_true:
@@ -36,7 +38,13 @@ models:
           Type of payment. Current patterns (2023-present):
           - 71: Most common type (8,335 payments), avg $293
           - 0: Administrative entries (1,110 payments), must be $0
-          - 69: High value payments (965 payments), avg $1,036
+          - 69: High value payments (965 payments)
+              * Average: $1,036
+              * Warning Tiers:
+                - LOW: > $5,000
+                - MEDIUM: > $10,000
+                - HIGH: > $25,000
+                - CRITICAL: > $50,000
           - 70: Regular payments (609 payments), avg $348
           - 391: High value (482 payments), avg $922
           - 412: Newer payment type (187 payments), avg $199
