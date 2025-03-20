@@ -3,12 +3,16 @@ version: 2
 
 sources:
   - name: opendental
-    description: "OpenDental backup database schema containing dental practice records"
-    database: opendental_analytics_opendentalbackup_02_28_2025
-    # schema: opendental_analytics_opendentalbackup_02_28_2025
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
     tables:
       - name: payment
         description: "Patient payments for services"
+        loaded_at_field: "SecDateTEdit"  # Add freshness tracking
+        freshness:
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
@@ -29,27 +33,36 @@ sources:
       
       - name: payperiod
         description: "Payment period information"
+        loaded_at_field: "SecDateTEdit"
       
       - name: payplan
         description: "Payment plans for spreading costs over time"
+        loaded_at_field: "SecDateTEdit"
       
       - name: paysplit
         description: "Payment splits across procedures"
+        loaded_at_field: "SecDateTEdit"
       
       - name: statement
         description: "Patient billing statements"
+        loaded_at_field: "SecDateTEdit"
       
       - name: statementprod
         description: "Statement production data"
+        loaded_at_field: "SecDateTEdit"
       
       - name: famaging
         description: "Family aging for accounts receivable"
+        loaded_at_field: "SecDateTEdit"
       
       - name: fee
         description: "Fee amounts for procedures"
+        loaded_at_field: "SecDateTEdit"
       
       - name: feesched
         description: "Fee schedules"
+        loaded_at_field: "SecDateTEdit"
       
       - name: feeschedgroup
         description: "Groupings of fee schedules"
+        loaded_at_field: "SecDateTEdit"
