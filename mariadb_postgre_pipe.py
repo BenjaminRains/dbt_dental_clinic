@@ -75,7 +75,7 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
     try:
         with pg_engine.connect() as conn:
             query = text("""
-                SELECT column_name, data_type, udt_name
+                SELECT column_name, data_type 
                 FROM information_schema.columns 
                 WHERE table_name = :table_name
             """)
@@ -84,38 +84,60 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
     except Exception as e:
         logger.warning(f"Could not get PostgreSQL schema for {table_name}: {str(e)}")
     
-    # Process each column according to target schema type
     for col in df.columns:
-        if col in pg_column_types:
-            target_type = pg_column_types[col]
+        if col not in pg_column_types:
+            continue
             
-            try:
-                if target_type == 'boolean':
-                    # Handle boolean conversion with proper null handling
-                    df[col] = pd.Series([
-                        True if val in (True, 1, '1', 'Y', 'y', 'Yes', 'true', 'TRUE')
-                        else False if pd.notna(val) and val != ''
-                        else None
-                        for val in df[col]
-                    ], index=df.index, dtype='boolean')
+        target_type = pg_column_types[col]
+        try:
+            # Handle TIME type specifically
+            if target_type == 'time without time zone':
+                def convert_to_time_string(val):
+                    if pd.isna(val) or val == '' or val == 0:
+                        return None
+                    
+                    try:
+                        # Handle nanoseconds format
+                        if isinstance(val, (int, float)) and val > 86400:
+                            seconds = val / 1000000000  # Convert nanoseconds to seconds
+                        else:
+                            seconds = float(val)
+                        
+                        hours = int(seconds // 3600)
+                        minutes = int((seconds % 3600) // 60)
+                        secs = int(seconds % 60)
+                        
+                        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+                    except (ValueError, TypeError):
+                        return None
                 
-                elif target_type in ('integer', 'bigint', 'smallint'):
-                    df[col] = pd.to_numeric(df[col], errors='coerce', downcast='integer')
+                df[col] = df[col].apply(convert_to_time_string)
+                logger.info(f"Converted column {col} to time format")
                 
-                elif target_type in ('numeric', 'decimal', 'real', 'double precision'):
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Boolean type
+            elif target_type == 'boolean':
+                bool_values = df[col].map(lambda x: bool(x) if pd.notnull(x) else None)
+                df[col] = pd.Series(bool_values, index=df.index, dtype="boolean")
                 
-                elif 'timestamp' in target_type or 'date' in target_type:
-                    df.loc[df[col] == '', col] = None
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
+            # Integer types
+            elif target_type in ('smallint', 'integer', 'bigint'):
+                df[col] = pd.to_numeric(df[col], errors='coerce', downcast='integer')
                 
-                elif target_type in ('text', 'character varying', 'varchar', 'char'):
-                    # Convert to string but handle nulls properly
-                    df[col] = df[col].astype(str).replace({'nan': None, 'None': None})
+            # Numeric/Decimal types
+            elif target_type in ('numeric', 'decimal', 'real', 'double precision'):
+                df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            except Exception as e:
-                logger.warning(f"Could not convert column {col} to {target_type}: {str(e)}")
-    
+            # Timestamp/Date types
+            elif target_type in ('timestamp', 'date'):
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                
+            # Text types (no conversion needed)
+            elif target_type in ('text', 'varchar', 'char'):
+                df[col] = df[col].astype(str).replace('nan', None)
+                
+        except Exception as e:
+            logger.error(f"Error converting column {col} to {target_type}: {str(e)}")
+            
     return df
 
 def is_bool_column(column_name: str, column_type: str) -> bool:
@@ -242,65 +264,75 @@ def validate_schema(table_name: str, df: pd.DataFrame) -> bool:
 
 
 def map_type(mysql_type: str, column_name: str = '') -> str:
-    """Map MySQL types to PostgreSQL types based solely on the actual type information."""
+    """Map MySQL types to PostgreSQL types with more precise type mapping."""
     try:
         type_lower = str(mysql_type).lower()
         
-        # Only consider tinyint(1) as boolean (MySQL/MariaDB convention)
+        # Specific integer type mappings
         if type_lower == 'tinyint(1)':
+            # Only tinyint(1) should be boolean (MySQL convention)
             return 'BOOLEAN'
-            
-        # Handle SET and ENUM types
-        if type_lower.startswith('set(') or type_lower.startswith('enum('):
-            return 'TEXT'
-            
-        # Integer types
-        if 'int' in type_lower:
+        elif type_lower.startswith('tinyint'):
+            return 'SMALLINT'  # PostgreSQL's smallest integer type
+        elif type_lower.startswith('smallint'):
+            return 'SMALLINT'
+        elif type_lower.startswith('mediumint'):
+            return 'INTEGER'
+        elif type_lower.startswith('int'):
+            return 'INTEGER'
+        elif type_lower.startswith('bigint'):
             return 'BIGINT'
             
+        # Handle SET and ENUM types
+        elif type_lower.startswith('set(') or type_lower.startswith('enum('):
+            return 'TEXT'
+            
         # String types
-        elif 'varchar' in type_lower or 'char' in type_lower:
+        elif type_lower.startswith('varchar') or type_lower.startswith('char'):
             try:
                 length = type_lower.split('(')[1].split(')')[0]
                 return f'VARCHAR({length})'
             except (IndexError, ValueError):
                 return 'VARCHAR(255)'
-        elif 'text' in type_lower:
+                
+        elif type_lower.startswith('text'):
             return 'TEXT'
             
         # Date/time types
-        elif 'datetime' in type_lower:
+        elif type_lower.startswith('datetime'):
             return 'TIMESTAMP'
-        elif 'timestamp' in type_lower:
+        elif type_lower.startswith('timestamp'):
             return 'TIMESTAMP'
-        elif 'date' in type_lower:
+        elif type_lower.startswith('date'):
             return 'DATE'
-        elif 'time' in type_lower:
+        elif type_lower.startswith('time'):
             return 'TIME'
             
         # Numeric types
-        elif 'decimal' in type_lower or 'numeric' in type_lower:
+        elif type_lower.startswith('decimal') or type_lower.startswith('numeric'):
             try:
                 precision = type_lower.split('(')[1].split(')')[0]
                 return f'NUMERIC({precision})'
             except (IndexError, ValueError):
                 return 'NUMERIC(10,2)'
-        elif 'float' in type_lower:
+                
+        elif type_lower.startswith('float'):
             return 'REAL'
-        elif 'double' in type_lower:
+        elif type_lower.startswith('double'):
             return 'DOUBLE PRECISION'
             
         # Binary types
-        elif 'blob' in type_lower or 'binary' in type_lower:
+        elif type_lower.startswith('blob') or type_lower.startswith('binary'):
             return 'BYTEA'
             
+        # Default fallback
         else:
             logger.warning(f"Unknown type {mysql_type}, defaulting to TEXT")
             return 'TEXT'
             
     except Exception as e:
         logger.error(f"Error mapping type {mysql_type}: {str(e)}")
-        return 'TEXT'
+        return 'TEXT'  # Safe fallback
 
 def is_numeric_type(mysql_type):
     """Check if MySQL type is numeric."""
