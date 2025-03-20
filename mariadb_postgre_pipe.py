@@ -127,9 +127,23 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
             elif target_type in ('numeric', 'decimal', 'real', 'double precision'):
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            # Timestamp/Date types - allow NULLs
-            elif target_type in ('timestamp', 'date'):
+            # Timestamp/Date types - allow NULLs and fix invalid dates
+            elif target_type in ('timestamp without time zone', 'timestamp with time zone', 'timestamp', 'date'):
+                # First replace invalid date strings with None
+                if df[col].dtype == 'object':  # Only process string columns
+                    # Replace '0000-00-00' style dates with None
+                    zero_date_mask = df[col].astype(str).str.contains(r'^0+[-/]0+[-/]0+', regex=True, na=False)
+                    if zero_date_mask.any():
+                        df.loc[zero_date_mask, col] = None
+                        logger.info(f"Replaced {zero_date_mask.sum()} zero dates in column {col}")
+                
+                # Now convert to datetime
                 df[col] = pd.to_datetime(df[col], errors='coerce')
+                
+                # If the entire column is NaT (not a valid time) after conversion, it may indicate
+                # a format that pandas couldn't interpret, so log a warning
+                if df[col].isna().all() and len(df) > 0:
+                    logger.warning(f"All values in column {col} converted to NaT. Check the original format.")
                 
             # Text types - convert NaN to NULL
             elif target_type in ('text', 'varchar', 'char'):
@@ -892,14 +906,35 @@ def sync_table_directly(table_name: str) -> bool:
             rows_in_chunk = len(chunk_df)
             total_rows += rows_in_chunk
             
-            # Add special handling for date columns with empty strings
+            # Add special handling for date columns with empty strings or invalid dates
             for column in chunk_df.columns:
-                if 'date' in column.lower():
-                    # Replace empty strings with NULL for date columns
-                    chunk_df.loc[chunk_df[column] == '', column] = None
-                    # For columns that should never be NULL, use a default date
-                    if column == 'DateAdverseReaction':
-                        chunk_df.loc[chunk_df[column].isnull(), column] = '0001-01-01'
+                # Pre-process date/time columns more aggressively
+                if any(date_pattern in column.lower() for date_pattern in ['date', 'time', 'created', 'modified', 'updated']):
+                    # Replace '0000-00-00' dates with NULL
+                    if chunk_df[column].dtype == 'object':  # Only for string columns
+                        # Replace MySQL zero dates with NULL
+                        zero_date_patterns = [
+                            '0000-00-00', 
+                            '0000-00-00 00:00:00', 
+                            '0001-01-01 00:00:00',
+                            '0001-01-01'
+                        ]
+                        for pattern in zero_date_patterns:
+                            chunk_df.loc[chunk_df[column] == pattern, column] = None
+                        
+                        # Also check for patterns like '0-0-0'
+                        zero_pattern_mask = chunk_df[column].astype(str).str.match(r'^0+[-/]0+[-/]0+', na=False)
+                        chunk_df.loc[zero_pattern_mask, column] = None
+                        
+                    # Handle specific known problem columns
+                    if table_name in ['histappointment', 'insverify', 'insverifyhist', 'patplan'] and column.lower() in [
+                        'createdate', 'modifydate', 'startdate', 'enddate', 'effectivedate', 'termdate'
+                    ]:
+                        # For known problematic tables, be extra cautious with these columns
+                        chunk_df.loc[chunk_df[column].isnull(), column] = None
+                        # Also check for other potential invalid dates
+                        potential_invalid = pd.to_datetime(chunk_df[column], errors='coerce').isna()
+                        chunk_df.loc[potential_invalid, column] = None
             
             # Process data types for PostgreSQL compatibility
             chunk_df = convert_data_types(chunk_df, table_name)
