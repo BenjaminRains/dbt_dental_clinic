@@ -332,6 +332,58 @@ models:
 - Document any discrepancies and resolution decisions
 - Create dbt macros for PostgreSQL-specific validation patterns
 
+### 4.3 Custom Test Implementation Pattern
+
+For complex validation rules that require multiple checks, we use a three-file pattern where files share similar names but serve different purposes:
+
+1. **Test Logic File** (`tests/staging/payment_validation_rules.sql`)
+   - Contains the actual validation SQL logic
+   - Returns rows that fail validation
+   - Uses CTEs to organize different validation checks
+   - This is the file you edit to modify validation rules
+   ```sql
+   WITH PaymentData AS (
+       SELECT * FROM {{ ref('stg_opendental__payment') }}
+   ),
+   ValidationFailures AS (
+       -- Your validation logic here
+   )
+   ```
+
+2. **Test Macro File** (`macros/tests/payment_validation_rules.sql`)
+   - Links the test SQL to dbt's testing framework
+   - Simple macro that references the test logic file
+   - Makes the test available to use in YML files
+   - Rarely needs modification
+   ```sql
+   {% test payment_validation_rules(model) %}
+       {{ return(ref('payment_validation_rules')) }}
+   {% endtest %}
+   ```
+
+3. **Compiled Test File** (`target/compiled/dbt_dental_clinic/tests/staging/payment_validation_rules.sql`)
+   - Generated automatically by dbt
+   - Shows the final SQL that dbt will execute
+   - Used for debugging
+   - Never edit this file directly
+   - Gets recreated every time dbt runs
+
+4. **Usage in Model YML**:
+   ```yaml
+   models:
+     - name: stg_opendental__payment
+       tests:
+         - payment_validation_rules:
+             config:
+               severity: warn  # For monitoring without failing
+   ```
+
+This pattern allows us to:
+- Keep complex validation logic organized and maintainable
+- Reuse validation rules across multiple models
+- Provide detailed failure information for debugging
+- Separate test logic from test implementation
+
 ## Best Practices
 
 ### SQL Naming Conventions
