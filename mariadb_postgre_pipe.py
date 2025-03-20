@@ -67,7 +67,7 @@ def validate_connections() -> bool:
 # Modify the convert_data_types function to properly handle time columns in the apptview table
 
 def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame:
-    """Convert DataFrame types to be compatible with PostgreSQL."""
+    """Convert DataFrame types to be compatible with PostgreSQL, but be lenient with NULLs."""
     df = df.copy()
     
     # Get PostgreSQL column types
@@ -94,7 +94,7 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
             if target_type == 'time without time zone':
                 def convert_to_time_string(val):
                     if pd.isna(val) or val == '' or val == 0:
-                        return None
+                        return None  # Be lenient with NULL/empty values
                     
                     try:
                         # Handle nanoseconds format
@@ -114,26 +114,26 @@ def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame
                 df[col] = df[col].apply(convert_to_time_string)
                 logger.info(f"Converted column {col} to time format")
                 
-            # Boolean type
+            # Boolean type - allow NULLs
             elif target_type == 'boolean':
                 bool_values = df[col].map(lambda x: bool(x) if pd.notnull(x) else None)
                 df[col] = pd.Series(bool_values, index=df.index, dtype="boolean")
                 
-            # Integer types
+            # Integer types - allow NULLs
             elif target_type in ('smallint', 'integer', 'bigint'):
-                df[col] = pd.to_numeric(df[col], errors='coerce', downcast='integer')
+                df[col] = pd.to_numeric(df[col], errors='coerce')  # 'coerce' converts invalid to NaN
                 
-            # Numeric/Decimal types
+            # Numeric/Decimal types - allow NULLs
             elif target_type in ('numeric', 'decimal', 'real', 'double precision'):
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            # Timestamp/Date types
+            # Timestamp/Date types - allow NULLs
             elif target_type in ('timestamp', 'date'):
                 df[col] = pd.to_datetime(df[col], errors='coerce')
                 
-            # Text types (no conversion needed)
+            # Text types - convert NaN to NULL
             elif target_type in ('text', 'varchar', 'char'):
-                df[col] = df[col].astype(str).replace('nan', None)
+                df[col] = df[col].astype(str).replace(['nan', 'None', ''], None)
                 
         except Exception as e:
             logger.error(f"Error converting column {col} to {target_type}: {str(e)}")
@@ -441,9 +441,15 @@ def create_empty_target_table(table_name: str) -> bool:
     try:
         safe_table = sanitize_identifier(table_name)
         
-        # Get MariaDB table schema using parameterized query
+        # Get MariaDB table schema
         schema_query = text("""
-            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA
+            SELECT 
+                COLUMN_NAME, 
+                COLUMN_TYPE, 
+                IS_NULLABLE,
+                COLUMN_DEFAULT, 
+                COLUMN_KEY, 
+                EXTRA
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = :db_name
             AND TABLE_NAME = :table_name
@@ -455,7 +461,7 @@ def create_empty_target_table(table_name: str) -> bool:
             mariadb_engine,
             params={
                 'db_name': os.getenv('DBT_MYSQL_DATABASE'),
-                'table_name': table_name  # Use original table name here
+                'table_name': table_name
             }
         )
         
@@ -463,105 +469,48 @@ def create_empty_target_table(table_name: str) -> bool:
             logger.warning(f"No schema found for {table_name}")
             return False
         
-        # Build CREATE TABLE statement with proper sanitization
+        # Build CREATE TABLE statement
         create_sql_parts = [f'CREATE TABLE IF NOT EXISTS "{table_name}" (']
         primary_keys = []
         
         for _, row in schema_df.iterrows():
             try:
-                col_name = row['COLUMN_NAME']  # Keep original column name
+                col_name = row['COLUMN_NAME']
                 col_type = map_type(row['COLUMN_TYPE'], col_name)
                 
-                # For analytics, we might want to relax NOT NULL constraints
-                # to avoid data loading issues:
+                # IMPORTANT: Only enforce NOT NULL on primary key
                 if row['COLUMN_KEY'] == 'PRI':
-                    # Primary keys must be NOT NULL
-                    nullable = "NOT NULL"
-                elif 'auto_increment' in str(row['EXTRA']).lower():
-                    # Auto-increment columns should also be NOT NULL
                     nullable = "NOT NULL"
                 else:
-                    # For analytics purposes, make all other columns nullable
-                    nullable = "NULL"
+                    nullable = ""  # Allow NULL by default for analytics
                 
-                # Handle default values properly
-                default = ""
-                if pd.notna(row['COLUMN_DEFAULT']):
-                    # Handle boolean defaults
-                    if col_type == 'BOOLEAN':
-                        # Handle default values for boolean columns
-                        if row['COLUMN_DEFAULT'] in ('1', 1, 'TRUE', 'true', 'True', 'Y', 'y', 'Yes'):
-                            default = "DEFAULT TRUE"
-                        else:
-                            default = "DEFAULT FALSE"
-                    # Handle DATE column type specifically
-                    elif col_type == 'DATE':
-                        # For DATE columns, add a more robust default value handling
-                        if row['COLUMN_DEFAULT'] == '' or row['COLUMN_DEFAULT'] == "''" or row['COLUMN_DEFAULT'] is None:
-                            default = "DEFAULT '0001-01-01'::date"
-                        elif row['COLUMN_DEFAULT'] == '0001-01-01' or row['COLUMN_DEFAULT'] == "'0001-01-01'":
-                            default = "DEFAULT '0001-01-01'::date"
-                        else:
-                            clean_default = str(row['COLUMN_DEFAULT']).strip("'")
-                            default = f"DEFAULT '{clean_default}'::date"
-                    # Handle timestamp default values
-                    elif ('datetime' in str(row['COLUMN_TYPE']).lower() or 
-                        'timestamp' in str(row['COLUMN_TYPE']).lower()):
-                        if 'current_timestamp' in str(row['COLUMN_DEFAULT']).lower() or row['COLUMN_DEFAULT'] == 'CURRENT_TIMESTAMP':
-                            default = "DEFAULT CURRENT_TIMESTAMP"
-                        elif row['COLUMN_DEFAULT'] == '0001-01-01 00:00:00' or pd.isna(row['COLUMN_DEFAULT']):
-                            default = "DEFAULT '0001-01-01 00:00:00'::timestamp"
-                        else:
-                            clean_default = str(row['COLUMN_DEFAULT']).strip("'")
-                            default = f"DEFAULT '{clean_default}'::timestamp"
-                    elif 'date' in str(row['COLUMN_TYPE']).lower() and col_type != 'DATE':
-                        if row['COLUMN_DEFAULT'] == '0001-01-01' or pd.isna(row['COLUMN_DEFAULT']):
-                            default = "DEFAULT '0001-01-01'::date"
-                        else:
-                            clean_default = str(row['COLUMN_DEFAULT']).strip("'")
-                            default = f"DEFAULT '{clean_default}'::date"
-                    elif is_numeric_type(row['COLUMN_TYPE']):
-                        default = f"DEFAULT {row['COLUMN_DEFAULT']}"
-                    else:
-                        # Handle other string defaults - remove extra quotes
-                        clean_default = str(row['COLUMN_DEFAULT']).strip("'")
-                        # Additional safety check to prevent syntax errors
-                        if all(c.isprintable() for c in clean_default):
-                            default = f"DEFAULT '{clean_default}'"
-                        else:
-                            # If non-printable characters, use empty string
-                            default = "DEFAULT ''"
-                            logger.warning(f"Non-printable characters in default value for {row['COLUMN_NAME']}, using empty string")
-                elif col_type == 'BOOLEAN':
-                    # Provide a safe default for boolean columns even when there's no default in the source
-                    default = "DEFAULT FALSE"
-                
-                # Handle auto increment - IMPORTANT FIX HERE
-                auto_increment = False
+                # Handle auto increment
                 if 'auto_increment' in str(row['EXTRA']).lower():
                     if 'int' in str(row['COLUMN_TYPE']).lower():
                         col_type = 'SERIAL'
                         nullable = ""  # SERIAL implies NOT NULL
-                        default = ""   # SERIAL handles default 
-                        auto_increment = True
+                        default = ""
+                        
+                # Handle default values but be lenient
+                default = ""
+                if pd.notna(row['COLUMN_DEFAULT']):
+                    if col_type == 'BOOLEAN':
+                        if row['COLUMN_DEFAULT'] in ('1', 1, 'TRUE', 'true', 'True'):
+                            default = "DEFAULT TRUE"
+                        else:
+                            default = "DEFAULT FALSE"
+                    elif col_type == 'DATE':
+                        # Don't enforce date defaults, let NULLs through
+                        pass
+                    elif 'timestamp' in col_type.lower():
+                        if 'current_timestamp' in str(row['COLUMN_DEFAULT']).lower():
+                            default = "DEFAULT CURRENT_TIMESTAMP"
+                    elif is_numeric_type(row['COLUMN_TYPE']):
+                        default = f"DEFAULT {row['COLUMN_DEFAULT']}"
                 
                 # Track primary keys
                 if row['COLUMN_KEY'] == 'PRI':
                     primary_keys.append(f'"{col_name}"')
-                    
-                    # Make sure primary key is NOT NULL even if auto_increment is handled separately
-                    if not auto_increment and nullable != "NOT NULL":
-                        nullable = "NOT NULL"
-                
-                # Special handling for TIME columns
-                if col_type == 'TIME':
-                    # For TIME columns, we want to preserve the NULL default behavior
-                    # from MariaDB exactly as it is
-                    if row['COLUMN_DEFAULT'] is None or pd.isna(row['COLUMN_DEFAULT']) or str(row['COLUMN_DEFAULT']).lower() == 'null':
-                        default = "DEFAULT NULL"  # Explicitly set DEFAULT NULL
-                    else:
-                        clean_default = str(row['COLUMN_DEFAULT']).strip("'")
-                        default = f"DEFAULT '{clean_default}'"
                 
                 create_sql_parts.append(
                     f'    "{col_name}" {col_type} {nullable} {default},'
@@ -576,7 +525,6 @@ def create_empty_target_table(table_name: str) -> bool:
             primary_key_line = f"    PRIMARY KEY ({', '.join(primary_keys)})"
             create_sql_parts.append(primary_key_line)
         else:
-            # Remove trailing comma from the last column definition
             create_sql_parts[-1] = create_sql_parts[-1].rstrip(',')
         
         # Finalize statement
@@ -593,7 +541,7 @@ def create_empty_target_table(table_name: str) -> bool:
             conn.execute(text(drop_sql))
             conn.execute(text(create_sql))
             
-        # Now we need to create the secondary indexes
+        # Create secondary indexes
         create_indexes_result = create_secondary_indexes(table_name)
         if create_indexes_result:
             logger.info(f"Created table {table_name} with indexes in PostgreSQL")
