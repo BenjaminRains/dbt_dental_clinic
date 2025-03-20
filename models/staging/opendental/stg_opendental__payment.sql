@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='payment_id'
+    unique_key='payment_id',
+    schema='staging'
 ) }}
 
 WITH Source AS (
@@ -35,9 +36,9 @@ Renamed AS (
         NULLIF(TRIM("ExternalId"), '') AS external_id,  -- varchar(255)
 
         -- Status flags (all smallint in DDL, default 0)
-        COALESCE("IsSplit", 0)::smallint::boolean AS is_split_flag,
-        COALESCE("IsRecurringCC", 0)::smallint::boolean AS is_recurring_cc_flag,
-        COALESCE("IsCcCompleted", 0)::smallint::boolean AS is_cc_completed_flag,
+        CASE WHEN COALESCE("IsSplit", 0) = 1 THEN TRUE ELSE FALSE END AS is_split_flag,
+        CASE WHEN COALESCE("IsRecurringCC", 0) = 1 THEN TRUE ELSE FALSE END AS is_recurring_cc_flag,
+        CASE WHEN COALESCE("IsCcCompleted", 0) = 1 THEN TRUE ELSE FALSE END AS is_cc_completed_flag,
         COALESCE("PaymentStatus", 0)::smallint AS payment_status,
         COALESCE("ProcessStatus", 0)::smallint AS process_status,  -- Has index: payment_ProcessStatus
         COALESCE("PaymentSource", 0)::smallint AS payment_source,
