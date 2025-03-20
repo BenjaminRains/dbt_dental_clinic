@@ -1,6 +1,6 @@
 # MariaDB to PostgreSQL ETL Pipeline
 
-A Python-based ETL (Extract, Transform, Load) pipeline for migrating data from MariaDB to PostgreSQL, specifically designed for analytics use cases.
+A Python-based ETL (Extract, Transform, Load) pipeline for migrating data from MariaDB to PostgreSQL, specifically designed for analytics use cases in healthcare and dental clinic environments.
 
 ## Overview
 
@@ -14,6 +14,7 @@ This script provides a robust solution for transferring data from a MariaDB sour
 - **Progress Tracking**: Maintains sync status and progress for each table
 - **Error Handling**: Comprehensive error catching and logging
 - **Analytics-First Design**: Relaxed constraints in raw layer for data exploration
+- **Special Date Handling**: Properly converts MySQL zero dates (`0000-00-00`) to NULL values in PostgreSQL
 
 ## Prerequisites
 
@@ -22,8 +23,12 @@ This script provides a robust solution for transferring data from a MariaDB sour
   - pandas
   - sqlalchemy
   - pymysql
-  - psycopg2
+  - psycopg2-binary
   - python-dotenv
+
+```bash
+pip install pandas sqlalchemy pymysql psycopg2-binary python-dotenv
+```
 
 ## Configuration
 
@@ -68,6 +73,30 @@ python mariadb_postgre_pipe.py
 python mariadb_postgre_pipe.py --tables table1 table2 table3
 ```
 
+## Common Issues and Solutions
+
+### Date/Time Issues
+
+PostgreSQL is strict about date/time values, unlike MySQL which allows invalid dates like `0000-00-00`. This pipeline handles these differences by:
+
+1. Converting invalid dates to NULL values
+2. Special handling for common date columns in healthcare tables
+3. Robust error handling for date conversion failures
+
+Example tables requiring special handling:
+- histappointment
+- insverify
+- insverifyhist
+- patplan
+
+### Boolean Type Handling
+
+The script automatically maps MySQL `tinyint(1)` to PostgreSQL `BOOLEAN` and provides special handling for columns with boolean-like names (is_*, has_*, etc.).
+
+### Character Set and Encoding
+
+By default, the pipeline assumes UTF-8 encoding. If you encounter character set issues, you may need to adjust encoding parameters in the database connection strings.
+
 ## Data Quality Considerations
 
 - Primary keys are preserved and enforced
@@ -85,6 +114,20 @@ The script maintains detailed logs in `etl.log`, including:
 - Error messages
 - Data quality check results
 
+### Troubleshooting Common Log Messages
+
+- `DatetimeFieldOverflow`: Indicates invalid date values in source data
+- `ProgrammingError: column X does not exist`: Schema mismatch between source and target
+- `OperationalError: connection failed`: Database connection issues
+
+## Performance Tuning
+
+For large datasets, you can adjust the following parameters in your `.env` file:
+
+- `ETL_CHUNK_SIZE`: Number of rows to process in memory at once
+- `ETL_SUB_CHUNK_SIZE`: Number of rows per batch insert
+- `ETL_SMALL_TABLE_THRESHOLD`: Tables smaller than this will use exact row count matching
+
 ## Best Practices
 
 1. **Testing**: Always test with a subset of data first
@@ -92,6 +135,31 @@ The script maintains detailed logs in `etl.log`, including:
 3. **Validation**: Use dbt tests for data quality checks
 4. **Backup**: Ensure source data is backed up before migration
 5. **Performance**: Adjust chunk sizes based on your system resources
+6. **Date Columns**: Pay special attention to date columns when troubleshooting
+
+## Advanced Usage
+
+### Customizing Type Mapping
+
+You can extend the `map_type()` function to handle specific columns or data types unique to your database:
+
+```python
+def map_type(mysql_type: str, column_name: str = '') -> str:
+    # Custom mapping for specific column names
+    if column_name == 'special_column':
+        return 'JSONB'  # Use PostgreSQL JSON type
+        
+    # Default mappings
+    type_lower = str(mysql_type).lower()
+    # ... rest of function
+```
+
+### Handling Large Binary Objects
+
+For tables with BLOB/BINARY columns, consider:
+1. Using `ETL_CHUNK_SIZE=10000` (smaller chunks)
+2. Setting `method='multi'` in the `to_sql` call
+3. Potentially skipping these columns or tables if they're not needed for analytics
 
 ## Error Handling
 
@@ -102,56 +170,10 @@ The script includes comprehensive error handling for:
 - Primary key violations
 - Resource constraints
 
-## Contributing
-
-[Add contribution guidelines if this is an open-source project]
-
 ## License
 
 [Add license information]
 
-def map_type(mysql_type: str, column_name: str = '') -> str:
-    """Map MySQL types to PostgreSQL types with more precise type mapping."""
-    type_lower = str(mysql_type).lower()
-    
-    # Basic integer mappings
-    if type_lower == 'tinyint(1)':
-        return 'BOOLEAN'
-    elif type_lower.startswith('tinyint'):
-        return 'SMALLINT'
-    elif type_lower.startswith('int'):
-        return 'INTEGER'
-    elif type_lower.startswith('bigint'):
-        return 'BIGINT'
-    
-    # String types - preserve lengths where possible
-    elif type_lower.startswith('varchar'):
-        try:
-            length = type_lower.split('(')[1].split(')')[0]
-            return f'VARCHAR({length})'
-        except:
-            return 'VARCHAR(255)'  # Safe fallback
-    
-    # Handle special types as TEXT
-    elif type_lower.startswith('set(') or type_lower.startswith('enum('):
-        return 'TEXT'  # Convert to TEXT for maximum flexibility
+## Contributing
 
-def convert_data_types(df: pd.DataFrame, table_name: str = None) -> pd.DataFrame:
-    """Convert DataFrame types to be compatible with PostgreSQL, but be lenient with NULLs."""
-    
-    # Handle TIME type with NULL allowance
-    if target_type == 'time without time zone':
-        df[col] = df[col].apply(lambda x: None if pd.isna(x) or x == '' else x)
-    
-    # Boolean type - allow NULLs
-    elif target_type == 'boolean':
-        bool_values = df[col].map(lambda x: bool(x) if pd.notnull(x) else None)
-        df[col] = pd.Series(bool_values, dtype="boolean")
-    
-    # Integer types - use 'coerce' to convert invalid to NULL
-    elif target_type in ('smallint', 'integer', 'bigint'):
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    # Dates - allow NULLs for invalid dates
-    elif target_type in ('timestamp', 'date'):
-        df[col] = pd.to_datetime(df[col], errors='coerce')
+[Add contribution guidelines if this is an open-source project]
