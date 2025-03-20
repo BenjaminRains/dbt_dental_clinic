@@ -94,11 +94,13 @@ ValidationFailures AS (
        OR (payment_type_id = 574 AND payment_amount > 50000)
 )
 
+-- Modified return statement for dbt test
+-- dbt tests fail if they return any rows
 SELECT 
+    payment_id,
+    payment_type_id,
+    payment_amount,
+    payment_date,
     failure_type,
-    failed_field,
-    COUNT(*) AS failure_count,
-    array_agg(payment_id) AS failed_payment_ids
+    failed_field
 FROM ValidationFailures
-GROUP BY failure_type, failed_field
-ORDER BY failure_count DESC
