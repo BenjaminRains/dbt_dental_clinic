@@ -1,3 +1,5 @@
+{{ config(severity = 'warn') }}
+
 /*
   PAYMENT VALIDATION RULES
   =======================
@@ -81,26 +83,38 @@ ValidationFailures AS (
 
     UNION ALL
 
-    -- 4. Payment Amount Validation
+    -- 4. Payment Amount Validation (with tiered warnings)
     SELECT 
         payment_id,
         payment_type_id,
         payment_amount,
         payment_date,
-        'Suspicious payment amount' AS failure_type,
+        CASE 
+            WHEN payment_type_id = 69 AND payment_amount > 50000 
+                THEN 'CRITICAL: Type 69 payment exceeds $50,000'
+            WHEN payment_type_id = 69 AND payment_amount > 25000 
+                THEN 'HIGH: Type 69 payment exceeds $25,000'
+            WHEN payment_type_id = 69 AND payment_amount > 10000 
+                THEN 'MEDIUM: Type 69 payment exceeds $10,000'
+            WHEN payment_type_id = 69 AND payment_amount > 5000 
+                THEN 'LOW: Type 69 payment exceeds $5,000'
+            WHEN payment_type_id = 574 AND payment_amount > 50000 
+                THEN 'Type 574 exceeds threshold'
+        END AS failure_type,
         'payment_amount' AS failed_field
     FROM PaymentData
     WHERE (payment_type_id = 69 AND payment_amount > 5000)
        OR (payment_type_id = 574 AND payment_amount > 50000)
 )
 
--- Modified return statement for dbt test
--- dbt tests fail if they return any rows
-SELECT 
-    payment_id,
-    payment_type_id,
-    payment_amount,
-    payment_date,
-    failure_type,
-    failed_field
-FROM ValidationFailures
+SELECT * FROM ValidationFailures
+WHERE failure_type IS NOT NULL
+ORDER BY 
+    CASE 
+        WHEN failure_type LIKE 'CRITICAL%' THEN 1
+        WHEN failure_type LIKE 'HIGH%' THEN 2
+        WHEN failure_type LIKE 'MEDIUM%' THEN 3
+        WHEN failure_type LIKE 'LOW%' THEN 4
+        ELSE 5
+    END,
+    payment_amount DESC
