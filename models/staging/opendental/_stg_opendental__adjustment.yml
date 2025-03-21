@@ -1,0 +1,99 @@
+version: 2
+
+models:
+  - name: stg_opendental__adjustment
+    description: >
+      Staged adjustment data from OpenDental system.
+      Contains financial adjustments including insurance write-offs, discounts, refunds, and other account modifications.
+      Filtered to include data from 2022-01-01 onwards with basic data quality checks.
+
+    columns:
+      - name: adjustment_id
+        description: Primary key, unique identifier for each adjustment record
+        tests:
+          - unique
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+
+      - name: procedure_id
+        description: Foreign key to the procedure table, NULL if not associated with a specific procedure
+
+      - name: provider_id
+        description: Foreign key to the provider table who authorized the adjustment
+
+      - name: clinic_id
+        description: Foreign key to the clinic table where adjustment was made
+
+      - name: adjustment_amount
+        description: The monetary value of the adjustment (positive for credits, negative for debits)
+        tests:
+          - not_null
+
+      - name: adjustment_date
+        description: Date when the adjustment was applied
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '2022-01-01'
+              max_value: "{{ current_date() }}"
+
+      - name: procedure_date
+        description: Date of the associated procedure, if applicable
+
+      - name: adjustment_category
+        description: >
+          Categorized type of adjustment including:
+          - insurance_writeoff
+          - provider_discount
+          - senior_discount
+          - reallocation
+          - employee_discount
+          - cash_discount
+          - patient_refund
+          - referral_credit
+          - new_patient_discount
+          - admin_correction
+          - admin_adjustment
+          - unearned_income
+          - other
+
+      - name: adjustment_size
+        description: Categorization of adjustment amount (large >= 1000, medium >= 500, small >= 100, minimal < 100)
+        tests:
+          - accepted_values:
+              values: ['large', 'medium', 'small', 'minimal']
+
+      - name: is_procedure_adjustment
+        description: Boolean flag indicating if adjustment is linked to a specific procedure
+
+      - name: is_retroactive_adjustment
+        description: Boolean flag indicating if adjustment date differs from procedure date
+
+      - name: is_provider_discretion
+        description: Boolean flag indicating if adjustment was made at provider's discretion
+
+      - name: is_employee_discount
+        description: Boolean flag for employee-specific discounts
+
+      - name: is_military_discount
+        description: Boolean flag for military-specific discounts
+
+      - name: is_courtesy_adjustment
+        description: Boolean flag for courtesy or warranty-related adjustments
+
+      - name: last_modified_at
+        description: Timestamp of last modification to the adjustment record
+
+      - name: created_by_user_id
+        description: Foreign key to the user who created the adjustment
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000000  # Adjust based on expected volume
+          
+
