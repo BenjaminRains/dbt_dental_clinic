@@ -41,9 +41,7 @@ sources:
           - name: ProcNum
             description: Reference to procedure if applicable (indexed)
           - name: ProvNum
-            description: Provider who authorized the adjustment
-          - name: ClinicNum
-            description: Clinic where adjustment was made
+            description: Provider who authorized the adjustment (must be from active provider list)
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
@@ -53,15 +51,21 @@ sources:
               - test: "required_fields_validation"
                 status: "pass"
                 fields: ["AdjNum", "PatNum", "AdjAmt", "AdjDate", "AdjType"]
-              - test: "adjustment_type_validation"
+              - test: "provider_validation"
                 status: "pass"
-                description: "Validates common adjustment types (188, 474, 186, etc.)"
-              - test: "amount_validation"
+                description: "Validates against active provider list (28, 47, 52, 48, 20, 19, 29, 53, 7, 30, 50, 43, 3, 12)"
+              - test: "procedure_documentation"
                 status: "pass"
-                description: "Validates reasonable adjustment amounts"
-              - test: "date_validation"
+                description: "Validates procedure flags and required documentation"
+              - test: "discount_flag_validation"
                 status: "pass"
-                description: "Ensures dates are within valid range"
+                description: "Validates employee and provider discount flags"
+              - test: "category_mapping"
+                status: "pass"
+                description: "Validates adjustment type categories (insurance_writeoff, provider_discount, senior_discount)"
+              - test: "large_adjustment_monitoring"
+                status: "warning"
+                description: "Monitors adjustments ≥$1000 with severity levels (CRITICAL ≥$5000, HIGH ≥$2500)"
           indexes:
             - columns: ["AdjDate", "PatNum"]
               type: "btree"
@@ -100,11 +104,6 @@ sources:
                 description: "Payment types validated with warning severity for flexibility"
               - test: "payment_validation_rules"
                 status: "pass"
-      
-      - name: payperiod
-        description: "Payment period information"
-        loaded_at_field: "SecDateTEdit"
-      
       
       - name: paysplit
         description: >
