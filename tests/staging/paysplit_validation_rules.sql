@@ -93,17 +93,20 @@ ValidationFailures AS (
 
     UNION ALL
 
-    -- 3. Patient Match Validation
+    -- 3. Patient Match Validation (Updated for Guarantor relationship)
     SELECT 
         ps.paysplit_id,
         ps.payment_id,
         ps.split_amount,
         ps.payment_date,
-        'Patient mismatch' AS failure_type,
+        'Patient mismatch without guarantor relationship' AS failure_type,
         'patient_id' AS failed_field
     FROM {{ ref('stg_opendental__paysplit') }} ps
     JOIN PaymentData p ON ps.payment_id = p.payment_id
+    LEFT JOIN {{ ref('stg_opendental__patient') }} pat 
+        ON ps.patient_id = pat.patient_id
     WHERE ps.patient_id != p.patient_id
+        AND p.patient_id != pat.guarantor_id  -- Only flag if payer is not the guarantor
 
     UNION ALL
 
@@ -238,14 +241,14 @@ ValidationFailures AS (
         ps.split_amount,
         ps.payment_date,
         CASE
-            WHEN ps.current_balance > 1000 AND ps.provider_id IS NULL 
-                THEN 'CRITICAL: High balance split missing provider'
-            WHEN ps.current_balance > 1000 AND ps.unearned_type IN (288, 439)
-                THEN 'HIGH: High balance unearned split'
+            WHEN ps.split_amount > 1000 AND ps.provider_id IS NULL 
+                THEN 'CRITICAL: High split amount missing provider'
+            WHEN ps.split_amount > 1000 AND ps.unearned_type IN (288, 439)
+                THEN 'HIGH: High amount unearned split'
         END AS failure_type,
         'balance_risk' AS failed_field
     FROM {{ ref('stg_opendental__paysplit') }} ps
-    WHERE ps.current_balance > 1000 
+    WHERE ps.split_amount > 1000 
       AND (ps.provider_id IS NULL OR ps.unearned_type IN (288, 439))
 
     UNION ALL
