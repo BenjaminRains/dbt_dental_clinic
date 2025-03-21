@@ -1,27 +1,24 @@
 version: 2
 
 models:
-  - name: _stg_opendental__paysplit
+  - name: stg_opendental__paysplit
     description: >
       Staging model for OpenDental payment splits. Payment splits represent individual allocations
       of payments to specific procedures, adjustments, or payment plans. This model includes
       data from 2023-01-01 onwards and is incrementally loaded.
     
     tests:
+      # Test: Each split must be allocated to either a procedure, adjustment, or payment plan
       - dbt_utils.expression_is_true:
-          name: paysplit_reference_validation
           expression: "procedure_id IS NOT NULL OR adjustment_id IS NOT NULL OR payplan_charge_id IS NOT NULL"
-          description: "Each split must be allocated to either a procedure, adjustment, or payment plan"
       
+      # Test: Split amount should not be zero unless it's marked as a discount
       - dbt_utils.expression_is_true:
-          name: paysplit_zero_amount_validation
           expression: "NOT (split_amount = 0 AND is_discount_flag = false)"
-          description: "Split amount should not be zero unless it's marked as a discount"
       
+      # Test: Unearned splits (types 288, 439) must have a provider assigned
       - dbt_utils.expression_is_true:
-          name: paysplit_unearned_provider_validation
           expression: "NOT (unearned_type IN (288, 439) AND provider_id IS NULL)"
-          description: "Unearned splits (types 288, 439) must have a provider assigned"
 
     columns:
       - name: paysplit_id
@@ -70,12 +67,12 @@ models:
         description: The monetary amount of this payment split
         tests:
           - not_null
+          # Test: Type 288 splits should not exceed $25,000
           - dbt_utils.expression_is_true:
               expression: "NOT (unearned_type = 288 AND split_amount > 25000)"
-              description: "Type 288 splits should not exceed $25,000"
+          # Test: Type 439 splits should not exceed $16,000
           - dbt_utils.expression_is_true:
               expression: "NOT (unearned_type = 439 AND split_amount > 16000)"
-              description: "Type 439 splits should not exceed $16,000"
 
       - name: payment_date
         description: Date when the payment was made
@@ -101,9 +98,9 @@ models:
           - Type 288: Represents one type of unearned income
           - Type 439: Represents another type of unearned income
         tests:
+          # Test: Unearned types must be either 288, 439, or null
           - accepted_values:
               values: [288, 439, null]
-              description: "Unearned types must be either 288, 439, or null"
 
       - name: payplan_debit_type
         description: Type of debit if associated with a payment plan
@@ -120,7 +117,7 @@ models:
 
     meta:
       contains_pii: true
-      owner: "dental_finance_team"
+      owner: "mdc analytics team"
       validation_rules:
         - "Required Fields: All key fields (payment_id, split_amount, payment_date) must be populated"
         - "Reference Rules: Must have either procedure_id, adjustment_id, or payplan_charge_id"
