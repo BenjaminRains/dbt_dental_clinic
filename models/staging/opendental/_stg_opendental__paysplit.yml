@@ -1,0 +1,131 @@
+version: 2
+
+models:
+  - name: _stg_opendental__paysplit
+    description: >
+      Staging model for OpenDental payment splits. Payment splits represent individual allocations
+      of payments to specific procedures, adjustments, or payment plans. This model includes
+      data from 2023-01-01 onwards and is incrementally loaded.
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          name: paysplit_reference_validation
+          expression: "procedure_id IS NOT NULL OR adjustment_id IS NOT NULL OR payplan_charge_id IS NOT NULL"
+          description: "Each split must be allocated to either a procedure, adjustment, or payment plan"
+      
+      - dbt_utils.expression_is_true:
+          name: paysplit_zero_amount_validation
+          expression: "NOT (split_amount = 0 AND is_discount_flag = false)"
+          description: "Split amount should not be zero unless it's marked as a discount"
+      
+      - dbt_utils.expression_is_true:
+          name: paysplit_unearned_provider_validation
+          expression: "NOT (unearned_type IN (288, 439) AND provider_id IS NULL)"
+          description: "Unearned splits (types 288, 439) must have a provider assigned"
+
+    columns:
+      - name: paysplit_id
+        description: Unique identifier for each payment split record
+        tests:
+          - unique
+          - not_null
+
+      # Relationship columns
+      - name: payment_id
+        description: Foreign key to the parent payment record
+        tests:
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to the patient associated with this payment split
+        tests:
+          - not_null
+
+      - name: clinic_id
+        description: Foreign key to the clinic where the payment split was recorded
+
+      - name: provider_id
+        description: Foreign key to the provider associated with this payment split
+
+      - name: procedure_id
+        description: Foreign key to the dental procedure this split is applied to
+
+      - name: adjustment_id
+        description: Foreign key to any related adjustment record
+
+      - name: payplan_id
+        description: Foreign key to the associated payment plan, if applicable
+
+      - name: payplan_charge_id
+        description: Foreign key to the specific payment plan charge
+
+      - name: forward_split_id
+        description: Reference to another split record if this is a forwarded payment
+
+      - name: created_by_user_id
+        description: ID of the user who created this payment split record
+
+      # Split details
+      - name: split_amount
+        description: The monetary amount of this payment split
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "NOT (unearned_type = 288 AND split_amount > 25000)"
+              description: "Type 288 splits should not exceed $25,000"
+          - dbt_utils.expression_is_true:
+              expression: "NOT (unearned_type = 439 AND split_amount > 16000)"
+              description: "Type 439 splits should not exceed $16,000"
+
+      - name: payment_date
+        description: Date when the payment was made
+        tests:
+          - not_null
+
+      - name: procedure_date
+        description: Date of the associated procedure, if applicable
+
+      # Flags and types
+      - name: is_discount_flag
+        description: Boolean flag indicating if this split represents a discount
+        tests:
+          - not_null
+
+      - name: discount_type
+        description: Type of discount if this split represents a discount
+
+      - name: unearned_type
+        description: >
+          Classification for unearned payment types. 
+          Special attention required for types:
+          - Type 288: Represents one type of unearned income
+          - Type 439: Represents another type of unearned income
+        tests:
+          - accepted_values:
+              values: [288, 439, null]
+              description: "Unearned types must be either 288, 439, or null"
+
+      - name: payplan_debit_type
+        description: Type of debit if associated with a payment plan
+
+      # Metadata columns
+      - name: entry_date
+        description: Date when this split record was entered into the system
+
+      - name: updated_at
+        description: Timestamp of the last update to this record
+
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the warehouse
+
+    meta:
+      contains_pii: true
+      owner: "dental_finance_team"
+      validation_rules:
+        - "Required Fields: All key fields (payment_id, split_amount, payment_date) must be populated"
+        - "Reference Rules: Must have either procedure_id, adjustment_id, or payplan_charge_id"
+        - "Amount Rules: Split amount should not be 0 unless marked as discount"
+        - "Patient Match: Patient ID should match the parent payment's patient"
+        - "Unearned Types: Special handling for types 288 and 439"
+        - "Provider Assignment: Required for unearned income types"
+        - "Amount Thresholds: Monitoring for statistical outliers in split amounts"
