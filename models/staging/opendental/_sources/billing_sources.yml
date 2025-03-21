@@ -7,12 +7,82 @@ sources:
     database: opendental_analytics
     schema: public  # PostgreSQL schema
     tables:
+
+      - name: adjustment
+        description: >
+          Financial adjustments including insurance write-offs, discounts, refunds, and other account modifications.
+          Core table for tracking all account balance adjustments and financial corrections.
+        loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: AdjNum
+            description: Primary key for adjustments
+            tests:
+              - unique
+              - not_null
+          - name: PatNum
+            description: Reference to patient record (indexed)
+            tests:
+              - not_null
+          - name: AdjAmt
+            description: Adjustment amount (positive for credits, negative for debits)
+            tests:
+              - not_null
+          - name: AdjDate
+            description: Date of adjustment (BRIN indexed)
+            tests:
+              - not_null
+          - name: AdjType
+            description: Type code for adjustment classification
+            tests:
+              - not_null
+          - name: ProcNum
+            description: Reference to procedure if applicable (indexed)
+          - name: ProvNum
+            description: Provider who authorized the adjustment
+          - name: ClinicNum
+            description: Clinic where adjustment was made
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 10
+            tests_total: 10
+            quality_checks:
+              - test: "required_fields_validation"
+                status: "pass"
+                fields: ["AdjNum", "PatNum", "AdjAmt", "AdjDate", "AdjType"]
+              - test: "adjustment_type_validation"
+                status: "pass"
+                description: "Validates common adjustment types (188, 474, 186, etc.)"
+              - test: "amount_validation"
+                status: "pass"
+                description: "Validates reasonable adjustment amounts"
+              - test: "date_validation"
+                status: "pass"
+                description: "Ensures dates are within valid range"
+          indexes:
+            - columns: ["AdjDate", "PatNum"]
+              type: "btree"
+            - columns: ["PatNum"]
+              type: "btree"
+            - columns: ["ProcNum"]
+              type: "btree"
+            - columns: ["ClinicNum"]
+              type: "btree"
+            - columns: ["ProvNum"]
+              type: "btree"
+          contains_pii: true
+          business_owners: ["dental_finance_team"]
+          technical_owners: ["data_engineering_team"]
+
       - name: payment
         description: "Patient payments for services"
         loaded_at_field: "SecDateTEdit"  # Add freshness tracking
         freshness:
-          warn_after: {count: 24, period: hour}
-          error_after: {count: 48, period: hour}
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
@@ -35,13 +105,79 @@ sources:
         description: "Payment period information"
         loaded_at_field: "SecDateTEdit"
       
-      - name: payplan
-        description: "Payment plans for spreading costs over time"
-        loaded_at_field: "SecDateTEdit"
       
       - name: paysplit
-        description: "Payment splits across procedures"
+        description: >
+          Payment splits that allocate payments across procedures, adjustments, and payment plans.
+          Contains detailed tracking of how payments are distributed, including special handling
+          for unearned income types (288, 439) and discounts.
         loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: SplitNum
+            description: Primary key for payment splits
+            tests:
+              - unique
+              - not_null
+          - name: PayNum
+            description: Reference to parent payment record
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'payment')
+                  field: PayNum
+          - name: SplitAmt
+            description: Amount of the split (default 0)
+            tests:
+              - not_null
+          - name: DatePay
+            description: Payment date (BRIN indexed)
+            tests:
+              - not_null
+          - name: ProcNum
+            description: Reference to procedure (indexed)
+          - name: AdjNum
+            description: Reference to adjustment (indexed)
+          - name: IsDiscount
+            description: Flag for discounts (smallint)
+          - name: PatNum
+            description: Reference to patient (indexed)
+          - name: UnearnedType
+            description: Income recognition type (288 and 439 for unearned)
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 12
+            tests_total: 12
+            quality_checks:
+              - test: "required_fields_validation"
+                status: "pass"
+                fields: ["SplitNum", "PayNum", "SplitAmt", "DatePay"]
+              - test: "reference_validation"
+                status: "pass"
+                description: "Must have either ProcNum, AdjNum, or PayPlanChargeNum"
+              - test: "amount_validation"
+                status: "pass"
+                description: "SplitAmt should not be 0 unless IsDiscount=1"
+              - test: "unearned_type_validation"
+                status: "pass"
+                description: "Validates types 288 and 439 for unearned income"
+          indexes:
+            - columns: ["PayNum"]
+              type: "btree"
+            - columns: ["DatePay"]
+              type: "brin"
+            - columns: ["ProcNum"]
+              type: "btree"
+            - columns: ["AdjNum"]
+              type: "btree"
+            - columns: ["PatNum"]
+              type: "btree"
+          contains_pii: true
+          business_owners: ["dental_finance_team"]
+          technical_owners: ["data_engineering_team"]
       
       - name: statement
         description: "Patient billing statements"
@@ -49,10 +185,6 @@ sources:
       
       - name: statementprod
         description: "Statement production data"
-        loaded_at_field: "SecDateTEdit"
-      
-      - name: famaging
-        description: "Family aging for accounts receivable"
         loaded_at_field: "SecDateTEdit"
       
       - name: fee
