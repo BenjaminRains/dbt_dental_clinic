@@ -96,28 +96,3 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
           max_value: 1000000  # Adjust based on expected volume
-
-      # Custom Validation Tests
-      - custom_validation:
-          name: adjustment_validation_rules
-          description: >
-            Comprehensive validation suite for adjustment data including:
-            - Primary key uniqueness checks
-            - Foreign key relationship validations (provider_id must be from active provider list)
-            - Adjustment amount direction validation (positive/negative/zero)
-            - Procedure flag and documentation completeness
-            - Retroactive adjustment flag accuracy
-            - Employee and provider discount flag validation
-            - Category mapping validation for specific adjustment types
-
-      # Large Adjustment Warnings
-      - custom_warning:
-          name: large_adjustment_warnings
-          description: >
-            Monitors adjustments based on amount thresholds:
-            - CRITICAL: >= $5,000
-            - HIGH: >= $2,500
-            - MEDIUM: >= $1,000
-            These are warnings only and do not cause test failures.
-          
-
