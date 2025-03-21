@@ -37,7 +37,10 @@ Renamed AS (
         "ProcDate" AS procedure_date,
         
         -- Flags and types
-        "IsDiscount"::boolean AS is_discount_flag,
+        CASE 
+            WHEN "IsDiscount" = 1 THEN TRUE 
+            ELSE FALSE 
+        END AS is_discount_flag,
         "DiscountType" AS discount_type,
         "UnearnedType" AS unearned_type,
         "PayPlanDebitType" AS payplan_debit_type,
