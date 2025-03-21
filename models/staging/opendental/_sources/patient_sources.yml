@@ -4,20 +4,134 @@ version: 2
 sources:
   - name: opendental
     description: "OpenDental backup database schema containing dental practice records"
-    database: opendental_analytics_opendentalbackup_02_28_2025
-    # schema: opendental_analytics_opendentalbackup_02_28_2025
+    database: opendental_analytics
+    schema: public
+    loader: postgres
+    loaded_at_field: "DateTStamp"  # Using the timestamp field from patient table
+    
     tables:
       - name: patient
         description: "Primary patient demographic and contact information"
+        columns:
+          - name: "PatNum"
+            description: "Primary key for patient records"
+            tests:
+              - unique
+              - not_null
+          - name: "DateTStamp"
+            description: "Last update timestamp"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+        tests:
+          - dbt_utils.unique_combination_of_columns:
+              combination_of_columns:
+                - "PatNum"
+          - dbt_utils.expression_is_true:
+              expression: "\"EstBalance\" = \"Bal_0_30\" + \"Bal_31_60\" + \"Bal_61_90\" + \"BalOver90\""
       
-      - name: patientlink
-        description: "Links between patients and their family groupings"
+#       - name: patientlink
+#         description: "Links between patients and their family groupings"
+#         columns:
+#           - name: "PatNum"
+#             description: "Foreign key to patient"
+#             tests:
+#               - not_null
+#               - relationships:
+#                   to: source('opendental', 'patient')
+#                   field: "PatNum"
+#           - name: "Guarantor"
+#             description: "Foreign key to guarantor patient"
+#             tests:
+#               - relationships:
+#                   to: source('opendental', 'patient')
+#                   field: "PatNum"
       
-      - name: patientnote
-        description: "Clinical and administrative notes for patients"
+#       - name: patientnote
+#         description: "Clinical and administrative notes for patients"
+#         columns:
+#           - name: "PatNum"
+#             description: "Foreign key to patient"
+#             tests:
+#               - not_null
+#               - unique
+#               - relationships:
+#                   to: source('opendental', 'patient')
+#                   field: "PatNum"
+#           - name: "DateTStamp"
+#             description: "Last update timestamp"
+#             tests:
+#               - not_null
       
-      - name: zipcode
-        description: "Zip code reference information"
+#       - name: zipcode
+#         description: "Zip code reference information"
+#         columns:
+#           - name: "ZipCodeNum"
+#             description: "Primary key for zipcode records"
+#             tests:
+#               - unique
+#               - not_null
+#           - name: "ZipCode"
+#             description: "Postal code"
+#             tests:
+#               - not_null
+#               - dbt_utils.expression_is_true:
+#                   expression: "length(\"ZipCode\") between 5 and 10"
       
-      - name: toothinitial
-        description: "Initial conditions of patient teeth"
+#       - name: toothinitial
+#         description: "Initial conditions of patient teeth"
+#         columns:
+#           - name: "ToothInitialNum"
+#             description: "Primary key for tooth initial conditions"
+#             tests:
+#               - unique
+#               - not_null
+#           - name: "PatNum"
+#             description: "Foreign key to patient"
+#             tests:
+#               - not_null
+#               - relationships:
+#                   to: source('opendental', 'patient')
+#                   field: "PatNum"
+#           - name: "ToothNum"
+#             description: "Tooth number"
+#             tests:
+#               - not_null
+#               - dbt_utils.expression_is_true:
+#                   expression: "between 1 and 32"
+#           - name: "DateTStamp"
+#             description: "Last update timestamp"
+#             tests:
+#               - not_null
+
+#       - name: provider
+#         description: "Provider information"
+#         columns:
+#           - name: "ProvNum"
+#             description: "Primary key for provider records"
+#             tests:
+#               - unique
+#               - not_null
+      
+#       - name: clinic
+#         description: "Clinic location information"
+#         columns:
+#           - name: "ClinicNum"
+#             description: "Primary key for clinic records"
+#             tests:
+#               - unique
+#               - not_null
+
+#       - name: feesched
+#         description: "Fee schedule information"
+#         columns:
+#           - name: "FeeSchedNum"
+#             description: "Primary key for fee schedule records"
+#             tests:
+#               - unique
+#               - not_null
+
+freshness:
+  warn_after: {count: 24, period: day}
+  error_after: {count: 48, period: day}
