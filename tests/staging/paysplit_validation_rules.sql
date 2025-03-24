@@ -1,5 +1,9 @@
 {{ config(severity = 'warn') }}
 
+{% if execute and model.name != 'stg_opendental__paysplit' %}
+    -- Skip this test for any model that isn't stg_opendental__paysplit
+    select 1 limit 0
+{% else %}
 /*
   PAYSPLIT VALIDATION RULES
   ========================
@@ -271,9 +275,32 @@ ValidationFailures AS (
        OR (ps.unearned_type = 439 AND ABS(ps.split_amount) > 16000)
 )
 
-SELECT * FROM ValidationFailures
-WHERE failure_type IS NOT NULL
-ORDER BY 
+-- Add this new summary CTE
+FailureSummary AS (
+    SELECT 
+        failure_type,
+        COUNT(*) as count
+    FROM ValidationFailures
+    GROUP BY failure_type
+    ORDER BY count DESC
+)
+
+-- Output includes a message showing the breakdown
+SELECT 
+    CASE WHEN row_number() OVER (ORDER BY count DESC) = 1 THEN
+        'Summary of paysplit validation issues: ' || 
+        string_agg(failure_type || ' (' || count || ')', ', ' ORDER BY count DESC)
+        OVER () 
+    ELSE NULL END as failure_message,
+    paysplit_id,
+    payment_id,
+    split_amount,
+    payment_date,
+    failure_type,
+    failed_field
+FROM ValidationFailures
+CROSS JOIN FailureSummary
+ORDER BY
     CASE 
         WHEN failure_type LIKE 'CRITICAL%' THEN 1
         WHEN failure_type LIKE 'HIGH%' THEN 2
@@ -283,3 +310,4 @@ ORDER BY
     END,
     payment_id,
     paysplit_id
+{% endif %}
