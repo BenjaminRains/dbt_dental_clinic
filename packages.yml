@@ -7,3 +7,6 @@ packages:
     
   - package: godatadriven/dbt_date
     version: 0.9.0
+
+  - package: dbt-labs/audit_helper
+    version: 0.9.0
