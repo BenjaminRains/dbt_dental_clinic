@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: stg_opendental__patientlink
+    description: "Standardized patient link records from OpenDental, tracking relationships or merges between patients"
+    
+    columns:
+      - name: patient_link_id
+        description: "Unique identifier for each patient link record"
+        tests:
+          - unique
+          - not_null
+      
+      - name: patient_id_from
+        description: "Source patient identifier referencing the patient_id in stg_opendental__patient"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      
+      - name: patient_id_to
+        description: "Destination patient identifier referencing the patient_id in stg_opendental__patient"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      
+      - name: link_type
+        description: "Type of relationship between patients"
+        tests:
+          - not_null
+      
+      - name: linked_at
+        description: "Timestamp when the link was created"
+        tests:
+          - not_null
+      
+      - name: dbt_loaded_at
+        description: "Timestamp indicating when the record was loaded into the data warehouse"
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "patient_id_from != patient_id_to"
