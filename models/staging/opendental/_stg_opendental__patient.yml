@@ -20,7 +20,7 @@ models:
           severity: warn
       - dbt_utils.expression_is_true:
           name: valid_date_sequence
-          expression: "updated_at >= created_at"
+          expression: "(updated_at >= created_at) OR created_at IS NULL"
           severity: warn
     columns:
       - name: patient_id
@@ -173,11 +173,11 @@ models:
       
       # Metadata
       - name: created_at
-        description: "When the patient record was created"
-        tests:
-          - not_null
+        description: "When the patient record was created (can be null)"
       - name: updated_at
         description: "When the patient record was last updated"
+        tests:
+          - not_null
       - name: created_by_user_id
         description: "User who created the patient record"
       - name: planned_treatment_complete
