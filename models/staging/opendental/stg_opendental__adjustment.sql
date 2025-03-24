@@ -1,28 +1,40 @@
+{{ config(
+    materialized='incremental',
+    unique_key='adjustment_id',
+    schema='staging'
+) }}
+
 with source as (
-    select * from {{ source('opendental', 'adjustment') }}
-    where "AdjDate" >= '2023-01-01'
+    select * 
+    from {{ source('opendental', 'adjustment') }}
+    where "AdjDate" >= '2023-01-01'::date
+        and "AdjDate" <= current_date
+        and "AdjDate" > '2000-01-01'::date
+    {% if is_incremental() %}
+        and "AdjDate" > (select max(adjustment_date) from {{ this }})
+    {% endif %}
 ),
 
 renamed as (
     select
         -- Keys (matching PostgreSQL data types)
-        "AdjNum"::integer as adjustment_id,  -- integer
-        "PatNum"::bigint as patient_id,      -- bigint
-        NULLIF("ProcNum", 0)::bigint as procedure_id,  -- bigint
-        NULLIF("ProvNum", 0)::bigint as provider_id,   -- bigint
-        NULLIF("ClinicNum", 0)::bigint as clinic_id,   -- bigint
-        NULLIF("StatementNum", 0)::bigint as statement_id,  -- bigint
-        "AdjType"::bigint as adjustment_type_id,       -- bigint
-        NULLIF("TaxTransID", 0)::bigint as tax_transaction_id,  -- bigint
+        "AdjNum"::integer as adjustment_id,  
+        "PatNum"::bigint as patient_id,      
+        NULLIF("ProcNum", 0)::bigint as procedure_id,  
+        NULLIF("ProvNum", 0)::bigint as provider_id,   
+        NULLIF("ClinicNum", 0)::bigint as clinic_id,   
+        NULLIF("StatementNum", 0)::bigint as statement_id,  
+        "AdjType"::bigint as adjustment_type_id,       
+        NULLIF("TaxTransID", 0)::bigint as tax_transaction_id,  
         
         -- Adjustment details
-        "AdjAmt"::double precision as adjustment_amount,  -- double precision
-        NULLIF("AdjNote", '')::text as adjustment_note,  -- text
+        "AdjAmt"::double precision as adjustment_amount,  
+        NULLIF("AdjNote", '')::text as adjustment_note,  
         
         -- Dates
-        "AdjDate"::date as adjustment_date,    -- date
-        "ProcDate"::date as procedure_date,    -- date
-        "DateEntry"::date as entry_date,       -- date
+        "AdjDate"::date as adjustment_date,    
+        "ProcDate"::date as procedure_date,    
+        "DateEntry"::date as entry_date,       
         
         -- Calculated fields
         CASE 
@@ -43,20 +55,19 @@ renamed as (
         
         -- Enhanced calculated fields
         CASE
-            -- High volume insurance and discount adjustments
-            WHEN "AdjType" = 188 THEN 'insurance_writeoff'        -- Most common, includes CT and other write-offs
-            WHEN "AdjType" = 474 THEN 'provider_discount'         -- Dr. Kamp's discounts
-            WHEN "AdjType" = 186 THEN 'senior_discount'          -- Usually smaller amounts
-            WHEN "AdjType" = 235 THEN 'reallocation'            -- Positive adjustments
-            WHEN "AdjType" = 472 THEN 'employee_discount'        -- MDC EDP
-            WHEN "AdjType" = 475 THEN 'provider_discount'        -- Dr. Schneiss's discounts
-            WHEN "AdjType" IN (9, 185) THEN 'cash_discount'     -- Cash/check discounts
-            WHEN "AdjType" IN (18, 337) THEN 'patient_refund'   -- Always positive amounts
-            WHEN "AdjType" = 483 THEN 'referral_credit'         -- $25-50 amounts
-            WHEN "AdjType" = 537 THEN 'new_patient_discount'    -- New patient coupons
-            WHEN "AdjType" = 485 THEN 'employee_discount'       -- MDC Employee
-            WHEN "AdjType" = 549 THEN 'admin_correction'        -- Fixing refund checks
-            WHEN "AdjType" = 550 THEN 'admin_adjustment'        -- Administrative adjustments
+            WHEN "AdjType" = 188 THEN 'insurance_writeoff'
+            WHEN "AdjType" = 474 THEN 'provider_discount'
+            WHEN "AdjType" = 186 THEN 'senior_discount'
+            WHEN "AdjType" = 235 THEN 'reallocation'
+            WHEN "AdjType" = 472 THEN 'employee_discount'
+            WHEN "AdjType" = 475 THEN 'provider_discount'
+            WHEN "AdjType" IN (9, 185) THEN 'cash_discount'
+            WHEN "AdjType" IN (18, 337) THEN 'patient_refund'
+            WHEN "AdjType" = 483 THEN 'referral_credit'
+            WHEN "AdjType" = 537 THEN 'new_patient_discount'
+            WHEN "AdjType" = 485 THEN 'employee_discount'
+            WHEN "AdjType" = 549 THEN 'admin_correction'
+            WHEN "AdjType" = 550 THEN 'admin_adjustment'
             WHEN EXISTS (
                 SELECT 1 
                 FROM paysplit ps 
@@ -149,11 +160,15 @@ renamed as (
         END as is_unearned_income,
         
         -- Metadata fields
-        NULLIF("SecUserNumEntry", 0)::bigint as created_by_user_id,  -- bigint
+        NULLIF("SecUserNumEntry", 0)::bigint as created_by_user_id,
         CASE 
             WHEN "SecDateTEdit" > current_timestamp THEN NULL
             ELSE "SecDateTEdit"
-        END::timestamp without time zone as last_modified_at  -- timestamp without time zone
+        END::timestamp without time zone as last_modified_at,
+        
+        -- Added _loaded_at timestamp
+        current_timestamp as _loaded_at
+
     from source
 )
 
