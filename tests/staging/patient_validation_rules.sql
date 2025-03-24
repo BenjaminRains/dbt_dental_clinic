@@ -50,7 +50,8 @@ validation_errors as (
             -- Date validations
             when created_at > current_timestamp then 'Creation date cannot be in future'
             when updated_at > current_timestamp then 'Update date cannot be in future'
-            when updated_at < created_at then 'Update date cannot be before creation date'
+            when created_at is not null and updated_at < created_at 
+                then 'Update date cannot be before creation date'
             when deceased_datetime is not null and deceased_datetime > current_timestamp 
                 then 'Deceased date cannot be in future'
             
