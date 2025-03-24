@@ -179,21 +179,200 @@ sources:
           technical_owners: ["data_engineering_team"]
       
       - name: statement
-        description: "Patient billing statements"
-        loaded_at_field: "SecDateTEdit"
+        description: >
+          Patient billing statements including payment history, balance tracking, and delivery status.
+          Used for generating and tracking patient invoices, receipts, and financial communications.
+        loaded_at_field: "DateTStamp"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: StatementNum
+            description: Primary key for statements
+            tests:
+              - unique
+              - not_null
+          - name: PatNum
+            description: Reference to patient record
+            tests:
+              - not_null
+          - name: DateSent
+            description: Date when statement was sent
+          - name: DateRangeFrom
+            description: Start date for statement period
+          - name: DateRangeTo
+            description: End date for statement period
+          - name: Mode_
+            description: Statement delivery mode
+          - name: BalTotal
+            description: Total balance amount on statement
+          - name: InsEst
+            description: Estimated insurance portion
+          - name: IsSent
+            description: Flag indicating if statement has been sent
+          - name: IsReceipt
+            description: Flag indicating if this is a receipt
+          - name: IsInvoice
+            description: Flag indicating if this is an invoice
+          - name: StatementType
+            description: Type classification for statement
+          - name: ShortGUID
+            description: Unique identifier for external reference
+          - name: SmsSendStatus
+            description: Status of SMS delivery (0=Not Sent, 1=Sent, 2=Failed)
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 8
+            tests_total: 8
+            quality_checks:
+              - test: "statement_validation"
+                status: "pass"
+                description: "Validates statement generation and delivery status"
+              - test: "balance_validation"
+                status: "pass"
+                description: "Validates balance calculations and insurance estimates"
+          indexes:
+            - columns: ["PatNum"]
+              type: "btree"
+            - columns: ["DocNum"]
+              type: "btree"
+            - columns: ["IsSent"]
+              type: "btree"
+            - columns: ["ShortGUID"]
+              type: "btree"
+            - columns: ["SuperFamily", "Mode_", "DateSent"]
+              type: "btree"
+          contains_pii: true
+          business_owners: ["dental_finance_team"]
+          technical_owners: ["data_engineering_team"]
       
       - name: statementprod
-        description: "Statement production data"
+        description: >
+          Links statements to various production items (procedures, adjustments, etc).
+          Used to track what items are included in each statement for billing purposes.
         loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: StatementProdNum
+            description: Primary key for statement production items
+            tests:
+              - unique
+              - not_null
+          - name: StatementNum
+            description: Reference to parent statement
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'statement')
+                  field: StatementNum
+          - name: FKey
+            description: Foreign key reference (varies based on ProdType)
+          - name: ProdType
+            description: Type of production item (determines what FKey references)
+          - name: LateChargeAdjNum
+            description: Reference to late charge adjustment if applicable
+          - name: DocNum
+            description: Reference to document number if applicable
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 6
+            tests_total: 6
+            quality_checks:
+              - test: "required_fields_validation"
+                status: "pass"
+                fields: ["StatementProdNum", "StatementNum"]
+          indexes:
+            - columns: ["StatementNum"]
+              type: "btree"
+            - columns: ["FKey"]
+              type: "btree"
+            - columns: ["DocNum"]
+              type: "btree"
+            - columns: ["LateChargeAdjNum"]
+              type: "btree"
+            - columns: ["ProdType"]
+              type: "btree"
+          contains_pii: false
+          business_owners: ["dental_finance_team"]
+          technical_owners: ["data_engineering_team"]
       
       - name: fee
         description: "Fee amounts for procedures"
         loaded_at_field: "SecDateTEdit"
+        columns:
+          - name: FeeNum
+            description: Primary key for fees
+            tests:
+              - unique
+              - not_null
+          - name: FeeSched
+            description: Reference to fee schedule
+            tests:
+              - not_null
+          - name: CodeNum
+            description: Reference to procedure code
+          - name: Amount
+            description: Fee amount
+            tests:
+              - not_null
+          - name: UseDefaultFee
+            description: Flag for using default fee (smallint)
+          - name: UseDefaultCov
+            description: Flag for using default coverage (smallint)
+          - name: SecDateEntry
+            description: Creation date
+          - name: SecDateTEdit
+            description: Last update timestamp
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        meta:
+          contains_pii: false
+          business_owners: ["dental_finance_team"]
+          technical_owners: ["data_engineering_team"]
       
       - name: feesched
-        description: "Fee schedules"
+        description: >
+          Fee schedules defining pricing structures for dental procedures.
+          Contains global and specific fee schedules for different insurance plans and scenarios.
         loaded_at_field: "SecDateTEdit"
-      
-      - name: feeschedgroup
-        description: "Groupings of fee schedules"
-        loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: FeeSchedNum
+            description: Primary key for fee schedules
+            tests:
+              - unique
+              - not_null
+          - name: Description
+            description: Name/description of the fee schedule
+            tests:
+              - not_null
+          - name: FeeSchedType
+            description: Type identifier for fee schedule classification
+            tests:
+              - not_null
+          - name: ItemOrder
+            description: Display order for the fee schedule
+          - name: IsHidden
+            description: Boolean flag indicating if fee schedule is hidden from view
+          - name: IsGlobal
+            description: Flag indicating if fee schedule applies globally
+          - name: SecUserNumEntry
+            description: User ID who created the fee schedule
+          - name: SecDateEntry
+            description: Creation date
+          - name: SecDateTEdit
+            description: Last update timestamp
+        meta:
+          contains_pii: false
+          business_owners: ["dental_finance_team"]
+          technical_owners: ["data_engineering_team"]
+          indexes:
+            - columns: ["SecUserNumEntry"]
+              type: "btree"
