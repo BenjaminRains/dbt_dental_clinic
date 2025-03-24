@@ -18,6 +18,8 @@ sources:
             tests:
               - unique
               - not_null
+          - name: "SecDateEntry"
+            description: "Creation timestamp that can be null"
           - name: "DateTStamp"
             description: "Last update timestamp"
             tests:
@@ -31,106 +33,216 @@ sources:
           - dbt_utils.expression_is_true:
               expression: "\"EstBalance\" = \"Bal_0_30\" + \"Bal_31_60\" + \"Bal_61_90\" + \"BalOver90\""
       
-#       - name: patientlink
-#         description: "Links between patients and their family groupings"
-#         columns:
-#           - name: "PatNum"
-#             description: "Foreign key to patient"
-#             tests:
-#               - not_null
-#               - relationships:
-#                   to: source('opendental', 'patient')
-#                   field: "PatNum"
-#           - name: "Guarantor"
-#             description: "Foreign key to guarantor patient"
-#             tests:
-#               - relationships:
-#                   to: source('opendental', 'patient')
-#                   field: "PatNum"
+      - name: patientlink
+        description: "Links between patient records, tracking relationships or merges between patients"
+        columns:
+          - name: "PatientLinkNum"
+            description: "Primary key for patient link records"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNumFrom"
+            description: "Source patient identifier referencing the patient_id in patient table"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "PatNumTo"
+            description: "Destination patient identifier referencing the patient_id in patient table"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "LinkType"
+            description: "Type of relationship between patients"
+            tests:
+              - not_null
+          - name: "DateTimeLink"
+            description: "Timestamp when the link was created"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+        tests:
+          - row_count:
+              min_count: 50
+              max_count: 200
+          - dbt_utils.expression_is_true:
+              expression: "\"PatNumFrom\" != \"PatNumTo\""
       
-#       - name: patientnote
-#         description: "Clinical and administrative notes for patients"
-#         columns:
-#           - name: "PatNum"
-#             description: "Foreign key to patient"
-#             tests:
-#               - not_null
-#               - unique
-#               - relationships:
-#                   to: source('opendental', 'patient')
-#                   field: "PatNum"
-#           - name: "DateTStamp"
-#             description: "Last update timestamp"
-#             tests:
-#               - not_null
+      - name: patientnote
+        description: "Clinical and administrative notes for patients"
+        columns:
+          - name: "PatNum"
+            description: "Foreign key to patient, serves as primary key for patientnote"
+            tests:
+              - not_null
+              - unique
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "FamFinancial"
+            description: "Family financial notes"
+          - name: "ApptPhone"
+            description: "Appointment phone notes"
+          - name: "Medical"
+            description: "Medical notes for the patient"
+          - name: "Service"
+            description: "Service notes"
+          - name: "MedicalComp"
+            description: "Medical compliance notes"
+          - name: "Treatment"
+            description: "Treatment notes"
+          - name: "ICEName"
+            description: "In Case of Emergency contact name"
+          - name: "ICEPhone"
+            description: "In Case of Emergency contact phone"
+          - name: "OrthoMonthsTreatOverride"
+            description: "Override for orthodontic treatment months"
+          - name: "DateOrthoPlacementOverride"
+            description: "Override date for orthodontic placement"
+          - name: "SecDateTEntry"
+            description: "Creation timestamp for the note"
+            tests:
+              - not_null
+          - name: "SecDateTEdit"
+            description: "Last update timestamp for the note"
+            tests:
+              - not_null
+          - name: "Consent"
+            description: "Consent indicator"
+          - name: "UserNumOrthoLocked"
+            description: "User number for orthodontic lock"
+          - name: "Pronoun"
+            description: "Patient's preferred pronoun"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "\"SecDateTEdit\" >= \"SecDateTEntry\""
       
-#       - name: zipcode
-#         description: "Zip code reference information"
-#         columns:
-#           - name: "ZipCodeNum"
-#             description: "Primary key for zipcode records"
-#             tests:
-#               - unique
-#               - not_null
-#           - name: "ZipCode"
-#             description: "Postal code"
-#             tests:
-#               - not_null
-#               - dbt_utils.expression_is_true:
-#                   expression: "length(\"ZipCode\") between 5 and 10"
+      - name: zipcode
+        description: "Zip code reference information"
+        columns:
+          - name: "ZipCodeNum"
+            description: "Primary key for zipcode records"
+            tests:
+              - unique
+              - not_null
+          - name: "ZipCodeDigits"
+            description: "Postal code digits"
+            tests:
+              - not_null
+          - name: "City"
+            description: "City name associated with the zipcode"
+          - name: "State"
+            description: "State or province associated with the zipcode"
+          - name: "IsFrequent"
+            description: "Flag indicating if this zipcode is frequently used (0=no, 1=yes)"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "\"IsFrequent\" IN (0, 1)"
       
-#       - name: toothinitial
-#         description: "Initial conditions of patient teeth"
-#         columns:
-#           - name: "ToothInitialNum"
-#             description: "Primary key for tooth initial conditions"
-#             tests:
-#               - unique
-#               - not_null
-#           - name: "PatNum"
-#             description: "Foreign key to patient"
-#             tests:
-#               - not_null
-#               - relationships:
-#                   to: source('opendental', 'patient')
-#                   field: "PatNum"
-#           - name: "ToothNum"
-#             description: "Tooth number"
-#             tests:
-#               - not_null
-#               - dbt_utils.expression_is_true:
-#                   expression: "between 1 and 32"
-#           - name: "DateTStamp"
-#             description: "Last update timestamp"
-#             tests:
-#               - not_null
+      - name: toothinitial
+        description: "Initial conditions of patient teeth"
+        columns:
+          - name: "ToothInitialNum"
+            description: "Primary key for tooth initial conditions"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNum"
+            description: "Foreign key to patient"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "ToothNum"
+            description: "Tooth number identifier"
+          - name: "InitialType"
+            description: "Type code for initial tooth condition"
+          - name: "Movement"
+            description: "Movement measurement value"
+          - name: "DrawingSegment"
+            description: "Drawing segment data for tooth visualization"
+          - name: "ColorDraw"
+            description: "Color code for drawing visualization"
+          - name: "SecDateTEntry"
+            description: "Timestamp when the record was created"
+            tests:
+              - not_null
+          - name: "SecDateTEdit"
+            description: "Timestamp when the record was last updated"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: ">= \"SecDateTEntry\""
+          - name: "DrawText"
+            description: "Text description for drawings"
 
-#       - name: provider
-#         description: "Provider information"
-#         columns:
-#           - name: "ProvNum"
-#             description: "Primary key for provider records"
-#             tests:
-#               - unique
-#               - not_null
-      
-#       - name: clinic
-#         description: "Clinic location information"
-#         columns:
-#           - name: "ClinicNum"
-#             description: "Primary key for clinic records"
-#             tests:
-#               - unique
-#               - not_null
-
-#       - name: feesched
-#         description: "Fee schedule information"
-#         columns:
-#           - name: "FeeSchedNum"
-#             description: "Primary key for fee schedule records"
-#             tests:
-#               - unique
-#               - not_null
+      - name: provider
+        description: "Dental provider information including doctors, hygienists, and other clinical staff"
+        columns:
+          - name: "ProvNum"
+            description: "Primary key for provider records"
+            tests:
+              - unique
+              - not_null
+          - name: "Abbr"
+            description: "Provider abbreviation used in schedules and reports"
+          - name: "ItemOrder"
+            description: "Display order for the provider in lists"
+          - name: "LName"
+            description: "Provider's last name"
+          - name: "FName"
+            description: "Provider's first name"
+          - name: "MI" 
+            description: "Provider's middle initial"
+          - name: "Suffix"
+            description: "Provider's name suffix (e.g., DDS, MD)"
+          - name: "PreferredName"
+            description: "Provider's preferred name to display"
+          - name: "FeeSched"
+            description: "Fee schedule ID assigned to this provider"
+          - name: "Specialty"
+            description: "Specialty ID for the provider's main practice area"
+          - name: "SSN"
+            description: "Provider's Social Security Number"
+          - name: "StateLicense"
+            description: "State license number"
+          - name: "DEANum"
+            description: "Drug Enforcement Administration number"
+          - name: "IsSecondary"
+            description: "Flag indicating if provider is considered secondary (0=no, 1=yes)"
+          - name: "ProvColor"
+            description: "Color code for provider in the schedule"
+          - name: "IsHidden"
+            description: "Flag indicating if provider is hidden in the UI (0=no, 1=yes)"
+          - name: "UsingTIN"
+            description: "Flag indicating if provider is using a Tax ID Number (0=no, 1=yes)"
+          - name: "BlueCrossID"
+            description: "Blue Cross Blue Shield provider identifier"
+          - name: "SigOnFile"
+            description: "Flag indicating if signature is on file (0=no, 1=yes)"
+          - name: "MedicaidID"
+            description: "Medicaid provider identifier"
+          - name: "OutlineColor"
+            description: "Color code for provider outline in the schedule"
+          - name: "NationalProvID"
+            description: "National Provider Identifier (NPI)"
+          - name: "DateTStamp"
+            description: "Last update timestamp for the provider record"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "ProvStatus"
+            description: "Provider status code (active, inactive, etc.)"
+          - name: "DateTerm"
+            description: "Date when the provider was terminated, if applicable"
+          - name: "HourlyProdGoalAmt"
+            description: "Hourly production goal amount for the provider"
 
 freshness:
   warn_after: {count: 24, period: day}
