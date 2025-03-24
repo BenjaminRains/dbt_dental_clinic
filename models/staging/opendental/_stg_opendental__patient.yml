@@ -6,6 +6,22 @@ models:
     tests:
       - dbt_utils.equal_rowcount:
           compare_model: source('opendental', 'patient')
+      - dbt_utils.expression_is_true:
+          name: balance_components_match_total
+          expression: "total_balance <= (balance_0_30_days + balance_31_60_days + balance_61_90_days + balance_over_90_days + 0.01)"
+          severity: warn
+      - dbt_utils.expression_is_true:
+          name: valid_schedule_time_range
+          expression: "schedule_not_before_time <= schedule_not_after_time OR schedule_not_before_time IS NULL OR schedule_not_after_time IS NULL"
+          severity: warn
+      - dbt_utils.expression_is_true:
+          name: different_providers
+          expression: "primary_provider_id != secondary_provider_id OR primary_provider_id IS NULL OR secondary_provider_id IS NULL"
+          severity: warn
+      - dbt_utils.expression_is_true:
+          name: valid_date_sequence
+          expression: "updated_at >= created_at"
+          severity: warn
     columns:
       - name: patient_id
         description: "Primary key for patient records (PatNum in source)"
