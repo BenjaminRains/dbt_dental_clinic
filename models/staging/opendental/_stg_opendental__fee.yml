@@ -1,0 +1,135 @@
+version: 2
+
+models:
+  - name: stg_opendental__fee
+    description: Staging model for OpenDental fee data
+    columns:
+      - name: fee_id
+        description: Primary key of the fee table
+        tests:
+          - unique
+          - not_null
+
+      - name: fee_schedule_id
+        description: Foreign key to fee schedule table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__fee_schedule')
+              field: fee_schedule_id
+
+      - name: procedure_code_id
+        description: Foreign key to procedure code table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedure_code')
+              field: procedure_code_id
+
+      - name: fee_amount
+        description: The amount charged for the procedure
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0  # Fees should not be negative
+              
+      - name: ada_code
+        description: ADA procedure code
+        tests:
+          - dbt_utils.string_length:
+              max_length: 15  # Based on the DDL specification
+
+      - name: is_default_fee
+        description: Flag indicating if this is a default fee
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]  # Changed from true/false to match smallint
+
+      - name: is_default_coverage
+        description: Flag indicating if this uses default coverage
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]  # Changed from true/false to match smallint
+
+      - name: created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+          - dbt_utils.date_in_past
+
+      - name: updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+          - dbt_utils.date_in_past
+
+    tests:
+      # Basic combination uniqueness test
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - fee_schedule_id
+            - procedure_code_id
+            - provider_id
+
+      # Custom validation tests with individual counts
+      - dbt_utils.expression_is_true:
+          name: fee_high_variation_check
+          expression: "procedure_code_id NOT IN (
+              select procedure_code_id 
+              from {{ ref('stg_opendental__fee') }}
+              group by procedure_code_id 
+              having max(fee_amount) - min(fee_amount) > 500
+            )"
+          severity: warn
+
+      - dbt_utils.expression_is_true:
+          name: fee_statistical_outlier_check
+          expression: "NOT EXISTS (
+              select 1
+              from (
+                select procedure_code_id, avg(fee_amount) as avg_amount, stddev(fee_amount) as fee_stddev
+                from {{ ref('stg_opendental__fee') }}
+                group by procedure_code_id
+                having count(*) > 5
+              ) stats
+              where stats.procedure_code_id = stg_opendental__fee.procedure_code_id
+              and abs(fee_amount - stats.avg_amount) > 2 * stats.fee_stddev
+            )"
+          severity: warn
+
+      - dbt_utils.expression_is_true:
+          name: fee_schedule_usage_check
+          expression: "fee_schedule_id NOT IN (
+              select fee_schedule_id
+              from {{ ref('stg_opendental__fee') }}
+              group by fee_schedule_id
+              having count(*) < 5
+            )"
+          severity: warn
+
+      - dbt_utils.expression_is_true:
+          name: fee_date_check
+          expression: "created_at >= '2023-01-01'::date 
+            and created_at <= {{ current_date() }}
+            and updated_at <= {{ current_date() }}"
+          severity: warn
+
+      - dbt_utils.expression_is_true:
+          name: fee_amount_check
+          expression: "fee_amount between 0 and 10000"
+          severity: warn
+
+      - dbt_utils.expression_is_true:
+          name: fee_default_zero_check
+          expression: "NOT (
+              is_default_fee = 1 
+              and fee_amount = 0 
+              and procedure_code_id in (
+                select procedure_code_id
+                from {{ ref('stg_opendental__fee') }}
+                group by procedure_code_id
+                having avg(fee_amount) > 0
+              )
+            )"
+          severity: warn 
