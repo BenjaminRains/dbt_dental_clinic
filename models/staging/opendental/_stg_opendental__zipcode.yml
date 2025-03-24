@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: stg_opendental__zipcode
+    description: "Standardized zipcode reference data from OpenDental, providing location information"
+    
+    columns:
+      - name: zipcode_id
+        description: "Unique identifier for each zipcode record"
+        tests:
+          - unique
+          - not_null
+      
+      - name: zipcode
+        description: "Postal code digits (may include extended ZIP+4 format)"
+        tests:
+          - not_null
+      
+      - name: city
+        description: "City name associated with the zipcode"
+        tests:
+          - not_null
+      
+      - name: state
+        description: "State or province code associated with the zipcode (2-letter abbreviation)"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "length(state) = 2"
+      
+      - name: is_frequent
+        description: "Flag indicating if this zipcode is frequently used (0=no, 1=yes)"
+        tests:
+          - dbt_utils.accepted_values:
+              values: [0, 1]
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - zipcode
+            - city
+            - state

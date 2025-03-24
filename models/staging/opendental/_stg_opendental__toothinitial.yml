@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: stg_opendental__toothinitial
+    description: "Standardized tooth initial conditions from OpenDental"
+    columns:
+      - name: tooth_initial_num
+        description: "Primary key for tooth initial conditions"
+        tests:
+          - unique
+          - not_null
+      - name: patient_num
+        description: "Foreign key to patient"
+        tests:
+          - not_null
+      - name: tooth_num
+        description: "Tooth number identifier - includes standard (1-32) and primary teeth notation (A-T). NULL values are expected for records with initial_type=9 or 10."
+      - name: initial_type
+        description: "Type code for initial tooth condition. Types 9 and 10 typically don't have associated tooth numbers."
+      - name: movement
+        description: "Movement measurement value"
+      - name: drawing_segment
+        description: "Drawing segment data for tooth visualization - mostly null (~99.9%)"
+      - name: color_draw
+        description: "Color code for drawing visualization"
+      - name: created_at
+        description: "Timestamp when the record was created - mostly default values (0001-01-01)"
+      - name: updated_at
+        description: "Timestamp when the record was last updated - use this for time-based analysis"
+      - name: draw_text
+        description: "Text description for drawings - mostly null (~99.9%)"

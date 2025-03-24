@@ -1,0 +1,86 @@
+version: 2
+
+models:
+  - name: stg_opendental__patientnote
+    description: "Standardized patient notes containing clinical and administrative information from OpenDental"
+    columns:
+      - name: patient_note_id
+        description: "Surrogate key for the patient note"
+        tests:
+          - unique
+          - not_null
+
+      - name: patient_id
+        description: "Foreign key to the patient dimension"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: warn
+
+      - name: family_financial_notes
+        description: "Notes regarding family financial circumstances (Optional field, often null)"
+
+      - name: appointment_phone_notes
+        description: "Notes about patient's preferred phone contact for appointments (Optional field, often null)"
+
+      - name: medical_notes
+        description: "Medical notes about the patient's health conditions (Optional field, often null)"
+
+      - name: service_notes
+        description: "Notes about patient services (Optional field, often null)"
+
+      - name: medical_compliance_notes
+        description: "Notes about patient's compliance with medical instructions (Optional field, often null)"
+
+      - name: treatment_notes
+        description: "Notes about patient's treatment plans and history (Optional field, often null)"
+
+      - name: emergency_contact_name
+        description: "Name of emergency contact person (Optional field, often null)"
+
+      - name: emergency_contact_phone
+        description: "Phone number for emergency contact (Optional field, often null)"
+
+      - name: ortho_months_treatment_override
+        description: "Override value for orthodontic treatment duration in months (Optional field, often null)"
+
+      - name: ortho_placement_date_override
+        description: "Override date for orthodontic appliance placement (Optional field, often null)"
+
+      - name: created_timestamp
+        description: "Timestamp when the note was first created"
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: updated_timestamp
+        description: "Timestamp when the note was last modified"
+        tests:
+          - not_null:
+              severity: warn
+          - dbt_utils.expression_is_true:
+              expression: ">= created_timestamp"
+              severity: warn
+
+      - name: consent_notes
+        description: "Documentation of patient consent (Optional field, often null)"
+
+      - name: ortho_locked_user_id
+        description: "User ID of person who locked orthodontic modifications (Optional field, often null)"
+
+      - name: preferred_pronoun
+        description: "Patient's preferred pronoun (Optional field, often null)"
+
+      - name: source_system
+        description: "Name of the source system (OpenDental)"
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: source_loaded_at
+        description: "Timestamp when record was loaded from source"
+        tests:
+          - not_null:
+              severity: warn

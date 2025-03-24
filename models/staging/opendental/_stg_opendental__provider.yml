@@ -1,0 +1,129 @@
+version: 2
+
+models:
+  - name: stg_opendental__provider
+    description: Standardized provider information from OpenDental
+    columns:
+      - name: provider_id
+        description: Unique identifier for the provider
+        tests:
+          - unique
+          - not_null
+      
+      # Provider identifiers
+      - name: provider_abbreviation
+        description: Provider abbreviation used in the system
+      - name: provider_item_order
+        description: Display order for the provider in lists
+      - name: provider_last_name
+        description: Provider's last name
+      - name: provider_first_name
+        description: Provider's first name
+      - name: provider_middle_initial
+        description: Provider's middle initial
+      - name: provider_suffix
+        description: Provider's name suffix
+      - name: provider_preferred_name
+        description: Provider's preferred name to display
+      - name: provider_custom_id
+        description: Custom identifier for the provider
+      
+      # Provider classifications
+      - name: fee_schedule_id
+        description: ID of the fee schedule associated with this provider
+      - name: specialty_id
+        description: ID of the provider's specialty
+      - name: provider_status
+        description: Status of the provider (active, inactive, etc.)
+      - name: anesthesia_provider_type
+        description: Type of anesthesia provider classification
+      - name: school_class_number
+        description: School class number for educational institutions
+      - name: ehr_mu_stage
+        description: EHR Meaningful Use stage for the provider
+      - name: provider_billing_override_id
+        description: Provider ID used to override billing information
+      
+      # Provider identifiers and numbers
+      - name: ssn
+        description: Provider's Social Security Number
+      - name: state_license
+        description: State license number
+      - name: dea_number
+        description: Drug Enforcement Administration number
+      - name: blue_cross_id
+        description: Blue Cross Blue Shield provider identifier
+      - name: medicaid_id
+        description: Medicaid provider identifier
+      - name: national_provider_id
+        description: National Provider Identifier (NPI)
+      - name: canadian_office_number
+        description: Canadian office identifier
+      - name: ecw_id
+        description: eClinicalWorks identifier
+      - name: state_rx_id
+        description: State prescription identifier
+      - name: state_where_licensed
+        description: State where the provider is licensed
+      
+      # Taxonomy and classification
+      - name: taxonomy_code_override
+        description: Override for provider taxonomy code
+      
+      # UI and display properties
+      - name: provider_color
+        description: Color code for provider in the schedule
+      - name: outline_color
+        description: Color code for provider outline in the schedule
+      - name: schedule_note
+        description: Notes related to provider scheduling
+      - name: web_schedule_description
+        description: Description for web scheduling
+      - name: web_schedule_image_location
+        description: Location of provider image for web scheduling
+      
+      # Financial and goals
+      - name: hourly_production_goal_amount
+        description: Hourly production goal amount for the provider
+      
+      # Boolean flags (stored as smallint)
+      - name: is_secondary
+        description: "Flag indicating if provider is considered secondary (smallint: 0=no, 1=yes)"
+      - name: is_hidden
+        description: "Flag indicating if provider is hidden in the UI (smallint: 0=no, 1=yes)"
+      - name: is_using_tin
+        description: "Flag indicating if provider is using a Tax ID Number (smallint: 0=no, 1=yes)"
+      - name: has_signature_on_file
+        description: "Flag indicating if signature is on file (smallint: 0=no, 1=yes)"
+      - name: is_cdanet
+        description: "Flag indicating if provider uses CDAnet (smallint: 0=no, 1=yes)"
+      - name: is_not_person
+        description: "Flag indicating if provider is not an individual person (smallint: 0=no, 1=yes)"
+      - name: is_instructor
+        description: "Flag indicating if provider is an instructor (smallint: 0=no, 1=yes)"
+      - name: is_hidden_report
+        description: "Flag indicating if provider is hidden on reports (smallint: 0=no, 1=yes)"
+      - name: is_erx_enabled
+        description: "Flag indicating if electronic prescriptions are enabled (smallint: 0=no, 1=yes)"
+      
+      # Dates
+      - name: birth_date
+        description: Provider's birth date
+      - name: termination_date
+        description: Date when the provider was terminated, if applicable
+      - name: record_updated_at
+        description: Timestamp of when the record was last updated in the source system
+      
+      # Relations
+      - name: email_address_id
+        description: ID of the associated email address record
+      
+      # Metadata
+      - name: dbt_created_at
+        description: Timestamp when this record was created in dbt
+      - name: dbt_pipeline_id
+        description: Unique identifier for the dbt run
+      - name: dbt_model
+        description: Name of the dbt model that created this record
+      - name: dbt_schema
+        description: Schema name where this model resides
