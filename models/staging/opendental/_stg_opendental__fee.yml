@@ -35,8 +35,8 @@ models:
       - name: ada_code
         description: ADA procedure code
         tests:
-          - dbt_utils.string_length:
-              max_length: 15  # Based on the DDL specification
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              max_value: 15
 
       - name: is_default_fee
         description: Flag indicating if this is a default fee
@@ -56,16 +56,25 @@ models:
         description: Timestamp when the record was created
         tests:
           - not_null
-          - dbt_utils.date_in_past
+          - dbt_utils.expression_is_true:
+              expression: "{{ column_name }} <= current_timestamp"
 
       - name: updated_at
         description: Timestamp when the record was last updated
         tests:
           - not_null
-          - dbt_utils.date_in_past
+          - dbt_utils.expression_is_true:
+              expression: "{{ column_name }} <= current_timestamp"
+
+      - name: provider_id
+        description: Foreign key to the provider table (maps to ProvNum in source)
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              severity: warn
 
     tests:
-      # Basic combination uniqueness test
+      # Update unique combination test to use correct field name
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - fee_schedule_id
@@ -88,14 +97,17 @@ models:
           expression: "NOT EXISTS (
               select 1
               from (
-                select procedure_code_id, avg(fee_amount) as avg_amount, stddev(fee_amount) as fee_stddev
+                select 
+                  procedure_code_id, 
+                  avg(fee_amount) as avg_amount, 
+                  stddev(fee_amount) as fee_stddev
                 from {{ ref('stg_opendental__fee') }}
                 group by procedure_code_id
-                having count(*) > 5
               ) stats
               where stats.procedure_code_id = stg_opendental__fee.procedure_code_id
+              and stats.fee_stddev > 0
               and abs(fee_amount - stats.avg_amount) > 2 * stats.fee_stddev
-            )"
+          )"
           severity: warn
 
       - dbt_utils.expression_is_true:
@@ -115,9 +127,25 @@ models:
             and updated_at <= {{ current_date() }}"
           severity: warn
 
+      # Add new relative fee amount check
       - dbt_utils.expression_is_true:
-          name: fee_amount_check
-          expression: "fee_amount between 0 and 10000"
+          name: fee_relative_amount_check
+          expression: "NOT EXISTS (
+              select 1
+              from (
+                select 
+                  procedure_code_id,
+                  avg(fee_amount) as avg_fee
+                from {{ ref('stg_opendental__fee') }}
+                group by procedure_code_id
+              ) stats
+              where stats.procedure_code_id = stg_opendental__fee.procedure_code_id
+              and (
+                  fee_amount > stats.avg_fee * 3
+                  or 
+                  fee_amount < stats.avg_fee * 0.25
+              )
+          )"
           severity: warn
 
       - dbt_utils.expression_is_true:
@@ -132,4 +160,10 @@ models:
                 having avg(fee_amount) > 0
               )
             )"
+          severity: warn
+
+      # Update provider check test
+      - dbt_utils.expression_is_true:
+          name: fee_provider_missing_check
+          expression: "provider_id is not null"
           severity: warn 
