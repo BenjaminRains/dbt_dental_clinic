@@ -1,13 +1,17 @@
 {{ config(
-    materialized='table',
-    sort='appointment_datetime',
-    dist='appointment_id'
+    materialized='incremental',
+    unique_key='appointment_id',
+    schema='staging'
 ) }}
 
 with source as (
     
     select * from {{ source('opendental', 'appointment') }}
-    where "AptDateTime" >= '2023-01-01'  -- Only include appointments from 2023 onwards
+    where "AptDateTime" >= '2023-01-01'::timestamp  -- Only include appointments from 2023 onwards
+        AND "AptDateTime" <= CURRENT_TIMESTAMP
+    {% if is_incremental() %}
+        AND "DateTStamp" > (SELECT max(date_timestamp) FROM {{ this }})
+    {% endif %}
 
 ),
 
