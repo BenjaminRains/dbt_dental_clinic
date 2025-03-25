@@ -3,36 +3,67 @@ version: 2
 
 sources:
   - name: opendental
-    description: "OpenDental backup database schema containing dental practice records"
-    database: opendental_analytics_opendentalbackup_02_28_2025
-    # schema: opendental_analytics_opendentalbackup_02_28_2025
+    description: "OpenDental dental practice management system data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
     tables:
+    
       - name: appointment
-        description: "Scheduled and completed patient appointments"
+        description: >
+          Primary table for scheduled and completed patient appointments. Contains appointment 
+          details including scheduling time, providers, operatories, status, confirmation 
+          status, and timestamps for patient flow (arrival, seating, dismissal).
+        columns:
+          - name: "AptNum"
+            description: "Primary key - Unique identifier for each appointment"
+          - name: "PatNum"
+            description: "Foreign key to patient table"
+          - name: "AptDateTime"
+            description: "Date and time the appointment is scheduled for"
+          - name: "AptStatus" 
+            description: "Status code (0=Scheduled, 1=Complete, 2=UnschedList, 3=Broken, etc.)"
       
       - name: appointmenttype
-        description: "Categorization of appointment types and durations"
+        description: >
+          Categorization of appointment types and durations. Used to define standard 
+          appointment lengths, colors, and defaults for different procedure types.
       
       - name: histappointment
-        description: "Historical appointment data"
+        description: >
+          Historical appointment data with changes tracked over time. Contains archives 
+          of modified or deleted appointments for audit and history purposes.
       
       - name: recall
-        description: "Patient recall scheduling information"
+        description: >
+          Patient recall scheduling information tracking when patients are due for 
+          regular appointments like cleanings, check-ups, and periodic examinations.
       
       - name: recalltrigger
-        description: "Triggers for patient recalls"
+        description: >
+          Triggers for patient recalls defining conditions that generate recall 
+          notifications based on procedures, time intervals, and patient criteria.
       
       - name: recalltype
-        description: "Types of recall appointments"
+        description: >
+          Types of recall appointments defining different categories of regular 
+          maintenance visits (e.g., 6-month cleaning, yearly exam, periodontal maintenance).
       
       - name: schedule
-        description: "Provider schedule information"
+        description: >
+          Provider schedule information tracking overall availability for providers,
+          including regular hours, time off, and scheduling templates.
       
       - name: scheduleop
-        description: "Schedule operation settings"
+        description: >
+          Schedule operation settings defining how operatories (dental chairs/rooms) 
+          are configured and assigned in the appointment scheduling system.
 
       - name: task
-        description: "Tasks and to-do items"
+        description: >
+          Tasks and to-do items for staff related to patients, appointments, 
+          or administrative work. Includes due dates, assignees, and status tracking.
       
       - name: timeadjust
-        description: "Time clock adjustments"
+        description: >
+          Time clock adjustments for provider and staff time tracking, including 
+          modifications to recorded hours and attendance records.
