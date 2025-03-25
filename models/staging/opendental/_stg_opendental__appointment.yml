@@ -1,0 +1,194 @@
+version: 2
+
+models:
+  - name: stg_opendental__appointment
+    description: >
+      Staging model for appointments from the OpenDental system.
+      Contains normalized and cleaned appointment data with standardized naming conventions.
+    
+    tests:
+      # High-level model tests
+      - dbt_utils.expression_is_true:
+          expression: "appointment_status in (1,2,3,5,6)"
+          severity: error  # This must pass
+      
+      # Future appointments check
+      - dbt_utils.expression_is_true:
+          expression: "appointment_status != 2 OR appointment_datetime <= current_date"
+          severity: error  # This must pass
+          
+    # Documentation of data quality tests that are defined as standalone SQL files
+    meta:
+      data_quality_tests:
+        - name: appt_broken_wo_procs
+          description: >
+            Tests for broken/missed appointments missing procedure descriptions.
+            Returns actual records that need attention.
+          file_path: tests/staging/appt_broken_wo_procs.sql
+          expected_results: 0
+          
+        - name: appt_past_scheduled
+          description: >
+            Tests specifically for past appointments that are still marked as scheduled.
+            Returns actual records that need attention with days overdue calculation.
+          file_path: tests/staging/appt_past_scheduled.sql
+          expected_results: 0
+          
+      known_issues:
+        - description: "409 past appointments still marked as Scheduled (Status 1)"
+          jira_ticket: "DQ-123"
+          identified_date: "2025-03-25"
+          test: "appt_past_scheduled"
+        
+        - description: "131 broken/missed appointments missing procedure descriptions"
+          jira_ticket: "DQ-124"
+          identified_date: "2025-03-25"
+          test: "appt_broken_wo_procs"
+
+    columns:
+      - name: appointment_id
+        description: Primary key - Unique identifier for each appointment
+        tests:
+          - unique
+          - not_null
+          
+      - name: patient_id
+        description: Foreign key to the patient who has the appointment
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+        
+      - name: provider_id
+        description: Foreign key to the primary provider for this appointment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+        
+      - name: hygienist_id
+        description: Foreign key to the hygienist assigned to this appointment
+        
+      - name: assistant_id
+        description: Foreign key to the assistant assigned to this appointment
+        
+      - name: clinic_id
+        description: Foreign key to the clinic where the appointment is scheduled
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+        
+      - name: operatory_id
+        description: Foreign key to the operatory/room where the appointment is scheduled
+        
+      - name: next_appointment_id
+        description: Foreign key to the next appointment in a series, if applicable
+        
+      - name: appointment_type_id
+        description: Foreign key to the appointment type classification
+        
+      - name: insurance_plan_1_id
+        description: Foreign key to the primary insurance plan for this appointment
+        
+      - name: insurance_plan_2_id
+        description: Foreign key to the secondary insurance plan for this appointment
+        
+      - name: unscheduled_status_id
+        description: Status ID for unscheduled appointments
+        
+      - name: entered_by_user_id
+        description: Foreign key to the user who created this appointment record
+        
+      - name: appointment_datetime
+        description: Date and time of the scheduled appointment
+        tests:
+          - not_null
+          # Remove redundant date test since it's covered in appointment_data_quality.sql
+      
+      - name: date_timestamp
+        description: System timestamp when the record was last updated
+        
+      - name: arrival_datetime
+        description: Date and time when the patient arrived for their appointment
+        
+      - name: seated_datetime
+        description: Date and time when the patient was seated/brought to the operatory
+        
+      - name: dismissed_datetime
+        description: Date and time when the patient was dismissed/completed their appointment
+        
+      - name: asked_to_arrive_datetime
+        description: Date and time when the patient was asked to arrive (may be earlier than appointment time)
+        
+      - name: entry_datetime
+        description: Date and time when this appointment record was created
+        
+      - name: appointment_status
+        description: >
+          Status code for the appointment:
+          1 = Scheduled
+          2 = Completed
+          3 = Unknown (requires investigation)
+          5 = Broken/Missed
+          6 = Unscheduled
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 5, 6]
+        
+      - name: confirmation_status
+        description: Status code for appointment confirmation (e.g., unconfirmed, confirmed, etc.)
+        
+      - name: is_new_patient
+        description: Flag indicating if this is a new patient appointment (0=No, 1=Yes)
+        
+      - name: is_hygiene
+        description: Flag indicating if this is a hygiene appointment (0=No, 1=Yes)
+        
+      - name: priority
+        description: Priority level for the appointment
+        
+      - name: is_time_locked
+        description: Boolean flag indicating if the appointment time is locked and cannot be changed
+        
+      - name: pattern
+        description: Pattern string representing time units for the appointment (e.g., "X" blocks)
+        
+      - name: pattern_secondary
+        description: Secondary pattern string for additional time allocation if needed
+        
+      - name: note
+        description: Free text notes related to the appointment
+        
+      - name: procedures_colored
+        description: Text describing procedures with color coding information
+        
+      - name: provider_bar_text
+        description: Text to display in the provider bar section of the scheduler
+        
+      - name: color_override
+        description: Custom color code to override default display color for this appointment
+        
+      - name: item_order_planned
+        description: Numeric value for ordering planned appointments
+        
+      - name: security_hash
+        description: Hash value for security purposes
+        
+      - name: procedure_description
+        description: Text description of procedures associated with this appointment
+        
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the warehouse
+
+    # Custom data tests
+    custom_tests:
+      - name: test_appointment_status_transitions
+        description: >
+          Verify that appointment status transitions follow business rules:
+          - Status 6 (Unscheduled) should not have appointment_datetime
+          - Status 1 (Scheduled) must have appointment_datetime
+          - Status 2 (Completed) must have dismissed_datetime
+          - Status 5 (Broken/Missed) should have appointment_datetime
