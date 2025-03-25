@@ -1,0 +1,29 @@
+version: 2
+
+# models:
+#   - name: stg_opendental__procedurecode
+#     description: "Dental procedure codes and descriptions"
+#
+#   - name: stg_opendental__procedurelog
+#     description: "Procedure log records"
+#
+#   - name: stg_opendental__procgroupitem
+#     description: "Links between procedures and procedure groups"
+#
+#   - name: stg_opendental__procmultivisit
+#     description: "Links between procedures and multi-visit procedures"
+#
+#   - name: stg_opendental__procnote
+#     description: "Notes related to specific procedures"
+#
+#   - name: stg_opendental__proctp
+#     description: "Procedure treatment plans"
+#
+#   - name: stg_opendental__perioexam
+#     description: "Periodontal examination records"
+#
+#   - name: stg_opendental__periomeasure
+#     description: "Periodontal measurements and assessments"
+#
+#   - name: stg_opendental__labcase
+#     description: "Dental laboratory case tracking"
