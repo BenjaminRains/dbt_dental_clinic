@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: stg_opendental__schedule
+    description: >
+      Staging model for the OpenDental schedule data. This table contains information about
+      scheduled appointments, provider schedules, and blockout times in the dental practice.
+      Records are from 2023-01-01 onward.
+    config:
+      materialized: incremental
+    columns:
+      - name: schedule_id
+        description: Primary key - unique identifier for each schedule record
+        tests:
+          - unique
+          - not_null
+          
+      - name: schedule_date
+        description: The date of the scheduled event
+        tests:
+          - not_null
+          
+      - name: start_time
+        description: The start time of the scheduled event
+        
+      - name: stop_time
+        description: The end time of the scheduled event
+        
+      - name: schedule_type
+        description: Type of schedule entry (0 for provider schedule, various other values for appointment types)
+        
+      - name: provider_id
+        description: Foreign key to the provider table, identifies the provider associated with this schedule
+        
+      - name: blockout_type_id
+        description: Identifies the type of blockout if this is a blockout entry
+        
+      - name: note
+        description: Additional notes or information about the scheduled event
+        
+      - name: status
+        description: Status code for the schedule entry
+        
+      - name: employee_id
+        description: Foreign key to the employee table if this schedule is for a non-provider employee
+        
+      - name: clinic_id
+        description: Foreign key to the clinic table, identifies which clinic location this schedule belongs to
+        
+      - name: created_at
+        description: Timestamp when this record was created or last updated in the source system
+        tests:
+          - not_null

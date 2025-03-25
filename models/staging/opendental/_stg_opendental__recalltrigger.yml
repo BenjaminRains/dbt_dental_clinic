@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: stg_opendental__recalltrigger
+    description: >
+      Staging model for dental recall triggers. Recall triggers associate recall types
+      with specific procedure codes that should initiate a recall.
+    config:
+      tags: ['staging', 'opendental', 'daily']
+    
+    columns:
+      - name: recall_trigger_num
+        description: Primary key - unique identifier for each recall trigger record
+        tests:
+          - unique
+          - not_null
+      
+      - name: recall_type_num
+        description: Foreign key to the recall type table, identifies which recall type this trigger applies to
+        tests:
+          - not_null
+      
+      - name: code_num
+        description: Foreign key to the procedure codes table, identifies which procedure code triggers this recall
+      
+      - name: loaded_at
+        description: Timestamp when this record was loaded into the warehouse

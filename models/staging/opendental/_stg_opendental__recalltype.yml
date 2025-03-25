@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: stg_opendental__recalltype
+    description: >
+      Staging model for OpenDental recall types.
+      Recall types define different kinds of patient recalls
+      with their associated intervals and procedures.
+    columns:
+      - name: recall_type_id
+        description: "Primary key - Unique identifier for each recall type"
+        tests:
+          - unique
+          - not_null
+
+      - name: description
+        description: "Descriptive name for the recall type"
+
+      - name: default_interval
+        description: "The default interval (in days) for this recall type"
+
+      - name: time_pattern
+        description: "The pattern defining when recalls should be scheduled (e.g. 6m, 1y)"
+
+      - name: procedures
+        description: "Procedure codes associated with this recall type"
+
+      - name: append_to_special
+        description: "Flag indicating whether to append notes to the special field (0=No, 1=Yes)"
+
+      - name: loaded_at
+        description: "Timestamp when this record was loaded into the warehouse"

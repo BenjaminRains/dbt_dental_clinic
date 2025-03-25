@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: stg_opendental__task
+    description: Staging model for OpenDental tasks. Contains records of tasks created on or after January 1st, 2023.
+    columns:
+      # Primary Key
+      - name: task_id
+        description: Unique identifier for the task
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: task_list_id
+        description: Foreign key to the task list this task belongs to
+      - name: key_id
+        description: Related identifier depending on the object type
+      - name: from_id
+        description: Identifier for the entity that created the task
+      - name: user_id
+        description: Identifier of the user assigned to the task
+      - name: priority_def_id
+        description: Identifier for the task's priority definition
+      - name: triage_category_id
+        description: Identifier for the task's triage category
+
+      # Date and Timestamps
+      - name: task_date
+        description: The date associated with the task
+      - name: entry_timestamp
+        description: Timestamp when the task was entered into the system
+      - name: finished_timestamp
+        description: Timestamp when the task was marked as finished
+      - name: original_timestamp
+        description: Timestamp when the task was originally created
+      - name: last_edit_timestamp
+        description: Timestamp of the last edit to the task
+
+      # Attributes
+      - name: description
+        description: Main description of the task
+      - name: task_status
+        description: Status code of the task (e.g., pending, completed, etc.)
+      - name: is_repeating
+        description: Flag indicating if this is a repeating task
+      - name: date_type
+        description: Code indicating the type of date being used
+      - name: object_type
+        description: Code indicating the type of object this task is associated with
+      - name: reminder_group_id
+        description: Identifier for the reminder group
+      - name: reminder_type
+        description: Code indicating the type of reminder
+      - name: reminder_frequency
+        description: Frequency of reminders for this task
+      - name: description_override
+        description: Override text for the description
+      - name: is_readonly
+        description: Flag indicating if the task is read-only
+
+      # Metadata
+      - name: dbt_updated_at
+        description: Timestamp when this record was last updated in the dbt model

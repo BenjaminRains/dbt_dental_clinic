@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: stg_opendental__appointmenttype
+    description: >
+      Staging model for appointment types from OpenDental.
+      Contains information about different types of appointments,
+      their display properties, and associated metadata.
+    columns:
+      - name: appointment_type_id
+        description: Primary key - Unique identifier for each appointment type
+        tests:
+          - unique
+          - not_null
+      
+      - name: appointment_type_name
+        description: The name of the appointment type displayed to users
+      
+      - name: appointment_type_color
+        description: Integer representing the color code for the appointment type
+      
+      - name: item_order
+        description: Numeric value determining the display order of appointment types
+      
+      - name: is_hidden
+        description: Flag indicating if the appointment type is hidden from view (1 for hidden, 0 for visible)
+      
+      - name: pattern
+        description: Pattern associated with this appointment type
+      
+      - name: code_str
+        description: String of procedure codes associated with this appointment type
+      
+      - name: code_str_required
+        description: String of required procedure codes for this appointment type
+      
+      - name: required_proc_codes_needed
+        description: Number of required procedure codes needed for this appointment type
+      
+      - name: blockout_types
+        description: Types of blockouts associated with this appointment type

@@ -1,0 +1,266 @@
+version: 2
+
+models:
+  - name: stg_opendental__histappointment
+    description: >
+      Staging model for historical appointment data from OpenDental.
+      Tracks all changes made to appointments over time as a series of snapshots.
+      Only includes historical records from January 1, 2023 onwards.
+      
+      Each record represents a snapshot of an appointment at a specific point in time.
+      The majority of records use history_action=1 regardless of sequence, which appears
+      to be the OpenDental system's standard way of tracking changes over time.
+      The current state of appointments is stored in the appointment table.
+      
+      NOTE: Data analysis shows that history_action=1 does NOT indicate "initial creation only"
+      but rather "a history snapshot was created" - most appointments have dozens of history_action=1
+      records spanning their entire lifecycle.
+    tests:
+      - dbt_utils.at_least_one:
+          column_name: hist_appointment_id
+      - dbt_utils.expression_is_true:
+          expression: "history_timestamp >= '2023-01-01'"
+      # High-level tests - keeping valid ones
+      - dbt_utils.expression_is_true:
+          expression: "history_action in (0,1,2,3)"
+          severity: error
+      - dbt_utils.expression_is_true:
+          expression: "appointment_status in (1,2,3,5,6)"
+          severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "history_timestamp <= current_timestamp"
+          severity: error
+      - dbt_utils.expression_is_true:
+          expression: "appointment_status != 2 OR appointment_datetime <= history_timestamp"
+          severity: error
+    
+    # Documentation of custom data quality tests
+    meta:
+      test_descriptions:
+        - test: "appointment_status != 2 OR appointment_datetime <= history_timestamp"
+          description: "Completed appointments should have dates in the past relative to the history record"
+      
+      data_quality_analyses:
+        - name: histappointment_chronology
+          description: >
+            Informational analysis that checks history records have a logical chronology - 
+            ensuring that history timestamps follow a sensible sequence.
+          file_path: tests/staging/histappointment_chronology.sql
+          type: "informational"
+          
+        - name: histappointment_action_complete
+          description: >
+            Informational analysis of data completeness in history records.
+            Identifies records with potential missing fields, but does not fail tests
+            since incomplete records may be normal in the OpenDental system.
+            To see results, run the query directly with analysis_mode=true.
+          file_path: tests/staging/histappointment_action_complete.sql
+          type: "informational"
+          
+        - name: histappointment_appt_coverage
+          description: >
+            Informational analysis that examines whether appointments with significant 
+            status changes have corresponding history records tracking those changes.
+          file_path: tests/staging/histappointment_appt_coverage.sql
+          type: "informational"
+          
+        - name: histappointment_missing_records
+          description: >
+            Tests for appointments with completely missing history records.
+            Only fails for appointments that have zero history records, as other
+            patterns (like missing creation records) have been found to be normal
+            in the OpenDental system.
+          file_path: tests/staging/histappointment_missing_records.sql
+          expected_results: 0
+          
+        - name: histappointment_action_consistency
+          description: >
+            Informational analysis of history action patterns in OpenDental.
+            This identifies various patterns like missing creation records, unusual
+            sequences, etc., but these are treated as informational rather than errors
+            since our analysis shows that certain patterns we initially thought were
+            problematic are actually normal in the OpenDental system.
+            To see results, run the query directly with analysis_mode=true.
+          file_path: tests/staging/histappointment_action_consistency.sql
+          type: "informational"
+      
+      history_action_analysis:
+        - finding: "Most appointments have 80-95% of their history records marked as history_action=1"
+        - finding: "These history_action=1 records span the entire lifecycle of appointments, often across hundreds of days"
+        - finding: "This appears to be by design in the OpenDental system - history_action=1 indicates 'snapshot created'"
+        - finding: "Many appointments that have history records don't have any with history_action=1, which we initially thought was required"
+        - finding: "Large gaps between consecutive history records (60-500+ days) are common and don't indicate data quality issues"
+        - conclusion: "Tests and analyses should not assume history_action=1 means 'first/initial creation only'"
+        - conclusion: "Missing creation records and large gaps should be treated as informational, not errors"
+    
+    columns:
+      - name: hist_appointment_id
+        description: Primary key - Unique identifier for each historical appointment record
+        tests:
+          - unique
+          - not_null
+      
+      # Foreign keys
+      - name: appointment_id
+        description: >
+          Foreign key to the appointment this history record relates to.
+          Note: Some historical appointments may reference appointments that have been deleted.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              severity: warn
+      
+      - name: patient_id
+        description: >
+          Foreign key to the patient associated with this appointment.
+          Note: Some historical records may reference patients that have been deleted or merged.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: warn
+      
+      - name: provider_id
+        description: Foreign key to the primary provider assigned to this appointment
+      
+      - name: hygienist_id
+        description: Foreign key to the hygienist assigned to this appointment
+      
+      - name: assistant_id
+        description: Foreign key to the assistant assigned to this appointment
+      
+      - name: clinic_id
+        description: Foreign key to the clinic where this appointment was scheduled
+      
+      - name: next_appointment_id
+        description: Foreign key to the next appointment in a series if applicable
+      
+      - name: appointment_type_id
+        description: Foreign key to appointment type defining category and default duration
+      
+      - name: operatory_id
+        description: Foreign key to the operatory (chair/room) for this appointment
+      
+      - name: history_user_id
+        description: Foreign key to the user who made the change that created this history record
+      
+      - name: entry_user_id
+        description: Foreign key to the user who originally created the appointment
+      
+      - name: insurance_plan_1_id
+        description: Foreign key to the primary insurance plan for this appointment
+      
+      - name: insurance_plan_2_id
+        description: Foreign key to the secondary insurance plan for this appointment
+      
+      - name: unscheduled_status_id
+        description: Status identifier for unscheduled appointments
+      
+      - name: confirmation_id
+        description: Identifier for the confirmation status of this appointment
+      
+      # Timestamps
+      - name: history_timestamp
+        description: Timestamp when this history record was created
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "{{ column_name }} <= current_timestamp"
+      
+      - name: created_timestamp
+        description: Timestamp when the original appointment record was created
+      
+      - name: appointment_datetime
+        description: Scheduled date and time for this appointment
+      
+      - name: arrived_datetime
+        description: Timestamp when the patient arrived for the appointment
+      
+      - name: seated_datetime
+        description: Timestamp when the patient was seated in the operatory
+      
+      - name: dismissed_datetime
+        description: Timestamp when the patient was dismissed after the appointment
+      
+      - name: asked_to_arrive_datetime
+        description: Timestamp when the patient was asked to arrive (may differ from scheduled time)
+      
+      - name: entry_datetime
+        description: Timestamp when the appointment was initially entered into the system
+      
+      # Flags and status indicators
+      - name: appointment_status
+        description: >
+          Status code of the appointment:
+            1 = Scheduled (active appointments not yet completed)
+            2 = Completed (appointments fulfilled with services rendered)
+            3 = Unknown (requires investigation, may indicate data quality issues)
+            5 = Broken/Missed (patient no-show or late cancellation)
+            6 = Unscheduled (treatment planned but not yet scheduled)
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 5, 6]
+              severity: warn
+      
+      - name: history_action
+        description: >
+          Code indicating the type of action that created this history record:
+          0 = Unknown
+          1 = History snapshot created (Note: This is the most common value, used for most changes throughout an appointment's lifecycle)
+          2 = Modified (used in special circumstances)
+          3 = Deleted (used when appointment is deleted)
+          
+          Data analysis shows that history_action=1 is used for most history records
+          regardless of sequence, representing ongoing changes rather than just initial creation.
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3]
+              severity: warn
+      
+      - name: appointment_source
+        description: Code indicating the source/method by which this appointment was created
+      
+      - name: is_time_locked
+        description: Flag indicating if the appointment time is locked from changes
+        meta:
+          source_column: "TimeLocked"
+          source_data_type: "smallint"
+          notes: "Converted from smallint (0/1) to boolean in the staging model"
+      
+      - name: is_new_patient
+        description: Flag indicating if this is a new patient appointment
+      
+      - name: is_hygiene
+        description: Flag indicating if this is a hygiene appointment
+      
+      - name: priority
+        description: Priority level assigned to this appointment
+      
+      # Text fields and descriptors
+      - name: pattern
+        description: Pattern string defining the graphical representation and time slots
+      
+      - name: pattern_secondary
+        description: Secondary pattern information for extended representation
+      
+      - name: note
+        description: Text notes for this appointment
+      
+      - name: procedure_description
+        description: Description of procedures to be performed
+      
+      - name: procedures_colored
+        description: Information about procedures with color coding for display
+      
+      - name: provider_bar_text
+        description: Text displayed in provider schedule bars for this appointment
+      
+      # Other attributes
+      - name: color_override
+        description: Manual color override value for this appointment's display
+      
+      - name: security_hash
+        description: Security hash for record integrity verification
+      
+      - name: item_order_planned
+        description: Ordering value for planned appointments

@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: stg_opendental__scheduleop
+    description: >
+      Staging model for the OpenDental scheduleop data. This table creates a link between
+      the schedule entries and operatories (dental chairs/rooms), allowing a schedule to be
+      associated with specific operatories. It works as a many-to-many relationship table
+      between the schedule and operatory tables.
+      
+      This table is closely related to the stg_opendental__schedule model. While the schedule 
+      table defines when providers or employees are available, this table specifies which 
+      operatories are allocated during those scheduled periods.
+    config:
+      materialized: incremental
+    columns:
+      - name: schedule_op_id
+        description: Primary key - unique identifier for each schedule-operatory association
+        tests:
+          - unique
+          - not_null
+          
+      - name: schedule_id
+        description: >
+          Foreign key to the schedule table. Links this operatory assignment to a 
+          specific schedule entry (provider availability, blockout, etc.)
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__schedule')
+              field: schedule_id
+        
+      - name: operatory_id
+        description: >
+          Foreign key to the operatory table. Identifies which specific dental chair/room
+          is associated with this schedule entry.
+        tests:
+          - not_null

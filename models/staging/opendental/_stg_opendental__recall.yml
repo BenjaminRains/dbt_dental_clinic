@@ -1,0 +1,77 @@
+version: 2
+
+models:
+  - name: stg_opendental__recall
+    description: >
+      Staging model for dental practice recall appointments and follow-up schedules
+      from the OpenDental system. Contains information about when patients are due
+      for their next appointment, recall status, and related configuration.
+    config:
+      materialized: incremental
+      unique_key: recall_id
+      schema: staging
+    
+    columns:
+      - name: recall_id
+        description: Primary key for the recall record
+        tests:
+          - unique
+          - not_null
+      
+      - name: patient_id
+        description: Foreign key to the patient record
+        tests:
+          - not_null
+      
+      - name: recall_type_id
+        description: Foreign key to the recall type record
+      
+      - name: date_due_calc
+        description: Calculated date when the patient's recall is due
+      
+      - name: date_due
+        description: Actual date when the patient is due for a return appointment
+        tests:
+          - not_null
+      
+      - name: date_previous
+        description: Date of the patient's previous recall appointment
+      
+      - name: date_scheduled
+        description: Date when the recall appointment has been scheduled, if applicable
+      
+      - name: disable_until_date
+        description: Date until which the recall is disabled, if applicable
+      
+      - name: recall_interval
+        description: >
+          The time interval specifying how frequently a patient should return for follow-up care,
+          typically measured in months (e.g., 3, 6, or 12 months)
+      
+      - name: recall_status
+        description: Current status of the recall (e.g., due, scheduled, completed)
+      
+      - name: is_disabled_flag
+        description: Boolean flag indicating whether the recall is currently disabled
+      
+      - name: disable_until_balance
+        description: Balance threshold at which the recall should remain disabled, if applicable
+      
+      - name: priority
+        description: Numeric priority level for the recall appointment
+      
+      - name: note
+        description: Additional notes or comments regarding the recall
+      
+      - name: time_pattern_override
+        description: Override for the standard time pattern for this recall appointment
+      
+      - name: date_tstamp
+        description: Timestamp from the source system indicating when the record was last updated
+        tests:
+          - not_null
+      
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the data warehouse
+        tests:
+          - not_null
