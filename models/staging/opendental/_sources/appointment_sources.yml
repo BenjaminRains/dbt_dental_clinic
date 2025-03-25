@@ -13,6 +13,8 @@ sources:
           Primary table for scheduled and completed patient appointments. Contains appointment 
           details including scheduling time, providers, operatories, status, confirmation 
           status, and timestamps for patient flow (arrival, seating, dismissal).
+          This table maintains the current state of appointments, while historical changes
+          are tracked in the histappointment table.
         columns:
           - name: "AptNum"
             description: "Primary key - Unique identifier for each appointment"
@@ -21,49 +23,313 @@ sources:
           - name: "AptDateTime"
             description: "Date and time the appointment is scheduled for"
           - name: "AptStatus" 
-            description: "Status code (0=Scheduled, 1=Complete, 2=UnschedList, 3=Broken, etc.)"
+            description: >
+              Status code for the appointment:
+              1 = Scheduled
+              2 = Completed
+              3 = Unknown (requires investigation)
+              5 = Broken/Missed
+              6 = Unscheduled
+          - name: "TimeLocked"
+            description: "Boolean flag indicating if the appointment time is locked from changes"
       
       - name: appointmenttype
         description: >
           Categorization of appointment types and durations. Used to define standard 
           appointment lengths, colors, and defaults for different procedure types.
+          Contains 12 records that define categories like Adult/Child Cleaning, 
+          Emergency Pain, Crown Prep, Implant Consult, etc.
+        columns:
+          - name: "AppointmentTypeNum"
+            description: "Primary key - Unique identifier for each appointment type"
+          - name: "AppointmentTypeName"
+            description: "The name of the appointment type displayed to users"
+          - name: "AppointmentTypeColor"
+            description: "Integer representing the color code for display in the scheduler"
+          - name: "ItemOrder" 
+            description: "Numeric value determining the display order of appointment types"
+          - name: "IsHidden"
+            description: "Flag indicating if the appointment type is hidden (1) or visible (0)"
+          - name: "Pattern"
+            description: "Pattern string used for visual representation in the scheduler"
+          - name: "CodeStr"
+            description: "String of procedure codes associated with this appointment type"
+          - name: "CodeStrRequired"
+            description: "String of procedure codes that are required for this appointment type"
+          - name: "RequiredProcCodesNeeded"
+            description: "Number of required procedure codes needed for this appointment type"
+          - name: "BlockoutTypes"
+            description: "Types of blockouts associated with this appointment type"
       
       - name: histappointment
         description: >
           Historical appointment data with changes tracked over time. Contains archives 
           of modified or deleted appointments for audit and history purposes.
+          Each record represents a specific change made to an appointment, creating
+          a complete audit trail for all appointment activities.
+          
+          The histappointment table works in conjunction with the appointment table -
+          appointment contains the current state, while histappointment stores all
+          previous states and change history.
+        columns:
+          - name: "HistApptNum"
+            description: "Primary key - Unique identifier for each historical appointment record"
+          - name: "AptNum"
+            description: "Foreign key to the original appointment record"
+          - name: "PatNum"
+            description: "Foreign key to the patient associated with this appointment"
+          - name: "HistUserNum"
+            description: "Foreign key to the user who made the change"
+          - name: "HistDateTStamp"
+            description: "Timestamp when this history record was created"
+          - name: "HistApptAction"
+            description: >
+              Code indicating what type of action was performed:
+              0 = Unknown
+              1 = Created
+              2 = Modified
+              3 = Deleted
+          - name: "AptStatus"
+            description: > 
+              Status code for the appointment:
+              1 = Scheduled
+              2 = Completed
+              3 = Unknown (requires investigation)
+              5 = Broken/Missed
+              6 = Unscheduled
+          - name: "AptDateTime"
+            description: "Date and time the appointment was scheduled for"
+          - name: "DateTimeArrived"
+            description: "Timestamp when the patient arrived for this appointment"
+          - name: "DateTimeSeated"
+            description: "Timestamp when the patient was seated in the operatory"
+          - name: "DateTimeDismissed"
+            description: "Timestamp when the patient was dismissed after the appointment"
+          - name: "AppointmentTypeNum"
+            description: "Foreign key to the appointment type"
+          - name: "ProvNum"
+            description: "Foreign key to the primary provider"
+          - name: "ProvHyg"
+            description: "Foreign key to the hygienist provider"
+          - name: "Op"
+            description: "Foreign key to the operatory (chair/room)"
+          - name: "TimeLocked"
+            description: "Smallint (0/1) indicating if the appointment time is locked from changes"
       
       - name: recall
         description: >
           Patient recall scheduling information tracking when patients are due for 
           regular appointments like cleanings, check-ups, and periodic examinations.
+          Contains intervals, due dates, status, and configuration settings for patient
+          recall management.
+        columns:
+          - name: "RecallNum"
+            description: "Primary key - Unique identifier for each recall record"
+          - name: "PatNum"
+            description: "Foreign key to patient table - identifies the patient for this recall"
+          - name: "RecallTypeNum"
+            description: "Foreign key to recalltype table - specifies the type of recall appointment"
+          - name: "DateDueCalc"
+            description: "Calculated date when the patient's recall is due based on recall interval"
+          - name: "DateDue"
+            description: "Actual date when the patient is due for a return appointment, may differ from calculated date"
+          - name: "DatePrevious"
+            description: "Date of the patient's previous recall appointment"
+          - name: "DateScheduled"
+            description: "Date when the recall appointment has been scheduled, if applicable"
+          - name: "DisableUntilDate"
+            description: "Date until which the recall is disabled, if applicable"
+          - name: "RecallInterval"
+            description: "The time interval specifying how frequently a patient should return for follow-up care"
+          - name: "RecallStatus"
+            description: "Current status of the recall (may include due, scheduled, completed, etc.)"
+          - name: "IsDisabled"
+            description: "Boolean flag (0/1) indicating whether the recall is currently disabled"
+          - name: "DisableUntilBalance"
+            description: "Balance threshold at which the recall should remain disabled, if applicable"
+          - name: "Priority"
+            description: "Numeric priority level for the recall appointment"
+          - name: "Note"
+            description: "Additional notes or comments regarding the recall"
+          - name: "TimePatternOverride"
+            description: "Override for the standard time pattern for this recall appointment"
+          - name: "DateTStamp"
+            description: "Timestamp when this recall record was last updated in the source system"
       
       - name: recalltrigger
         description: >
-          Triggers for patient recalls defining conditions that generate recall 
-          notifications based on procedures, time intervals, and patient criteria.
+          Links recall types to specific procedure codes that should trigger a recall notification.
+          This table establishes the relationship between dental procedures and the appropriate
+          recall schedule that should be initiated after those procedures are performed.
+          Each record associates a recall type with a procedure code to automate recall scheduling.
+        columns:
+          - name: "RecallTriggerNum"
+            description: "Primary key - Unique identifier for each recall trigger record"
+          - name: "RecallTypeNum" 
+            description: "Foreign key to recalltype table - identifies which recall type should be triggered"
+          - name: "CodeNum"
+            description: "Foreign key to procedure code table - identifies which procedure code initiates this recall"
       
       - name: recalltype
         description: >
           Types of recall appointments defining different categories of regular 
           maintenance visits (e.g., 6-month cleaning, yearly exam, periodontal maintenance).
+          This table configures the system's recall scheduling functionality by defining
+          intervals, time patterns, and associated procedures for each type of recall.
+          Used to automate patient recall management and ensure consistent follow-up care.
+        columns:
+          - name: "RecallTypeNum"
+            description: "Primary key - Unique identifier for each recall type"
+          - name: "Description"
+            description: "Descriptive name for the recall type (e.g., 'Adult Prophy', 'Perio Maintenance')"
+          - name: "DefaultInterval"
+            description: "The default interval in days for this recall type (e.g., 180 for a 6-month recall)"
+          - name: "TimePattern"
+            description: "Pattern string defining the scheduling time format (e.g., '6m' for 6 months, '1y' for yearly)"
+          - name: "Procedures"
+            description: "Comma-separated list of procedure codes that are associated with this recall type"
+          - name: "AppendToSpecial"
+            description: "Flag (0/1) indicating whether notes should be appended to the Special field in appointments"
       
       - name: schedule
         description: >
           Provider schedule information tracking overall availability for providers,
-          including regular hours, time off, and scheduling templates.
+          including regular hours, time off, blockout periods, and general scheduling templates.
+          This table is used to manage the clinic's schedule at a high level, separate from
+          specific patient appointments. It includes provider schedules, employee work hours,
+          clinic operation times, and blockout periods (e.g., lunch breaks, meetings, vacations).
+        columns:
+          - name: "ScheduleNum"
+            description: "Primary key - Unique identifier for each schedule record"
+          - name: "SchedDate"
+            description: "The date of the scheduled event or blockout"
+          - name: "StartTime"
+            description: "The start time of the scheduled period"
+          - name: "StopTime"
+            description: "The end time of the scheduled period"
+          - name: "SchedType"
+            description: >
+              Type of schedule entry (0 for provider schedule, other values for 
+              different schedule categories)
+          - name: "ProvNum"
+            description: "Foreign key to provider table - identifies which provider this schedule entry applies to"
+          - name: "BlockoutType"
+            description: "Foreign key identifying the type of blockout if this is a blockout entry (e.g., lunch, meeting, vacation)"
+          - name: "Note"
+            description: "Additional notes or information about the scheduled event or blockout"
+          - name: "Status"
+            description: "Status code for the schedule entry indicating its current state"
+          - name: "EmployeeNum"
+            description: "Foreign key to employee table - identifies which staff member this schedule applies to if not a provider"
+          - name: "DateTStamp"
+            description: "Timestamp when this record was created or last updated in the source system"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic location this schedule applies to"
       
       - name: scheduleop
         description: >
-          Schedule operation settings defining how operatories (dental chairs/rooms) 
-          are configured and assigned in the appointment scheduling system.
-
+          Linking table between the schedule and operatory tables that associates schedule 
+          entries with specific operatories (dental chairs/rooms). This creates a many-to-many
+          relationship, allowing a single schedule entry (e.g., provider availability, blockout)
+          to be applied to multiple operatories simultaneously, and for operatories to have
+          multiple schedule entries.
+          
+          This table works closely with the schedule table - while schedule defines when 
+          providers/employees are available or unavailable, scheduleop specifies which 
+          operatories are affected during those scheduled periods.
+        columns:
+          - name: "ScheduleOpNum"
+            description: "Primary key - Unique identifier for each schedule-operatory association"
+          - name: "ScheduleNum"
+            description: "Foreign key to the schedule table - links to the schedule entry this operatory assignment belongs to"
+          - name: "OperatoryNum"
+            description: "Foreign key to the operatory table - identifies which specific operatory (dental chair/room) is associated with this schedule"
+      
       - name: task
         description: >
           Tasks and to-do items for staff related to patients, appointments, 
-          or administrative work. Includes due dates, assignees, and status tracking.
+          or administrative work. This table maintains the practice's task management system,
+          tracking assignments, due dates, priorities, and completion status. Tasks can be
+          associated with various object types (patients, appointments, etc.) and organized
+          into task lists. The system supports reminders, recurring tasks, and triage categories
+          for workflow prioritization. Only tasks created on or after January 1, 2023 are
+          included in the analytics models.
+        columns:
+          - name: "TaskNum"
+            description: "Primary key - Unique identifier for each task"
+          - name: "TaskListNum"
+            description: "Foreign key to the task list this task belongs to"
+          - name: "DateTask"
+            description: "The date associated with the task"
+          - name: "KeyNum" 
+            description: "Reference key to associated entity depending on the ObjectType"
+          - name: "Descript"
+            description: "Main description text of the task"
+          - name: "TaskStatus"
+            description: "Status code of the task (pending, completed, etc.)"
+          - name: "IsRepeating"
+            description: "Flag indicating if this is a recurring/repeating task"
+          - name: "DateType"
+            description: "Type code indicating how dates are used for this task"
+          - name: "FromNum"
+            description: "Foreign key to the entity that created or assigned the task"
+          - name: "ObjectType"
+            description: "Code indicating what type of object this task is associated with"
+          - name: "DateTimeEntry"
+            description: "Timestamp when the task was entered into the system"
+          - name: "UserNum"
+            description: "Foreign key to the user assigned to complete this task"
+          - name: "DateTimeFinished"
+            description: "Timestamp when the task was marked as finished/completed"
+          - name: "PriorityDefNum"
+            description: "Foreign key to the priority definition for this task"
+          - name: "ReminderGroupId"
+            description: "Identifier for grouping related reminders"
+          - name: "ReminderType"
+            description: "Type code for the reminder associated with this task"
+          - name: "ReminderFrequency"
+            description: "How frequently reminders should be sent for this task"
+          - name: "DateTimeOriginal"
+            description: "Timestamp when the task was originally created"
+          - name: "SecDateTEdit"
+            description: "Timestamp of the last edit to this task record"
+          - name: "DescriptOverride"
+            description: "Optional override text for the description"
+          - name: "IsReadOnly"
+            description: "Flag indicating if the task is read-only and cannot be modified"
+          - name: "TriageCategory"
+            description: "Foreign key to triage category for task prioritization in workflows"
       
       - name: timeadjust
         description: >
           Time clock adjustments for provider and staff time tracking, including 
-          modifications to recorded hours and attendance records.
+          modifications to recorded hours and attendance records. Contains details about
+          employee time entries with regular, overtime, and PTO hour adjustments. 
+          This table is used for payroll processing, attendance tracking, and labor 
+          management. It includes clinic associations and notes about why adjustments 
+          were made. Supports both manual and automatic adjustments to time records.
+        columns:
+          - name: "TimeAdjustNum"
+            description: "Primary key - Unique identifier for each time adjustment record"
+          - name: "EmployeeNum"
+            description: "Foreign key to employee table - identifies which staff member this time adjustment applies to"
+          - name: "TimeEntry"
+            description: "Timestamp when the adjusted time entry was recorded"
+          - name: "RegHours"
+            description: "Regular (non-overtime) hours being adjusted"
+          - name: "OTimeHours"
+            description: "Overtime hours being adjusted"
+          - name: "Note"
+            description: "Additional notes or explanation for why the time adjustment was made"
+          - name: "IsAuto"
+            description: "Flag indicating if this adjustment was created automatically by the system (1) or manually entered (0)"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic location this time adjustment applies to"
+          - name: "PtoDefNum"
+            description: "Foreign key to the PTO definition table - indicates which type of paid time off is being used if applicable"
+          - name: "PtoHours"
+            description: "Paid time off hours being adjusted"
+          - name: "IsUnpaidProtectedLeave"
+            description: "Flag indicating if this adjustment represents unpaid protected leave (1) or standard paid time (0)"
+          - name: "SecuUserNumEntry"
+            description: "Foreign key to security user table - identifies which user entered or approved this time adjustment"
