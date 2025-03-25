@@ -5,6 +5,7 @@ models:
     description: >
       Staging model for appointments from the OpenDental system.
       Contains normalized and cleaned appointment data with standardized naming conventions.
+      This represents the current state of appointments, while historical changes are tracked in histappointment.
     
     tests:
       # High-level model tests
