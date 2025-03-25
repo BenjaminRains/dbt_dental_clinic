@@ -1,0 +1,89 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+    
+      - name: carrier
+        description: "Insurance carrier information"
+        columns:
+          - name: carrier_id
+            description: "Primary key for insurance carriers"
+            tests:
+              - unique
+              - not_null
+
+      - name: insplan
+        description: "Insurance plan details and configuration"
+        columns:
+          - name: insurance_plan_id
+            description: "Primary key for insurance plans"
+            tests:
+              - unique
+              - not_null
+
+      - name: inssub
+        description: "Insurance subscriber information"
+        columns:
+          - name: insurance_subscriber_id
+            description: "Primary key for insurance subscribers"
+            tests:
+              - unique
+              - not_null
+
+      - name: patplan
+        description: "Patient-plan assignments and coverage"
+        columns:
+          - name: patient_plan_id
+            description: "Primary key for patient plan assignments"
+            tests:
+              - unique
+              - not_null
+
+      - name: benefit
+        description: "Insurance benefit information"
+        columns:
+          - name: benefit_id
+            description: "Primary key for benefits"
+            tests:
+              - unique
+              - not_null
+
+      - name: insverify
+        description: "Insurance verification records"
+        columns:
+          - name: insurance_verification_id
+            description: "Primary key for verification records"
+            tests:
+              - unique
+              - not_null
+
+      - name: insverifyhist
+        description: "Historical insurance verification data"
+        columns:
+          - name: insurance_verification_history_id
+            description: "Primary key for verification history"
+            tests:
+              - unique
+              - not_null
+
+      - name: insbluebook
+        description: "Insurance fee schedules (bluebook)"
+        columns:
+          - name: insurance_bluebook_id
+            description: "Primary key for bluebook entries"
+            tests:
+              - unique
+              - not_null
+
+      - name: insbluebooklog
+        description: "Logs of insurance bluebook changes"
+        columns:
+          - name: insurance_bluebook_log_id
+            description: "Primary key for bluebook log entries"
+            tests:
+              - unique
+              - not_null
