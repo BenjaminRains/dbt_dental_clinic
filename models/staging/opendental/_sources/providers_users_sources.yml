@@ -77,6 +77,52 @@ sources:
             tests:
               - unique
               - not_null
+          - name: user_group_id
+            description: "Foreign key to user group table"
+          - name: employee_id
+            description: "Foreign key to employee table"
+          - name: clinic_id
+            description: "Foreign key to clinic table"
+          - name: provider_id
+            description: "Foreign key to provider table"
+          - name: cemt_user_id
+            description: "Foreign key to another user record (CEMT user reference)"
+          - name: username
+            description: "User's login username"
+          - name: password_hash
+            description: "Hashed password value"
+          - name: domain_username
+            description: "Domain username for network authentication"
+          - name: badge_id
+            description: "User's badge identifier"
+          - name: is_hidden
+            description: "Flag indicating if the user account is hidden"
+          - name: has_strong_password
+            description: "Flag indicating if the password meets strong password requirements"
+          - name: is_clinic_restricted
+            description: "Flag indicating if the user is restricted to specific clinics"
+          - name: is_password_reset_required
+            description: "Flag indicating if the user needs to reset their password"
+          - name: task_list_inbox
+            description: "User's task list inbox configuration"
+          - name: anesthesia_provider_type
+            description: "Type of anesthesia provider if applicable"
+          - name: is_default_hide_popups
+            description: "Flag for default popup visibility settings"
+          - name: is_inbox_hide_popups
+            description: "Flag for inbox popup visibility settings"
+          - name: mobile_web_pin
+            description: "PIN for mobile web access"
+          - name: mobile_web_pin_failed_attempts
+            description: "Count of failed mobile web PIN attempts"
+          - name: eclipboard_clinical_pin
+            description: "PIN for eClipboard clinical access"
+          - name: last_failed_login_at
+            description: "Timestamp of last failed login attempt"
+          - name: failed_login_attempts
+            description: "Count of failed login attempts"
+          - name: last_login_at
+            description: "Timestamp of last successful login"
 
       - name: usergroup
         description: "User security groups"
@@ -86,6 +132,16 @@ sources:
             tests:
               - unique
               - not_null
+          - name: description
+            description: "Description or name of the user group"
+          - name: usergroup_num_cemt
+            description: "Reference to CEMT user group number"
+          - name: _airbyte_ab_id
+            description: "Unique identifier created by Airbyte for each record"
+          - name: _airbyte_emitted_at
+            description: "Timestamp when the record was emitted by Airbyte"
+          - name: _airbyte_normalized_at
+            description: "Timestamp when the record was normalized"
 
       - name: usergroupattach
         description: "User-group assignments"
@@ -95,3 +151,9 @@ sources:
             tests:
               - unique
               - not_null
+          - name: user_num
+            description: "Foreign key to the user table"
+          - name: user_group_num
+            description: "Foreign key to the user group table"
+          - name: _loaded_at
+            description: "Timestamp when this record was loaded into the staging model"
