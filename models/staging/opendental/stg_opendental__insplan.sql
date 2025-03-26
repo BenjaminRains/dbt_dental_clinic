@@ -4,6 +4,7 @@
 
 with source as (
     select * from {{ source('opendental', 'insplan') }}
+    where "SecDateTEdit" >= '2023-01-01'
 ),
 
 renamed as (
@@ -31,13 +32,28 @@ renamed as (
         "TrojanID" as trojan_id,
         
         -- Flags and Settings
-        "IsMedical"::boolean as is_medical,
-        "IsHidden"::boolean as is_hidden,
+        CASE 
+            WHEN "IsMedical" = 1 THEN TRUE
+            ELSE FALSE
+        END as is_medical,
+        CASE 
+            WHEN "IsHidden" = 1 THEN TRUE
+            ELSE FALSE
+        END as is_hidden,
         "ShowBaseUnits"::boolean as show_base_units,
         "CodeSubstNone"::boolean as code_subst_none,
-        "HideFromVerifyList"::boolean as hide_from_verify_list,
-        "HasPpoSubstWriteoffs"::boolean as has_ppo_subst_writeoffs,
-        "IsBlueBookEnabled"::boolean as is_blue_book_enabled,
+        CASE 
+            WHEN "HideFromVerifyList" = 1 THEN TRUE
+            ELSE FALSE
+        END as hide_from_verify_list,
+        CASE 
+            WHEN "HasPpoSubstWriteoffs" = 1 THEN TRUE
+            ELSE FALSE
+        END as has_ppo_subst_writeoffs,
+        CASE 
+            WHEN "IsBlueBookEnabled" = 1 THEN TRUE
+            ELSE FALSE
+        END as is_blue_book_enabled,
         
         -- Ortho Related
         "OrthoType" as ortho_type,
@@ -52,8 +68,14 @@ renamed as (
         
         -- Other Fields
         "ClaimFormNum" as claim_form_id,
-        "UseAltCode"::boolean as use_alt_code,
-        "ClaimsUseUCR"::boolean as claims_use_ucr,
+        CASE 
+            WHEN "UseAltCode" = 1 THEN TRUE
+            ELSE FALSE
+        END as use_alt_code,
+        CASE 
+            WHEN "ClaimsUseUCR" = 1 THEN TRUE
+            ELSE FALSE
+        END as claims_use_ucr,
         "FilingCode" as filing_code,
         "FilingCodeSubtype" as filing_code_subtype,
         "MonthRenew" as month_renew,
