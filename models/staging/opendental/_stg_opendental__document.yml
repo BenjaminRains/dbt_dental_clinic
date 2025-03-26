@@ -1,0 +1,91 @@
+version: 2
+
+models:
+  - name: stg_opendental__document
+    description: Staging model for dental documents. Contains information about various documents, images, and files associated with patient records.
+    columns:
+      # Primary Key
+      - name: document_id
+        description: Unique identifier for each document
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: patient_id
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      - name: document_category_id
+        description: Foreign key to the document category reference table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+      - name: mount_item_id
+        description: Foreign key to the mount item table
+      - name: provider_id
+        description: Foreign key to the provider table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      # String Fields
+      - name: description
+        description: Text description of the document
+      - name: file_name
+        description: Name of the stored file
+      - name: tooth_numbers
+        description: Comma-separated list of tooth numbers related to the document
+      - name: note
+        description: Additional notes about the document
+      - name: signature
+        description: Digital signature data
+      - name: external_guid
+        description: External system's unique identifier
+      - name: external_source
+        description: Source system or application that created the document
+      - name: raw_base64
+        description: Base64 encoded document data
+      - name: thumbnail
+        description: Base64 encoded thumbnail image
+      - name: ocr_response_data
+        description: OCR extracted text from the document
+
+      # Numeric Fields
+      - name: image_type
+        description: Type identifier for the image format
+      - name: is_flipped
+        description: Flag indicating if the image is flipped (0/1)
+      - name: degrees_rotated
+        description: Number of degrees the image is rotated
+      - name: is_signature_topaz
+        description: Flag indicating if signature is from Topaz system (0/1)
+      - name: crop_x
+        description: X-coordinate of crop starting point
+      - name: crop_y
+        description: Y-coordinate of crop starting point
+      - name: crop_width
+        description: Width of the cropped area
+      - name: crop_height
+        description: Height of the cropped area
+      - name: windowing_min
+        description: Minimum window value for image display
+      - name: windowing_max
+        description: Maximum window value for image display
+      - name: is_crop_old
+        description: Flag indicating if crop uses old format (0/1)
+      - name: image_capture_type
+        description: Type identifier for how the image was captured
+      - name: print_heading
+        description: Flag for print header settings (0/1)
+
+      # Timestamps
+      - name: created_at
+        description: Timestamp when the document was created
+      - name: updated_at
+        description: Timestamp when the document was last updated

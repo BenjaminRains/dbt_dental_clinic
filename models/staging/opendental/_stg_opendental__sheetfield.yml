@@ -1,0 +1,109 @@
+version: 2
+
+models:
+  - name: stg_opendental__sheetfield
+    description: Staging model for OpenDental sheet fields. Sheet fields represent individual elements within a sheet/form, such as text boxes, checkboxes, or signature fields.
+    config:
+      tags: ['staging', 'opendental', 'incremental']
+    columns:
+      - name: sheet_field_num
+        description: Primary key of the sheet field table
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: sheet_num
+        description: Foreign key to the sheet table. References sheet_num in stg_opendental__sheet
+        tests:
+          - not_null
+      
+      - name: sheet_field_def_num
+        description: Foreign key to the sheet field definition table. References sheet_field_def_num in stg_opendental__sheetfielddef
+        tests:
+          - not_null
+
+      # Regular Fields
+      - name: field_type
+        description: Type of field (e.g., text box, checkbox, signature field)
+      
+      - name: field_name
+        description: Name identifier for the field
+      
+      - name: field_value
+        description: Content/value stored in the field
+      
+      - name: font_size
+        description: Size of the font used in the field
+      
+      - name: font_name
+        description: Name of the font used in the field
+      
+      - name: is_font_bold
+        description: Boolean indicating if the font is bold
+      
+      - name: x_position
+        description: Horizontal position of the field on the sheet
+      
+      - name: y_position
+        description: Vertical position of the field on the sheet
+      
+      - name: width
+        description: Width of the field
+      
+      - name: height
+        description: Height of the field
+      
+      - name: growth_behavior
+        description: Defines how the field grows when content is added
+      
+      - name: radio_button_value
+        description: Value associated with a radio button field
+      
+      - name: radio_button_group
+        description: Group identifier for related radio buttons
+      
+      - name: is_required
+        description: Boolean indicating if the field is required
+      
+      - name: tab_order
+        description: Order of the field when using tab navigation
+      
+      - name: reportable_name
+        description: Name used for reporting purposes
+      
+      - name: text_align
+        description: Text alignment within the field
+      
+      - name: item_color
+        description: Color of the field item
+      
+      - name: date_time_signature
+        description: Timestamp when the field was signed
+      
+      - name: is_locked
+        description: Boolean indicating if the field is locked for editing
+      
+      - name: tab_order_mobile
+        description: Tab order for mobile device display
+      
+      - name: ui_label_mobile
+        description: Label displayed on mobile devices
+      
+      - name: ui_label_mobile_radio_button
+        description: Mobile-specific label for radio buttons
+      
+      - name: can_electronically_sign
+        description: Boolean indicating if the field can be signed electronically
+      
+      - name: is_sig_prov_restricted
+        description: Boolean indicating if signature is restricted to providers
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: sheet_num
+          related_to: stg_opendental__sheet.sheet_num
+        - relationship: many_to_one
+          field: sheet_field_def_num
+          related_to: stg_opendental__sheetfielddef.sheet_field_def_num

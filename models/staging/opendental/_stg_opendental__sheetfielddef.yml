@@ -1,0 +1,108 @@
+version: 2
+
+models:
+  - name: stg_opendental__sheetfielddef
+    description: Staging model for OpenDental sheet field definitions. These definitions serve as templates for sheet fields, defining their default properties and behaviors.
+    columns:
+      - name: sheet_field_def_num
+        description: Primary key of the sheet field definition table
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: sheet_def_num
+        description: Foreign key to the sheet definition table. References sheet_def_num in stg_opendental__sheetdef
+        tests:
+          - not_null
+
+      # Regular Fields
+      - name: field_type
+        description: Type of field template (e.g., text box, checkbox, signature field)
+      
+      - name: field_name
+        description: Default name identifier for the field
+      
+      - name: field_value
+        description: Default value for the field
+      
+      - name: font_size
+        description: Default font size for the field
+      
+      - name: font_name
+        description: Default font name for the field
+      
+      - name: is_font_bold
+        description: Boolean indicating if the default font is bold
+      
+      - name: x_position
+        description: Default horizontal position of the field
+      
+      - name: y_position
+        description: Default vertical position of the field
+      
+      - name: width
+        description: Default width of the field
+      
+      - name: height
+        description: Default height of the field
+      
+      - name: growth_behavior
+        description: Default growth behavior when content is added
+      
+      - name: radio_button_value
+        description: Default value for radio button fields
+      
+      - name: radio_button_group
+        description: Default group identifier for related radio buttons
+      
+      - name: is_required
+        description: Boolean indicating if the field is required by default
+      
+      - name: tab_order
+        description: Default tab navigation order
+      
+      - name: reportable_name
+        description: Default name used for reporting purposes
+      
+      - name: text_align
+        description: Default text alignment within the field
+      
+      - name: is_payment_option
+        description: Boolean indicating if the field is used for payment options
+      
+      - name: item_color
+        description: Default color of the field item
+      
+      - name: is_locked
+        description: Boolean indicating if the field is locked by default
+      
+      - name: tab_order_mobile
+        description: Default tab order for mobile device display
+      
+      - name: ui_label_mobile
+        description: Default label for mobile device display
+      
+      - name: ui_label_mobile_radio_button
+        description: Default mobile-specific label for radio buttons
+      
+      - name: layout_mode
+        description: Defines how the field is laid out in the form
+      
+      - name: language
+        description: Language setting for the field definition
+      
+      - name: can_electronically_sign
+        description: Boolean indicating if the field can be signed electronically
+      
+      - name: is_sig_prov_restricted
+        description: Boolean indicating if signature is restricted to providers
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: sheet_def_num
+          related_to: stg_opendental__sheetdef.sheet_def_num
+        - relationship: one_to_many
+          field: sheet_field_def_num
+          related_to: stg_opendental__sheetfield.sheet_field_def_num

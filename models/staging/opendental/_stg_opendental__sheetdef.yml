@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: stg_opendental__sheetdef
+    description: Staging model for OpenDental sheet definitions. Sheet definitions serve as templates for creating new sheets, containing default properties and layouts.
+    columns:
+      - name: sheet_def_num
+        description: Primary key of the sheet definition table
+        tests:
+          - unique
+          - not_null
+
+      # Attributes
+      - name: description
+        description: Description of the sheet definition template
+      
+      - name: sheet_type
+        description: Type of sheet (e.g., consent form, medical history, treatment plan)
+      
+      - name: font_size
+        description: Default font size for the sheet
+      
+      - name: font_name
+        description: Default font name for the sheet
+      
+      - name: width
+        description: Default width of the sheet
+      
+      - name: height
+        description: Default height of the sheet
+      
+      - name: is_landscape
+        description: Boolean indicating if the sheet is in landscape orientation
+      
+      - name: page_count
+        description: Number of pages in the sheet template
+      
+      - name: is_multi_page
+        description: Boolean indicating if the sheet can span multiple pages
+      
+      - name: bypass_global_lock
+        description: Boolean indicating if the sheet can bypass global locking settings
+      
+      - name: has_mobile_layout
+        description: Boolean indicating if the sheet has a mobile-optimized layout
+      
+      - name: created_at
+        description: Timestamp when the sheet definition was created
+      
+      - name: rev_id
+        description: Revision identifier for version control
+      
+      - name: auto_check_save_image
+        description: Boolean indicating if images should be automatically saved
+      
+      - name: auto_check_save_image_doc_category
+        description: Category for automatically saved images
+
+    meta:
+      relationships:
+        - relationship: one_to_many
+          field: sheet_def_num
+          related_to: stg_opendental__sheet.sheet_def_num
+        - relationship: one_to_many
+          field: sheet_def_num
+          related_to: stg_opendental__sheetfielddef.sheet_def_num
