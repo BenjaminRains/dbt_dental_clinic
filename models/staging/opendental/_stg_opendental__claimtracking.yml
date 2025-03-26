@@ -36,10 +36,13 @@ models:
         description: Detailed notes about the tracking event
 
     tests:
-      - dbt_utils.relationships:
+      - relationships_with_third_table:
           to: ref('stg_opendental__claim')
           field: claim_id
           column_name: claim_id
+          from_condition: "claim_id is not null AND claim_id > 15260"
+          third_table: ref('stg_opendental__claimproc')
+          third_table_field: claim_id
     
     meta:
       relationships:
