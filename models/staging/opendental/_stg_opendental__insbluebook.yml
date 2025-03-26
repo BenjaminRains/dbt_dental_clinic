@@ -47,9 +47,13 @@ models:
         description: Foreign key to claims table
         tests:
           - not_null
-          - relationships:
+          - relationships_with_third_table:
               to: ref('stg_opendental__claim')
               field: claim_id
+              column_name: claim_num
+              from_condition: "claim_num is not null AND claim_num > 15260"
+              third_table: ref('stg_opendental__claimproc')
+              third_table_field: claim_id
 
       # Other Fields
       - name: group_num
