@@ -16,6 +16,31 @@ our database queries, reports, and data extraction tools.
 - **Precision**: Names should be specific enough to avoid ambiguity
 - **Brevity**: Names should be concise while maintaining clarity
 
+## Source Files and Staging Models
+
+**Source System Convention**: The OpenDental postgre source database uses CamelCase for column names (e.g., "PatNum", "AptDateTime", "ClaimNum").
+
+**Source YAML Files**: 
+- Document the actual raw database column names in their original CamelCase format
+- Example: In `_sources/claims_sources.yml`, use "ClaimNum", "PatNum", "DateService"
+
+**Staging Models**:
+- Transform raw CamelCase column names to snake_case for downstream use
+- Example: In `stg_opendental__claim.sql`:
+  ```sql
+  select
+      "ClaimNum" as claim_id,
+      "PatNum" as patient_id,
+      "DateService" as service_date
+  ```
+
+**Staging Model YAML Files**:
+- Use snake_case column names that match the output of the staging models (not the source database)
+- Example: In `_stg_opendental__adjustment.yml`, use "adjustment_id", "patient_id", "procedure_id"
+- These document the transformed column names that downstream models will reference
+
+This dual-convention pattern allows us to accurately document both the source system and our transformed data models while maintaining consistent naming within each context.
+
 ## Naming Conventions
 
 ### Database Column References
@@ -159,4 +184,4 @@ conventions may be modified. Such exceptions should be documented in the code.
 
 ---
 
-*Document Version: 2.0 - Last Updated: March 14, 2025* 
+*Document Version: 2.1 - Last Updated: March 26, 2025* 
