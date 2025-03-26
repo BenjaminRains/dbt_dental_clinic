@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_opendental__codegroup
+    description: Staging model for OpenDental code groups. Contains groupings of dental procedure codes with their attributes and display settings.
+    columns:
+      - name: codegroup_num
+        description: Primary key for the code group table
+        tests:
+          - unique
+          - not_null
+
+      - name: group_name
+        description: Name of the code group (limited to 50 characters)
+        tests:
+          - not_null
+
+      - name: proc_codes
+        description: Text field containing the procedure codes associated with this group
+        tests:
+          - not_null
+
+      - name: item_order
+        description: Integer representing the display order of the code group
+        tests:
+          - not_null
+
+      - name: is_fixed
+        description: Boolean flag indicating if the code group is fixed/unchangeable
+        tests:
+          - not_null
+
+      - name: is_hidden
+        description: Boolean flag indicating if the code group is hidden from normal view
+        tests:
+          - not_null
+
+      - name: show_in_age_limit
+        description: Boolean flag indicating if the code group should be shown in age limit settings
+        tests:
+          - not_null
+
+      - name: _loaded_at
+        description: Timestamp of when this record was loaded into the warehouse
+        tests:
+          - not_null

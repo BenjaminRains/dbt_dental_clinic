@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: stg_opendental__definition
+    description: Staging model for OpenDental definitions table. Contains various system definitions and configurations.
+    columns:
+      - name: definition_id
+        description: Primary key of the definition table
+        tests:
+          - unique
+          - not_null
+
+      - name: category_id
+        description: Category identifier for the definition item
+        tests:
+          - not_null
+
+      - name: item_order
+        description: Ordering sequence for items within the same category
+
+      - name: item_name
+        description: Name or identifier of the definition item
+        tests:
+          - not_null
+
+      - name: item_value
+        description: Value or setting associated with the definition item
+
+      - name: item_color
+        description: Color value associated with the definition item (if applicable)
+
+      - name: is_hidden
+        description: Flag indicating if the definition item is hidden from view (0=visible, 1=hidden)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the warehouse
+        tests:
+          - not_null

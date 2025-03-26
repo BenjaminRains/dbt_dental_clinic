@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: stg_opendental__autocode
+    description: Staging model for OpenDental autocodes. This is a small lookup table (~37 records) containing dental procedure autocodes and their attributes.
+    columns:
+      - name: autocode_num
+        description: Primary key for the autocode table
+        tests:
+          - unique
+          - not_null
+
+      - name: description
+        description: Description of the autocode and its purpose
+        tests:
+          - not_null
+
+      - name: is_hidden
+        description: Boolean flag indicating if the autocode is hidden from normal view
+        tests:
+          - not_null
+
+      - name: is_less_intrusive
+        description: Boolean flag indicating if the procedure is considered less intrusive
+        tests:
+          - not_null
+
+      - name: _loaded_at
+        description: Timestamp of when this record was loaded into the warehouse
+        tests:
+          - not_null

@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: stg_opendental__programproperty
+    description: Staging model for program properties from OpenDental. Contains configuration and property settings for various programs with associated clinic and security information.
+    columns:
+      - name: program_property_num
+        description: Primary key of the program property record
+        tests:
+          - unique
+          - not_null
+
+      - name: program_num
+        description: Foreign key to the program record
+        tests:
+          - not_null
+
+      - name: clinic_num
+        description: Foreign key to the clinic record
+        tests:
+          - not_null
+
+      - name: property_desc
+        description: Description of the program property
+        tests:
+          - not_null
+
+      - name: property_value
+        description: Value associated with the program property
+
+      - name: computer_name
+        description: Name of the computer where the property is set
+
+      - name: is_masked
+        description: Boolean flag indicating if the property value is masked for security purposes
+        tests:
+          - not_null
+
+      - name: is_high_security
+        description: Boolean flag indicating if the property requires high security access
+        tests:
+          - not_null

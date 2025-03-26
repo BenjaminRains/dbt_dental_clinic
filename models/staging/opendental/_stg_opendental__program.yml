@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: stg_opendental__program
+    description: Staging model for OpenDental program configurations. Contains information about integrated software programs, their paths, and settings.
+    columns:
+      - name: program_id
+        description: Primary key of the program table
+        tests:
+          - unique
+          - not_null
+
+      - name: program_name
+        description: Name of the integrated program or software (limited to 100 characters)
+        tests:
+          - not_null
+
+      - name: program_description
+        description: Description of the program or software (limited to 100 characters)
+
+      - name: is_enabled
+        description: Flag indicating if the program integration is enabled (0=disabled, 1=enabled)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: program_path
+        description: File system path to the program executable
+
+      - name: command_line
+        description: Command line parameters or arguments used when launching the program
+
+      - name: note
+        description: Additional notes or comments about the program integration
+
+      - name: plugin_dll_name
+        description: Name of the plugin DLL file if applicable (limited to 255 characters)
+
+      - name: button_image
+        description: Path or reference to the button image used in the interface
+
+      - name: file_template
+        description: Template for file naming or structure used by the program
+
+      - name: file_path
+        description: File system path for program-specific files (limited to 255 characters)
+
+      - name: is_disabled_by_hq
+        description: Flag indicating if the program is disabled by headquarters (0=not disabled, 1=disabled)
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: custom_error
+        description: Custom error message for the program (limited to 255 characters)
+
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the warehouse
+        tests:
+          - not_null
