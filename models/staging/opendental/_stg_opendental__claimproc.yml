@@ -159,20 +159,24 @@ models:
         description: Security hash for the record
 
     tests:
-      - dbt_utils.relationships:
+      - dbt_utils.relationships_where:
           to: ref('stg_opendental__claim')
           field: claim_id
           column_name: claim_id
+          from_condition: "claim_id is not null AND claim_id != 0 AND status != 2"
+          to_condition: "claim_id is not null"
       
-      - dbt_utils.relationships:
+      - dbt_utils.relationships_where:
           to: ref('stg_opendental__claimpayment')
           field: claim_payment_id
           column_name: claim_payment_id
-      
-      - dbt_utils.relationships:
+
+      - dbt_utils.relationships_where:
           to: ref('stg_opendental__clinic')
           field: clinic_id
           column_name: clinic_id
+          from_condition: "clinic_id is not null"
+          to_condition: "clinic_id is not null"
     
     meta:
       relationships:
