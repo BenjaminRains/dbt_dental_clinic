@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: stg_opendental__usergroupattach
+    description: Staging model for user group attachments. Links users to their assigned user groups.
+    columns:
+      - name: user_group_attach_num
+        description: Primary key of the user group attachment
+        tests:
+          - unique
+          - not_null
+
+      - name: user_num
+        description: Foreign key to the user table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_num
+
+      - name: user_group_num
+        description: Foreign key to the user group table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__usergroup')
+              field: user_group_num
+
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the staging model

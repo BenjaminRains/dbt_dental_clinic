@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: stg_opendental__usergroup
+    description: Staging model for usergroup data from OpenDental. Contains user group information and their associated permissions.
+    
+    columns:
+      - name: usergroup_num
+        description: Primary key of the usergroup table
+        tests:
+          - unique
+          - not_null
+
+      - name: description
+        description: Description or name of the user group
+        tests:
+          - not_null
+
+      - name: usergroup_num_cemt
+        description: Reference to CEMT user group number
+
+      # Metadata columns
+      - name: _airbyte_ab_id
+        description: Unique identifier created by Airbyte for each record
+        tests:
+          - not_null
+
+      - name: _airbyte_emitted_at
+        description: Timestamp when the record was emitted by Airbyte
+        tests:
+          - not_null
+
+      - name: _airbyte_normalized_at
+        description: Timestamp when the record was normalized
+        tests:
+          - not_null
