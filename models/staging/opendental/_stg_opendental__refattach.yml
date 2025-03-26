@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: stg_opendental__refattach
+    description: Staging model for referral attachments. This table contains information about referrals linked to patients, procedures, and providers.
+    columns:
+      - name: ref_attach_num
+        description: Primary key of the referral attachment
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: referral_num
+        description: Foreign key to the referral table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__referral')
+              field: referral_num
+
+      - name: patient_num
+        description: Foreign key to the patient table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_num
+
+      - name: procedure_num
+        description: Foreign key to the procedure table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedure')
+              field: procedure_num
+
+      - name: provider_num
+        description: Foreign key to the provider table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_num
+
+      # Regular columns
+      - name: item_order
+        description: Order of the referral attachment item, defaults to 0
+
+      - name: referral_date
+        description: Date when the referral was made
+
+      - name: referral_type
+        description: Type of referral (numeric code)
+
+      - name: referral_to_status
+        description: Status of the referral (numeric code)
+
+      - name: note
+        description: Additional notes about the referral attachment
+
+      - name: is_transition_of_care
+        description: Flag indicating if this is a transition of care referral
+
+      - name: procedure_completion_date
+        description: Date when the associated procedure was completed
+
+      # Meta columns
+      - name: created_at
+        description: Timestamp when the record was created

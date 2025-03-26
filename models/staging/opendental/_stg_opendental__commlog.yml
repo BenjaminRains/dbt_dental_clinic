@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: stg_opendental__commlog
+    description: Staging model for communication logs from OpenDental
+    columns:
+      - name: commlog_id
+        description: Primary key of the communication log
+        tests:
+          - unique
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to stg_opendental__patient
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: user_id
+        description: >
+          Foreign key to stg_opendental__userod, represents the user who created/handled the communication. 
+          Links to user_id (formerly UserNum) in userod table which contains user account details, 
+          including username, clinic assignments, and access information.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+
+      - name: program_id
+        description: Foreign key to stg_opendental__program, represents the program/system used for communication
+        tests:
+          - relationships:
+              to: ref('stg_opendental__program')
+              field: program_id
+
+      # Other important fields
+      - name: communication_datetime
+        description: Date and time when the communication occurred
+
+      - name: communication_type
+        description: Type of communication
+
+      - name: mode
+        description: Mode of communication
+
+      - name: is_sent
+        description: Flag indicating if the communication was sent (1) or received (0)
+
+      - name: communication_source
+        description: Source of the communication

@@ -1,0 +1,116 @@
+version: 2
+
+models:
+  - name: stg_opendental__userod
+    description: Staging model for user/operator data from OpenDental
+    columns:
+      - name: user_id
+        description: Primary key - unique identifier for each user
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: user_group_id
+        description: Foreign key to user group table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__usergroup')
+              field: user_group_id
+
+      - name: employee_id
+        description: Foreign key to employee table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__employee')
+              field: employee_id
+
+      - name: clinic_id
+        description: Foreign key to clinic table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+
+      - name: provider_id
+        description: Foreign key to provider table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: cemt_user_id
+        description: Foreign key to another user record (CEMT user reference)
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+
+      # User Information
+      - name: username
+        description: User's login username
+        tests:
+          - not_null
+
+      - name: password_hash
+        description: Hashed password value
+
+      - name: domain_username
+        description: Domain username for network authentication
+
+      - name: badge_id
+        description: User's badge identifier
+
+      # Boolean Flags
+      - name: is_hidden
+        description: Flag indicating if the user account is hidden
+
+      - name: has_strong_password
+        description: Flag indicating if the password meets strong password requirements
+
+      - name: is_clinic_restricted
+        description: Flag indicating if the user is restricted to specific clinics
+
+      - name: is_password_reset_required
+        description: Flag indicating if the user needs to reset their password
+
+      # Security and Access
+      - name: task_list_inbox
+        description: User's task list inbox configuration
+
+      - name: anesthesia_provider_type
+        description: Type of anesthesia provider if applicable
+
+      - name: is_default_hide_popups
+        description: Flag for default popup visibility settings
+
+      - name: is_inbox_hide_popups
+        description: Flag for inbox popup visibility settings
+
+      # Mobile and Web Access
+      - name: mobile_web_pin
+        description: PIN for mobile web access
+
+      - name: mobile_web_pin_failed_attempts
+        description: Count of failed mobile web PIN attempts
+
+      - name: eclipboard_clinical_pin
+        description: PIN for eClipboard clinical access
+
+      # Security Tracking
+      - name: last_failed_login_at
+        description: Timestamp of last failed login attempt
+
+      - name: failed_login_attempts
+        description: Count of failed login attempts
+
+      - name: last_login_at
+        description: Timestamp of last successful login
+
+    # Known relationships where userod is referenced by other tables
+    tests:
+      - relationships:
+          name: userod_referenced_in_commlog
+          to: ref('stg_opendental__commlog')
+          field: user_id
+          column_name: user_id
