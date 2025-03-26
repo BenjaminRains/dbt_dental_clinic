@@ -170,6 +170,8 @@ models:
           to: ref('stg_opendental__claimpayment')
           field: claim_payment_id
           column_name: claim_payment_id
+          from_condition: "claim_payment_id is not null AND claim_payment_id != 0"
+          to_condition: "claim_payment_id is not null"
 
       - dbt_utils.relationships_where:
           to: ref('stg_opendental__clinic')
