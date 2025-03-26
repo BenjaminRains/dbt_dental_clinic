@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: stg_opendental__rxnorm
+    description: Staging model for RxNorm data. RxNorm provides normalized names for clinical drugs and links its names to many of the drug vocabularies commonly used in pharmacy management and drug interaction software.
+    columns:
+      - name: rxnorm_num
+        description: Primary key - Unique identifier for each RxNorm record
+        tests:
+          - unique
+          - not_null
+
+      - name: rx_cui
+        description: RxNorm Concept Unique Identifier - A unique identifier for a drug concept
+        tests:
+          - not_null
+
+      - name: mmsl_code
+        description: MMSL (Multum MediSource Lexicon) code for the drug
+        tests:
+          - not_null
+
+      - name: description
+        description: Text description of the drug/medication

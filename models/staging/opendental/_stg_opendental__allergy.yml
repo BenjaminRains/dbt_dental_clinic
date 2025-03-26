@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_opendental__allergy
+    description: Staging model for allergy records from OpenDental. Contains patient allergy information including reactions and status.
+    columns:
+      - name: allergy_num
+        description: Primary key - Unique identifier for each allergy record
+        tests:
+          - unique
+          - not_null
+
+      - name: allergy_def_num
+        description: Foreign key to allergy definitions table. References the specific type of allergy
+        tests:
+          - not_null
+        # Relationship can be added once stg_opendental__allergydef is created
+        # relationships:
+        #   - to: ref('stg_opendental__allergydef')
+        #     field: allergy_def_num
+
+      - name: patient_num
+        description: Foreign key to patient table. Identifies the patient who has the allergy
+        tests:
+          - not_null
+        relationships:
+          - to: ref('stg_opendental__patient')
+            field: patient_num
+
+      - name: reaction
+        description: Text description of the allergic reaction
+
+      - name: is_active
+        description: Flag indicating if the allergy is currently active (1) or inactive (0)
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: date_timestamp
+        description: Timestamp when the allergy record was last modified
+
+      - name: adverse_reaction_date
+        description: Date when the adverse reaction occurred
+
+      - name: snomed_reaction
+        description: SNOMED CT code for the allergic reaction

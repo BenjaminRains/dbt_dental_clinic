@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: stg_opendental__diseasedef
+    description: Staging model for OpenDental disease definitions. Contains information about various diseases including their ICD9, ICD10, and SNOMED codes.
+    columns:
+      - name: disease_def_num
+        description: Primary key of the disease definition table
+        tests:
+          - unique
+          - not_null
+
+      - name: disease_name
+        description: The name or description of the disease
+        tests:
+          - not_null
+
+      - name: item_order
+        description: Numerical value indicating the display order of the disease definition
+        
+      - name: is_hidden
+        description: Flag indicating if the disease definition is hidden from view (0 = visible, 1 = hidden)
+
+      - name: date_tstamp
+        description: Timestamp of when the record was last updated
+        tests:
+          - not_null
+
+      - name: icd9_code
+        description: International Classification of Diseases, 9th Revision (ICD-9) code for the disease
+
+      - name: snomed_code
+        description: SNOMED CT (Systematized Nomenclature of Medicine -- Clinical Terms) code for the disease
+
+      - name: icd10_code
+        description: International Classification of Diseases, 10th Revision (ICD-10) code for the disease
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - disease_def_num

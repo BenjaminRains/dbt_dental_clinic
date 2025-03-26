@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_opendental__pharmacy
+    description: Staging model for pharmacy data from OpenDental. Contains information about pharmacies including their contact details and locations.
+    columns:
+      - name: pharmacy_num
+        description: Primary key - Unique identifier for each pharmacy
+        tests:
+          - unique
+          - not_null
+
+      - name: pharm_id
+        description: External identifier for the pharmacy
+
+      - name: store_name
+        description: Name of the pharmacy store
+        tests:
+          - not_null
+
+      - name: phone
+        description: Contact phone number for the pharmacy
+
+      - name: fax
+        description: Fax number for the pharmacy
+
+      - name: address
+        description: Primary street address of the pharmacy
+
+      - name: address2
+        description: Secondary address line (suite, unit, etc.) if applicable
+
+      - name: city
+        description: City where the pharmacy is located
+
+      - name: state
+        description: State where the pharmacy is located
+
+      - name: zip
+        description: ZIP/Postal code of the pharmacy location
+
+      - name: note
+        description: Additional notes or comments about the pharmacy
+
+      - name: date_tstamp
+        description: Timestamp of when the record was last updated

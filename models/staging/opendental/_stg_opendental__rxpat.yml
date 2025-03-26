@@ -1,0 +1,95 @@
+version: 2
+
+models:
+  - name: stg_opendental__rxpat
+    description: Staging model for prescription records from OpenDental. Contains information about prescriptions written for patients.
+    columns:
+      - name: rx_num
+        description: Primary key - unique identifier for each prescription
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: patient_num
+        description: Foreign key to patient table
+        tests:
+          - not_null
+      
+      - name: provider_num
+        description: Foreign key to provider who prescribed the medication
+        
+      - name: pharmacy_num
+        description: Foreign key to pharmacy where prescription was sent
+        
+      - name: procedure_num
+        description: Foreign key to related dental procedure (if applicable)
+        
+      - name: clinic_num
+        description: Foreign key to clinic where prescription was written
+        
+      - name: user_num
+        description: Foreign key to user who created/modified the prescription record
+
+      # Dates and Timestamps
+      - name: rx_date
+        description: Date when prescription was written
+        
+      - name: date_timestamp
+        description: Timestamp of when record was last modified
+
+      # Prescription Details
+      - name: drug_name
+        description: Name of prescribed medication
+        
+      - name: sig
+        description: Prescription instructions/signatura
+        
+      - name: dispense_instructions
+        description: Instructions for dispensing the medication
+        
+      - name: refills
+        description: Number of refills authorized
+        
+      - name: notes
+        description: Additional notes about the prescription
+        
+      - name: is_controlled
+        description: Boolean flag indicating if medication is a controlled substance
+        
+      - name: send_status
+        description: Status of prescription transmission
+        
+      - name: rx_cui
+        description: RxNorm Concept Unique Identifier for the medication
+        
+      - name: dosage_code
+        description: Code indicating medication dosage
+        
+      - name: days_of_supply
+        description: Number of days the prescription should last
+        
+      - name: patient_instruction
+        description: Detailed instructions for the patient
+
+      # E-Prescription Related
+      - name: erx_guid
+        description: Globally unique identifier for electronic prescriptions
+        
+      - name: is_erx_old
+        description: Boolean flag indicating if this is an old electronic prescription
+        
+      - name: erx_pharmacy_info
+        description: Additional pharmacy information for electronic prescriptions
+        
+      - name: is_proc_required
+        description: Boolean flag indicating if a procedure is required
+        
+      - name: rx_type
+        description: Type of prescription
+
+    # Table-level tests
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - rx_num

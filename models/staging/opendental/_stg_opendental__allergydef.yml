@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: stg_opendental__allergydef
+    description: Staging model for OpenDental allergy definitions. Contains information about different types of allergies and their related medication references.
+    columns:
+      - name: allergydef_id
+        description: Primary key - Unique identifier for each allergy definition
+        tests:
+          - unique
+          - not_null
+
+      - name: allergydef_description
+        description: Description of the allergy definition
+        
+      - name: is_hidden
+        description: Flag indicating if the allergy definition is hidden from view (0 = visible, 1 = hidden)
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: date_timestamp
+        description: Timestamp of when the record was last updated
+        tests:
+          - not_null
+
+      - name: snomed_type
+        description: SNOMED CT (Systematized Nomenclature of Medicine -- Clinical Terms) type identifier
+
+      - name: medication_id
+        description: Foreign key reference to the related medication
+        tests:
+          - not_null
+
+      - name: unii_code
+        description: Unique Ingredient Identifier (UNII) code for the allergen
+
+      - name: _loaded_at
+        description: Timestamp of when this record was loaded into the warehouse
+        tests:
+          - not_null

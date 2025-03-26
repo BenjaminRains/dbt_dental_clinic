@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_opendental__rxdef
+    description: Staging model for prescription definitions from OpenDental
+    columns:
+      - name: rx_def_num
+        description: Primary key for the prescription definition
+        tests:
+          - unique
+          - not_null
+
+      - name: drug
+        description: Name or description of the drug
+        tests:
+          - not_null
+
+      - name: sig
+        description: Prescription instructions/signatura (how to take the medication)
+
+      - name: disp
+        description: Dispensing instructions or quantity to dispense
+
+      - name: refills
+        description: Number of refills allowed for the prescription
+
+      - name: notes
+        description: Additional notes about the prescription
+
+      - name: is_controlled
+        description: Flag indicating if this is a controlled substance (0/1)
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: rx_cui
+        description: RxNorm Concept Unique Identifier for the drug
+
+      - name: is_proc_required
+        description: Flag indicating if a procedure is required (0/1)
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: patient_instruction
+        description: Detailed instructions for the patient

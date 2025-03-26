@@ -1,0 +1,40 @@
+version: 2
+
+models:
+  - name: stg_opendental__disease
+    description: Staging model for OpenDental disease records. Contains patient disease history, including start/stop dates, status, and notes.
+    columns:
+      - name: disease_num
+        description: Primary key - Unique identifier for each disease record
+        tests:
+          - unique
+          - not_null
+
+      - name: patient_num
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_num
+
+      - name: patient_note
+        description: Text notes related to the patient's specific disease condition
+
+      - name: snomed_problem_type
+        description: SNOMED CT classification code for the type of problem/disease
+
+      - name: date_timestamp
+        description: Timestamp when the record was created or last modified
+
+      - name: date_start
+        description: Date when the disease/condition was first diagnosed or recorded
+
+      - name: date_stop
+        description: Date when the disease/condition was resolved or ended (if applicable)
+
+      - name: problem_status
+        description: Numeric indicator of the problem's current status
+
+      - name: function_status
+        description: Numeric indicator of the patient's functional status related to this condition
