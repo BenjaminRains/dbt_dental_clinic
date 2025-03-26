@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: stg_opendental__periomeasure
+    description: Staging model for periodontal measurements from OpenDental. Contains detailed measurements for teeth examined during periodontal exams.
+    columns:
+      - name: periomeasure_id
+        description: Unique identifier for the periodontal measurement
+        tests:
+          - unique
+          - not_null
+      
+      - name: perioexam_id
+        description: Foreign key to stg_opendental__perioexam. Relates measurements to a specific periodontal examination.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__perioexam')
+              field: perioexam_id
+      
+      - name: sequence_type
+        description: Identifies the measurement sequence type (default 0)
+      
+      - name: tooth_number
+        description: Integer representing the tooth number being measured
+      
+      - name: tooth_value
+        description: General value associated with the tooth
+      
+      - name: mesial_buccal_value
+        description: Measurement at the mesial-buccal position of the tooth
+      
+      - name: buccal_value
+        description: Measurement at the buccal (outer/cheek) position of the tooth
+      
+      - name: distal_buccal_value
+        description: Measurement at the distal-buccal position of the tooth
+      
+      - name: mesial_lingual_value
+        description: Measurement at the mesial-lingual position of the tooth
+      
+      - name: lingual_value
+        description: Measurement at the lingual (inner/tongue) position of the tooth
+      
+      - name: distal_lingual_value
+        description: Measurement at the distal-lingual position of the tooth
+      
+      - name: entry_timestamp
+        description: Timestamp when the measurement was initially entered
+      
+      - name: edit_timestamp
+        description: Timestamp when the measurement was last edited
+
+    config:
+      tags: ['staging', 'opendental', 'periodontal']

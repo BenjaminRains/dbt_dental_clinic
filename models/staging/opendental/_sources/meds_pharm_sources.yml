@@ -1,0 +1,88 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+      - name: allergy
+        description: "Patient allergies"
+        columns:
+          - name: allergy_id
+            description: "Primary key for patient allergies"
+            tests:
+              - unique
+              - not_null
+
+      - name: allergydef
+        description: "Allergy definitions"
+        columns:
+          - name: allergy_def_id
+            description: "Primary key for allergy definitions"
+            tests:
+              - unique
+              - not_null
+
+      - name: disease
+        description: "Patient diseases"
+        columns:
+          - name: disease_id
+            description: "Primary key for patient diseases"
+            tests:
+              - unique
+              - not_null
+
+      - name: diseasedef
+        description: "Disease definitions"
+        columns:
+          - name: disease_def_id
+            description: "Primary key for disease definitions"
+            tests:
+              - unique
+              - not_null
+
+      - name: pharmclinic
+        description: "Pharmacy-clinic relationships"
+        columns:
+          - name: pharm_clinic_id
+            description: "Primary key for pharmacy-clinic relationships"
+            tests:
+              - unique
+              - not_null
+
+      - name: pharmacy
+        description: "Pharmacy information"
+        columns:
+          - name: pharmacy_id
+            description: "Primary key for pharmacies"
+            tests:
+              - unique
+              - not_null
+
+      - name: rxdef
+        description: "Prescription definitions"
+        columns:
+          - name: rx_def_id
+            description: "Primary key for prescription definitions"
+            tests:
+              - unique
+              - not_null
+
+      - name: rxnorm
+        description: "RxNorm medication codes"
+        columns:
+          - name: rx_norm_id
+            description: "Primary key for RxNorm medication codes"
+            tests:
+              - unique
+              - not_null
+
+      - name: rxpat
+        description: "Patient prescriptions"
+        columns:
+          - name: rx_patient_id
+            description: "Primary key for patient prescriptions"
+            tests:
+              - unique
+              - not_null

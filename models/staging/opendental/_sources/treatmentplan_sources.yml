@@ -1,0 +1,94 @@
+# =========== TREATMENT PLANNING ===========
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental dental practice management system data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    loader: postgres
+
+    tables:
+      - name: treatplan
+        description: "Treatment plans containing procedure recommendations and patient acceptance records"
+        freshness:
+          warn_after: {count: 7, period: day}
+        loaded_at_field: "SecDateTEdit"  # Using the last edit timestamp for freshness checks
+        columns:
+          - name: "TreatPlanNum"
+            description: "Primary key for treatment plans"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNum" 
+            description: "Foreign key to patient table"
+            tests:
+              - not_null
+          - name: "DateTP"
+            description: "Date the treatment plan was created"
+          - name: "TPStatus"
+            description: "Status code: 0=Active, 1=Signed, 2=Inactive, etc."
+          - name: "TPType"
+            description: "Type code for the treatment plan"
+        meta:
+          contains_phi: true  # Treatment plans contain Protected Health Information
+          owner: "Dental Team"
+          sync_frequency: "Daily"
+
+      - name: treatplanattach
+        description: "Connections between treatment plans and procedures, defining which procedures are included in each treatment plan"
+        columns:
+          - name: "TreatPlanAttachNum"
+            description: "Primary key for treatment plan attachments"
+            tests:
+              - unique
+              - not_null
+          - name: "TreatPlanNum"
+            description: "Foreign key to treatment plan table"
+            tests:
+              - not_null
+          - name: "ProcNum"
+            description: "Foreign key to procedure table"
+            tests:
+              - not_null
+          - name: "Priority"
+            description: "Priority value determining the order of procedures within the treatment plan"
+        meta:
+          contains_phi: true  # Contains patient treatment information
+          owner: "Dental Team"
+          sync_frequency: "Daily"
+      
+      - name: treatplanparam
+        description: "Display parameters and settings for treatment plans, controlling how treatment plans appear and what information is shown"
+        columns:
+          - name: "TreatPlanParamNum"
+            description: "Primary key for treatment plan parameters"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNum"
+            description: "Foreign key to patient table"
+            tests:
+              - not_null
+          - name: "TreatPlanNum"
+            description: "Foreign key to treatment plan table"
+            tests:
+              - not_null
+          - name: "ShowDiscount"
+            description: "Flag indicating whether discounts should be shown (0=No, 1=Yes)"
+          - name: "ShowMaxDed"
+            description: "Flag indicating whether maximum deductibles should be shown (0=No, 1=Yes)"
+          - name: "ShowSubTotals"
+            description: "Flag indicating whether subtotals should be shown (0=No, 1=Yes)"
+          - name: "ShowTotals"
+            description: "Flag indicating whether totals should be shown (0=No, 1=Yes)"
+          - name: "ShowCompleted"
+            description: "Flag indicating whether completed procedures should be shown (0=No, 1=Yes)"
+          - name: "ShowFees"
+            description: "Flag indicating whether fees should be shown (0=No, 1=Yes)"
+          - name: "ShowIns"
+            description: "Flag indicating whether insurance information should be shown (0=No, 1=Yes)"
+        meta:
+          contains_phi: true  # Associated with patient treatment plans
+          owner: "Dental Team"
+          sync_frequency: "Daily"

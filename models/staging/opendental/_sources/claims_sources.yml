@@ -1,0 +1,43 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+      - name: claim
+        description: "Insurance claims submitted"
+        columns:
+          - name: claim_id
+            description: "Primary key for insurance claims"
+            tests:
+              - unique
+              - not_null
+
+      - name: claimpayment
+        description: "Payments received from insurance claims"
+        columns:
+          - name: claim_payment_id
+            description: "Primary key for claim payments"
+            tests:
+              - unique
+              - not_null
+
+      - name: claimproc
+        description: "Procedures included in insurance claims"
+        columns:
+          - name: claim_procedure_id
+            description: "Primary key for claim procedures"
+            tests:
+              - unique
+              - not_null
+
+      - name: claimtracking
+        description: "Tracking status of insurance claims"
+        columns:
+          - name: claim_tracking_id
+            description: "Primary key for claim tracking records"
+            tests:
+              - unique
+              - not_null

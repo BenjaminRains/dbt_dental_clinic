@@ -1,0 +1,43 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+      - name: document
+        description: "Documents attached to patient records"
+        columns:
+          - name: document_id
+            description: "Primary key for documents"
+            tests:
+              - unique
+              - not_null
+
+      - name: sheet
+        description: "Custom forms and sheets"
+        columns:
+          - name: sheet_id
+            description: "Primary key for sheets"
+            tests:
+              - unique
+              - not_null
+
+      - name: sheetfield
+        description: "Field values for custom sheets"
+        columns:
+          - name: sheet_field_id
+            description: "Primary key for sheet fields"
+            tests:
+              - unique
+              - not_null
+
+      - name: sheetfielddef
+        description: "Field definitions for custom sheets"
+        columns:
+          - name: sheet_field_def_id
+            description: "Primary key for sheet field definitions"
+            tests:
+              - unique
+              - not_null

@@ -1,29 +1,460 @@
+# =========== PROCEDURE INFORMATION ===========
 version: 2
 
-# models:
-#   - name: stg_opendental__procedurecode
-#     description: "Dental procedure codes and descriptions"
-#
-#   - name: stg_opendental__procedurelog
-#     description: "Procedure log records"
-#
-#   - name: stg_opendental__procgroupitem
-#     description: "Links between procedures and procedure groups"
-#
-#   - name: stg_opendental__procmultivisit
-#     description: "Links between procedures and multi-visit procedures"
-#
-#   - name: stg_opendental__procnote
-#     description: "Notes related to specific procedures"
-#
-#   - name: stg_opendental__proctp
-#     description: "Procedure treatment plans"
-#
-#   - name: stg_opendental__perioexam
-#     description: "Periodontal examination records"
-#
-#   - name: stg_opendental__periomeasure
-#     description: "Periodontal measurements and assessments"
-#
-#   - name: stg_opendental__labcase
-#     description: "Dental laboratory case tracking"
+sources:
+  - name: opendental
+    description: "OpenDental dental practice management system data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    loader: postgres
+    loaded_at_field: "DateTStamp"  # Using the timestamp field for freshness
+    
+    tables:
+      - name: procedurecode
+        description: >
+          Dental procedure codes and descriptions including both standard CDT codes
+          and practice-specific custom codes. These codes form the foundation of
+          clinical documentation, billing, and insurance claims. The practice uses
+          several code formats:
+          - Standard CDT codes (D0140, D2330, etc.)
+          - 5-digit numeric codes for internal use
+          - N-codes for non-billable procedures (N4104, N4107)
+          - Z-codes for monitoring procedures (Ztoth, Ztoths)
+          - 4-digit codes for tracking (0000, 0909)
+          - Custom alphanumeric codes for specialty services (CWTRAY, 00PIC)
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "CodeNum"
+            description: "Primary key for procedure codes"
+            tests:
+              - unique
+              - not_null
+          - name: "ProcCode"
+            description: >
+              Standard and custom procedure code identifiers. Includes:
+              1. Standard CDT format: D# (e.g., D0140, D2330)
+              2. 5-digit numeric format (e.g., 12345)
+              3. Custom N-codes (e.g., N4104, N4107) - Non-billable procedures
+              4. Custom Z-codes (e.g., Ztoth, Ztoths) - Watchlist/monitoring procedures
+              5. 4-digit numeric codes (e.g., 0000, 0909) - Internal tracking codes
+              6. Custom alphanumeric codes (e.g., CWTRAY, 00PIC) - Special services
+              All formats are validated using custom tests.
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "DateTStamp"
+            description: "Timestamp when the record was created or updated"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+
+      - name: procedurelog
+        description: >
+          Comprehensive procedure log records capturing all services performed on and planned for patients.
+          Contains approximately 88,759 procedures for 4,518 unique patients, performed by 16 providers.
+          Includes both completed procedures (49.6%) and various planned/ordered procedures (38.5%).
+          Fee data shows variance from standard fees with both premium and discounted pricing.
+          Procedures can be linked to patients, providers, appointments, and billing records.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "ProcNum"
+            description: "Primary key for procedure log entries"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNum"
+            description: "Foreign key to the patient receiving the procedure"
+            tests:
+              - not_null
+          - name: "ProcDate" 
+            description: "Date when procedure was performed or is planned to be performed (future dates valid)"
+            tests:
+              - not_null
+          - name: "ProcStatus"
+            description: >
+              Status of the procedure: 1=Treatment Planned, 2=Completed, 3=Admin/Documentation,
+              4=Existing Prior, 5=Referred, 6=Ordered/Planned, 7=Condition, 8=In Progress
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [1, 2, 3, 4, 5, 6, 7, 8]
+                  quote: false
+          - name: "CodeNum"
+            description: "Foreign key to procedure code"
+            tests:
+              - not_null
+          - name: "ProcFee"
+            description: "Fee amount charged for procedure (median $75, avg $201.80)"
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "ProcFee >= 0 or ProcFee is null"
+          - name: "DateTStamp"
+            description: "Timestamp when the record was created or updated"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+      
+      - name: procgroupitem
+        description: >
+          Links procedures to procedure groups, allowing multiple procedures to be organized 
+          and tracked together. This relationship table creates associations between individual 
+          procedure records and their corresponding groups for treatment planning, billing, 
+          and clinical workflow management.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "ProcGroupItemNum"
+            description: "Primary key for procedure group item"
+            tests:
+              - unique
+              - not_null
+          - name: "ProcNum"
+            description: "Foreign key to the procedure entry in procedurelog"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'procedurelog')
+                  field: "ProcNum"
+          - name: "GroupNum"
+            description: "Foreign key to the procedure group"
+            tests:
+              - not_null
+          - name: "DateTStamp"
+            description: "Timestamp when the record was created or updated"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+
+      - name: procmultivisit
+        description: >
+          Tracks procedures that require multiple visits or appointments to complete.
+          This table maintains the relationship between individual procedures and their 
+          multi-visit status, including grouping related procedures, tracking completion
+          status, and managing in-process indicators. Used for complex treatment plans
+          where procedures span multiple appointments such as root canals, crowns,
+          dentures, and multi-stage implants.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "ProcMultiVisitNum"
+            description: "Primary key for procedure multi-visit records"
+            tests:
+              - unique
+              - not_null
+          - name: "GroupProcMultiVisitNum"
+            description: "Groups related multi-visit procedures together"
+          - name: "ProcNum"
+            description: "Foreign key to the associated procedure in procedurelog"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'procedurelog')
+                  field: "ProcNum"
+          - name: "PatNum"
+            description: "Foreign key to the patient"
+            tests:
+              - not_null
+          - name: "ProcStatus"
+            description: "Status of the procedure, similar to procedurelog status codes"
+          - name: "IsInProcess"
+            description: "Flag indicating if procedure is currently in process (1) or not (0)"
+          - name: "SecDateTEntry"
+            description: "Timestamp when the record was created"
+            tests:
+              - not_null
+          - name: "SecDateTEdit"
+            description: "Timestamp when the record was last modified"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+      
+      - name: procnote
+        description: >
+          Detailed notes and documentation related to specific dental procedures. Contains clinical observations,
+          treatment specifics, and digital signatures associated with procedures performed. This table provides
+          supplementary documentation for procedures tracked in the procedurelog table and is essential for
+          maintaining comprehensive clinical records and supporting treatment decisions.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "ProcNoteNum"
+            description: "Primary key for procedure notes"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNum"
+            description: "Foreign key to the patient"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "ProcNum"
+            description: "Foreign key to the associated procedure in procedurelog"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'procedurelog')
+                  field: "ProcNum"
+          - name: "EntryDateTime"
+            description: "Date and time when the note was entered"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "UserNum"
+            description: "Foreign key to the user who created the note"
+            tests:
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: "UserNum"
+          - name: "Note"
+            description: "The text content of the procedure note documenting clinical observations and treatment details"
+          - name: "SigIsTopaz"
+            description: "Flag indicating if a Topaz signature pad was used (1 = yes, 0 = no)"
+          - name: "Signature"
+            description: "Digital signature data associated with the note for documentation validation and compliance"
+      
+      - name: proctp
+        description: >
+          Treatment planned procedures that represent services planned but not necessarily completed.
+          Contains detailed information about dental procedures within treatment plans, including
+          financial estimates (fees, insurance coverage, patient costs), tooth-specific details,
+          provider assignments, and prioritization. Serves as a bridge between treatment plans
+          (treatplan table) and completed procedures (procedurelog table) when procedures are
+          completed and billed. Used extensively for treatment planning, financial estimates,
+          and tracking patient treatment acceptance.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "ProcTPNum"
+            description: "Primary key for treatment planned procedures"
+            tests:
+              - unique
+              - not_null
+          - name: "TreatPlanNum"
+            description: "Foreign key to the treatment plan this procedure belongs to"
+            tests:
+              - not_null
+          - name: "PatNum"
+            description: "Foreign key to the patient receiving the planned procedure"
+            tests:
+              - not_null
+          - name: "ProcNumOrig"
+            description: "Foreign key to procedurelog when the planned procedure is completed"
+          - name: "DateTP"
+            description: "Date when the procedure was added to the treatment plan"
+            tests:
+              - not_null
+          - name: "ToothNumTP"
+            description: "Tooth number for the planned procedure, using dental notation"
+          - name: "Surf"
+            description: "Tooth surface(s) involved in the procedure (e.g., MOD, B, F)"
+          - name: "ProcCode"
+            description: "Procedure code identifier, usually in CDT format"
+            tests:
+              - not_null
+          - name: "FeeAmt"
+            description: "Standard fee amount for the procedure"
+          - name: "PriInsAmt"
+            description: "Estimated amount to be covered by primary insurance"
+          - name: "SecInsAmt"
+            description: "Estimated amount to be covered by secondary insurance"
+          - name: "PatAmt"
+            description: "Estimated amount to be paid by patient"
+          - name: "FeeAllowed"
+            description: "Allowed fee amount (may differ from standard fee). A value of -1 is unexpected and should be investigated."
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "\"FeeAllowed\" != -1 or \"FeeAllowed\" is null"
+                  severity: warn
+          - name: "SecDateTEdit"
+            description: "Timestamp when the record was last modified"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+      
+      - name: perioexam
+        description: >
+          Records of periodontal examinations conducted on patients. These exams 
+          assess gum health, pocket depths, and other periodontal conditions to 
+          diagnose periodontal disease and plan appropriate treatment. Each exam 
+          serves as a parent record for detailed measurements stored in the periomeasure 
+          table. Contains information about the patient, provider, exam date, 
+          and clinical notes.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "PerioExamNum"
+            description: "Primary key for periodontal examinations"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNum"
+            description: "Foreign key to the patient who received the periodontal exam"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "ExamDate"
+            description: "Date when the periodontal examination was performed"
+            tests:
+              - not_null
+          - name: "ProvNum"
+            description: "Foreign key to the provider who performed the examination"
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: "ProvNum"
+          - name: "DateTMeasureEdit"
+            description: "Timestamp when the exam or its measurements were last edited"
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "Note"
+            description: "Clinical notes and observations recorded during the periodontal exam"
+      
+      - name: periomeasure
+        description: >
+          Detailed periodontal measurements taken during periodontal examinations. 
+          Contains specific measurements at six positions around each tooth (mesial-buccal, 
+          buccal, distal-buccal, mesial-lingual, lingual, distal-lingual), documenting 
+          pocket depths, recession, attachment loss, furcation involvement, and mobility. 
+          These measurements provide critical data for diagnosing periodontal disease 
+          severity, tracking disease progression, and evaluating treatment effectiveness 
+          over time.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "PerioMeasureNum"
+            description: "Primary key for periodontal measurements"
+            tests:
+              - unique
+              - not_null
+          - name: "PerioExamNum"
+            description: "Foreign key to the parent periodontal examination"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'perioexam')
+                  field: "PerioExamNum"
+          - name: "SequenceType"
+            description: "Type of measurement sequence (default 0)"
+          - name: "IntTooth"
+            description: "Integer representing the tooth number being measured"
+            tests:
+              - not_null
+          - name: "ToothValue"
+            description: "General value associated with the tooth assessment"
+          - name: "MBvalue"
+            description: "Measurement at the mesial-buccal position of the tooth (in mm)"
+          - name: "Bvalue"
+            description: "Measurement at the buccal (outer/cheek) position of the tooth (in mm)"
+          - name: "DBvalue"
+            description: "Measurement at the distal-buccal position of the tooth (in mm)"
+          - name: "MLvalue"
+            description: "Measurement at the mesial-lingual position of the tooth (in mm)"
+          - name: "Lvalue"
+            description: "Measurement at the lingual (inner/tongue) position of the tooth (in mm)"
+          - name: "DLvalue"
+            description: "Measurement at the distal-lingual position of the tooth (in mm)"
+          - name: "SecDateTEntry"
+            description: "Timestamp when the measurement was initially entered"
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "SecDateTEdit"
+            description: "Timestamp when the measurement was last edited"
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+      
+      - name: labcase
+        description: >
+          Dental laboratory case tracking system for managing all laboratory work ordered for patients.
+          This table tracks the complete lifecycle of lab cases from creation to receipt and verification,
+          including due dates, fees, and instructions. Lab cases are typically used for prosthetic work
+          such as crowns, bridges, dentures, and other fabricated dental appliances that require
+          collaboration with external dental laboratories. Each case can be linked to patients,
+          providers, and appointments for comprehensive tracking.
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "LabCaseNum"
+            description: "Primary key for lab case records"
+            tests:
+              - unique
+              - not_null
+          - name: "PatNum"
+            description: "Foreign key to the patient for whom the lab case is created"
+            tests:
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "LaboratoryNum"
+            description: "Foreign key to the dental laboratory handling the case"
+          - name: "AptNum"
+            description: "Foreign key to the appointment associated with this lab case"
+            tests:
+              - relationships:
+                  to: source('opendental', 'appointment')
+                  field: "AptNum"
+          - name: "PlannedAptNum"
+            description: "Foreign key to a future planned appointment for case delivery/insertion"
+          - name: "DateTimeDue"
+            description: "Date and time when the lab case is expected to be completed"
+          - name: "DateTimeCreated"
+            description: "Date and time when the lab case was initially created"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "DateTimeSent"
+            description: "Date and time when the lab case was sent to the laboratory"
+          - name: "DateTimeRecd"
+            description: "Date and time when the lab case was received back from the laboratory"
+          - name: "DateTimeChecked"
+            description: "Date and time when the lab case was checked and verified by clinical staff"
+          - name: "ProvNum"
+            description: "Foreign key to the provider responsible for the lab case"
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: "ProvNum"
+          - name: "Instructions"
+            description: "Detailed instructions for the laboratory regarding specifications, materials, and design requirements"
+          - name: "LabFee"
+            description: "Fee charged by the laboratory for fabricating this case"
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "\"LabFee\" >= 0 or \"LabFee\" is null"
+          - name: "DateTStamp"
+            description: "Timestamp when the record was created or last updated"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "InvoiceNum"
+            description: "Invoice or reference number provided by the laboratory for billing purposes"
+
+freshness:
+  warn_after: {count: 24, period: day}
+  error_after: {count: 48, period: day}

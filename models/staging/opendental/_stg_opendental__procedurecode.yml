@@ -1,0 +1,184 @@
+version: 2
+
+models:
+  - name: stg_opendental__procedurecode
+    description: >
+      Standardized staging model for procedure codes from the OpenDental system.
+      This table contains dental procedure codes, descriptions, and related attributes
+      for dental services and treatments. Only includes records from 2023-01-01 onwards.
+      
+      Key business context:
+      - Procedure codes follow CDT (Code on Dental Procedures) format with D-prefixes.
+      - Primary categorization is through procedure_category_id field.
+      - Category 622 contains most common procedures (~83% of all codes).
+      - D0-D9 prefixes indicate procedure groups (diagnostic, preventive, etc.)
+      - Flags like is_hygiene_flag and is_radiology_flag indicate special handling requirements.
+      
+      Tests:
+      - Custom test "validate_procedure_code_flag" checks that D6 codes have prosthodontic flags
+      - Custom test "validate_procedure_code_prefixes" validates proper code prefixes
+    config:
+      materialized: incremental
+      unique_key: procedure_code_id
+    tests:
+      - validate_procedure_code_flag:
+          column_name: procedure_code
+          prefix: 'D6'
+          flag_column: is_prosthetic_flag
+          expected_value: 1
+          severity: warn
+      
+      - validate_procedure_code_flag:
+          column_name: procedure_code
+          prefix: 'D0'
+          flag_column: is_radiology_flag
+          expected_value: 1
+          severity: warn
+    columns:
+      - name: procedure_code_id
+        description: Primary key - unique identifier for each procedure code record
+        tests:
+          - unique
+          - not_null
+
+      - name: procedure_code
+        description: Standard dental procedure code (e.g. CDT code)
+        tests:
+          - not_null
+          - unique
+          - validate_procedure_code_prefixes
+          - validate_procedure_code_format
+      
+      - name: description
+        description: Full description of the dental procedure
+      
+      - name: abbreviated_description
+        description: Shortened description of the dental procedure
+      
+      - name: procedure_time
+        description: Expected time required to complete the procedure
+      
+      - name: procedure_category_id
+        description: Foreign key to the procedure category
+        tests:
+          - not_null
+          - accepted_values:
+              values: [73, 74, 75, 77, 78, 79, 80, 81, 82, 83, 85, 250, 251, 260, 300, 622]
+              quote: false
+              severity: warn
+      
+      - name: treatment_area
+        description: Area of the mouth where treatment is applied
+      
+      - name: no_bill_insurance_flag
+        description: Flag indicating if this procedure should not be billed to insurance
+      
+      - name: is_prosthetic_flag
+        description: Flag indicating if this procedure involves prosthetics
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: default_note
+        description: Standard note associated with this procedure
+      
+      - name: is_hygiene_flag
+        description: Flag indicating if this is a hygiene-related procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: graphic_type_num
+        description: Type of graphic representation used for this procedure
+      
+      - name: alternate_code1
+        description: Alternative procedure code
+      
+      - name: medical_code
+        description: Associated medical code for this procedure
+      
+      - name: is_taxed_flag
+        description: Flag indicating if this procedure is taxable
+      
+      - name: paint_type
+        description: Visual indicator type used in dental software
+      
+      - name: graphic_color
+        description: Color code used for visual representation
+      
+      - name: layman_term
+        description: Non-technical term for the procedure for patient communication
+      
+      - name: is_canadian_lab_flag
+        description: Flag for Canadian lab work
+      
+      - name: pre_existing_flag
+        description: Flag indicating if condition was pre-existing
+      
+      - name: base_units
+        description: Standard time/billing units for the procedure
+      
+      - name: substitution_code
+        description: Alternative code that can be substituted
+      
+      - name: substitution_only_if
+        description: Condition code for substitution
+      
+      - name: date_timestamp
+        description: Date and time the record was created or last updated
+      
+      - name: is_multi_visit_flag
+        description: Flag indicating if procedure typically requires multiple visits
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: drug_ndc
+        description: National Drug Code if applicable
+      
+      - name: default_revenue_code
+        description: Default revenue code for billing
+      
+      - name: default_provider_id
+        description: ID of the default provider for this procedure
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+      
+      - name: canada_time_units
+        description: Time units specific to Canadian dental coding
+      
+      - name: is_radiology_flag
+        description: Flag indicating if this is a radiology procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: default_claim_note
+        description: Default note to appear on insurance claims
+      
+      - name: default_treatment_plan_note
+        description: Default note for treatment plans
+      
+      - name: bypass_global_lock_flag
+        description: Flag indicating if procedure can bypass global locks
+      
+      - name: tax_code
+        description: Tax code associated with this procedure
+      
+      - name: paint_text
+        description: Text to display in dental software UI
+      
+      - name: area_also_tooth_range_flag
+        description: Flag indicating if procedure area includes tooth range
+      
+      - name: diagnostic_codes
+        description: Associated diagnostic codes
+      
+      - name: _invocation_id
+        description: Metadata - dbt invocation ID for lineage tracking
+      
+      - name: _extract_timestamp
+        description: Metadata - timestamp when this record was extracted

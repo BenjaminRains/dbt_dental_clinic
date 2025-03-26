@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: stg_opendental__perioexam
+    description: Staging model for periodontal examinations from OpenDental. Each exam may have multiple related periomeasure records.
+    columns:
+      - name: perioexam_id
+        description: Unique identifier for the periodontal examination. Referenced by periomeasure records in stg_opendental__periomeasure.
+        tests:
+          - unique
+          - not_null
+      
+      - name: patient_id
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+      
+      - name: exam_date
+        description: Date when the periodontal examination was performed
+      
+      - name: provider_id
+        description: Foreign key to the provider who performed the examination
+      
+      - name: measure_edit_timestamp
+        description: Timestamp indicating when the measurements were last edited
+      
+      - name: note
+        description: Text notes associated with the periodontal examination
+
+    config:
+      tags: ['staging', 'opendental', 'periodontal']

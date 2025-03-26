@@ -1,0 +1,60 @@
+version: 2
+
+models:
+  - name: stg_opendental__labcase
+    description: Staging model for OpenDental lab cases. Contains information about laboratory work ordered for patients.
+    config:
+      tags: ['opendental', 'staging', 'labcase']
+    
+    columns:
+      - name: lab_case_id
+        description: Unique identifier for the lab case
+        tests:
+          - unique
+          - not_null
+      
+      - name: patient_id
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+      
+      - name: laboratory_id
+        description: Foreign key to the laboratory table
+        
+      - name: appointment_id
+        description: Foreign key to the appointment table associated with this lab case
+      
+      - name: planned_appointment_id
+        description: Foreign key to the planned appointment table
+      
+      - name: provider_id
+        description: Foreign key to the provider responsible for this lab case
+      
+      - name: due_at
+        description: Timestamp indicating when the lab case is due
+      
+      - name: created_at
+        description: Timestamp indicating when the lab case was created
+        tests:
+          - not_null
+      
+      - name: sent_at
+        description: Timestamp indicating when the lab case was sent to the laboratory
+      
+      - name: received_at
+        description: Timestamp indicating when the lab case was received back from the laboratory
+      
+      - name: checked_at
+        description: Timestamp indicating when the lab case was checked/verified
+      
+      - name: updated_at
+        description: Timestamp indicating when the lab case record was last updated
+      
+      - name: instructions
+        description: Text instructions for the laboratory regarding the case
+      
+      - name: lab_fee
+        description: The fee charged by the laboratory for this case
+      
+      - name: invoice_number
+        description: The invoice number associated with this lab case

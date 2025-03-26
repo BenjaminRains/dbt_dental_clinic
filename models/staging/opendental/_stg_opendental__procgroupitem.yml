@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: stg_opendental__procgroupitem
+    description: Staging model for procedure group items from the OpenDental source system.
+    
+    columns:
+      - name: procgroup_item_id
+        description: Unique identifier for the procedure group item
+        tests:
+          - unique
+          - not_null
+          
+      - name: procedure_id
+        description: Foreign key to the procedures table (ProcNum)
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              
+      - name: group_id
+        description: Identifier for the procedure group
+        tests:
+          - not_null
+          
+      - name: _airbyte_ab_id
+        description: Unique identifier generated during extraction
+        
+      - name: _airbyte_loaded_at
+        description: Timestamp when the record was loaded into the staging area

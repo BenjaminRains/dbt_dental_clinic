@@ -1,0 +1,295 @@
+version: 2
+
+models:
+  - name: stg_opendental__procedurelog
+    description: >
+      Staging model for OpenDental procedure log data. Contains detailed information 
+      about dental procedures performed on patients. This model is incremental and 
+      only includes procedures dated 2023-01-01 or later. This is a core table that links
+      with procedurecode, adjustment, appointment, patient, statement and other tables.
+      
+      Key data characteristics:
+      - Approximately 88,759 procedures for 4,518 unique patients (avg 19.6 procedures per patient)
+      - Fee comparison with standard fees shows ~29% exact matches, with ~37% higher and ~34% lower than standard
+      - Median fee difference is $0, while average difference is -$39.20
+      - Future-dated procedures are valid and represent planned treatments
+    
+    # Add some general model-level tests
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: source('opendental', 'procedurelog')
+          where: "ProcDate >= '2023-01-01'"
+    
+    columns:
+      - name: procedure_id
+        description: Unique identifier for the procedure
+        tests:
+          - unique
+          - not_null
+      
+      # Foreign keys with relationship tests
+      - name: patient_id
+        description: Foreign key to the patient. Dataset contains ~4,518 unique patients with an average of 19.6 procedures per patient.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      
+      - name: provider_id
+        description: Foreign key to the provider who performed the procedure. Distribution shows ~16 unique providers.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+      
+      - name: appointment_id
+        description: Foreign key to the appointment where the procedure was performed
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              where: "appointment_id is not null"
+      
+      - name: clinic_id
+        description: Foreign key to the clinic where the procedure was performed
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              where: "clinic_id is not null"
+      
+      - name: code_id
+        description: >
+          Foreign key to the procedure code. 346 unique procedure codes are used.
+          When compared to fee schedules, about 17.6% of procedure codes lack standard fee information.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: code_id
+      
+      - name: site_id
+        description: Foreign key to the site where the procedure was performed
+        tests:
+          - relationships:
+              to: ref('stg_opendental__site')
+              field: site_id
+              where: "site_id is not null"
+      
+      - name: planned_appointment_id
+        description: Foreign key to a planned future appointment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              where: "planned_appointment_id is not null"
+      
+      - name: statement_id
+        description: Foreign key to an associated statement
+        tests:
+          - relationships:
+              to: ref('stg_opendental__statement')
+              field: statement_id
+              where: "statement_id is not null"
+      
+      # Date and time fields with validity tests
+      - name: procedure_date
+        description: >
+          Date when the procedure was performed or is planned to be performed.
+          Future dates are valid and represent planned procedures that haven't occurred yet.
+          Data spans from 2023-01-01 to 2026-03-04.
+        tests:
+          - not_null
+      
+      - name: date_original_prosthesis
+        description: Date of the original prosthesis
+      
+      - name: date_entry
+        description: Date when the procedure was entered into the system
+      
+      - name: date_treatment_plan
+        description: Date when the procedure was planned
+      
+      - name: date_timestamp
+        description: Timestamp of the last update to the procedure record
+        tests:
+          - not_null
+      
+      - name: sec_date_entry
+        description: Timestamp when the security user entered the procedure
+      
+      - name: date_complete
+        description: Date when the procedure was completed
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "date_complete >= procedure_date or date_complete is null"
+      
+      - name: procedure_time
+        description: Time when the procedure started
+      
+      - name: procedure_time_end
+        description: Time when the procedure ended
+      
+      # Procedure details with business logic tests
+      - name: procedure_fee
+        description: >
+          Fee amount for the procedure. Analysis shows:
+          - Median fee: $75.00, Average fee: $201.80
+          - About 29% match standard fees exactly, 37% exceed standard, 34% below standard
+          - Fee-to-standard ratio typically ranges from 0.5-2.0
+          - Despite average fees being $39.20 below standard, total revenue impact is positive at $14.8M
+          - Approximately 50% of procedure codes have outlier fees (significantly different from standard)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "procedure_fee >= 0 or procedure_fee is null"
+      
+      - name: old_code
+        description: Legacy procedure code
+      
+      - name: surface
+        description: Tooth surface(s) involved in the procedure
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "surface ~ '^[BDFILO]+$' OR surface IS NULL"
+      
+      - name: tooth_number
+        description: Tooth number for the procedure
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "tooth_number ~ '^[A-T]$' OR tooth_number ~ '^[1-9][0-9]?$' OR tooth_number IS NULL"
+      
+      - name: tooth_range
+        description: Range of teeth involved in the procedure
+      
+      - name: priority
+        description: Priority level of the procedure
+      
+      - name: procedure_status
+        description: >
+          Status of the procedure:
+          1 = Treatment Planned (22.2% of procedures)
+          2 = Completed (49.6% of procedures)
+          3 = Administrative/Documentation (5.3% of procedures)
+          4 = Existing Prior (0.5% of procedures)
+          5 = Referred (1.5% of procedures)
+          6 = Ordered/Planned (16.3% of procedures)
+          7 = Condition (4.4% of procedures)
+          8 = In Progress (0.1% of procedures)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8]
+              quote: false
+      
+      - name: diagnosis
+        description: Diagnosis code
+      
+      - name: place_service
+        description: Place of service code
+      
+      - name: prosthesis
+        description: Prosthesis indicator
+      
+      - name: claim_note
+        description: Note associated with the claim
+      
+      - name: medical_code
+        description: Medical code for the procedure
+      
+      - name: diagnostic_code
+        description: Primary diagnostic code
+      
+      - name: is_principal_diagnosis
+        description: Flag indicating if this is the principal diagnosis
+      
+      - name: code_modifier_1
+        description: First modifier for the procedure code
+      
+      - name: code_modifier_2
+        description: Second modifier for the procedure code
+      
+      - name: code_modifier_3
+        description: Third modifier for the procedure code
+      
+      - name: code_modifier_4
+        description: Fourth modifier for the procedure code
+      
+      - name: revenue_code
+        description: Revenue code associated with the procedure
+      
+      - name: unit_quantity
+        description: Quantity of units for the procedure
+      
+      - name: base_units
+        description: Base units for the procedure
+      
+      - name: start_time
+        description: Start time as an integer
+      
+      - name: stop_time
+        description: Stop time as an integer
+      
+      - name: hide_graphics
+        description: Flag indicating if graphics should be hidden
+      
+      - name: canadian_type_codes
+        description: Canadian-specific type codes
+      
+      - name: prognosis
+        description: Prognosis identifier
+      
+      - name: drug_unit
+        description: Unit type for drug procedures
+      
+      - name: drug_quantity
+        description: Quantity of drug administered
+      
+      - name: unit_quantity_type
+        description: Type of unit quantity
+      
+      - name: discount
+        description: Discount amount applied to the procedure. Analysis reveals systematic discounting for certain procedure types.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "discount >= 0 or discount is null"
+      
+      - name: is_date_prosthesis_estimated
+        description: Flag indicating if the prosthesis date is estimated
+      
+      - name: icd_version
+        description: Version of ICD codes used
+      
+      - name: urgency
+        description: Urgency level of the procedure
+      
+      - name: tax_amount
+        description: Tax amount for the procedure
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "tax_amount >= 0 or tax_amount is null"
+      
+      - name: discount_plan_amount
+        description: Discount amount from the plan
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "discount_plan_amount >= 0 or discount_plan_amount is null"
+      
+      # Advanced business logic tests
+      - name: is_locked
+        description: Flag indicating if the procedure is locked
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "(is_locked = 0 OR is_locked = 1) OR is_locked is null"
+      
+      - name: is_cpoe
+        description: Flag indicating if this is a Computerized Physician Order Entry
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "(is_cpoe = 0 OR is_cpoe = 1) OR is_cpoe is null"
+      
+      # Metadata columns
+      - name: _airbyte_ab_id
+        description: Airbyte unique identifier
+      
+      - name: _airbyte_loaded_at
+        description: Timestamp when the record was loaded

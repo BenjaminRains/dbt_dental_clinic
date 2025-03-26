@@ -6,16 +6,7 @@ sources:
     database: opendental_analytics
     schema: public  # PostgreSQL schema
     tables:
-    
-      - name: carrier
-        description: "Insurance carrier information"
-        columns:
-          - name: carrier_id
-            description: "Primary key for insurance carriers"
-            tests:
-              - unique
-              - not_null
-
+ 
       - name: insplan
         description: "Insurance plan details and configuration"
         columns:
@@ -84,6 +75,15 @@ sources:
         columns:
           - name: insurance_bluebook_log_id
             description: "Primary key for bluebook log entries"
+            tests:
+              - unique
+              - not_null
+
+      - name: carrier
+        description: "Insurance carrier/company information"
+        columns:
+          - name: carrier_id
+            description: "Primary key for insurance carriers"
             tests:
               - unique
               - not_null

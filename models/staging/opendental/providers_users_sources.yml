@@ -1,0 +1,43 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+      - name: provider
+        description: "Dentists and other providers in the practice"
+        columns:
+          - name: provider_id
+            description: "Primary key for providers"
+            tests:
+              - unique
+              - not_null
+
+      - name: userod
+        description: "User information for OpenDental"
+        columns:
+          - name: user_id
+            description: "Primary key for users"
+            tests:
+              - unique
+              - not_null
+
+      - name: usergroup
+        description: "User security groups"
+        columns:
+          - name: user_group_id
+            description: "Primary key for user groups"
+            tests:
+              - unique
+              - not_null
+
+      - name: usergroupattach
+        description: "User-group assignments"
+        columns:
+          - name: user_group_attach_id
+            description: "Primary key for user group assignments"
+            tests:
+              - unique
+              - not_null

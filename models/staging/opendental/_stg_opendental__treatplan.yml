@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: stg_opendental__treatplan
+    description: >
+      Staging model for OpenDental treatment plans. This incremental model contains 
+      treatment plans created on or after January 1, 2023.
+    config:
+      materialized: incremental
+    columns:
+      # Primary key
+      - name: treatment_plan_id
+        description: Unique identifier for the treatment plan
+        tests:
+          - unique
+          - not_null
+      
+      # Foreign keys
+      - name: patient_id
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+      - name: responsible_party_id
+        description: Foreign key to the responsible party (usually guarantor)
+      - name: document_id
+        description: Foreign key to associated document
+      - name: entry_user_id
+        description: User ID of the person who created the treatment plan
+      - name: presenter_user_id
+        description: User ID of the person who presented the treatment plan
+      - name: mobile_app_device_id
+        description: Device ID if created through mobile app
+      
+      # Timestamps and dates
+      - name: treatment_plan_date
+        description: Date the treatment plan was created
+        tests:
+          - not_null
+      - name: entry_date
+        description: Date the treatment plan was entered into the system
+      - name: last_edit_timestamp
+        description: Timestamp of the most recent edit
+      - name: signed_timestamp
+        description: Timestamp when the treatment plan was signed
+      - name: practice_signed_timestamp
+        description: Timestamp when the practice signed the treatment plan
+      
+      # Descriptive fields
+      - name: heading
+        description: Heading or title of the treatment plan
+      - name: note
+        description: General notes associated with the treatment plan
+      - name: signature
+        description: Patient signature data
+      - name: signature_text
+        description: Textual representation of patient signature
+      - name: signature_practice
+        description: Practice signature data
+      - name: signature_practice_text
+        description: Textual representation of practice signature
+      
+      # Status and type flags
+      - name: is_signature_topaz
+        description: Boolean indicating if signature was captured using Topaz system
+      - name: treatment_plan_status
+        description: Status code for the treatment plan
+      - name: treatment_plan_type
+        description: Type code for the treatment plan

@@ -1,0 +1,34 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+      - name: commlog
+        description: "Communication logs with patients"
+        columns:
+          - name: comm_log_id
+            description: "Primary key for communication logs"
+            tests:
+              - unique
+              - not_null
+
+      - name: referral
+        description: "Referral source information"
+        columns:
+          - name: referral_id
+            description: "Primary key for referrals"
+            tests:
+              - unique
+              - not_null
+
+      - name: refattach
+        description: "Referral attachments"
+        columns:
+          - name: referral_attachment_id
+            description: "Primary key for referral attachments"
+            tests:
+              - unique
+              - not_null

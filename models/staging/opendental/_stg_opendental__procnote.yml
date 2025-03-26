@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: stg_opendental__procnote
+    description: >
+      Staging model for procedure notes from the OpenDental system.
+      Contains notes and signatures related to dental procedures.
+    
+    columns:
+      - name: procnote_id
+        description: Unique identifier for each procedure note
+        tests:
+          - unique
+          - not_null
+      
+      - name: patient_id
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      
+      - name: procedure_id
+        description: Foreign key to the procedure log table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+      
+      - name: user_id
+        description: ID of the user who created the procedure note
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+      
+      - name: entry_timestamp
+        description: Date and time when the note was entered
+        tests:
+          - not_null
+      
+      - name: note
+        description: The text content of the procedure note
+      
+      - name: is_topaz_signature
+        description: Flag indicating if a Topaz signature pad was used (1 = yes, 0 = no)
+      
+      - name: signature
+        description: Digital signature data associated with the note
+      
+      - name: _data_loaded_at
+        description: Timestamp indicating when this record was loaded into the warehouse
+        tests:
+          - not_null

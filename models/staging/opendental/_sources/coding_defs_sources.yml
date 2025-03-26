@@ -1,0 +1,61 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+      - name: autocode
+        description: "Automatic code assignments"
+        columns:
+          - name: autocode_id
+            description: "Primary key for automatic code assignments"
+            tests:
+              - unique
+              - not_null
+
+      - name: codegroup
+        description: "Groupings of dental codes"
+        columns:
+          - name: code_group_id
+            description: "Primary key for code groups"
+            tests:
+              - unique
+              - not_null
+
+      - name: cpt
+        description: "CPT procedure codes"
+        columns:
+          - name: cpt_id
+            description: "Primary key for CPT codes"
+            tests:
+              - unique
+              - not_null
+
+      - name: definition
+        description: "System definitions and configuration"
+        columns:
+          - name: definition_id
+            description: "Primary key for system definitions"
+            tests:
+              - unique
+              - not_null
+
+      - name: program
+        description: "Program configuration"
+        columns:
+          - name: program_id
+            description: "Primary key for program configurations"
+            tests:
+              - unique
+              - not_null
+
+      - name: programproperty
+        description: "Program properties and settings"
+        columns:
+          - name: program_property_id
+            description: "Primary key for program properties"
+            tests:
+              - unique
+              - not_null
