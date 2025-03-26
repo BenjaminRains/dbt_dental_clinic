@@ -59,7 +59,7 @@ models:
         description: Timestamp when this record was last modified
 
     tests:
-      - dbt_utils.relationships:
+      - dbt_utils.relationships_where:
           to: ref('stg_opendental__clinic')
           field: clinic_id
           column_name: clinic_id
