@@ -7,82 +7,298 @@ sources:
     schema: public  # PostgreSQL schema
     tables:
       - name: allergy
-        description: "Patient allergies"
+        description: "Patient allergy records containing allergy information including reactions and status"
         columns:
           - name: allergy_id
-            description: "Primary key for patient allergies"
+            description: "Primary key - Unique identifier for each allergy record"
             tests:
               - unique
               - not_null
+          - name: allergy_def_id
+            description: "Foreign key to allergy definitions table. References the specific type of allergy"
+            tests:
+              - not_null
+          - name: patient_id
+            description: "Foreign key to patient table. Identifies the patient who has the allergy"
+            tests:
+              - not_null
+          - name: reaction
+            description: "Text description of the allergic reaction"
+          - name: is_active
+            description: "Flag indicating if the allergy is currently active (1) or inactive (0)"
+            tests:
+              - accepted_values:
+                  values: [0, 1]
+          - name: date_timestamp
+            description: "Timestamp when the allergy record was last modified"
+          - name: adverse_reaction_date
+            description: "Date when the adverse reaction occurred"
+          - name: snomed_reaction
+            description: "SNOMED CT code for the allergic reaction"
 
       - name: allergydef
-        description: "Allergy definitions"
+        description: "Allergy definitions containing information about different types of allergies and their related medication references"
         columns:
           - name: allergy_def_id
-            description: "Primary key for allergy definitions"
+            description: "Primary key - Unique identifier for each allergy definition"
             tests:
               - unique
               - not_null
+          - name: description
+            description: "Description of the allergy definition"
+          - name: is_hidden
+            description: "Flag indicating if the allergy definition is hidden from view (0 = visible, 1 = hidden)"
+            tests:
+              - accepted_values:
+                  values: [0, 1]
+          - name: date_timestamp
+            description: "Timestamp of when the record was last updated"
+            tests:
+              - not_null
+          - name: snomed_type
+            description: "SNOMED CT (Systematized Nomenclature of Medicine -- Clinical Terms) type identifier"
+          - name: medication_id
+            description: "Foreign key reference to the related medication"
+            tests:
+              - not_null
+          - name: unii_code
+            description: "Unique Ingredient Identifier (UNII) code for the allergen"
 
       - name: disease
-        description: "Patient diseases"
+        description: "Patient disease records containing disease history, including start/stop dates, status, and notes"
         columns:
           - name: disease_id
-            description: "Primary key for patient diseases"
+            description: "Primary key - Unique identifier for each disease record"
             tests:
               - unique
               - not_null
+          - name: patient_id
+            description: "Foreign key to the patient table"
+            tests:
+              - not_null
+          - name: patient_note
+            description: "Text notes related to the patient's specific disease condition"
+          - name: snomed_problem_type
+            description: "SNOMED CT classification code for the type of problem/disease"
+          - name: date_timestamp
+            description: "Timestamp when the record was created or last modified"
+          - name: date_start
+            description: "Date when the disease/condition was first diagnosed or recorded"
+          - name: date_stop
+            description: "Date when the disease/condition was resolved or ended (if applicable)"
+          - name: problem_status
+            description: "Numeric indicator of the problem's current status"
+          - name: function_status
+            description: "Numeric indicator of the patient's functional status related to this condition"
 
       - name: diseasedef
-        description: "Disease definitions"
+        description: "Disease definitions containing information about various diseases including their ICD9, ICD10, and SNOMED codes"
         columns:
           - name: disease_def_id
-            description: "Primary key for disease definitions"
+            description: "Primary key of the disease definition table"
             tests:
               - unique
               - not_null
+          - name: disease_name
+            description: "The name or description of the disease"
+            tests:
+              - not_null
+          - name: item_order
+            description: "Numerical value indicating the display order of the disease definition"
+          - name: is_hidden
+            description: "Flag indicating if the disease definition is hidden from view (0 = visible, 1 = hidden)"
+          - name: date_timestamp
+            description: "Timestamp of when the record was last updated"
+            tests:
+              - not_null
+          - name: icd9_code
+            description: "International Classification of Diseases, 9th Revision (ICD-9) code for the disease"
+          - name: snomed_code
+            description: "SNOMED CT (Systematized Nomenclature of Medicine -- Clinical Terms) code for the disease"
+          - name: icd10_code
+            description: "International Classification of Diseases, 10th Revision (ICD-10) code for the disease"
 
       - name: pharmclinic
-        description: "Pharmacy-clinic relationships"
+        description: "Pharmacy-clinic relationships that map the associations between pharmacies and clinics"
         columns:
           - name: pharm_clinic_id
-            description: "Primary key for pharmacy-clinic relationships"
+            description: "Primary key - Unique identifier for each pharmacy-clinic relationship"
             tests:
               - unique
+              - not_null
+          - name: pharmacy_id
+            description: "Foreign key to the pharmacy table"
+            tests:
+              - not_null
+          - name: clinic_id
+            description: "Foreign key to the clinic table"
+            tests:
               - not_null
 
       - name: pharmacy
-        description: "Pharmacy information"
+        description: "Pharmacy data containing information about pharmacies including their contact details and locations"
         columns:
           - name: pharmacy_id
-            description: "Primary key for pharmacies"
+            description: "Primary key - Unique identifier for each pharmacy"
             tests:
               - unique
               - not_null
+          - name: pharm_id
+            description: "External identifier for the pharmacy"
+          - name: store_name
+            description: "Name of the pharmacy store"
+            tests:
+              - not_null
+          - name: phone
+            description: "Contact phone number for the pharmacy"
+          - name: fax
+            description: "Fax number for the pharmacy"
+          - name: address
+            description: "Primary street address of the pharmacy"
+          - name: address2
+            description: "Secondary address line (suite, unit, etc.) if applicable"
+          - name: city
+            description: "City where the pharmacy is located"
+          - name: state
+            description: "State where the pharmacy is located"
+          - name: zip
+            description: "ZIP/Postal code of the pharmacy location"
+          - name: note
+            description: "Additional notes or comments about the pharmacy"
+          - name: date_timestamp
+            description: "Timestamp of when the record was last updated"
 
       - name: rxdef
-        description: "Prescription definitions"
+        description: "Prescription definitions containing standard drug information, instructions, and control status"
         columns:
-          - name: rx_def_id
-            description: "Primary key for prescription definitions"
+          - name: RxDefNum
+            description: "Primary key - Unique identifier for prescription definitions"
             tests:
               - unique
               - not_null
+          - name: Drug
+            description: "Name or description of the drug"
+            tests:
+              - not_null
+          - name: Sig
+            description: "Prescription instructions/signatura (how to take the medication)"
+          - name: Disp
+            description: "Dispensing instructions or quantity to dispense"
+          - name: Refills
+            description: "Number of refills allowed for the prescription"
+          - name: Notes
+            description: "Additional notes about the prescription"
+          - name: IsControlled
+            description: "Flag indicating if this is a controlled substance (0/1)"
+            tests:
+              - accepted_values:
+                  values: [0, 1]
+          - name: RxCui
+            description: "RxNorm Concept Unique Identifier for the drug"
+          - name: IsProcRequired
+            description: "Flag indicating if a procedure is required (0/1)"
+            tests:
+              - accepted_values:
+                  values: [0, 1]
+          - name: PatientInstruction
+            description: "Detailed instructions for the patient"
 
       - name: rxnorm
-        description: "RxNorm medication codes"
+        description: "RxNorm medication reference data providing normalized names and identifiers for clinical drugs"
         columns:
-          - name: rx_norm_id
-            description: "Primary key for RxNorm medication codes"
+          - name: RxNormNum
+            description: "Primary key - Unique identifier for each RxNorm record"
             tests:
               - unique
               - not_null
+          - name: RxCui
+            description: "RxNorm Concept Unique Identifier - A unique identifier for a drug concept"
+            tests:
+              - not_null
+          - name: MmslCode
+            description: "MMSL (Multum MediSource Lexicon) code for the drug"
+          - name: Description
+            description: "Text description of the drug/medication"
 
       - name: rxpat
-        description: "Patient prescriptions"
+        description: "Patient prescriptions containing detailed prescription records including drug information, instructions, and e-prescription details"
         columns:
-          - name: rx_patient_id
-            description: "Primary key for patient prescriptions"
+          - name: RxNum
+            description: "Primary key - Unique identifier for each prescription"
             tests:
               - unique
               - not_null
+          
+          - name: PatNum
+            description: "Foreign key to patient table identifying the patient receiving the prescription"
+            tests:
+              - not_null
+
+          - name: ProvNum
+            description: "Foreign key to provider table identifying the prescribing provider"
+
+          - name: PharmacyNum
+            description: "Foreign key to pharmacy table identifying the dispensing pharmacy"
+
+          - name: ProcNum
+            description: "Foreign key to procedure table linking to related dental procedure"
+
+          - name: ClinicNum
+            description: "Foreign key to clinic table identifying the prescribing clinic"
+
+          - name: UserNum
+            description: "Foreign key to user table identifying who created/modified the record"
+
+          - name: RxDate
+            description: "Date when the prescription was written"
+
+          - name: DateTStamp
+            description: "Timestamp of when the record was last modified"
+
+          - name: Drug
+            description: "Name of the prescribed medication"
+
+          - name: Sig
+            description: "Prescription instructions/signatura"
+
+          - name: Disp
+            description: "Instructions for dispensing the medication"
+
+          - name: Refills
+            description: "Number of authorized refills"
+
+          - name: Notes
+            description: "Additional notes about the prescription"
+
+          - name: IsControlled
+            description: "Boolean flag (smallint) indicating if medication is a controlled substance"
+
+          - name: SendStatus
+            description: "Status of prescription transmission"
+
+          - name: RxCui
+            description: "RxNorm Concept Unique Identifier for the medication"
+
+          - name: DosageCode
+            description: "Code indicating medication dosage"
+
+          - name: DaysOfSupply
+            description: "Number of days the prescription should last"
+
+          - name: PatientInstruction
+            description: "Detailed instructions for the patient"
+
+          - name: ErxGuid
+            description: "Globally unique identifier for electronic prescriptions"
+
+          - name: IsErxOld
+            description: "Boolean flag (smallint) indicating if this is an old electronic prescription"
+
+          - name: ErxPharmacyInfo
+            description: "Additional pharmacy information for electronic prescriptions"
+
+          - name: IsProcRequired
+            description: "Boolean flag (smallint) indicating if a procedure is required"
+
+          - name: RxType
+            description: "Type of prescription"
