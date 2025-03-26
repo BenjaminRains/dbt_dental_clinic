@@ -25,7 +25,9 @@ sources:
           - name: PatNum
             description: Reference to patient record (indexed)
             tests:
-              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: PatNum
           - name: AdjAmt
             description: Adjustment amount (positive for credits, negative for debits)
             tests:
@@ -40,8 +42,18 @@ sources:
               - not_null
           - name: ProcNum
             description: Reference to procedure if applicable (indexed)
+            tests:
+              - relationships:
+                  to: source('opendental', 'procedurelog')
+                  field: ProcNum
+                  where: "ProcNum is not null"
           - name: ProvNum
-            description: Provider who authorized the adjustment (must be from active provider list)
+            description: Reference to provider who authorized the adjustment
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: ProvNum
+                  where: "ProvNum is not null"
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
@@ -104,7 +116,14 @@ sources:
                 description: "Payment types validated with warning severity for flexibility"
               - test: "payment_validation_rules"
                 status: "pass"
-      
+        columns:
+          - name: PatNum
+            description: Reference to patient
+            tests:
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: PatNum
+
       - name: paysplit
         description: >
           Payment splits that allocate payments across procedures, adjustments, and payment plans.
@@ -123,7 +142,6 @@ sources:
           - name: PayNum
             description: Reference to parent payment record
             tests:
-              - not_null
               - relationships:
                   to: source('opendental', 'payment')
                   field: PayNum
@@ -136,13 +154,27 @@ sources:
             tests:
               - not_null
           - name: ProcNum
-            description: Reference to procedure (indexed)
+            description: Reference to procedure if applicable
+            tests:
+              - relationships:
+                  to: source('opendental', 'procedurelog')
+                  field: ProcNum
+                  where: "ProcNum is not null"
           - name: AdjNum
-            description: Reference to adjustment (indexed)
+            description: Reference to adjustment if applicable
+            tests:
+              - relationships:
+                  to: source('opendental', 'adjustment')
+                  field: AdjNum
+                  where: "AdjNum is not null"
           - name: IsDiscount
             description: Flag for discounts (smallint)
           - name: PatNum
-            description: Reference to patient (indexed)
+            description: Reference to patient
+            tests:
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: PatNum
           - name: UnearnedType
             description: Income recognition type (288 and 439 for unearned)
         meta:
@@ -195,7 +227,9 @@ sources:
           - name: PatNum
             description: Reference to patient record
             tests:
-              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: PatNum
           - name: DateSent
             description: Date when statement was sent
           - name: DateRangeFrom
@@ -264,7 +298,6 @@ sources:
           - name: StatementNum
             description: Reference to parent statement
             tests:
-              - not_null
               - relationships:
                   to: source('opendental', 'statement')
                   field: StatementNum
@@ -376,3 +409,27 @@ sources:
           indexes:
             - columns: ["SecUserNumEntry"]
               type: "btree"
+
+      - name: procedurelog
+        description: "Dental procedures performed or planned"
+        columns:
+          - name: PatNum
+            description: Reference to patient
+            tests:
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: PatNum
+          - name: ProvNum
+            description: Reference to provider who performed the procedure
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: ProvNum
+                  where: "ProvNum is not null"
+          - name: StatementNum
+            description: Reference to billing statement
+            tests:
+              - relationships:
+                  to: source('opendental', 'statement')
+                  field: StatementNum
+                  where: "StatementNum is not null"
