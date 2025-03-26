@@ -9,26 +9,149 @@ sources:
       - name: commlog
         description: "Communication logs with patients"
         columns:
-          - name: comm_log_id
+          - name: CommlogNum
             description: "Primary key for communication logs"
             tests:
               - unique
               - not_null
+          - name: PatNum
+            description: "Foreign key to patient table"
+          - name: UserNum
+            description: "Foreign key to userod table, represents the user who created/handled the communication"
+          - name: ProgramNum
+            description: "Foreign key to program table, represents the program/system used for communication"
+          - name: CommDateTime
+            description: "Date and time when the communication occurred"
+          - name: CommType
+            description: "Type of communication"
+          - name: Mode_
+            description: "Mode of communication"
+          - name: SentOrReceived
+            description: "Flag indicating if the communication was sent (1) or received (0)"
+          - name: Note
+            description: "Content or notes about the communication"
+          - name: CommSource
+            description: "Source of the communication"
+          - name: DateTimeEnd
+            description: "End date and time of the communication"
+          - name: DateTEntry
+            description: "Date and time when the entry was created"
+          - name: DateTStamp
+            description: "Timestamp of last update"
+          - name: Signature
+            description: "Digital signature if applicable"
+          - name: SigIsTopaz
+            description: "Flag indicating if signature is from Topaz system"
+          - name: CommReferralBehavior
+            description: "Referral behavior associated with the communication"
 
       - name: referral
-        description: "Referral source information"
+        description: "Referral source and contact information for healthcare providers and business partners"
         columns:
-          - name: referral_id
+          - name: ReferralNum
             description: "Primary key for referrals"
             tests:
               - unique
               - not_null
+          - name: LName
+            description: "Last name of the referral contact"
+          - name: FName
+            description: "First name of the referral contact"
+          - name: MName
+            description: "Middle name of the referral contact"
+          - name: SSN
+            description: "Social Security Number of the referral contact"
+          - name: UsingTIN
+            description: "Flag indicating if using Tax Identification Number instead of SSN"
+          - name: NationalProvID
+            description: "National Provider Identifier (NPI)"
+          - name: BusinessName
+            description: "Business or practice name"
+          - name: Telephone
+            description: "Primary telephone number"
+          - name: Phone2
+            description: "Secondary telephone number"
+          - name: EMail
+            description: "Email address"
+          - name: Address
+            description: "Primary address line"
+          - name: Address2
+            description: "Secondary address line"
+          - name: City
+            description: "City name"
+          - name: ST
+            description: "State code (2 characters)"
+          - name: Zip
+            description: "ZIP/Postal code"
+          - name: Specialty
+            description: "Specialty code/identifier"
+          - name: Title
+            description: "Professional title"
+          - name: IsDoctor
+            description: "Flag indicating if the referral contact is a doctor"
+          - name: IsPreferred
+            description: "Flag indicating if this is a preferred referral contact"
+          - name: IsTrustedDirect
+            description: "Flag indicating if this is a trusted direct referral source"
+          - name: Note
+            description: "General notes about the referral contact"
+          - name: DisplayNote
+            description: "Notes for display purposes"
+          - name: IsHidden
+            description: "Flag indicating if the referral record is hidden"
+          - name: NotPerson
+            description: "Flag indicating if the referral is not an individual person"
+          - name: PatNum
+            description: "Foreign key to patient table"
+          - name: Slip
+            description: "Identifier for associated slip record"
+          - name: DateTStamp
+            description: "Timestamp of when the record was last updated"
 
       - name: refattach
-        description: "Referral attachments"
+        description: "Referral attachments linking referrals to patients, procedures, and providers"
         columns:
-          - name: referral_attachment_id
+          - name: RefAttachNum
             description: "Primary key for referral attachments"
             tests:
               - unique
               - not_null
+          
+          # Foreign Keys
+          - name: ReferralNum
+            description: "Foreign key to the referral table"
+          
+          - name: PatNum
+            description: "Foreign key to the patient table"
+          
+          - name: ProcNum
+            description: "Foreign key to the procedure table"
+          
+          - name: ProvNum
+            description: "Foreign key to the provider table"
+          
+          # Regular columns
+          - name: ItemOrder
+            description: "Order of the referral attachment item, defaults to 0"
+          
+          - name: RefDate
+            description: "Date when the referral was made"
+          
+          - name: RefType
+            description: "Type of referral (numeric code)"
+          
+          - name: RefToStatus
+            description: "Status of the referral (numeric code)"
+          
+          - name: Note
+            description: "Additional notes about the referral attachment"
+          
+          - name: IsTransitionOfCare
+            description: "Flag indicating if this is a transition of care referral"
+          
+          - name: DateProcComplete
+            description: "Date when the associated procedure was completed"
+          
+          # Meta columns
+          - name: DateTStamp
+            description: "Timestamp when the record was created"
