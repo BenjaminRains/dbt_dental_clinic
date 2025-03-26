@@ -1,0 +1,73 @@
+version: 2
+
+models:
+  - name: stg_opendental__insbluebook
+    description: Staging model for insurance bluebook entries. Contains current insurance payment information and allowed fee overrides.
+    columns:
+      - name: insbluebook_num
+        description: Primary key for the insurance bluebook entry
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Key Relationships
+      - name: proccode_num
+        description: Foreign key to procedure codes table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: procedure_code_id
+
+      - name: carrier_num
+        description: Foreign key to insurance carriers table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__carrier')
+              field: carrier_id
+
+      - name: plan_num
+        description: Foreign key to insurance plans table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+
+      - name: proc_num
+        description: Foreign key to procedures table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+
+      - name: claim_num
+        description: Foreign key to claims table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+
+      # Other Fields
+      - name: group_num
+        description: Insurance group number
+
+      - name: claim_type
+        description: Type of insurance claim
+
+      - name: insurance_payment_amount
+        description: Amount paid by insurance
+
+      - name: allowed_override_amount
+        description: Override amount for allowed fee
+
+      - name: created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+
+      - name: procedure_date
+        description: Date of the procedure

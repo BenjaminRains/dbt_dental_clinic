@@ -1,0 +1,73 @@
+version: 2
+
+models:
+  - name: stg_opendental__inssub
+    description: Staging model for insurance subscribers. This table contains information about insurance subscribers and their relationship to insurance plans.
+    
+    columns:
+      - name: inssub_id
+        description: Primary key - Unique identifier for the insurance subscriber record
+        tests:
+          - unique
+          - not_null
+
+      - name: insurance_plan_id
+        description: Foreign key to stg_opendental__insplan. Links to the insurance plan details.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+
+      - name: subscriber_id
+        description: Foreign key to the subscriber (patient) record
+        tests:
+          - not_null
+
+      - name: user_entry_id
+        description: Foreign key - ID of the user who created the record
+
+      - name: effective_date
+        description: Date when the insurance subscription becomes effective
+
+      - name: termination_date
+        description: Date when the insurance subscription terminates
+
+      - name: is_release_info
+        description: Flag indicating if information release is authorized
+
+      - name: is_assign_benefits
+        description: Flag indicating if benefits assignment is authorized
+
+      - name: subscriber_external_id
+        description: External identifier for the subscriber (often used for insurance claims)
+
+      - name: benefit_notes
+        description: Notes regarding the benefits
+
+      - name: subscriber_notes
+        description: Notes about the subscriber
+
+      - name: entry_date
+        description: Date when the record was created
+
+      - name: last_modified_at
+        description: Timestamp of the last modification to the record
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.relationships_where:
+          to: ref('stg_opendental__insverify')
+          field: foreign_key_id
+          from_condition: "foreign_key_id is not null"
+          to_condition: "verify_type = 1"  # 95% match rate with inssub records
+
+      - dbt_utils.relationships_where:
+          to: ref('stg_opendental__insverifyhist')
+          field: foreign_key_id
+          from_condition: "foreign_key_id is not null"
+          to_condition: "verify_type = 1"  # 95% match rate with inssub records
+
+    config:
+      tags: ['staging', 'insurance', 'daily']

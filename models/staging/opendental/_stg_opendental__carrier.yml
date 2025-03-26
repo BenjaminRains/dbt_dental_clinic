@@ -1,0 +1,102 @@
+version: 2
+
+models:
+  - name: stg_opendental__carrier
+    description: Staging model for insurance carriers. Contains information about insurance companies and their configurations.
+    columns:
+      # Primary Key
+      - name: carrier_id
+        description: Primary key for the insurance carrier
+        tests:
+          - unique
+          - not_null
+
+      # Basic Information
+      - name: carrier_name
+        description: Name of the insurance carrier
+        tests:
+          - not_null
+
+      - name: address_line1
+        description: Primary address line of the carrier
+
+      - name: address_line2
+        description: Secondary address line of the carrier
+
+      - name: city
+        description: City of the carrier's address
+
+      - name: state
+        description: State of the carrier's address
+
+      - name: zip_code
+        description: ZIP/Postal code of the carrier's address
+
+      - name: phone
+        description: Contact phone number for the carrier
+
+      - name: tax_id_number
+        description: Tax identification number (TIN) of the carrier
+
+      # Electronic Claims
+      - name: electronic_id
+        description: Electronic identifier used for claims submission
+
+      - name: no_send_electronic
+        description: Flag indicating whether electronic claims should not be sent to this carrier
+
+      # Canadian Specific
+      - name: is_canadian_dental_association
+        description: Flag indicating if carrier is part of Canadian Dental Association
+
+      - name: cdanet_version
+        description: Version of CDAnet used by the carrier
+
+      - name: canadian_network_num
+        description: Canadian network identification number
+
+      - name: canadian_encryption_method
+        description: Encryption method used for Canadian carriers
+
+      - name: canadian_supported_types
+        description: Types of claims supported by Canadian carrier
+
+      # Group and Display
+      - name: carrier_group_id
+        description: Identifier for the carrier group
+
+      - name: appointment_text_background_color
+        description: Background color for appointment text display
+
+      - name: is_hidden
+        description: Flag indicating if carrier should be hidden from normal lists
+
+      # Insurance Behavior Settings
+      - name: is_coinsurance_inverted
+        description: Flag indicating if coinsurance calculation is inverted
+
+      - name: trusted_etrans_flags
+        description: Flag for trusted electronic transaction settings
+
+      - name: cob_insurance_paid_behavior_override
+        description: Override for coordination of benefits insurance payment behavior
+
+      - name: era_automation_override
+        description: Override for Electronic Remittance Advice automation
+
+      - name: ortho_insurance_payment_consolidate
+        description: Flag for consolidating orthodontic insurance payments
+
+      # Metadata
+      - name: user_entry_id
+        description: ID of the user who created the record
+
+      - name: created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+
+      - name: updated_at
+        description: Timestamp when the record was last modified
+        tests:
+          - not_null

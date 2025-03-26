@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: stg_opendental__patplan
+    description: Staging model for patient insurance plan assignments. Links patients to their insurance subscriptions.
+    columns:
+      - name: patplan_id
+        description: Primary key - Unique identifier for each patient plan record
+        tests:
+          - unique
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to the patient table
+        tests:
+          - not_null
+
+      - name: insurance_subscriber_id
+        description: Foreign key to stg_opendental__inssub table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: inssub_id
+
+      - name: ordinal
+        description: Order/priority of the insurance plan for the patient (primary, secondary, etc.)
+        tests:
+          - not_null
+
+      - name: is_pending
+        description: Flag indicating if the insurance plan assignment is pending
+
+      - name: relationship
+        description: Code indicating the relationship between the patient and the subscriber
+
+      - name: patient_external_id
+        description: External identifier for the patient
+
+      - name: ortho_auto_fee_billed_override
+        description: Override amount for automatic orthodontic fee billing
+        
+      - name: ortho_auto_next_claim_date
+        description: Next scheduled date for automatic orthodontic claim submission
+
+      - name: created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+
+      - name: updated_at
+        description: Timestamp when the record was last modified
+        tests:
+          - not_null

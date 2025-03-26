@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_opendental__insbluebooklog
+    description: Staging model for insurance bluebook log entries. Contains historical tracking of allowed fee changes for claim procedures.
+    columns:
+      - name: insbluebooklog_num
+        description: Primary key for the insurance bluebook log entry
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Key Relationships
+      - name: claimprocedure_num
+        description: Foreign key to claim procedures table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claimproc')
+              field: claim_procedure_id
+
+      # Other Fields
+      - name: allowed_fee
+        description: The allowed fee amount recorded in this log entry
+
+      - name: description
+        description: Text description of the change or entry
+
+      - name: created_at
+        description: Timestamp when the log entry was created
+        tests:
+          - not_null
+

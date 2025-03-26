@@ -2,103 +2,80 @@ version: 2
 
 models:
   - name: stg_opendental__insplan
-    description: Staging model for insurance plans. Contains information about dental insurance plans including group details, fee schedules, and plan settings.
+    description: >
+      Staging model for dental insurance plans. Contains information about plan details, 
+      fee schedules, and settings. Group numbers may have legitimate duplicates across 
+      different scenarios (e.g., federal agencies, Medicare programs, or same company 
+      with multiple carriers).
     columns:
       - name: insurance_plan_id
-        description: Primary key for the insurance plan
+        description: Primary key for the insurance plan. Unique identifier for each plan record.
         tests:
           - unique
           - not_null
 
       # Foreign Keys
       - name: employer_id
-        description: Foreign key to the employer table
+        description: Foreign key to the employer table. Each plan is associated with an employer.
+        tests:
+          - not_null
       - name: carrier_id
-        description: Foreign key to the insurance carrier table
+        description: Foreign key to the insurance carrier table. Identifies the insurance provider.
+        tests:
+          - not_null
       - name: user_entry_id
-        description: Foreign key to the user who created the entry
+        description: Foreign key to the user who created the entry. Used for audit tracking.
 
       # Fee Schedule Related
       - name: fee_schedule_id
-        description: Primary fee schedule associated with the insurance plan
+        description: Primary fee schedule associated with the insurance plan. Base pricing structure.
       - name: copay_fee_schedule_id
-        description: Fee schedule used for copayment calculations
+        description: Fee schedule for copayment calculations. Determines patient portion.
       - name: allowed_fee_schedule_id
-        description: Fee schedule for allowed amounts
+        description: Fee schedule for allowed amounts. Maximum covered charges.
       - name: manual_fee_schedule_id
-        description: Manual override fee schedule if applicable
+        description: Manual override fee schedule if applicable. Used for special cases.
 
       # Plan Details
       - name: group_name
-        description: Name of the insurance group
+        description: Name of the insurance group. May vary slightly for same group number across different carriers.
+        tests:
+          - not_null
       - name: group_number
-        description: Insurance group identification number
-      - name: plan_note
-        description: Additional notes about the insurance plan
+        description: >
+          Insurance group identification number. Can be legitimately duplicated across:
+          1. Same company with multiple carriers
+          2. Federal agency programs (e.g., numbers 104, 105)
+          3. Industry-specific groups (e.g., railroads)
+          4. Program-specific numbers (e.g., Medicare)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_not_be_in_set:
+              value_set: [""]  # Empty strings are not valid group numbers
+
+      # Plan Settings
       - name: plan_type
-        description: Type of insurance plan
+        description: Type of insurance plan (e.g., PPO, HMO, etc.)
       - name: division_number
-        description: Division number within the insurance group
+        description: Division number within the insurance group. Subgroup identifier.
       - name: trojan_id
-        description: Identifier for Trojan insurance benefit information
+        description: Identifier for Trojan insurance benefit information system.
 
       # Flags and Settings
       - name: is_medical
-        description: Flag indicating if this is a medical insurance plan
+        description: Flag indicating if this is a medical (true) vs dental (false) insurance plan
       - name: is_hidden
-        description: Flag indicating if the plan is hidden from normal views
-      - name: show_base_units
-        description: Flag indicating if base units should be shown
-      - name: code_subst_none
-        description: Flag indicating if code substitutions are disabled
-      - name: hide_from_verify_list
-        description: Flag indicating if plan should be hidden from verification lists
-      - name: has_ppo_subst_writeoffs
-        description: Flag indicating if plan has PPO substitution writeoffs
-      - name: is_blue_book_enabled
-        description: Flag indicating if Blue Book pricing is enabled
-
-      # Ortho Related
-      - name: ortho_type
-        description: Type of orthodontic coverage
-      - name: ortho_auto_proc_freq
-        description: Frequency of automatic orthodontic procedures
-      - name: ortho_auto_proc_code_num_override
-        description: Override code for automatic orthodontic procedures
-      - name: ortho_auto_fee_billed
-        description: Standard fee billed for automatic orthodontic procedures
-      - name: ortho_auto_claim_days_wait
-        description: Waiting period in days for automatic orthodontic claims
-
-      # Financial
-      - name: per_visit_patient_amount
-        description: Standard patient payment amount per visit
-      - name: per_visit_insurance_amount
-        description: Standard insurance payment amount per visit
-
-      # Other Fields
-      - name: claim_form_id
-        description: ID of the claim form used for this plan
-      - name: use_alt_code
-        description: Flag indicating if alternate codes should be used
+        description: Administrative flag to hide plan from normal views
       - name: claims_use_ucr
-        description: Flag indicating if claims use UCR (Usual, Customary, and Reasonable) fees
-      - name: filing_code
-        description: Code used for insurance claim filing
-      - name: filing_code_subtype
-        description: Subtype of the filing code
-      - name: month_renew
-        description: Month when the insurance plan renews
-      - name: rx_bin
-        description: Prescription BIN number
-      - name: cob_rule
-        description: Coordination of Benefits rule
-      - name: sop_code
-        description: Standard Operating Procedure code
-      - name: billing_type
-        description: Type of billing used for this plan
-      - name: exclusion_fee_rule
-        description: Rule for fee exclusions
+        description: Indicates if claims use UCR (Usual, Customary, and Reasonable) fees
+      - name: has_ppo_subst_writeoffs
+        description: Indicates if plan has PPO substitution writeoffs for fee adjustments
+
+      # Financial Settings
+      - name: per_visit_patient_amount
+        description: Standard patient payment amount per visit. Base patient responsibility.
+      - name: per_visit_insurance_amount
+        description: Standard insurance payment amount per visit. Base insurance coverage.
 
       # Audit Fields
       - name: created_at
