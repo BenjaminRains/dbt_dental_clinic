@@ -100,6 +100,21 @@ sources:
               - not_null
               - dbt_utils.expression_is_true:
                   expression: "<= current_timestamp"
+          - name: "AptNum"
+            description: "Foreign key to the appointment where the procedure was performed"
+            tests:
+              - relationships:
+                  to: source('opendental', 'appointment')
+                  field: "AptNum"
+                  where: "AptNum is not null"
+          
+          - name: "PlannedAptNum"
+            description: "Foreign key to a future planned appointment where the procedure will be performed"
+            tests:
+              - relationships:
+                  to: source('opendental', 'appointment')
+                  field: "AptNum"
+                  where: "PlannedAptNum is not null"
       
       - name: procgroupitem
         description: >
