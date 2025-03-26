@@ -7,55 +7,150 @@ sources:
     schema: public  # PostgreSQL schema
     tables:
       - name: autocode
-        description: "Automatic code assignments"
+        description: "Automatic code assignments for dental procedures (~37 records)"
         columns:
-          - name: autocode_id
+          - name: "AutoCodeNum"
             description: "Primary key for automatic code assignments"
             tests:
               - unique
               - not_null
+          - name: "Description"
+            description: "Description of the autocode and its purpose"
+          - name: "IsHidden"
+            description: "Flag indicating if the autocode is hidden from normal view (0/1)"
+          - name: "LessIntrusive"
+            description: "Flag indicating if the procedure is considered less intrusive (0/1)"
 
       - name: codegroup
-        description: "Groupings of dental codes"
+        description: "Groupings of dental procedure codes with their display settings"
         columns:
-          - name: code_group_id
+          - name: "CodeGroupNum"
             description: "Primary key for code groups"
             tests:
               - unique
               - not_null
-
-      - name: cpt
-        description: "CPT procedure codes"
-        columns:
-          - name: cpt_id
-            description: "Primary key for CPT codes"
-            tests:
-              - unique
-              - not_null
+          - name: "GroupName"
+            description: "Name of the code group (varchar 50)"
+          - name: "ProcCodes"
+            description: "Text field containing the procedure codes associated with this group"
+          - name: "ItemOrder"
+            description: "Integer representing the display order of the code group"
+          - name: "CodeGroupFixed"
+            description: "Flag indicating if the code group is fixed/unchangeable (0/1)"
+          - name: "IsHidden"
+            description: "Flag indicating if the code group is hidden from normal view (0/1)"
+          - name: "ShowInAgeLimit"
+            description: "Flag indicating if the code group should be shown in age limit settings (0/1)"
 
       - name: definition
-        description: "System definitions and configuration"
+        description: "System definitions and configuration settings for OpenDental"
         columns:
-          - name: definition_id
+          - name: "DefNum"
             description: "Primary key for system definitions"
             tests:
               - unique
               - not_null
+          - name: "Category"
+            description: "Category identifier for grouping related definitions"
+            tests:
+              - not_null
+          - name: "ItemOrder"
+            description: "Display order sequence within a category"
+          - name: "ItemName"
+            description: "Name or identifier of the definition item"
+            tests:
+              - not_null
+          - name: "ItemValue"
+            description: "Value or setting associated with the definition item"
+          - name: "ItemColor"
+            description: "Color value associated with the definition item"
+          - name: "IsHidden"
+            description: "Flag indicating if the definition is hidden from view (0=visible, 1=hidden)"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1]
 
       - name: program
-        description: "Program configuration"
+        description: "Configuration for integrated software programs and external tools in OpenDental"
         columns:
-          - name: program_id
+          - name: "ProgramNum"
             description: "Primary key for program configurations"
             tests:
               - unique
               - not_null
+          - name: "ProgName"
+            description: "Name of the integrated program or software (varchar 100)"
+            tests:
+              - not_null
+          - name: "ProgDesc"
+            description: "Description of the program or software (varchar 100)"
+          - name: "Enabled"
+            description: "Flag indicating if the program integration is enabled (0=disabled, 1=enabled)"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1]
+          - name: "Path"
+            description: "File system path to the program executable"
+          - name: "CommandLine"
+            description: "Command line parameters or arguments used when launching the program"
+          - name: "Note"
+            description: "Additional notes or comments about the program integration"
+          - name: "PluginDllName"
+            description: "Name of the plugin DLL file if applicable (varchar 255)"
+          - name: "ButtonImage"
+            description: "Path or reference to the button image used in the interface"
+          - name: "FileTemplate"
+            description: "Template for file naming or structure used by the program"
+          - name: "FilePath"
+            description: "File system path for program-specific files (varchar 255)"
+          - name: "IsDisabledByHq"
+            description: "Flag indicating if the program is disabled by headquarters (0=not disabled, 1=disabled)"
+          - name: "CustErr"
+            description: "Custom error message for the program (varchar 255)"
 
       - name: programproperty
-        description: "Program properties and settings"
+        description: "Properties and configuration settings for integrated programs in OpenDental"
         columns:
-          - name: program_property_id
+          - name: "ProgramPropertyNum"
             description: "Primary key for program properties"
             tests:
               - unique
               - not_null
+          
+          - name: "ProgramNum"
+            description: "Foreign key to the program table, linking to the associated program configuration"
+            tests:
+              - not_null
+              - relationships:
+                  to: ref('stg_opendental__program')
+                  field: program_num
+
+          - name: "PropertyDesc"
+            description: "Description of the program property or setting"
+            tests:
+              - not_null
+
+          - name: "PropertyValue"
+            description: "Value assigned to the program property"
+
+          - name: "ComputerName"
+            description: "Name of the computer where this property is configured"
+
+          - name: "ClinicNum"
+            description: "Foreign key to the clinic associated with this property setting"
+
+          - name: "IsMasked"
+            description: "Flag indicating if the property value is masked for security (0=not masked, 1=masked)"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1]
+
+          - name: "IsHighSecurity"
+            description: "Flag indicating if the property requires high security access (0=normal, 1=high security)"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1]
