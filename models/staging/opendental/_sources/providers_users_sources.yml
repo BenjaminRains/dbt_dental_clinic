@@ -1,0 +1,97 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: public  # PostgreSQL schema
+    tables:
+      - name: provider
+        description: "Dental provider information including doctors, hygienists, and other clinical staff"
+        columns:
+          - name: "ProvNum"
+            description: "Primary key for provider records"
+            tests:
+              - unique
+              - not_null
+          - name: "Abbr"
+            description: "Provider abbreviation used in schedules and reports"
+          - name: "ItemOrder"
+            description: "Display order for the provider in lists"
+          - name: "LName"
+            description: "Provider's last name"
+          - name: "FName"
+            description: "Provider's first name"
+          - name: "MI" 
+            description: "Provider's middle initial"
+          - name: "Suffix"
+            description: "Provider's name suffix (e.g., DDS, MD)"
+          - name: "PreferredName"
+            description: "Provider's preferred name to display"
+          - name: "FeeSched"
+            description: "Fee schedule ID assigned to this provider"
+          - name: "Specialty"
+            description: "Specialty ID for the provider's main practice area"
+          - name: "SSN"
+            description: "Provider's Social Security Number"
+          - name: "StateLicense"
+            description: "State license number"
+          - name: "DEANum"
+            description: "Drug Enforcement Administration number"
+          - name: "IsSecondary"
+            description: "Flag indicating if provider is considered secondary (0=no, 1=yes)"
+          - name: "ProvColor"
+            description: "Color code for provider in the schedule"
+          - name: "IsHidden"
+            description: "Flag indicating if provider is hidden in the UI (0=no, 1=yes)"
+          - name: "UsingTIN"
+            description: "Flag indicating if provider is using a Tax ID Number (0=no, 1=yes)"
+          - name: "BlueCrossID"
+            description: "Blue Cross Blue Shield provider identifier"
+          - name: "SigOnFile"
+            description: "Flag indicating if signature is on file (0=no, 1=yes)"
+          - name: "MedicaidID"
+            description: "Medicaid provider identifier"
+          - name: "OutlineColor"
+            description: "Color code for provider outline in the schedule"
+          - name: "NationalProvID"
+            description: "National Provider Identifier (NPI)"
+          - name: "DateTStamp"
+            description: "Last update timestamp for the provider record"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "ProvStatus"
+            description: "Provider status code (active, inactive, etc.)"
+          - name: "DateTerm"
+            description: "Date when the provider was terminated, if applicable"
+          - name: "HourlyProdGoalAmt"
+            description: "Hourly production goal amount for the provider"
+
+      - name: userod
+        description: "User information for OpenDental"
+        columns:
+          - name: user_id
+            description: "Primary key for users"
+            tests:
+              - unique
+              - not_null
+
+      - name: usergroup
+        description: "User security groups"
+        columns:
+          - name: user_group_id
+            description: "Primary key for user groups"
+            tests:
+              - unique
+              - not_null
+
+      - name: usergroupattach
+        description: "User-group assignments"
+        columns:
+          - name: user_group_attach_id
+            description: "Primary key for user group assignments"
+            tests:
+              - unique
+              - not_null

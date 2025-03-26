@@ -14,6 +14,100 @@ sources:
             tests:
               - unique
               - not_null
+          # Primary patient and plan relationships
+          - name: patient_id
+            description: "Foreign key to the patient associated with this claim"
+          - name: plan_id
+            description: "Foreign key to the primary insurance plan for this claim"
+          - name: secondary_plan_id
+            description: "Foreign key to the secondary insurance plan for this claim"
+          # Provider information
+          - name: treating_provider_id
+            description: "Foreign key to the provider who performed the treatment"
+          - name: billing_provider_id
+            description: "Foreign key to the provider responsible for billing"
+          - name: referring_provider_id
+            description: "Foreign key to the provider who referred the patient"
+          - name: ordering_referral_id
+            description: "Foreign key to the provider who ordered or referred the treatment"
+          - name: provider_order_override_id
+            description: "Foreign key to the provider who overrode treatment orders"
+          # Other relationships
+          - name: clinic_id
+            description: "Foreign key to the clinic where services were provided"
+          - name: claim_form_id
+            description: "Foreign key to the type of claim form used"
+          - name: insurance_subscriber_id
+            description: "Foreign key to the primary insurance subscriber"
+          - name: secondary_insurance_subscriber_id
+            description: "Foreign key to the secondary insurance subscriber"
+          - name: custom_tracking_id
+            description: "Foreign key to custom tracking information for the claim"
+          - name: secure_user_entry_id
+            description: "Foreign key to the user who entered the claim"
+          # Important dates
+          - name: service_date
+            description: "Date when the dental service was performed"
+          - name: sent_date
+            description: "Date when the claim was sent to the insurance company"
+          - name: received_date
+            description: "Date when the claim was received by the insurance company"
+          - name: prior_date
+            description: "Date of prior prosthesis, if applicable"
+          - name: accident_date
+            description: "Date of accident, if claim is accident-related"
+          - name: ortho_date
+            description: "Date orthodontic treatment began"
+          - name: resent_date
+            description: "Date when the claim was resent to the insurance company"
+          - name: original_sent_date
+            description: "Original date the claim was first sent"
+          - name: illness_injury_pregnancy_date
+            description: "Date of illness, injury, or pregnancy"
+          - name: other_date
+            description: "Miscellaneous date field used for various purposes"
+          - name: secure_entry_date
+            description: "Date when the claim was entered into the system"
+          - name: secure_edit_timestamp
+            description: "Timestamp of the last edit to the claim record"
+          # Financial information
+          - name: claim_fee
+            description: "Total fee amount for the claim"
+          - name: insurance_payment_estimate
+            description: "Estimated payment amount from insurance"
+          - name: insurance_payment_amount
+            description: "Actual payment amount received from insurance"
+          - name: deductible_applied
+            description: "Amount of deductible applied to this claim"
+          - name: write_off
+            description: "Amount written off by the provider"
+          - name: share_of_cost
+            description: "Patient's share of cost for the claim"
+          # Status and metadata
+          - name: claim_status
+            description: "Single character status code for the claim"
+          - name: place_of_service
+            description: "Code indicating where services were performed (office, hospital, etc.)"
+          - name: is_employment_related
+            description: "Flag indicating if claim is related to employment (0=No, 1=Yes)"
+          - name: is_ortho
+            description: "Flag indicating if claim is for orthodontic treatment (0=No, 1=Yes)"
+          - name: ortho_remaining_months
+            description: "Number of months remaining in orthodontic treatment"
+          - name: ortho_total_months
+            description: "Total number of months for orthodontic treatment"
+          - name: patient_relation
+            description: "Code for patient's relationship to primary subscriber"
+          - name: secondary_patient_relation
+            description: "Code for patient's relationship to secondary subscriber"
+          - name: pre_auth_string
+            description: "Pre-authorization string or number"
+          - name: is_prosthesis
+            description: "Flag indicating if claim involves prosthesis"
+          - name: claim_type
+            description: "Type of claim (e.g., primary, secondary)"
+          - name: reference_number_string
+            description: "Reference number for the claim"
 
       - name: claimpayment
         description: "Payments received from insurance claims"
@@ -23,6 +117,39 @@ sources:
             tests:
               - unique
               - not_null
+          # Dates
+          - name: check_date
+            description: "Date the insurance check was issued or received"
+          - name: date_issued
+            description: "Date the payment was issued by the insurance carrier"
+          - name: created_date
+            description: "Date the payment record was created"
+          - name: last_modified_at
+            description: "Timestamp when this record was last modified"
+          # Payment details
+          - name: check_amount
+            description: "Total amount of the insurance check"
+          - name: check_number
+            description: "Check number or payment reference from the insurance carrier"
+          - name: bank_branch
+            description: "Bank branch information for the payment"
+          - name: carrier_name
+            description: "Name of the insurance carrier that issued the payment"
+          - name: is_partial
+            description: "Boolean flag indicating if this is a partial payment"
+          - name: note
+            description: "Additional notes related to the payment"
+          # Relationships
+          - name: clinic_id
+            description: "Foreign key to clinic where the payment was processed"
+          - name: deposit_id
+            description: "Foreign key to the deposit record if this payment was part of a deposit"
+          - name: payment_type_id
+            description: "Foreign key to payment type definition"
+          - name: payment_group_id
+            description: "Foreign key to payment group"
+          - name: created_by_user_id
+            description: "ID of the user who created this payment record"
 
       - name: claimproc
         description: "Procedures included in insurance claims"
@@ -32,6 +159,106 @@ sources:
             tests:
               - unique
               - not_null
+          # Relationships
+          - name: procedure_id
+            description: "Foreign key to the procedure record (ProcNum)"
+          - name: claim_id
+            description: "Foreign key to the insurance claim (ClaimNum)"
+          - name: patient_id
+            description: "Foreign key to the patient (PatNum)"
+          - name: provider_id
+            description: "Foreign key to the provider who performed the procedure (ProvNum)"
+          - name: plan_id
+            description: "Foreign key to the insurance plan (PlanNum)"
+          - name: claim_payment_id
+            description: "Foreign key to the insurance payment record (ClaimPaymentNum)"
+          - name: clinic_id
+            description: "Foreign key to the clinic where procedure was performed"
+          - name: insurance_subscriber_id
+            description: "Foreign key to the insurance subscriber"
+          - name: payment_plan_id
+            description: "Foreign key to payment plan if applicable"
+          - name: claim_payment_tracking_id
+            description: "Foreign key to payment tracking record"
+          - name: secure_user_entry_id
+            description: "ID of the user who created this record"
+          # Dates
+          - name: claim_procedure_date
+            description: "Date of the claim procedure record"
+          - name: procedure_date
+            description: "Date the procedure was performed"
+          - name: entry_date
+            description: "Date the record was entered"
+          - name: secure_entry_date
+            description: "Date the record was securely entered"
+          - name: last_modified_at
+            description: "Timestamp when this record was last modified"
+          - name: supplemental_received_date
+            description: "Date supplemental information was received"
+          - name: insurance_finalized_date
+            description: "Date the insurance processing was finalized"
+          # Financial information
+          - name: fee_billed
+            description: "Amount billed for the procedure"
+          - name: insurance_payment_estimate
+            description: "Estimated payment from insurance"
+          - name: insurance_payment_amount
+            description: "Actual payment received from insurance"
+          - name: deductible_applied
+            description: "Deductible amount applied to this procedure"
+          - name: write_off
+            description: "Amount written off for this procedure"
+          - name: allowed_override
+            description: "Manual override for allowed amount"
+          - name: copay_amount
+            description: "Copay amount for this procedure"
+          - name: paid_other_insurance
+            description: "Amount paid by other insurance"
+          - name: base_estimate
+            description: "Base estimate before adjustments"
+          - name: copay_override
+            description: "Manual override for copay amount"
+          - name: deductible_estimate
+            description: "Estimated deductible amount"
+          - name: deductible_estimate_override
+            description: "Manual override for deductible estimate"
+          - name: insurance_estimate_total
+            description: "Total estimate from insurance"
+          - name: insurance_estimate_total_override
+            description: "Manual override for total insurance estimate"
+          - name: paid_other_insurance_override
+            description: "Manual override for amount paid by other insurance"
+          - name: write_off_estimate
+            description: "Estimated write-off amount"
+          - name: write_off_estimate_override
+            description: "Manual override for write-off estimate"
+          # Status and metadata
+          - name: status
+            description: "Status code for the claim procedure"
+          - name: percentage
+            description: "Coverage percentage"
+          - name: percentage_override
+            description: "Manual override for coverage percentage"
+          - name: no_bill_insurance
+            description: "Flag indicating if this procedure should not be billed to insurance"
+          - name: line_number
+            description: "Line number on the claim form"
+          - name: payment_row
+            description: "Reference to payment row if applicable"
+          - name: is_transfer
+            description: "Boolean flag indicating if this is a transfer"
+          - name: is_overpay
+            description: "Boolean flag indicating if this is an overpayment"
+          - name: remarks
+            description: "Additional remarks about the claim procedure"
+          - name: code_sent
+            description: "Procedure code sent to insurance"
+          - name: estimate_note
+            description: "Notes about the estimate"
+          - name: claim_adjustment_reason_codes
+            description: "Codes explaining claim adjustments"
+          - name: security_hash
+            description: "Security hash for the record"
 
       - name: claimtracking
         description: "Tracking status of insurance claims"
@@ -41,3 +268,19 @@ sources:
             tests:
               - unique
               - not_null
+          # Relationships
+          - name: claim_id
+            description: "Foreign key to the insurance claim (ClaimNum)"
+          - name: user_id
+            description: "Foreign key to the user who created the tracking entry"
+          - name: tracking_definition_id
+            description: "Foreign key to tracking definition record"
+          - name: tracking_error_definition_id
+            description: "Foreign key to tracking error definition record"
+          # Tracking information  
+          - name: entry_timestamp
+            description: "Timestamp when the tracking entry was created"
+          - name: tracking_type
+            description: "Type of tracking event or activity"
+          - name: note
+            description: "Detailed notes about the tracking event"
