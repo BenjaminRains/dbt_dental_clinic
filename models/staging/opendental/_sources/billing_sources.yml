@@ -409,27 +409,3 @@ sources:
           indexes:
             - columns: ["SecUserNumEntry"]
               type: "btree"
-
-      - name: procedurelog
-        description: "Dental procedures performed or planned"
-        columns:
-          - name: PatNum
-            description: Reference to patient
-            tests:
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: PatNum
-          - name: ProvNum
-            description: Reference to provider who performed the procedure
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: ProvNum
-                  where: "ProvNum is not null"
-          - name: StatementNum
-            description: Reference to billing statement
-            tests:
-              - relationships:
-                  to: source('opendental', 'statement')
-                  field: StatementNum
-                  where: "StatementNum is not null"
