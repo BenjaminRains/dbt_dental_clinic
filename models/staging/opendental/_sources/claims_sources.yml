@@ -5,282 +5,366 @@ sources:
     description: "OpenDental data in PostgreSQL"
     database: opendental_analytics
     schema: public  # PostgreSQL schema
+    loaded_at_field: "SecDateTEdit"  # Default loaded_at_field for freshness checks
+    freshness:
+      warn_after: {count: 24, period: day}
+      error_after: {count: 48, period: day}
     tables:
       - name: claim
         description: "Insurance claims submitted"
+        loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
         columns:
-          - name: claim_id
+          - name: "ClaimNum"
             description: "Primary key for insurance claims"
             tests:
               - unique
               - not_null
           # Primary patient and plan relationships
-          - name: patient_id
+          - name: "PatNum"
             description: "Foreign key to the patient associated with this claim"
-          - name: plan_id
+            tests:
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+          - name: "PlanNum"
             description: "Foreign key to the primary insurance plan for this claim"
-          - name: secondary_plan_id
+          - name: "PlanNum2"
             description: "Foreign key to the secondary insurance plan for this claim"
           # Provider information
-          - name: treating_provider_id
+          - name: "ProvTreat"
             description: "Foreign key to the provider who performed the treatment"
-          - name: billing_provider_id
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: "ProvNum"
+                  where: "ProvTreat is not null"
+          - name: "ProvBill"
             description: "Foreign key to the provider responsible for billing"
-          - name: referring_provider_id
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: "ProvNum"
+                  where: "ProvBill is not null"
+          - name: "ReferringProv"
             description: "Foreign key to the provider who referred the patient"
-          - name: ordering_referral_id
+          - name: "OrderingReferralNum"
             description: "Foreign key to the provider who ordered or referred the treatment"
-          - name: provider_order_override_id
+          - name: "ProvOrderOverride"
             description: "Foreign key to the provider who overrode treatment orders"
           # Other relationships
-          - name: clinic_id
+          - name: "ClinicNum"
             description: "Foreign key to the clinic where services were provided"
-          - name: claim_form_id
+          - name: "ClaimForm"
             description: "Foreign key to the type of claim form used"
-          - name: insurance_subscriber_id
+          - name: "InsSubNum"
             description: "Foreign key to the primary insurance subscriber"
-          - name: secondary_insurance_subscriber_id
+          - name: "InsSubNum2"
             description: "Foreign key to the secondary insurance subscriber"
-          - name: custom_tracking_id
+          - name: "CustomTracking"
             description: "Foreign key to custom tracking information for the claim"
-          - name: secure_user_entry_id
+          - name: "SecUserNumEntry"
             description: "Foreign key to the user who entered the claim"
           # Important dates
-          - name: service_date
+          - name: "DateService"
             description: "Date when the dental service was performed"
-          - name: sent_date
+          - name: "DateSent"
             description: "Date when the claim was sent to the insurance company"
-          - name: received_date
+          - name: "DateReceived"
             description: "Date when the claim was received by the insurance company"
-          - name: prior_date
+          - name: "PriorDate"
             description: "Date of prior prosthesis, if applicable"
-          - name: accident_date
+          - name: "AccidentDate"
             description: "Date of accident, if claim is accident-related"
-          - name: ortho_date
+          - name: "OrthoDate"
             description: "Date orthodontic treatment began"
-          - name: resent_date
+          - name: "DateResent"
             description: "Date when the claim was resent to the insurance company"
-          - name: original_sent_date
+          - name: "DateSentOrig"
             description: "Original date the claim was first sent"
-          - name: illness_injury_pregnancy_date
+          - name: "DateIllnessInjuryPreg"
             description: "Date of illness, injury, or pregnancy"
-          - name: other_date
+          - name: "DateOther"
             description: "Miscellaneous date field used for various purposes"
-          - name: secure_entry_date
+          - name: "SecDateEntry"
             description: "Date when the claim was entered into the system"
-          - name: secure_edit_timestamp
+          - name: "SecDateTEdit"
             description: "Timestamp of the last edit to the claim record"
           # Financial information
-          - name: claim_fee
+          - name: "ClaimFee"
             description: "Total fee amount for the claim"
-          - name: insurance_payment_estimate
+          - name: "InsPayEst"
             description: "Estimated payment amount from insurance"
-          - name: insurance_payment_amount
+          - name: "InsPayAmt"
             description: "Actual payment amount received from insurance"
-          - name: deductible_applied
+          - name: "DedApplied"
             description: "Amount of deductible applied to this claim"
-          - name: write_off
+          - name: "WriteOff"
             description: "Amount written off by the provider"
-          - name: share_of_cost
+          - name: "ShareOfCost"
             description: "Patient's share of cost for the claim"
           # Status and metadata
-          - name: claim_status
+          - name: "ClaimStatus"
             description: "Single character status code for the claim"
-          - name: place_of_service
+          - name: "PlaceService"
             description: "Code indicating where services were performed (office, hospital, etc.)"
-          - name: is_employment_related
+          - name: "EmployRelated"
             description: "Flag indicating if claim is related to employment (0=No, 1=Yes)"
-          - name: is_ortho
+          - name: "IsOrtho"
             description: "Flag indicating if claim is for orthodontic treatment (0=No, 1=Yes)"
-          - name: ortho_remaining_months
+          - name: "OrthoRemainM"
             description: "Number of months remaining in orthodontic treatment"
-          - name: ortho_total_months
+          - name: "OrthoTotalM"
             description: "Total number of months for orthodontic treatment"
-          - name: patient_relation
+          - name: "PatRelat"
             description: "Code for patient's relationship to primary subscriber"
-          - name: secondary_patient_relation
+          - name: "PatRelat2"
             description: "Code for patient's relationship to secondary subscriber"
-          - name: pre_auth_string
+          - name: "PreAuthString"
             description: "Pre-authorization string or number"
-          - name: is_prosthesis
+          - name: "IsProsthesis"
             description: "Flag indicating if claim involves prosthesis"
-          - name: claim_type
+          - name: "ClaimType"
             description: "Type of claim (e.g., primary, secondary)"
-          - name: reference_number_string
+          - name: "RefNumString"
             description: "Reference number for the claim"
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 8
+            tests_total: 8
+            quality_checks:
+              - test: "unique_claim_id"
+                status: "pass"
+              - test: "not_null_critical_fields"
+                status: "pass"
+                fields: ["ClaimNum", "PatNum", "DateService", "ClaimStatus"]
+              - test: "insurance_coverage_validation"
+                status: "pass"
+                description: "Validates insurance coverage for claims"
+          indexes:
+            - columns: ["PatNum"]
+              type: "btree"
+            - columns: ["PlanNum"]
+              type: "btree"
+            - columns: ["ClinicNum"]
+              type: "btree"
+            - columns: ["DateSent"]
+              type: "brin"
+          contains_pii: true
+          business_owners: ["dental_finance_team", "insurance_team"]
+          technical_owners: ["data_engineering_team"]
 
       - name: claimpayment
         description: "Payments received from insurance claims"
+        loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
         columns:
-          - name: claim_payment_id
+          - name: "ClaimPaymentNum"
             description: "Primary key for claim payments"
             tests:
               - unique
               - not_null
           # Dates
-          - name: check_date
+          - name: "CheckDate"
             description: "Date the insurance check was issued or received"
-          - name: date_issued
+          - name: "DateIssued"
             description: "Date the payment was issued by the insurance carrier"
-          - name: created_date
+          - name: "DateEntry"
             description: "Date the payment record was created"
-          - name: last_modified_at
+          - name: "SecDateTEdit"
             description: "Timestamp when this record was last modified"
           # Payment details
-          - name: check_amount
+          - name: "CheckAmt"
             description: "Total amount of the insurance check"
-          - name: check_number
+          - name: "CheckNum"
             description: "Check number or payment reference from the insurance carrier"
-          - name: bank_branch
+          - name: "BankBranch"
             description: "Bank branch information for the payment"
-          - name: carrier_name
+          - name: "CarrierName"
             description: "Name of the insurance carrier that issued the payment"
-          - name: is_partial
+          - name: "IsPartial"
             description: "Boolean flag indicating if this is a partial payment"
-          - name: note
+          - name: "Note"
             description: "Additional notes related to the payment"
           # Relationships
-          - name: clinic_id
+          - name: "ClinicNum"
             description: "Foreign key to clinic where the payment was processed"
-          - name: deposit_id
+          - name: "DepositNum"
             description: "Foreign key to the deposit record if this payment was part of a deposit"
-          - name: payment_type_id
+          - name: "PayType"
             description: "Foreign key to payment type definition"
-          - name: payment_group_id
+          - name: "PayGroupNum"
             description: "Foreign key to payment group"
-          - name: created_by_user_id
+          - name: "SecUserNumEntry"
             description: "ID of the user who created this payment record"
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 6
+            tests_total: 6
+          contains_pii: true
+          business_owners: ["dental_finance_team", "insurance_team"]
+          technical_owners: ["data_engineering_team"]
 
       - name: claimproc
         description: "Procedures included in insurance claims"
+        loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
         columns:
-          - name: claim_procedure_id
+          - name: "ClaimProcNum"
             description: "Primary key for claim procedures"
             tests:
               - unique
               - not_null
           # Relationships
-          - name: procedure_id
+          - name: "ProcNum"
             description: "Foreign key to the procedure record (ProcNum)"
-          - name: claim_id
+          - name: "ClaimNum"
             description: "Foreign key to the insurance claim (ClaimNum)"
-          - name: patient_id
+          - name: "PatNum"
             description: "Foreign key to the patient (PatNum)"
-          - name: provider_id
+          - name: "ProvNum"
             description: "Foreign key to the provider who performed the procedure (ProvNum)"
-          - name: plan_id
+          - name: "PlanNum"
             description: "Foreign key to the insurance plan (PlanNum)"
-          - name: claim_payment_id
+          - name: "ClaimPaymentNum"
             description: "Foreign key to the insurance payment record (ClaimPaymentNum)"
-          - name: clinic_id
+          - name: "ClinicNum"
             description: "Foreign key to the clinic where procedure was performed"
-          - name: insurance_subscriber_id
+          - name: "InsSubNum"
             description: "Foreign key to the insurance subscriber"
-          - name: payment_plan_id
+          - name: "PayPlanNum"
             description: "Foreign key to payment plan if applicable"
-          - name: claim_payment_tracking_id
+          - name: "ClaimPaymentTracking"
             description: "Foreign key to payment tracking record"
-          - name: secure_user_entry_id
+          - name: "SecUserNumEntry"
             description: "ID of the user who created this record"
           # Dates
-          - name: claim_procedure_date
+          - name: "ProcDate"
             description: "Date of the claim procedure record"
-          - name: procedure_date
+          - name: "DateCP"
             description: "Date the procedure was performed"
-          - name: entry_date
+          - name: "DateEntry"
             description: "Date the record was entered"
-          - name: secure_entry_date
+          - name: "SecDateEntry"
             description: "Date the record was securely entered"
-          - name: last_modified_at
+          - name: "SecDateTEdit"
             description: "Timestamp when this record was last modified"
-          - name: supplemental_received_date
+          - name: "SupplementalReceived"
             description: "Date supplemental information was received"
-          - name: insurance_finalized_date
+          - name: "DateInsFinalized"
             description: "Date the insurance processing was finalized"
           # Financial information
-          - name: fee_billed
+          - name: "FeeBilled"
             description: "Amount billed for the procedure"
-          - name: insurance_payment_estimate
+          - name: "InsEstTotal"
             description: "Estimated payment from insurance"
-          - name: insurance_payment_amount
+          - name: "InsPayAmt"
             description: "Actual payment received from insurance"
-          - name: deductible_applied
+          - name: "DedApplied"
             description: "Deductible amount applied to this procedure"
-          - name: write_off
+          - name: "WriteOff"
             description: "Amount written off for this procedure"
-          - name: allowed_override
+          - name: "AllowedOverride"
             description: "Manual override for allowed amount"
-          - name: copay_amount
+          - name: "CopayAmt"
             description: "Copay amount for this procedure"
-          - name: paid_other_insurance
+          - name: "PaidOtherIns"
             description: "Amount paid by other insurance"
-          - name: base_estimate
+          - name: "BaseEst"
             description: "Base estimate before adjustments"
-          - name: copay_override
+          - name: "CopayOverride"
             description: "Manual override for copay amount"
-          - name: deductible_estimate
+          - name: "DedEst"
             description: "Estimated deductible amount"
-          - name: deductible_estimate_override
+          - name: "DedEstOverride"
             description: "Manual override for deductible estimate"
-          - name: insurance_estimate_total
+          - name: "InsEstTotal"
             description: "Total estimate from insurance"
-          - name: insurance_estimate_total_override
+          - name: "InsEstTotalOverride"
             description: "Manual override for total insurance estimate"
-          - name: paid_other_insurance_override
+          - name: "PaidOtherInsOverride"
             description: "Manual override for amount paid by other insurance"
-          - name: write_off_estimate
+          - name: "WriteOffEst"
             description: "Estimated write-off amount"
-          - name: write_off_estimate_override
+          - name: "WriteOffEstOverride"
             description: "Manual override for write-off estimate"
           # Status and metadata
-          - name: status
+          - name: "Status"
             description: "Status code for the claim procedure"
-          - name: percentage
+          - name: "Percentage"
             description: "Coverage percentage"
-          - name: percentage_override
+          - name: "PercentOverride"
             description: "Manual override for coverage percentage"
-          - name: no_bill_insurance
+          - name: "NoBillIns"
             description: "Flag indicating if this procedure should not be billed to insurance"
-          - name: line_number
+          - name: "LineNumber"
             description: "Line number on the claim form"
-          - name: payment_row
+          - name: "PaymentRow"
             description: "Reference to payment row if applicable"
-          - name: is_transfer
+          - name: "IsTransfer"
             description: "Boolean flag indicating if this is a transfer"
-          - name: is_overpay
+          - name: "IsOverpay"
             description: "Boolean flag indicating if this is an overpayment"
-          - name: remarks
+          - name: "Remarks"
             description: "Additional remarks about the claim procedure"
-          - name: code_sent
+          - name: "CodeSent"
             description: "Procedure code sent to insurance"
-          - name: estimate_note
+          - name: "EstimateNote"
             description: "Notes about the estimate"
-          - name: claim_adjustment_reason_codes
+          - name: "ClaimAdjustmentReasons"
             description: "Codes explaining claim adjustments"
-          - name: security_hash
+          - name: "SecHash"
             description: "Security hash for the record"
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 10
+            tests_total: 10
+          contains_pii: true
+          business_owners: ["dental_finance_team", "insurance_team"]
+          technical_owners: ["data_engineering_team"]
 
       - name: claimtracking
         description: "Tracking status of insurance claims"
+        loaded_at_field: "EntryDateTime"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
         columns:
-          - name: claim_tracking_id
+          - name: "ClaimTrackingNum"
             description: "Primary key for claim tracking records"
             tests:
               - unique
               - not_null
           # Relationships
-          - name: claim_id
+          - name: "ClaimNum"
             description: "Foreign key to the insurance claim (ClaimNum)"
-          - name: user_id
+          - name: "UserNum"
             description: "Foreign key to the user who created the tracking entry"
-          - name: tracking_definition_id
+          - name: "TrackingDefNum"
             description: "Foreign key to tracking definition record"
-          - name: tracking_error_definition_id
+          - name: "TrackingErrorDefNum"
             description: "Foreign key to tracking error definition record"
           # Tracking information  
-          - name: entry_timestamp
+          - name: "EntryDateTime"
             description: "Timestamp when the tracking entry was created"
-          - name: tracking_type
+          - name: "TrackingType"
             description: "Type of tracking event or activity"
-          - name: note
+          - name: "Note"
             description: "Detailed notes about the tracking event"
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 4
+            tests_total: 4
+          contains_pii: false
+          business_owners: ["dental_finance_team", "insurance_team"]
+          technical_owners: ["data_engineering_team"]
