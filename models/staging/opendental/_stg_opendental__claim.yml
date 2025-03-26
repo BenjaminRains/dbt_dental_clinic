@@ -1,0 +1,160 @@
+version: 2
+
+models:
+  - name: stg_opendental__claim
+    description: >
+      Standardized view of dental insurance claims from the OpenDental system.
+      Contains information about claim status, payments, providers, and related details.
+    columns:
+      # Primary key
+      - name: claim_id
+        description: "Primary key - Unique identifier for the claim"
+        tests:
+          - unique
+          - not_null
+
+      # Foreign keys
+      - name: patient_id
+        description: "Foreign key to the patient associated with this claim"
+      - name: plan_id
+        description: "Foreign key to the primary insurance plan for this claim"
+      - name: secondary_plan_id
+        description: "Foreign key to the secondary insurance plan for this claim"
+      - name: treating_provider_id
+        description: "Foreign key to the provider who performed the treatment"
+      - name: billing_provider_id
+        description: "Foreign key to the provider responsible for billing"
+      - name: referring_provider_id
+        description: "Foreign key to the provider who referred the patient"
+      - name: clinic_id
+        description: "Foreign key to the clinic where services were provided"
+      - name: claim_form_id
+        description: "Foreign key to the type of claim form used"
+      - name: insurance_subscriber_id
+        description: "Foreign key to the primary insurance subscriber"
+      - name: secondary_insurance_subscriber_id
+        description: "Foreign key to the secondary insurance subscriber"
+      - name: ordering_referral_id
+        description: "Foreign key to the provider who ordered or referred the treatment"
+      - name: provider_order_override_id
+        description: "Foreign key to the provider who overrode treatment orders"
+      - name: custom_tracking_id
+        description: "Foreign key to custom tracking information for the claim"
+      - name: secure_user_entry_id
+        description: "Foreign key to the user who entered the claim"
+
+      # Date fields
+      - name: service_date
+        description: "Date when the dental service was performed"
+      - name: sent_date
+        description: "Date when the claim was sent to the insurance company"
+      - name: received_date
+        description: "Date when the claim was received by the insurance company"
+      - name: prior_date
+        description: "Date of prior prosthesis, if applicable"
+      - name: accident_date
+        description: "Date of accident, if claim is accident-related"
+      - name: ortho_date
+        description: "Date orthodontic treatment began"
+      - name: resent_date
+        description: "Date when the claim was resent to the insurance company"
+      - name: original_sent_date
+        description: "Original date the claim was first sent"
+      - name: illness_injury_pregnancy_date
+        description: "Date of illness, injury, or pregnancy"
+      - name: other_date
+        description: "Miscellaneous date field used for various purposes"
+      - name: secure_entry_date
+        description: "Date when the claim was entered into the system"
+      - name: secure_edit_timestamp
+        description: "Timestamp of the last edit to the claim record"
+
+      # Numerical values
+      - name: claim_fee
+        description: "Total fee amount for the claim"
+      - name: insurance_payment_estimate
+        description: "Estimated payment amount from insurance"
+      - name: insurance_payment_amount
+        description: "Actual payment amount received from insurance"
+      - name: deductible_applied
+        description: "Amount of deductible applied to this claim"
+      - name: write_off
+        description: "Amount written off by the provider"
+      - name: share_of_cost
+        description: "Patient's share of cost for the claim"
+
+      # Integer/status fields
+      - name: place_of_service
+        description: "Code indicating where services were performed (office, hospital, etc.)"
+      - name: is_employment_related
+        description: "Flag indicating if claim is related to employment (0=No, 1=Yes)"
+      - name: is_ortho
+        description: "Flag indicating if claim is for orthodontic treatment (0=No, 1=Yes)"
+      - name: ortho_remaining_months
+        description: "Number of months remaining in orthodontic treatment"
+      - name: patient_relation
+        description: "Code for patient's relationship to primary subscriber"
+      - name: secondary_patient_relation
+        description: "Code for patient's relationship to secondary subscriber"
+      - name: radiographs
+        description: "Number of radiographs attached to claim"
+      - name: attached_images
+        description: "Number of images attached to claim"
+      - name: attached_models
+        description: "Number of models attached to claim"
+      - name: special_program_code
+        description: "Code indicating special program status"
+      - name: med_type
+        description: "Medical claim type code"
+      - name: correction_type
+        description: "Code indicating type of correction made to claim"
+      - name: ortho_total_months
+        description: "Total number of months for orthodontic treatment"
+      - name: illness_injury_pregnancy_date_qualifier
+        description: "Qualifier for the illness/injury/pregnancy date"
+      - name: other_date_qualifier
+        description: "Qualifier for the other date field"
+      - name: is_outside_lab
+        description: "Flag indicating if outside lab was used (0=No, 1=Yes)"
+
+      # Character fields
+      - name: claim_status
+        description: "Single character status code for the claim"
+      - name: pre_auth_string
+        description: "Pre-authorization string or number"
+      - name: is_prosthesis
+        description: "Flag indicating if claim involves prosthesis"
+      - name: reason_under_paid
+        description: "Explanation for why claim was underpaid"
+      - name: claim_note
+        description: "Notes related to the claim"
+      - name: claim_type
+        description: "Type of claim (e.g., primary, secondary)"
+      - name: reference_number_string
+        description: "Reference number for the claim"
+      - name: accident_related
+        description: "Flag indicating if claim is related to an accident"
+      - name: accident_state
+        description: "State where accident occurred, if applicable"
+      - name: attached_flags
+        description: "Flags indicating types of attachments"
+      - name: attachment_id
+        description: "Identifier for attachments to the claim"
+      - name: prior_authorization_number
+        description: "Number for prior authorization"
+      - name: uniform_bill_type
+        description: "Type of uniform bill used"
+      - name: admission_type_code
+        description: "Code for type of admission, if applicable"
+      - name: admission_source_code
+        description: "Code for source of admission, if applicable"
+      - name: patient_status_code
+        description: "Code for patient status"
+      - name: claim_identifier
+        description: "Unique identifier assigned to claim by insurance"
+      - name: original_reference_number
+        description: "Original reference number for the claim"
+      - name: security_hash
+        description: "Hash value for security verification"
+      - name: narrative
+        description: "Detailed narrative text related to the claim"

@@ -1,0 +1,86 @@
+version: 2
+
+models:
+  - name: stg_opendental__claimpayment
+    description: >
+      Standardized staging model for insurance claim payments from OpenDental. 
+      This model represents payments received from insurance companies for submitted claims.
+    
+    columns:
+      - name: claim_payment_id
+        description: Primary key for the claim payment record (from ClaimPaymentNum)
+        tests:
+          - unique
+          - not_null
+      
+      - name: check_date
+        description: Date the insurance check was issued or received
+      
+      - name: date_issued
+        description: Date the payment was issued by the insurance carrier
+      
+      - name: check_amount
+        description: Total amount of the insurance check
+      
+      - name: check_number
+        description: Check number or payment reference from the insurance carrier
+      
+      - name: bank_branch
+        description: Bank branch information for the payment
+      
+      - name: note
+        description: Additional notes related to the payment
+      
+      - name: clinic_id
+        description: Foreign key to clinic where the payment was processed
+      
+      - name: deposit_id
+        description: Foreign key to the deposit record if this payment was part of a deposit
+      
+      - name: carrier_name
+        description: Name of the insurance carrier that issued the payment
+      
+      - name: is_partial
+        description: Boolean flag indicating if this is a partial payment
+      
+      - name: payment_type_id
+        description: Foreign key to payment type definition
+      
+      - name: payment_group_id
+        description: Foreign key to payment group
+      
+      - name: created_by_user_id
+        description: ID of the user who created this payment record
+      
+      - name: created_date
+        description: Date the payment record was created
+      
+      - name: last_modified_at
+        description: Timestamp when this record was last modified
+
+    tests:
+      - dbt_utils.relationships:
+          to: ref('stg_opendental__clinic')
+          field: clinic_id
+          column_name: clinic_id
+    
+    meta:
+      relationships:
+        - related_model: stg_opendental__claim
+          description: >
+            While there is no direct foreign key from claim payments to claims in the database schema,
+            claim payments are logically connected to claims through the claim procedures (claimproc) table.
+            A single claim payment can be distributed across multiple claims.
+        
+        - related_model: stg_opendental__claimproc
+          field: claim_payment_id
+          description: >
+            Claim procedures reference claim payments through the claim_payment_id field.
+            Each claim payment can be associated with multiple claim procedures, showing how
+            the payment was allocated across different procedures within a claim.
+        
+        - related_model: stg_opendental__claimtracking
+          description: >
+            Claim tracking entries may reference payment events for a claim, though there is
+            no direct foreign key relationship. The tracking records provide status updates
+            on claims which may include payment information.

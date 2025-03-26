@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: stg_opendental__claimtracking
+    description: >
+      Standardized staging model for insurance claim tracking from OpenDental.
+      This model represents tracking events and status updates for insurance claims,
+      providing a history of claim processing activities and communications.
+    
+    columns:
+      - name: claim_tracking_id
+        description: Primary key for the claim tracking record (from ClaimTrackingNum)
+        tests:
+          - unique
+          - not_null
+      
+      - name: claim_id
+        description: Foreign key to the insurance claim (ClaimNum)
+      
+      - name: user_id
+        description: Foreign key to the user who created the tracking entry
+      
+      - name: tracking_definition_id
+        description: Foreign key to tracking definition record
+      
+      - name: tracking_error_definition_id
+        description: Foreign key to tracking error definition record
+      
+      - name: entry_timestamp
+        description: Timestamp when the tracking entry was created
+      
+      - name: tracking_type
+        description: Type of tracking event or activity
+      
+      - name: note
+        description: Detailed notes about the tracking event
+
+    tests:
+      - dbt_utils.relationships:
+          to: ref('stg_opendental__claim')
+          field: claim_id
+          column_name: claim_id
+    
+    meta:
+      relationships:
+        - related_model: stg_opendental__claim
+          field: claim_id
+          description: >
+            Each claim tracking entry is directly associated with a specific claim through the claim_id field.
+            Multiple tracking entries can exist for a single claim, providing a chronological history of
+            claim status updates, communications, and processing events.
+        
+        - related_model: stg_opendental__claimpayment
+          description: >
+            While there is no direct foreign key between claim tracking and claim payments, tracking entries 
+            often document payment-related activities for a claim. The connection is indirect, through the 
+            common claim_id that both tracking entries and claim procedures reference.
+        
+        - related_model: stg_opendental__claimproc
+          through_field: claim_id
+          description: >
+            Claim tracking entries and claim procedures are indirectly related through their common claim_id field.
+            Tracking entries may document status updates or issues related to specific procedures within a claim,
+            though there is no direct database relationship between these tables.

@@ -1,0 +1,197 @@
+version: 2
+
+models:
+  - name: stg_opendental__claimproc
+    description: >
+      Standardized staging model for insurance claim procedures from OpenDental.
+      This model represents individual procedures that are included in insurance claims,
+      connecting claims, procedures, and payments in the dental practice management system.
+    
+    columns:
+      - name: claim_procedure_id
+        description: Primary key for the claim procedure record (from ClaimProcNum)
+        tests:
+          - unique
+          - not_null
+      
+      - name: procedure_id
+        description: Foreign key to the procedure record (ProcNum)
+      
+      - name: claim_id
+        description: Foreign key to the insurance claim (ClaimNum)
+      
+      - name: patient_id
+        description: Foreign key to the patient (PatNum)
+      
+      - name: provider_id
+        description: Foreign key to the provider who performed the procedure (ProvNum)
+      
+      - name: plan_id
+        description: Foreign key to the insurance plan (PlanNum)
+      
+      - name: claim_payment_id
+        description: Foreign key to the insurance payment record (ClaimPaymentNum)
+      
+      - name: clinic_id
+        description: Foreign key to the clinic where procedure was performed
+      
+      - name: insurance_subscriber_id
+        description: Foreign key to the insurance subscriber
+      
+      - name: payment_plan_id
+        description: Foreign key to payment plan if applicable
+      
+      - name: claim_payment_tracking_id
+        description: Foreign key to payment tracking record
+      
+      - name: secure_user_entry_id
+        description: ID of the user who created this record
+      
+      - name: claim_procedure_date
+        description: Date of the claim procedure record
+      
+      - name: procedure_date
+        description: Date the procedure was performed
+      
+      - name: entry_date
+        description: Date the record was entered
+      
+      - name: secure_entry_date
+        description: Date the record was securely entered
+      
+      - name: last_modified_at
+        description: Timestamp when this record was last modified
+      
+      - name: supplemental_received_date
+        description: Date supplemental information was received
+      
+      - name: insurance_finalized_date
+        description: Date the insurance processing was finalized
+      
+      - name: fee_billed
+        description: Amount billed for the procedure
+      
+      - name: insurance_payment_estimate
+        description: Estimated payment from insurance
+      
+      - name: insurance_payment_amount
+        description: Actual payment received from insurance
+      
+      - name: deductible_applied
+        description: Deductible amount applied to this procedure
+      
+      - name: write_off
+        description: Amount written off for this procedure
+      
+      - name: allowed_override
+        description: Manual override for allowed amount
+      
+      - name: copay_amount
+        description: Copay amount for this procedure
+      
+      - name: paid_other_insurance
+        description: Amount paid by other insurance
+      
+      - name: base_estimate
+        description: Base estimate before adjustments
+      
+      - name: copay_override
+        description: Manual override for copay amount
+      
+      - name: deductible_estimate
+        description: Estimated deductible amount
+      
+      - name: deductible_estimate_override
+        description: Manual override for deductible estimate
+      
+      - name: insurance_estimate_total
+        description: Total estimate from insurance
+      
+      - name: insurance_estimate_total_override
+        description: Manual override for total insurance estimate
+      
+      - name: paid_other_insurance_override
+        description: Manual override for amount paid by other insurance
+      
+      - name: write_off_estimate
+        description: Estimated write-off amount
+      
+      - name: write_off_estimate_override
+        description: Manual override for write-off estimate
+      
+      - name: status
+        description: Status code for the claim procedure
+      
+      - name: percentage
+        description: Coverage percentage
+      
+      - name: percentage_override
+        description: Manual override for coverage percentage
+      
+      - name: no_bill_insurance
+        description: Flag indicating if this procedure should not be billed to insurance
+      
+      - name: line_number
+        description: Line number on the claim form
+      
+      - name: payment_row
+        description: Reference to payment row if applicable
+      
+      - name: is_transfer
+        description: Boolean flag indicating if this is a transfer
+      
+      - name: is_overpay
+        description: Boolean flag indicating if this is an overpayment
+      
+      - name: remarks
+        description: Additional remarks about the claim procedure
+      
+      - name: code_sent
+        description: Procedure code sent to insurance
+      
+      - name: estimate_note
+        description: Notes about the estimate
+      
+      - name: claim_adjustment_reason_codes
+        description: Codes explaining claim adjustments
+      
+      - name: security_hash
+        description: Security hash for the record
+
+    tests:
+      - dbt_utils.relationships:
+          to: ref('stg_opendental__claim')
+          field: claim_id
+          column_name: claim_id
+      
+      - dbt_utils.relationships:
+          to: ref('stg_opendental__claimpayment')
+          field: claim_payment_id
+          column_name: claim_payment_id
+      
+      - dbt_utils.relationships:
+          to: ref('stg_opendental__clinic')
+          field: clinic_id
+          column_name: clinic_id
+    
+    meta:
+      relationships:
+        - related_model: stg_opendental__claim
+          field: claim_id
+          description: >
+            Each claim procedure is directly associated with a claim through the claim_id field.
+            Multiple procedures can be included in a single claim (one-to-many relationship).
+        
+        - related_model: stg_opendental__claimpayment
+          field: claim_payment_id
+          description: >
+            Claim procedures are linked to claim payments through the claim_payment_id field,
+            showing which insurance payment covered specific procedures. This is the key
+            relationship that connects payments to claims and their procedures.
+        
+        - related_model: stg_opendental__claimtracking
+          through_field: claim_id
+          description: >
+            Claim procedures and claim tracking are indirectly related through their
+            common claim_id field. Tracking entries provide status updates for claims
+            that contain these procedures.
