@@ -4,19 +4,19 @@ models:
   - name: stg_opendental__refattach
     description: Staging model for referral attachments. This table contains information about referrals linked to patients, procedures, and providers.
     columns:
-      - name: ref_attach_num
+      - name: ref_attach_id
         description: Primary key of the referral attachment
         tests:
           - unique
           - not_null
 
       # Foreign Keys
-      - name: referral_num
+      - name: referral_id
         description: Foreign key to referral table
         tests:
           - relationships:
               to: ref('stg_opendental__referral')
-              field: referral_num
+              field: referral_id
               severity: warn
               config:
                 description: >
@@ -24,21 +24,21 @@ models:
                   Most are single occurrences per patient,
                   suggesting these might be historical or deleted referrals.
 
-      - name: patient_num
+      - name: patient_id
         description: Foreign key to the patient table
         tests:
           - relationships:
               to: ref('stg_opendental__patient')
-              field: patient_num
+              field: patient_id
 
-      - name: procedure_num
+      - name: procedure_id
         description: Foreign key to the procedurelog table
         tests:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
 
-      - name: provider_num
+      - name: provider_id
         description: Foreign key to the provider table
         tests:
           - relationships:

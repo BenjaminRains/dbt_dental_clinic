@@ -1,19 +1,19 @@
-with source as (
+with Source as (
     select * 
     from {{ source('opendental', 'refattach') }}
     where "RefDate" >= '2023-01-01'
 ),
 
-renamed as (
+Renamed as (
     select
         -- Primary Key
-        "RefAttachNum" as ref_attach_num,
+        "RefAttachNum" as ref_attach_id,
         
         -- Foreign Keys
-        "ReferralNum" as referral_num,
-        "PatNum" as patient_num,
-        "ProcNum" as procedure_num,
-        "ProvNum" as provider_num,
+        "ReferralNum" as referral_id,
+        "PatNum" as patient_id,
+        "ProcNum" as procedure_id,
+        "ProvNum" as provider_id,
         
         -- Regular columns
         "ItemOrder" as item_order,
@@ -27,7 +27,7 @@ renamed as (
         -- Meta columns
         "DateTStamp" as created_at
 
-    from source
+    from Source
 )
 
-select * from renamed
+select * from Renamed
