@@ -8,13 +8,13 @@ models:
       to standardize naming conventions and filter to records from statements sent in 2023 or later.
     
     columns:
-      - name: statement_prod_id
+      - name: statement_prod_num
         description: Unique identifier for each statement product record
         tests:
           - unique
           - not_null
       
-      - name: statement_id
+      - name: statement_num
         description: Foreign key to the statement table
         tests:
           - not_null
