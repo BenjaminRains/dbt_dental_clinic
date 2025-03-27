@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: stg_opendental__statementprod
+    description: >
+      Staging model for OpenDental statement product records. 
+      This model pulls records from the statementprod table and performs basic transformations
+      to standardize naming conventions and filter to records from statements sent in 2023 or later.
+    
+    columns:
+      - name: statement_prod_num
+        description: Unique identifier for each statement product record
+        tests:
+          - unique
+          - not_null
+      
+      - name: statement_num
+        description: Foreign key to the statement table
+        tests:
+          - not_null
+      
+      - name: fkey
+        description: Foreign key reference (depends on product type)
+      
+      - name: doc_num
+        description: Reference to document number, if applicable
+      
+      - name: late_charge_adj_num
+        description: Reference to late charge adjustment number, if applicable
+      
+      - name: prod_type
+        description: Type of product included in the statement
+        tests:
+          - not_null
+      
+      - name: _loaded_at
+        description: Timestamp indicating when this record was loaded into the data warehouse
