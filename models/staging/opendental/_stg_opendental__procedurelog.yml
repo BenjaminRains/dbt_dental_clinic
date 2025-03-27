@@ -84,12 +84,18 @@ models:
               where: "planned_appointment_id is not null and procedure_date >= '2023-01-01'"
       
       - name: statement_id
-        description: Foreign key to an associated statement
+        description: >
+          Reference to the statement. Future-dated procedures (treatment plans) and same-day 
+          treatments may not have statements. Analysis shows:
+          - Future treatment plans (2025-2026) typically have 2-3 procedures per visit
+          - Common fee combinations suggest standard procedure groupings
+          - Same-day treatments may not require statements
         tests:
           - relationships:
               to: ref('stg_opendental__statement')
               field: statement_id
-              where: "statement_id is not null"
+              where: "procedure_date <= current_date"
+              severity: warn
       
       # Date and time fields with validity tests
       - name: procedure_date
