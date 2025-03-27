@@ -66,13 +66,13 @@ models:
       - name: insurance_estimate
         description: Estimated portion to be covered by insurance
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "insurance_estimate >= 0 OR insurance_estimate IS NULL"
+          - not_null:
+              where: "insurance_estimate < 0"  # Will fail if any negative values exist
       - name: balance_total
         description: Total balance amount on the statement
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "balance_total >= 0 OR balance_total IS NULL"
+          - not_null:
+              where: "balance_total < 0"  # Will fail if any negative values exist
 
       # Boolean/Status Fields
       - name: is_payment_hidden
