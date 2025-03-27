@@ -9,6 +9,9 @@ models:
         tests:
           - unique
           - not_null
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
 
       - name: fee_schedule_description
         description: Description of the fee schedule
