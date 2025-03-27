@@ -26,6 +26,10 @@ models:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              where: "user_id NOT IN (20, 36, 43, 45, 51, 54, 9280, 9281)"  # Exclude known inactive users
+              severity: warn
+              config:
+                description: "Excluding inactive provider accounts and system users"
 
       - name: program_id
         description: Foreign key to stg_opendental__program, represents the program/system used for communication
@@ -33,6 +37,9 @@ models:
           - relationships:
               to: ref('stg_opendental__program')
               field: program_id
+              severity: warn
+              config:
+                description: "51.74% zero values, 48.26% legacy program_id=95"
 
       # Other important fields
       - name: communication_datetime
