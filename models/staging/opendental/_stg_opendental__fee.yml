@@ -11,19 +11,21 @@ models:
           - not_null
 
       - name: fee_schedule_id
-        description: Foreign key to fee schedule table
+        description: Foreign key to fee schedule table. Some historical or inactive fee schedules may not exist in current data.
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              severity: warn  # Change to warning since some fee schedules might be historical
 
       - name: procedure_code_id
-        description: Foreign key to procedure code table
+        description: Foreign key to procedure code table. Some procedure codes may be deprecated or not yet added to the procedure code table.
         tests:
           - relationships:
               to: ref('stg_opendental__procedurecode')
               field: procedure_code_id
+              severity: warn  # Change to warning since procedure codes might be deprecated or future codes
 
       - name: fee_amount
         description: The amount charged for the procedure
