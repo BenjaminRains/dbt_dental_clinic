@@ -37,7 +37,7 @@ renamed as (
         "Confirmed"::bigint as confirmation_id,
         
         -- Timestamps
-        "HistDateTStamp"::timestamp as history_timestamp,
+        "HistDateTStamp"::timestamp with time zone as history_timestamp,
         "DateTStamp"::timestamp as created_timestamp,
         "AptDateTime"::timestamp as appointment_datetime,
         "DateTimeArrived"::timestamp as arrived_datetime,
