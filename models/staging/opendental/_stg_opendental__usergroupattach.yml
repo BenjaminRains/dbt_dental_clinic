@@ -15,8 +15,8 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_opendental__user')
-              field: user_num
+              to: ref('stg_opendental__userod')
+              field: user_id
 
       - name: user_group_num
         description: Foreign key to the user group table
@@ -24,7 +24,7 @@ models:
           - not_null
           - relationships:
               to: ref('stg_opendental__usergroup')
-              field: user_group_num
+              field: usergroup_num
 
       - name: _loaded_at
         description: Timestamp when this record was loaded into the staging model
