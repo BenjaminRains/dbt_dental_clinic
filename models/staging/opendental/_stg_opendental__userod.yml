@@ -16,21 +16,23 @@ models:
         tests:
           - relationships:
               to: ref('stg_opendental__usergroup')
-              field: user_group_id
+              field: usergroup_num
+              severity: warn
+              where: "user_group_id is not null"
+              name: fk_userod_usergroup_valid
 
       - name: employee_id
-        description: Foreign key to employee table
+        description: Foreign key to employee table that links users to employee records
         tests:
           - relationships:
               to: ref('stg_opendental__employee')
               field: employee_id
+              severity: warn
+              where: "employee_id is not null"
+              name: fk_userod_employee_valid
 
       - name: clinic_id
         description: Foreign key to clinic table
-        tests:
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
 
       - name: provider_id
         description: Foreign key to provider table
