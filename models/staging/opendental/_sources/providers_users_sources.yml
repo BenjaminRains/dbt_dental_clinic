@@ -157,3 +157,43 @@ sources:
             description: "Foreign key to the user group table"
           - name: _loaded_at
             description: "Timestamp when this record was loaded into the staging model"
+
+      - name: employee
+        description: "Employee information for dental practice staff"
+        columns:
+          - name: "EmployeeNum"
+            description: "Primary key - Unique identifier for each employee"
+            tests:
+              - unique
+              - not_null
+          - name: "LName"
+            description: "Employee's last name"
+          - name: "FName"
+            description: "Employee's first name"
+          - name: "MiddleI"
+            description: "Employee's middle initial"
+          - name: "IsHidden"
+            description: "Flag indicating if the employee record is hidden from view (0=no, 1=yes)"
+          - name: "ClockStatus"
+            description: "Current clock status of the employee (e.g., 'in', 'out', etc.)"
+          - name: "PhoneExt"
+            description: "Employee's office phone extension"
+          - name: "PayrollID"
+            description: "Employee's payroll identifier"
+          - name: "WirelessPhone"
+            description: "Employee's mobile/wireless phone number"
+          - name: "EmailWork"
+            description: "Employee's work email address"
+          - name: "EmailPersonal"
+            description: "Employee's personal email address"
+          - name: "IsFurloughed"
+            description: "Flag indicating if the employee is currently furloughed (0=no, 1=yes)"
+          - name: "IsWorkingHome"
+            description: "Flag indicating if the employee is working from home (0=no, 1=yes)"
+          - name: "ReportsTo"
+            description: "Foreign key reference to the employee's manager/supervisor"
+            tests:
+              - relationships:
+                  to: source('opendental', 'employee')
+                  field: "EmployeeNum"
+                  severity: warn
