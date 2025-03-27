@@ -15,14 +15,14 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_opendental__fee_schedule')
+              to: ref('stg_opendental__feesched')
               field: fee_schedule_id
 
       - name: procedure_code_id
         description: Foreign key to procedure code table
         tests:
           - relationships:
-              to: ref('stg_opendental__procedure_code')
+              to: ref('stg_opendental__procedurecode')
               field: procedure_code_id
 
       - name: fee_amount
