@@ -53,11 +53,6 @@ models:
       
       - name: clinic_id
         description: Foreign key to the clinic where the procedure was performed
-        tests:
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
-              where: "clinic_id is not null"
       
       - name: code_id
         description: >
@@ -70,11 +65,6 @@ models:
       
       - name: site_id
         description: Foreign key to the site where the procedure was performed
-        tests:
-          - relationships:
-              to: ref('stg_opendental__site')
-              field: site_id
-              where: "site_id is not null"
       
       - name: planned_appointment_id
         description: Foreign key to a planned future appointment

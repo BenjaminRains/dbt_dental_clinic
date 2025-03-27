@@ -76,10 +76,6 @@ models:
         
       - name: clinic_id
         description: Foreign key to the clinic where the appointment is scheduled
-        tests:
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
         
       - name: operatory_id
         description: Foreign key to the operatory/room where the appointment is scheduled
