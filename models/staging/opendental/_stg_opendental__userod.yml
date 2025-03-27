@@ -40,6 +40,9 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              severity: warn
+              where: "provider_id is not null"
+              name: fk_userod_provider_valid
 
       - name: cemt_user_id
         description: Foreign key to another user record (CEMT user reference)
@@ -47,6 +50,9 @@ models:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              severity: warn
+              where: "cemt_user_id is not null"
+              name: fk_userod_cemt_valid
 
       # User Information
       - name: username
@@ -109,10 +115,21 @@ models:
       - name: last_login_at
         description: Timestamp of last successful login
 
-    # Known relationships where userod is referenced by other tables
+    # Model-level tests
     tests:
       - relationships:
           name: userod_referenced_in_commlog
           to: ref('stg_opendental__commlog')
           field: user_id
           column_name: user_id
+          where: "user_id NOT IN (20, 36, 43, 45, 51, 54, 9280, 9281)"
+          severity: warn
+          config:
+            description: >
+              Excluding known inactive providers and system users:
+              - Jennifer Berg (20) - Active provider, no commlog entries
+              - Becky Solomey (36) - Hidden provider
+              - LocalMed (43) - Hidden provider
+              - Maria Barajas (45) - Hidden provider
+              - Edward Karateew (51) - Hidden provider
+              And system/unknown users (54, 9280, 9281)
