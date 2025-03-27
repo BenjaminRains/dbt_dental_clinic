@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='statement_num',
+    unique_key='statement_id',
     schema='staging'
 ) }}
 
@@ -18,12 +18,12 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "StatementNum" as statement_num,
+        "StatementNum" as statement_id,
         
         -- Foreign Keys
-        "PatNum" as patient_num,
-        "DocNum" as document_num,
-        "SuperFamily" as super_family_num,
+        "PatNum" as patient_id,
+        "DocNum" as document_id,
+        "SuperFamily" as super_family_id,
         
         -- Timestamps and Dates
         "DateSent" as date_sent,
