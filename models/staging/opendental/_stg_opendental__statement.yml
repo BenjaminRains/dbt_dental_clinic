@@ -7,14 +7,14 @@ models:
       from OpenDental, including payment history, balance tracking, and delivery status information.
     columns:
       # Primary Key
-      - name: statement_num
+      - name: statement_id
         description: Unique identifier for each statement
         tests:
           - unique
           - not_null
 
       # Foreign Keys
-      - name: patient_num
+      - name: patient_id
         description: >
           Foreign key reference to the patient table (stg_opendental__patient). 
           Each statement must be associated with a patient record, representing the 
@@ -24,12 +24,12 @@ models:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
-              field: patient_num
+              field: patient_id
         meta:
           contains_pii: true
-      - name: document_num
+      - name: document_id
         description: Reference to associated document record
-      - name: super_family_num
+      - name: super_family_id
         description: Reference to the super family grouping
 
       # Timestamps and Dates
