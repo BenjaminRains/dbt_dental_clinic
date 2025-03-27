@@ -83,14 +83,43 @@ models:
         description: Flag indicating if the referral is not an individual person
 
       - name: patient_num
-        description: Foreign key to patient table
+        description: >
+          Foreign key to patient table. Zero (0) indicates an external referral source 
+          (other practices, specialists, or non-patient referral sources).
         tests:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              where: "patient_num != 0"  # Exclude external referral sources
+              severity: warn
+              config:
+                description: >
+                  22 referrals have patient_num = 0, representing external referral sources:
+                  - Specialist offices (Oral Surgery, Orthodontics, Endodontics)
+                  - Other dental practices
+                  - Non-medical sources (Google Search, Phone Book)
 
       - name: slip
         description: Identifier for associated slip record
 
       - name: date_timestamp
         description: Timestamp of when the record was last updated
+
+      - name: referral_num
+        description: >
+          Foreign key to referral table
+          Note: Contains some orphaned references
+        tests:
+          - relationships:
+              to: ref('stg_opendental__referral')
+              field: referral_num
+              severity: warn
+              config:
+                description: >
+                  497 orphaned referral attachments found.
+                  Top issues:
+                  - referral_num 25 (220 attachments)
+                  - referral_num 36 (90 attachments)
+                  - referral_num 27 (72 attachments)
+                  - referral_num 34 (38 attachments)
+                  Plus ~30 other referral numbers with fewer attachments
