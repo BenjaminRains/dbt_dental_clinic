@@ -7,7 +7,7 @@ models:
       for treatment plans. Each record contains configuration options for how a treatment plan
       should be displayed and what information should be shown.
     columns:
-      - name: treatplan_param_num
+      - name: treatplan_param_id
         description: Unique identifier for the treatment plan parameters
         tests:
           - unique
@@ -18,7 +18,7 @@ models:
         tests:
           - not_null
       
-      - name: treatplan_num
+      - name: treatplan_id
         description: Foreign key to the treatment plan (references stg_opendental__treatplan.treatment_plan_id)
         tests:
           - not_null
@@ -54,13 +54,13 @@ models:
           description: Each set of treatment plan parameters belongs to one treatment plan
           model: stg_opendental__treatplan
           field_mapping:
-            - from: treatplan_num
+            - from: treatplan_id
               to: treatment_plan_id
         
         - name: treatment_plan_attachments
           description: A treatment plan can have both parameters and procedure attachments
           model: stg_opendental__treatplanattach
           field_mapping:
-            - from: treatplan_num
-              to: treatplan_num
+            - from: treatplan_id
+              to: treatplan_id
           type: related_through_parent

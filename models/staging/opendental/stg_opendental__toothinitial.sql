@@ -4,9 +4,9 @@ with source as (
 
 renamed as (
     select
-        "ToothInitialNum" as tooth_initial_num,
-        "PatNum" as patient_num,
-        "ToothNum" as tooth_num,
+        "ToothInitialNum" as tooth_initial_id,
+        "PatNum" as patient_id,
+        "ToothNum" as tooth_id,
         "InitialType" as initial_type,
         "Movement" as movement,
         "DrawingSegment" as drawing_segment,

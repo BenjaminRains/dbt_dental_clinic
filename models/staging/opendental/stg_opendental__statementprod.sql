@@ -1,7 +1,7 @@
 -- depends_on: {{ ref('stg_opendental__statement') }}
 {{ config(
     materialized='incremental',
-    unique_key='statement_prod_num',
+    unique_key='statement_prod_id',
     schema='staging'
 ) }}
 
@@ -21,13 +21,13 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "StatementProdNum" as statement_prod_num,
+        "StatementProdNum" as statement_prod_id,
         
         -- Foreign Keys
-        "StatementNum" as statement_num,
+        "StatementNum" as statement_id,
         "FKey" as fkey,
-        "DocNum" as doc_num,
-        "LateChargeAdjNum" as late_charge_adj_num,
+        "DocNum" as doc_id,
+        "LateChargeAdjNum" as late_charge_adj_id,
         
         -- Additional Fields
         "ProdType" as prod_type,

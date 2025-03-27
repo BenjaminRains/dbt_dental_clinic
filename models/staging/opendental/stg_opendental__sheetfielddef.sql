@@ -5,10 +5,10 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "SheetFieldDefNum" as sheet_field_def_num,
+        "SheetFieldDefNum" as sheet_field_def_id,
         
         -- Foreign Keys
-        "SheetDefNum" as sheet_def_num,
+        "SheetDefNum" as sheet_def_id,
         
         -- Regular Fields
         "FieldType" as field_type,

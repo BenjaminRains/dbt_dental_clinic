@@ -4,19 +4,24 @@ models:
   - name: stg_opendental__disease
     description: Staging model for OpenDental disease records. Contains patient disease history, including start/stop dates, status, and notes.
     columns:
-      - name: disease_num
+      - name: disease_id
         description: Primary key - Unique identifier for each disease record
         tests:
           - unique
           - not_null
 
-      - name: patient_num
+      - name: patient_id
         description: Foreign key to the patient table
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
-              field: patient_num
+              field: patient_id
+
+      - name: disease_def_id
+        description: Foreign key to the disease definition table
+        tests:
+          - not_null
 
       - name: patient_note
         description: Text notes related to the patient's specific disease condition

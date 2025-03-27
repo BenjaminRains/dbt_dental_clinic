@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='treatplan_attach_num'
+    unique_key='treatplan_attach_id'
 ) }}
 
 with source as (
@@ -17,11 +17,11 @@ with source as (
 renamed as (
     select
         -- Primary key
-        "TreatPlanAttachNum" as treatplan_attach_num,
+        "TreatPlanAttachNum" as treatplan_attach_id,
         
         -- Foreign keys
-        "TreatPlanNum" as treatplan_num,
-        "ProcNum" as proc_num,
+        "TreatPlanNum" as treatplan_id,
+        "ProcNum" as proc_id,
         
         -- Other fields
         "Priority" as priority

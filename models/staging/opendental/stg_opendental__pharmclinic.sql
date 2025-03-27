@@ -5,11 +5,11 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "PharmClinicNum" as pharm_clinic_num,
+        "PharmClinicNum" as pharm_clinic_id,
         
         -- Foreign Keys
-        "PharmacyNum" as pharmacy_num,
-        "ClinicNum" as clinic_num
+        "PharmacyNum" as pharmacy_id,
+        "ClinicNum" as clinic_id
         
     from source
 )

@@ -5,7 +5,7 @@ models:
     description: Staging model for usergroup data from OpenDental. Contains user group information and their associated permissions.
     
     columns:
-      - name: usergroup_num
+      - name: usergroup_id
         description: Primary key of the usergroup table
         tests:
           - unique

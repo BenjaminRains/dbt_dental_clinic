@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__sheetdef
     description: Staging model for OpenDental sheet definitions. Sheet definitions serve as templates for creating new sheets, containing default properties and layouts.
     columns:
-      - name: sheet_def_num
+      - name: sheet_def_id
         description: Primary key of the sheet definition table
         tests:
           - unique
@@ -59,8 +59,8 @@ models:
     meta:
       relationships:
         - relationship: one_to_many
-          field: sheet_def_num
-          related_to: stg_opendental__sheet.sheet_def_num
+          field: sheet_def_id
+          related_to: stg_opendental__sheet.sheet_def_id
         - relationship: one_to_many
-          field: sheet_def_num
-          related_to: stg_opendental__sheetfielddef.sheet_def_num
+          field: sheet_def_id
+          related_to: stg_opendental__sheetfielddef.sheet_def_id

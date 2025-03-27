@@ -10,17 +10,17 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "InsBlueBookNum" as insbluebook_num,
+        "InsBlueBookNum" as insbluebook_id,
         
         -- Foreign Keys
-        "ProcCodeNum" as proccode_num,
-        "CarrierNum" as carrier_num,
-        "PlanNum" as plan_num,
-        "ProcNum" as proc_num,
-        "ClaimNum" as claim_num,
+        "ProcCodeNum" as proccode_id,
+        "CarrierNum" as carrier_id,
+        "PlanNum" as plan_id,
+        "ProcNum" as proc_id,
+        "ClaimNum" as claim_id,
         
         -- String Fields
-        "GroupNum" as group_num,
+        "GroupNum" as group_id,
         "ClaimType" as claim_type,
         
         -- Numeric Fields

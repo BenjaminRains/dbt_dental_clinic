@@ -5,7 +5,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "UserGroupNum" as usergroup_num,
+        "UserGroupNum" as usergroup_id,
         
         -- Attributes
         "Description" as description,

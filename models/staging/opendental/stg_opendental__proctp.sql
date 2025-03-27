@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='proctp_num'
+    unique_key='proctp_id'
 ) }}
 
 with source as (
@@ -14,14 +14,14 @@ with source as (
 renamed as (
     select
         -- Primary key
-        "ProcTPNum" as proctp_num,
+        "ProcTPNum" as proctp_id,
         
         -- Foreign keys
-        "TreatPlanNum" as treatment_plan_num,
-        "PatNum" as patient_num,
+        "TreatPlanNum" as treatment_plan_id,
+        "PatNum" as patient_id,
         "ProcNumOrig" as procedure_num_orig,
-        "ProvNum" as provider_num,
-        "ClinicNum" as clinic_num,
+        "ProvNum" as provider_id,
+        "ClinicNum" as clinic_id,
         "SecUserNumEntry" as user_num_entry,
         
         -- Regular fields

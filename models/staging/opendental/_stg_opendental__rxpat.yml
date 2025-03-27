@@ -4,31 +4,31 @@ models:
   - name: stg_opendental__rxpat
     description: Staging model for prescription records from OpenDental. Contains information about prescriptions written for patients.
     columns:
-      - name: rx_num
+      - name: rx_id
         description: Primary key - unique identifier for each prescription
         tests:
           - unique
           - not_null
 
       # Foreign Keys
-      - name: patient_num
+      - name: patient_id
         description: Foreign key to patient table
         tests:
           - not_null
       
-      - name: provider_num
+      - name: provider_id
         description: Foreign key to provider who prescribed the medication
         
-      - name: pharmacy_num
+      - name: pharmacy_id
         description: Foreign key to pharmacy where prescription was sent
         
-      - name: procedure_num
+      - name: procedure_id
         description: Foreign key to related dental procedure (if applicable)
         
-      - name: clinic_num
+      - name: clinic_id
         description: Foreign key to clinic where prescription was written
         
-      - name: user_num
+      - name: user_id
         description: Foreign key to user who created/modified the prescription record
 
       # Dates and Timestamps
@@ -92,4 +92,4 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
-            - rx_num
+            - rx_id

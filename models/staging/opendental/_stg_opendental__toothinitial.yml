@@ -4,16 +4,16 @@ models:
   - name: stg_opendental__toothinitial
     description: "Standardized tooth initial conditions from OpenDental"
     columns:
-      - name: tooth_initial_num
+      - name: tooth_initial_id
         description: "Primary key for tooth initial conditions"
         tests:
           - unique
           - not_null
-      - name: patient_num
+      - name: patient_id
         description: "Foreign key to patient"
         tests:
           - not_null
-      - name: tooth_num
+      - name: tooth_id
         description: "Tooth number identifier - includes standard (1-32) and primary teeth notation (A-T). NULL values are expected for records with initial_type=9 or 10."
       - name: initial_type
         description: "Type code for initial tooth condition. Types 9 and 10 typically don't have associated tooth numbers."

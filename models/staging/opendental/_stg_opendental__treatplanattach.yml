@@ -6,13 +6,13 @@ models:
       Staging model for the treatplanattach table, which stores the connections between treatment plans and procedures.
       Each record represents a procedure attached to a treatment plan with an assigned priority.
     columns:
-      - name: treatplan_attach_num
+      - name: treatplan_attach_id
         description: Unique identifier for the treatment plan attachment
         tests:
           - unique
           - not_null
       
-      - name: treatplan_num
+      - name: treatplan_id
         description: Foreign key to the treatment plan (references stg_opendental__treatplan.treatment_plan_id)
         tests:
           - not_null
@@ -20,7 +20,7 @@ models:
               to: ref('stg_opendental__treatplan')
               field: treatment_plan_id
       
-      - name: proc_num
+      - name: proc_id
         description: Foreign key to the procedure
         tests:
           - not_null
@@ -35,13 +35,13 @@ models:
           description: Each treatment plan attachment belongs to one treatment plan
           model: stg_opendental__treatplan
           field_mapping:
-            - from: treatplan_num
+            - from: treatplan_id
               to: treatment_plan_id
         
         - name: treatment_plan_params
           description: Treatment plan parameters can be defined for the same treatment plan
           model: stg_opendental__treatplanparam
           field_mapping:
-            - from: treatplan_num
-              to: treatplan_num
+            - from: treatplan_id
+              to: treatplan_id
           type: related_through_parent

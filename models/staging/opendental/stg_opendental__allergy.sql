@@ -4,9 +4,9 @@ with source as (
 
 renamed as (
     select
-        "AllergyNum" as allergy_num,
-        "AllergyDefNum" as allergy_def_num,
-        "PatNum" as patient_num,
+        "AllergyNum" as allergy_id,
+        "AllergyDefNum" as allergy_def_id,
+        "PatNum" as patient_id,
         "Reaction" as reaction,
         "StatusIsActive" as is_active,
         "DateTStamp" as date_timestamp,

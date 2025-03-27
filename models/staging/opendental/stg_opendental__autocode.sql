@@ -11,7 +11,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "AutoCodeNum" as autocode_num,
+        "AutoCodeNum" as autocode_id,
         
         -- Attributes
         "Description" as description,
@@ -21,7 +21,7 @@ renamed as (
         -- Metadata
         current_timestamp as _loaded_at
     
-    from source
+    from Source
 )
 
 select * from renamed

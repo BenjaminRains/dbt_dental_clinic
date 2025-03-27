@@ -4,14 +4,14 @@ models:
   - name: stg_opendental__insbluebook
     description: Staging model for insurance bluebook entries. Contains current insurance payment information and allowed fee overrides.
     columns:
-      - name: insbluebook_num
+      - name: insbluebook_id
         description: Primary key for the insurance bluebook entry
         tests:
           - unique
           - not_null
 
       # Foreign Key Relationships
-      - name: proccode_num
+      - name: proccode_id
         description: Foreign key to procedure codes table
         tests:
           - not_null
@@ -19,7 +19,7 @@ models:
               to: ref('stg_opendental__procedurecode')
               field: procedure_code_id
 
-      - name: carrier_num
+      - name: carrier_id
         description: Foreign key to insurance carriers table
         tests:
           - not_null
@@ -27,7 +27,7 @@ models:
               to: ref('stg_opendental__carrier')
               field: carrier_id
 
-      - name: plan_num
+      - name: plan_id
         description: Foreign key to insurance plans table
         tests:
           - not_null
@@ -35,7 +35,7 @@ models:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
 
-      - name: proc_num
+      - name: proc_id
         description: Foreign key to procedures table
         tests:
           - not_null
@@ -43,20 +43,20 @@ models:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
 
-      - name: claim_num
+      - name: claim_id
         description: Foreign key to claims table
         tests:
           - not_null
           - relationships_with_third_table:
               to: ref('stg_opendental__claim')
               field: claim_id
-              column_name: claim_num
-              from_condition: "claim_num is not null AND claim_num > 15260"
+              column_name: claim_id
+              from_condition: "claim_id is not null AND claim_id > 15260"
               third_table: ref('stg_opendental__claimproc')
               third_table_field: claim_id
 
       # Other Fields
-      - name: group_num
+      - name: group_id
         description: Insurance group number
 
       - name: claim_type

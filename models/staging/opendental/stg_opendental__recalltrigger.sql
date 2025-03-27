@@ -7,9 +7,9 @@ with source as (
 renamed as (
     
     select
-        "RecallTriggerNum" as recall_trigger_num,
-        "RecallTypeNum" as recall_type_num,
-        "CodeNum" as code_num,
+        "RecallTriggerNum" as recall_trigger_id,
+        "RecallTypeNum" as recall_type_id,
+        "CodeNum" as code_id,
         
         -- Add metadata fields
         {{ current_timestamp() }} as loaded_at

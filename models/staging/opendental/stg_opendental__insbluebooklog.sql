@@ -10,10 +10,10 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "InsBlueBookLogNum" as insbluebooklog_num,
+        "InsBlueBookLogNum" as insbluebooklog_id,
         
         -- Foreign Keys
-        "ClaimProcNum" as claimprocedure_num,
+        "ClaimProcNum" as claimprocedure_id,
         
         -- Numeric Fields
         "AllowedFee" as allowed_fee,

@@ -11,11 +11,11 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "DiseaseNum" as disease_num,
+        "DiseaseNum" as disease_id,
         
         -- Foreign Keys
-        "PatNum" as patient_num,
-        "DiseaseDefNum" as disease_def_num,
+        "PatNum" as patient_id,
+        "DiseaseDefNum" as disease_def_id,
         
         -- String/Text fields
         "PatNote" as patient_note,

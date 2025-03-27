@@ -5,13 +5,13 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "SheetNum" as sheet_num,
+        "SheetNum" as sheet_id,
         
         -- Foreign Keys
-        "PatNum" as patient_num,
-        "SheetDefNum" as sheet_def_num,
-        "DocNum" as doc_num,
-        "ClinicNum" as clinic_num,
+        "PatNum" as patient_id,
+        "SheetDefNum" as sheet_def_id,
+        "DocNum" as doc_id,
+        "ClinicNum" as clinic_id,
         "WebFormSheetID" as web_form_sheet_id,
         
         -- Timestamps

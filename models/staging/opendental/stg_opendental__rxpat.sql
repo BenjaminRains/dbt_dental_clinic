@@ -5,15 +5,15 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "RxNum" as rx_num,
+        "RxNum" as rx_id,
         
         -- Foreign Keys
-        "PatNum" as patient_num,
-        "ProvNum" as provider_num,
-        "PharmacyNum" as pharmacy_num,
-        "ProcNum" as procedure_num,
-        "ClinicNum" as clinic_num,
-        "UserNum" as user_num,
+        "PatNum" as patient_id,
+        "ProvNum" as provider_id,
+        "PharmacyNum" as pharmacy_id,
+        "ProcNum" as procedure_id,
+        "ClinicNum" as clinic_id,
+        "UserNum" as user_id,
         
         -- Timestamps and Dates
         "RxDate" as rx_date,

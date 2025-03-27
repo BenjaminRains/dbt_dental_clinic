@@ -8,13 +8,13 @@ models:
       to standardize naming conventions and filter to records from statements sent in 2023 or later.
     
     columns:
-      - name: statement_prod_num
+      - name: statement_prod_id
         description: Unique identifier for each statement product record
         tests:
           - unique
           - not_null
       
-      - name: statement_num
+      - name: statement_id
         description: Foreign key to the statement table
         tests:
           - not_null
@@ -22,10 +22,10 @@ models:
       - name: fkey
         description: Foreign key reference (depends on product type)
       
-      - name: doc_num
+      - name: doc_id
         description: Reference to document number, if applicable
       
-      - name: late_charge_adj_num
+      - name: late_charge_adj_id
         description: Reference to late charge adjustment number, if applicable
       
       - name: prod_type

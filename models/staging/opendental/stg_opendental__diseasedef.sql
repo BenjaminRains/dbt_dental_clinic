@@ -8,7 +8,7 @@ renamed as (
 
     select
         -- Primary Key
-        "DiseaseDefNum" as disease_def_num,
+        "DiseaseDefNum" as disease_def_id,
         
         -- Attributes
         "DiseaseName" as disease_name,

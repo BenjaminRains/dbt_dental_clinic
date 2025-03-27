@@ -5,7 +5,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "PharmacyNum" as pharmacy_num,
+        "PharmacyNum" as pharmacy_id,
         
         -- Identifiers
         "PharmID" as pharm_id,

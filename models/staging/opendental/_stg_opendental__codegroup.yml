@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__codegroup
     description: Staging model for OpenDental code groups. Contains groupings of dental procedure codes with their attributes and display settings.
     columns:
-      - name: codegroup_num
+      - name: codegroup_id
         description: Primary key for the code group table
         tests:
           - unique

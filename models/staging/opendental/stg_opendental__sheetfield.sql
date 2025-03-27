@@ -1,6 +1,6 @@
 {{ config(
     materialized = 'incremental',
-    unique_key = 'sheet_field_num'
+    unique_key = 'sheet_field_id'
 ) }}
 
 with source as (
@@ -17,11 +17,11 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "SheetFieldNum" as sheet_field_num,
+        "SheetFieldNum" as sheet_field_id,
         
         -- Foreign Keys
-        "SheetNum" as sheet_num,
-        "SheetFieldDefNum" as sheet_field_def_num,
+        "SheetNum" as sheet_id,
+        "SheetFieldDefNum" as sheet_field_def_id,
         
         -- Regular Fields
         "FieldType" as field_type,

@@ -5,7 +5,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "RxDefNum" as rx_def_num,
+        "RxDefNum" as rx_def_id,
         
         -- Attributes
         "Drug" as drug,

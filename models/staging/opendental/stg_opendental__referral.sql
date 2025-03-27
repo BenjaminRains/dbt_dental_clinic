@@ -7,7 +7,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "ReferralNum" as referral_num,
+        "ReferralNum" as referral_id,
         
         -- Names and Identifiers
         "LName" as last_name,
@@ -42,13 +42,13 @@ renamed as (
         "DisplayNote" as display_note,
         "IsHidden" as is_hidden,
         "NotPerson" as not_person,
-        "PatNum" as patient_num,
+        "PatNum" as patient_id,
         "Slip" as slip,
         
         -- Metadata
         "DateTStamp" as date_timestamp
     
-    from source
+    from Source
 )
 
 select * from renamed

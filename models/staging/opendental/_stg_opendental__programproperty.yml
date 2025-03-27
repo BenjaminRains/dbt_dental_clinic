@@ -4,18 +4,18 @@ models:
   - name: stg_opendental__programproperty
     description: Staging model for program properties from OpenDental. Contains configuration and property settings for various programs with associated clinic and security information.
     columns:
-      - name: program_property_num
+      - name: program_property_id
         description: Primary key of the program property record
         tests:
           - unique
           - not_null
 
-      - name: program_num
+      - name: program_id
         description: Foreign key to the program record
         tests:
           - not_null
 
-      - name: clinic_num
+      - name: clinic_id
         description: Foreign key to the clinic record
         tests:
           - not_null

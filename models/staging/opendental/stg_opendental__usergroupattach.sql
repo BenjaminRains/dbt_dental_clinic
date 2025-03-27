@@ -5,11 +5,11 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "UserGroupAttachNum" as user_group_attach_num,
+        "UserGroupAttachNum" as user_group_attach_id,
         
         -- Foreign Keys
-        "UserNum" as user_num,
-        "UserGroupNum" as user_group_num,
+        "UserNum" as user_id,
+        "UserGroupNum" as user_group_id,
         
         -- Metadata
         {{ current_timestamp() }} as _loaded_at

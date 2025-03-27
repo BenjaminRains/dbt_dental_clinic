@@ -4,14 +4,14 @@ models:
   - name: stg_opendental__insbluebooklog
     description: Staging model for insurance bluebook log entries. Contains historical tracking of allowed fee changes for claim procedures.
     columns:
-      - name: insbluebooklog_num
+      - name: insbluebooklog_id
         description: Primary key for the insurance bluebook log entry
         tests:
           - unique
           - not_null
 
       # Foreign Key Relationships
-      - name: claimprocedure_num
+      - name: claimprocedure_id
         description: >
           Foreign key to claim procedures table. Note that this foreign key relationship is not
           enforced for UCR Fee records and Allowed fee records, particularly those created in

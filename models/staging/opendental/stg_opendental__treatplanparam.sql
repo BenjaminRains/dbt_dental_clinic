@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='treatplan_param_num'
+    unique_key='treatplan_param_id'
 ) }}
 
 with source as (
@@ -16,11 +16,11 @@ with source as (
 renamed as (
     select
         -- Primary key
-        "TreatPlanParamNum" as treatplan_param_num,
+        "TreatPlanParamNum" as treatplan_param_id,
         
         -- Foreign keys
         "PatNum" as patient_id,
-        "TreatPlanNum" as treatplan_num,
+        "TreatPlanNum" as treatplan_id,
         
         -- Display parameters
         "ShowDiscount" as show_discount,

@@ -4,26 +4,26 @@ models:
   - name: stg_opendental__sheet
     description: Staging model for OpenDental sheets. Sheets are forms or documents that can be associated with patients, containing various types of clinical information.
     columns:
-      - name: sheet_num
+      - name: sheet_id
         description: Primary key of the sheet table
         tests:
           - unique
           - not_null
 
       # Foreign Keys
-      - name: patient_num
+      - name: patient_id
         description: Foreign key to the patient table. References patient_id in stg_opendental__patient
         tests:
           - not_null:
               severity: warn
       
-      - name: sheet_def_num
+      - name: sheet_def_id
         description: Foreign key to the definition table which contains the template information. References definition_id in stg_opendental__definition
       
-      - name: doc_num
+      - name: doc_id
         description: Foreign key to the document table. References document_id in stg_opendental__document
       
-      - name: clinic_num
+      - name: clinic_id
         description: Legacy clinic identifier (not actively used - single clinic system)
       
       - name: web_form_sheet_id
@@ -35,11 +35,11 @@ models:
     meta:
       relationships:
         - relationship: many_to_one
-          field: patient_num
+          field: patient_id
           related_to: stg_opendental__patient.patient_id
         - relationship: many_to_one
-          field: sheet_def_num
+          field: sheet_def_id
           related_to: stg_opendental__definition.definition_id
         - relationship: many_to_one
-          field: doc_num
+          field: doc_id
           related_to: stg_opendental__document.document_id

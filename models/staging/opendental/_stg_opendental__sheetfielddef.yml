@@ -4,15 +4,15 @@ models:
   - name: stg_opendental__sheetfielddef
     description: Staging model for OpenDental sheet field definitions. These definitions serve as templates for sheet fields, defining their default properties and behaviors.
     columns:
-      - name: sheet_field_def_num
+      - name: sheet_field_def_id
         description: Primary key of the sheet field definition table
         tests:
           - unique
           - not_null
 
       # Foreign Keys
-      - name: sheet_def_num
-        description: Foreign key to the sheet definition table. References sheet_def_num in stg_opendental__sheetdef
+      - name: sheet_def_id
+        description: Foreign key to the sheet definition table. References sheet_def_id in stg_opendental__sheetdef
         tests:
           - not_null
 
@@ -101,8 +101,8 @@ models:
     meta:
       relationships:
         - relationship: many_to_one
-          field: sheet_def_num
-          related_to: stg_opendental__sheetdef.sheet_def_num
+          field: sheet_def_id
+          related_to: stg_opendental__sheetdef.sheet_def_id
         - relationship: one_to_many
-          field: sheet_field_def_num
-          related_to: stg_opendental__sheetfield.sheet_field_def_num
+          field: sheet_field_def_id
+          related_to: stg_opendental__sheetfield.sheet_field_def_id

@@ -11,7 +11,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "CodeGroupNum" as codegroup_num,
+        "CodeGroupNum" as codegroup_id,
         
         -- Attributes
         "GroupName" as group_name,
@@ -24,7 +24,7 @@ renamed as (
         -- Metadata
         current_timestamp as _loaded_at
     
-    from source
+    from Source
 )
 
 select * from renamed

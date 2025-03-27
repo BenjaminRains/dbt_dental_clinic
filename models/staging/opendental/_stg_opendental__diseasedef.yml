@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__diseasedef
     description: Staging model for OpenDental disease definitions. Contains information about various diseases including their ICD9, ICD10, and SNOMED codes.
     columns:
-      - name: disease_def_num
+      - name: disease_def_id
         description: Primary key of the disease definition table
         tests:
           - unique
@@ -38,4 +38,4 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
-            - disease_def_num
+            - disease_def_id

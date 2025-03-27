@@ -11,11 +11,11 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "ProgramPropertyNum" as program_property_num,
+        "ProgramPropertyNum" as program_property_id,
         
         -- Foreign Keys
-        "ProgramNum" as program_num,
-        "ClinicNum" as clinic_num,
+        "ProgramNum" as program_id,
+        "ClinicNum" as clinic_id,
         
         -- Regular columns
         "PropertyDesc" as property_desc,

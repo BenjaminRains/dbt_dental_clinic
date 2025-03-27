@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__rxdef
     description: Staging model for prescription definitions from OpenDental
     columns:
-      - name: rx_def_num
+      - name: rx_def_id
         description: Primary key for the prescription definition
         tests:
           - unique

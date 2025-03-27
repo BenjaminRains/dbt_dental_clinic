@@ -4,7 +4,7 @@ with source as (
 
 renamed as (
     select
-        "RxNormNum" as rxnorm_num,
+        "RxNormNum" as rxnorm_id,
         "RxCui" as rx_cui,
         "MmslCode" as mmsl_code,
         "Description" as description

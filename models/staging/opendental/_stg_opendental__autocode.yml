@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__autocode
     description: Staging model for OpenDental autocodes. This is a small lookup table (~37 records) containing dental procedure autocodes and their attributes.
     columns:
-      - name: autocode_num
+      - name: autocode_id
         description: Primary key for the autocode table
         tests:
           - unique

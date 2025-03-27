@@ -6,20 +6,20 @@ models:
     config:
       tags: ['staging', 'opendental', 'incremental']
     columns:
-      - name: sheet_field_num
+      - name: sheet_field_id
         description: Primary key of the sheet field table
         tests:
           - unique
           - not_null
 
       # Foreign Keys
-      - name: sheet_num
-        description: Foreign key to the sheet table. References sheet_num in stg_opendental__sheet
+      - name: sheet_id
+        description: Foreign key to the sheet table. References sheet_id in stg_opendental__sheet
         tests:
           - not_null
       
-      - name: sheet_field_def_num
-        description: Foreign key to the sheet field definition table. References sheet_field_def_num in stg_opendental__sheetfielddef
+      - name: sheet_field_def_id
+        description: Foreign key to the sheet field definition table. References sheet_field_def_id in stg_opendental__sheetfielddef
         tests:
           - not_null
 
@@ -102,8 +102,8 @@ models:
     meta:
       relationships:
         - relationship: many_to_one
-          field: sheet_num
-          related_to: stg_opendental__sheet.sheet_num
+          field: sheet_id
+          related_to: stg_opendental__sheet.sheet_id
         - relationship: many_to_one
-          field: sheet_field_def_num
-          related_to: stg_opendental__sheetfielddef.sheet_field_def_num
+          field: sheet_field_def_id
+          related_to: stg_opendental__sheetfielddef.sheet_field_def_id

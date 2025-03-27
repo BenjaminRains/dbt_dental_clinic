@@ -5,7 +5,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "SheetDefNum" as sheet_def_num,
+        "SheetDefNum" as sheet_def_id,
         
         -- Attributes
         "Description" as description,

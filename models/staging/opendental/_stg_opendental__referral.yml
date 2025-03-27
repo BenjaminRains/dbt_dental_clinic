@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__referral
     description: Staging model for referrals from OpenDental
     columns:
-      - name: referral_num
+      - name: referral_id
         description: Primary key of the referral record
         tests:
           - unique
@@ -82,7 +82,7 @@ models:
       - name: not_person
         description: Flag indicating if the referral is not an individual person
 
-      - name: patient_num
+      - name: patient_id
         description: >
           Foreign key to patient table. Zero (0) indicates an external referral source 
           (other practices, specialists, or non-patient referral sources).
@@ -90,11 +90,11 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
-              where: "patient_num != 0"  # Exclude external referral sources
+              where: "patient_id != 0"
               severity: warn
               config:
                 description: >
-                  22 referrals have patient_num = 0, representing external referral sources:
+                  22 referrals have patient_id = 0, representing external referral sources:
                   - Specialist offices (Oral Surgery, Orthodontics, Endodontics)
                   - Other dental practices
                   - Non-medical sources (Google Search, Phone Book)
@@ -105,21 +105,21 @@ models:
       - name: date_timestamp
         description: Timestamp of when the record was last updated
 
-      - name: referral_num
+      - name: referral_id
         description: >
           Foreign key to referral table
           Note: Contains some orphaned references
         tests:
           - relationships:
               to: ref('stg_opendental__referral')
-              field: referral_num
+              field: referral_id
               severity: warn
               config:
                 description: >
                   497 orphaned referral attachments found.
                   Top issues:
-                  - referral_num 25 (220 attachments)
-                  - referral_num 36 (90 attachments)
-                  - referral_num 27 (72 attachments)
-                  - referral_num 34 (38 attachments)
+                  - referral_id 25 (220 attachments)
+                  - referral_id 36 (90 attachments)
+                  - referral_id 27 (72 attachments)
+                  - referral_id 34 (38 attachments)
                   Plus ~30 other referral numbers with fewer attachments
