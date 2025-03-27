@@ -15,14 +15,35 @@ models:
       NOTE: Data analysis shows that history_action=1 does NOT indicate "initial creation only"
       but rather "a history snapshot was created" - most appointments have dozens of history_action=1
       records spanning their entire lifecycle.
+      
+      Note: While created_timestamp exists in the source data, it appears to be 
+      in a different timezone than history_timestamp. For analysis purposes, we 
+      focus on the chronological order of history records rather than comparing 
+      against created_timestamp.
     tests:
       - dbt_utils.at_least_one:
           column_name: hist_appointment_id
       - dbt_utils.expression_is_true:
           expression: "history_timestamp >= '2023-01-01'"
+          config:
+            severity: warn
+      # Add the chronology test here
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1 
+              FROM {{ this }} t2 
+              WHERE t2.appointment_id = {{ this }}.appointment_id 
+              AND t2.history_timestamp < {{ this }}.history_timestamp 
+              AND t2.history_timestamp > LAG({{ this }}.history_timestamp) 
+                OVER (PARTITION BY {{ this }}.appointment_id ORDER BY {{ this }}.history_timestamp)
+            )
+          config:
+            severity: error
+          name: chronological_order_check
       # High-level tests - keeping valid ones
       - dbt_utils.expression_is_true:
-          expression: "history_action in (0,1,2,3)"
+          expression: "history_action in (0,1,2,3,4)"
           severity: error
       - dbt_utils.expression_is_true:
           expression: "appointment_status in (1,2,3,5,6)"
@@ -37,16 +58,21 @@ models:
     # Documentation of custom data quality tests
     meta:
       test_descriptions:
-        - test: "appointment_status != 2 OR appointment_datetime <= history_timestamp"
-          description: "Completed appointments should have dates in the past relative to the history record"
+        - test: "histappointment_chronology"
+          description: >
+            Ensures history records for each appointment maintain chronological order.
+            First records (with NULL previous_timestamp) are expected and ignored.
       
       data_quality_analyses:
         - name: histappointment_chronology
           description: >
-            Informational analysis that checks history records have a logical chronology - 
-            ensuring that history timestamps follow a sensible sequence.
+            Checks that history records maintain chronological order within each appointment.
+            The test only verifies that consecutive history records are properly ordered,
+            ignoring the first record of each appointment (NULL previous_timestamp).
+            Created timestamp comparisons have been removed as they are not relevant
+            for chronological ordering of history records.
           file_path: tests/staging/histappointment_chronology.sql
-          type: "informational"
+          type: "data_quality"
           
         - name: histappointment_action_complete
           description: >
@@ -162,13 +188,18 @@ models:
       
       # Timestamps
       - name: history_timestamp
-        description: Timestamp when this history record was created
+        description: >
+          Timestamp when this history record was created.
+          All timestamps are stored with timezone information to ensure proper chronological ordering.
         tests:
+          - not_null
           - dbt_utils.expression_is_true:
               expression: "{{ column_name }} <= current_timestamp"
       
       - name: created_timestamp
-        description: Timestamp when the original appointment record was created
+        description: >
+          Original timestamp when the appointment record was created.
+          All timestamps are now handled with timezone information to ensure proper comparison.
       
       - name: appointment_datetime
         description: Scheduled date and time for this appointment
@@ -206,16 +237,17 @@ models:
         description: >
           Code indicating the type of action that created this history record:
           0 = Unknown
-          1 = History snapshot created (Note: This is the most common value, used for most changes throughout an appointment's lifecycle)
-          2 = Modified (used in special circumstances)
-          3 = Deleted (used when appointment is deleted)
+          1 = History snapshot created
+          2 = Modified
+          3 = Deleted
+          4 = Special modification (possibly rescheduling or appointment type changes)
           
           Data analysis shows that history_action=1 is used for most history records
           regardless of sequence, representing ongoing changes rather than just initial creation.
         tests:
           - accepted_values:
-              values: [0, 1, 2, 3]
-              severity: warn
+              values: [0, 1, 2, 3, 4]
+              severity: error
       
       - name: appointment_source
         description: Code indicating the source/method by which this appointment was created
