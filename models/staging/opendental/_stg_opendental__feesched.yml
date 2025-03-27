@@ -50,7 +50,7 @@ models:
           - not_null
           - relationships:
               to: source('opendental', 'userod')
-              field: UserNum
+              field: '"UserNum"'
 
       - name: created_at_date
         description: Date when the fee schedule was created
