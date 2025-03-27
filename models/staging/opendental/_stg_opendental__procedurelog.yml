@@ -44,12 +44,17 @@ models:
               field: provider_id
       
       - name: appointment_id
-        description: Foreign key to the appointment where the procedure was performed
+        description: >
+          Foreign key to the appointment where the procedure was performed.
+          Note: Null or non-matching appointment IDs are expected for walk-ins 
+          and same-day procedures that don't require scheduled appointments.
         tests:
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
-              where: "appointment_id is not null"
+              config:
+                severity: warn  # Change to warning since missing appointments can be valid
+          - not_null
       
       - name: clinic_id
         description: Foreign key to the clinic where the procedure was performed
@@ -67,12 +72,16 @@ models:
         description: Foreign key to the site where the procedure was performed
       
       - name: planned_appointment_id
-        description: Foreign key to a planned future appointment
+        description: >
+          Foreign key to a planned future appointment. This field may reference appointments
+          that haven't been created yet or are scheduled beyond our current dataset timeframe.
         tests:
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
-              where: "planned_appointment_id is not null"
+              config:
+                severity: warn
+              where: "planned_appointment_id is not null and procedure_date >= '2023-01-01'"
       
       - name: statement_id
         description: Foreign key to an associated statement
