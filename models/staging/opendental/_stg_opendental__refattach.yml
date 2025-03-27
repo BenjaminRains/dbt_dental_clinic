@@ -26,18 +26,18 @@ models:
               field: patient_num
 
       - name: procedure_num
-        description: Foreign key to the procedure table
+        description: Foreign key to the procedurelog table
         tests:
           - relationships:
-              to: ref('stg_opendental__procedure')
-              field: procedure_num
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
 
       - name: provider_num
         description: Foreign key to the provider table
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
-              field: provider_num
+              field: provider_id
 
       # Regular columns
       - name: item_order
