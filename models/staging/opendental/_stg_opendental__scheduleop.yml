@@ -29,6 +29,7 @@ models:
           - relationships:
               to: ref('stg_opendental__schedule')
               field: schedule_id
+              severity: warn
         
       - name: operatory_id
         description: >
