@@ -16,31 +16,14 @@ with source as (
     {% endif %}
 ),
 
-schedule_dates as (
-    select
-        "ScheduleNum",
-        "SchedDate" as schedule_date
-    from {{ source('opendental', 'schedule') }}
-),
-
 renamed as (
     select
         -- Primary key
-        s."ScheduleOpNum" as schedule_op_id,
-        
+        "ScheduleOpNum" as schedule_op_id,
         -- Foreign keys
-        s."ScheduleNum" as schedule_id,
-        s."OperatoryNum" as operatory_id,
-        
-        -- Join to get the date
-        sd.schedule_date
-    from source s
-    left join schedule_dates sd on s."ScheduleNum" = sd."ScheduleNum"
+        "ScheduleNum" as schedule_id,
+        "OperatoryNum" as operatory_id
+    from source
 )
 
-select
-    schedule_op_id,
-    schedule_id,
-    operatory_id
-from renamed
-where schedule_date >= '2023-01-01'
+select * from renamed
