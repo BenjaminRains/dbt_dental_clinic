@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: stg_opendental__employee
+    description: Staging model for employee data from OpenDental
+    columns:
+      - name: employee_id
+        description: Primary key - Unique identifier for each employee
+        tests:
+          - unique
+          - not_null
+      
+      - name: last_name
+        description: Employee's last name
+      
+      - name: first_name
+        description: Employee's first name
+      
+      - name: middle_initial
+        description: Employee's middle initial
+      
+      - name: is_hidden
+        description: Flag indicating if the employee record is hidden from view
+      
+      - name: clock_status
+        description: Current clock status of the employee (e.g., 'in', 'out', etc.)
+      
+      - name: phone_extension
+        description: Employee's office phone extension
+      
+      - name: payroll_id
+        description: Employee's payroll identifier
+      
+      - name: wireless_phone
+        description: Employee's mobile/wireless phone number
+      
+      - name: work_email
+        description: Employee's work email address
+      
+      - name: personal_email
+        description: Employee's personal email address
+      
+      - name: is_furloughed
+        description: Flag indicating if the employee is currently furloughed
+      
+      - name: is_working_home
+        description: Flag indicating if the employee is working from home
+      
+      - name: reports_to_employee_id
+        description: Foreign key reference to the employee's manager/supervisor
+        tests:
+          - relationships:
+              to: ref('stg_opendental__employee')
+              field: employee_id
+              severity: warn
