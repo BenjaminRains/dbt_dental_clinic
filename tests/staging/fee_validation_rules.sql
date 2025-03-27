@@ -108,3 +108,16 @@ join (
     having count(*) > 5
 ) p on f.procedure_code_id = p.procedure_code_id
 where abs(f.fee_amount - p.avg_amount) > 2 * p.fee_stddev
+
+UNION ALL
+
+-- Add test for orphaned procedure codes
+select 
+    fee_id,
+    created_at,
+    updated_at,
+    'Orphaned Procedure Code' as validation_check
+from {{ ref('stg_opendental__fee') }} f
+left join {{ ref('stg_opendental__procedurecode') }} p 
+    on f.procedure_code_id = p.procedure_code_id
+where p.procedure_code_id is null
