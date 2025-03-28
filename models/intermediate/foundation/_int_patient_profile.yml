@@ -1,0 +1,143 @@
+version: 2
+
+models:
+  - name: int_patient_profile
+    description: >
+      Foundation layer model combining core patient information from various staging models
+      to create a comprehensive patient profile. This model serves as the primary source
+      of truth for patient-related information.
+    
+    columns:
+      - name: patient_id
+        description: Unique identifier for each patient
+        tests:
+          - unique
+          - not_null
+
+      # Demographics
+      - name: preferred_name
+        description: Patient's preferred name
+      - name: middle_initial
+        description: Patient's middle initial
+      - name: gender
+        description: Patient's gender
+      - name: language
+        description: Patient's preferred language
+      - name: birthdate
+        description: Patient's date of birth
+      - name: age
+        description: Patient's calculated age
+
+      # Status and Classification
+      - name: patient_status
+        description: >
+          Current status of the patient
+          - 2 = Active
+          - Other statuses indicate various inactive states
+        tests:
+          - not_null
+      - name: position_code
+        description: Patient position classification
+      - name: student_status
+        description: Patient's student status if applicable
+
+      # Relationships and IDs
+      - name: guarantor_id
+        description: ID of the guarantor responsible for patient's account
+      - name: primary_provider_id
+        description: ID of the patient's primary provider
+      - name: secondary_provider_id
+        description: ID of the patient's secondary provider
+      - name: clinic_id
+        description: ID of the patient's primary clinic
+      - name: family_id
+        description: ID linking to related family members
+      - name: family_link_type
+        description: Type of family relationship
+      - name: family_linked_at
+        description: Timestamp when family relationship was established
+
+      # Contact Preferences
+      - name: preferred_confirmation_method
+        description: Patient's preferred method for appointment confirmations
+      - name: preferred_contact_method
+        description: Patient's preferred method of contact
+      - name: text_messaging_consent
+        description: Whether patient has consented to text messaging
+
+      # Financial Information
+      - name: estimated_balance
+        description: Estimated current balance
+        tests:
+          - not_null
+          - has_non_zero_balance:
+              severity: warn
+      - name: total_balance
+        description: Total balance on account
+        tests:
+          - not_null
+          - has_non_zero_balance:
+              severity: warn
+      - name: has_insurance_flag
+        description: Indicates if patient has insurance
+
+      # Emergency Contact and Medical
+      - name: emergency_contact_name
+        description: Name of emergency contact (ICE)
+      - name: emergency_contact_phone
+        description: Phone number of emergency contact
+      - name: medical_notes
+        description: General medical notes
+      - name: treatment_notes
+        description: Notes related to treatment
+      - name: pronoun
+        description: Patient's preferred pronouns
+      - name: consent
+        description: Patient's recorded consents
+
+      # Important Dates
+      - name: first_visit_date
+        description: Date of patient's first visit
+
+      # Metadata
+      - name: patient_created_at
+        description: Timestamp when patient record was created
+      - name: patient_updated_at
+        description: >
+          Timestamp when patient record was last updated.
+          Warning: If this is older than 2 years for active patients (status=2),
+          the patient may be effectively inactive despite their active status.
+        tests:
+          - not_null
+      - name: notes_created_at
+        description: Timestamp when patient notes were created
+      - name: notes_updated_at
+        description: Timestamp when patient notes were last updated
+      - name: model_created_at
+        description: Timestamp when this model record was created
+      - name: model_updated_at
+        description: Timestamp when this model record was last updated
+
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: ref('stg_opendental__patient')
+      # Test for inactive patients
+      - dbt_utils.expression_is_true:
+          expression: "NOT(patient_updated_at < CURRENT_DATE - INTERVAL '2 years' AND patient_status = 2)"
+          severity: warn
+          where: "patient_status = 2"  # Only check active patients
+
+    config:
+      tags:
+        - 'foundation'
+        - 'patient'
+        - 'daily'
+
+    meta:
+      owner: 'data_team'
+      contains_phi: true
+      refresh_frequency: 'daily'
+      upstream_sources:
+        - 'stg_opendental__patient'
+        - 'stg_opendental__patientlink'
+        - 'stg_opendental__patientnote'
