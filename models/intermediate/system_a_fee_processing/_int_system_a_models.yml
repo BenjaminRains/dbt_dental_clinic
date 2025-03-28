@@ -83,6 +83,13 @@ models:
               min_value: 0
               max_value: 10000
               row_condition: "procedure_status = 2"  # Only test completed procedures
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              row_condition: "is_hygiene_flag = 1"
+              config:
+                severity: warn
+                name: warn_high_hygiene_fees
 
       - name: tooth_number
         description: Tooth number for the procedure (dental notation)
@@ -193,6 +200,11 @@ models:
         tests:
           - accepted_values:
               values: [true, false]
+          - dbt_utils.expression_is_true:
+              expression: "fee_matches_standard = true or procedure_status != 2"
+              config:
+                severity: warn
+                name: warn_completed_procedure_fee_mismatch
 
       - name: procedure_notes
         description: Aggregated clinical notes associated with the procedure
@@ -237,6 +249,41 @@ models:
       - dbt_utils.expression_is_true:
           expression: "procedure_date >= '2023-01-01' or procedure_status = 1"  # 1 = Treatment Plan
           name: historical_procedures_must_be_recent_or_planned
+
+      # Add new model-level tests
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_code is null)"
+          severity: error
+          name: completed_procedures_must_have_codes
+
+      - dbt_utils.expression_is_true:
+          expression: "abs(procedure_fee - standard_fee) <= 100 or not has_standard_fee"
+          severity: warn
+          name: warn_large_fee_differences
+
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and fee_matches_standard = false and abs(procedure_fee - standard_fee) > 300)"
+          severity: warn
+          name: warn_extreme_fee_mismatches
+
+      - dbt_utils.expression_is_true:
+          expression: "not (is_hygiene_flag = 1 and procedure_fee > 500)"
+          severity: warn
+          name: warn_high_hygiene_procedure_fees
+
+      - dbt_expectations.expect_column_pair_values_to_be_in_set:
+          column_a: procedure_status_desc
+          column_b: has_standard_fee
+          value_pairs:
+            - ["Complete", true]
+            - ["Treatment Plan", true]
+          severity: warn
+          name: warn_key_procedures_missing_standard_fees
+
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_notes is null)"
+          severity: warn
+          name: warn_completed_procedures_without_notes
 
   - name: int_adjustments
     description: >
