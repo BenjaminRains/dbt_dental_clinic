@@ -1,0 +1,404 @@
+version: 2
+
+models:
+  - name: int_procedure_complete
+    description: >
+      Comprehensive procedure model that combines clinical procedure data with fee schedules
+      and validation flags. Part of System A: Fee Processing & Verification workflow.
+      
+      Key metrics:
+      - Approximately 88,000 procedures from staging
+      - Fee validation statuses track discrepancies between standard and applied fees
+      - Includes procedure notes and signature tracking
+      - Supports fee verification workflow
+      - Includes fee statistics (min, max, avg) per procedure code
+    
+    config:
+      materialized: incremental
+      unique_key: procedure_id
+    
+    columns:
+      - name: procedure_id
+        description: Primary key from procedurelog
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+
+      - name: patient_id
+        description: Foreign key to patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: provider_id
+        description: Provider who performed the procedure
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: clinic_id
+        description: Clinic where procedure was performed
+        tests:
+          - not_null
+
+      - name: procedure_code_id
+        description: Foreign key to procedure code
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: procedure_code_id
+
+      - name: procedure_date
+        description: Date when procedure was performed or planned
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"  # Allows for future planned procedures
+
+      - name: procedure_status
+        description: Raw status code from source system
+        tests:
+          - not_null
+
+      - name: procedure_status_desc
+        description: Human-readable procedure status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Treatment Plan', 'Complete', 'Existing Current', 'Existing Other', 
+                      'Referred', 'Deleted', 'Condition', 'EHR Planned', 'Draft']
+
+      - name: procedure_fee
+        description: Fee amount from procedurelog
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "procedure_status = 2"  # Only test completed procedures
+
+      - name: tooth_number
+        description: Tooth number for the procedure (dental notation)
+
+      - name: surface
+        description: Tooth surface(s) involved in the procedure
+
+      - name: procedure_code
+        description: ADA procedure code from procedure codes table
+        tests:
+          - not_null
+
+      - name: procedure_description
+        description: Detailed description of the procedure
+        tests:
+          - not_null
+
+      - name: abbreviated_description
+        description: Short description of the procedure
+
+      - name: is_hygiene_flag
+        description: Flag indicating if this is a hygiene procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: treatment_area
+        description: Area of treatment
+
+      - name: is_prosthetic_flag
+        description: Flag indicating if this is a prosthetic procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: is_multi_visit_flag
+        description: Flag indicating if procedure requires multiple visits
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: standard_fee_id
+        description: ID of the standard fee record used
+        tests:
+          - relationships:
+              to: ref('stg_opendental__fee')
+              field: fee_id
+              severity: warn  # Some procedures might not have standard fees
+
+      - name: fee_schedule_id
+        description: ID of the fee schedule used
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+              severity: warn  # Some procedures might not have fee schedules
+
+      - name: standard_fee
+        description: Standard fee amount from fee schedule
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "has_standard_fee = true"
+
+      - name: fee_schedule_description
+        description: Name/description of the fee schedule
+
+      - name: fee_schedule_type_id
+        description: Type identifier for the fee schedule
+
+      - name: available_fee_options
+        description: Count of different fee options available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+
+      - name: min_available_fee
+        description: Minimum fee amount available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: max_available_fee
+        description: Maximum fee amount available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: avg_fee_amount
+        description: Average fee amount for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: has_standard_fee
+        description: Flag indicating if a standard fee was found for this procedure
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: fee_matches_standard
+        description: Flag indicating if the procedure fee matches the standard fee
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: procedure_notes
+        description: Aggregated clinical notes associated with the procedure
+
+      - name: note_count
+        description: Number of notes attached to this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+
+      - name: last_note_timestamp
+        description: Timestamp of the most recent note
+
+      - name: date_timestamp
+        description: Last update timestamp from the source system
+
+      - name: _airbyte_loaded_at
+        description: Timestamp when record was loaded by Airbyte
+
+      - name: _loaded_at
+        description: Timestamp when record was processed by the int model
+        tests:
+          - not_null
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 80000
+          max_value: 100000  # Adjusted based on expected volume
+
+      # Custom composite tests
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_fee = 0)"
+          severity: warn
+          name: warn_completed_procedure_zero_fee
+
+      - dbt_utils.expression_is_true:
+          expression: "not (has_standard_fee = false and procedure_status = 2)"
+          severity: warn
+          name: warn_completed_procedure_no_standard_fee
+
+      - dbt_utils.expression_is_true:
+          expression: "procedure_date >= '2023-01-01' or procedure_status = 1"  # 1 = Treatment Plan
+          name: historical_procedures_must_be_recent_or_planned
+
+  - name: int_adjustments
+    description: >
+      Comprehensive model that combines adjustment data with procedure information to track
+      and analyze fee adjustments. Part of System A: Fee Processing & Verification workflow.
+      
+      Key features:
+      - Links adjustments to procedures and their standard fees
+      - Calculates adjusted fees and adjustment impacts
+      - Tracks various adjustment types (employee, military, courtesy, etc.)
+      - Supports fee adjustment analysis and reporting
+    
+    columns:
+      - name: adjustment_id
+        description: Primary key from adjustment table
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__adjustment')
+              field: adjustment_id
+
+      - name: patient_id
+        description: Foreign key to patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: procedure_id
+        description: Foreign key to procedure
+        tests:
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+
+      - name: provider_id
+        description: Provider who authorized the adjustment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: clinic_id
+        description: Clinic where adjustment was made
+        tests:
+          - not_null
+
+      - name: adjustment_amount
+        description: Amount of the adjustment (can be positive or negative)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+
+      - name: adjustment_date
+        description: Date when adjustment was applied
+        tests:
+          - not_null
+
+      - name: procedure_date
+        description: Date of the associated procedure
+        tests:
+          - not_null
+
+      - name: adjustment_category
+        description: Category of the adjustment
+
+      - name: adjustment_size
+        description: Size classification of the adjustment
+
+      - name: is_procedure_adjustment
+        description: Flag indicating if adjustment is tied to a specific procedure
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_retroactive_adjustment
+        description: Flag indicating if adjustment was applied retroactively
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_provider_discretion
+        description: Flag indicating if adjustment was at provider's discretion
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_employee_discount
+        description: Flag indicating if adjustment is an employee discount
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_military_discount
+        description: Flag indicating if adjustment is a military discount
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_courtesy_adjustment
+        description: Flag indicating if adjustment is a courtesy adjustment
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: procedure_code
+        description: ADA procedure code from linked procedure
+        tests:
+          - not_null
+
+      - name: procedure_description
+        description: Description of the linked procedure
+
+      - name: procedure_fee
+        description: Original fee amount before adjustment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: fee_schedule_id
+        description: ID of the fee schedule used
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+              severity: warn
+
+      - name: standard_fee
+        description: Standard fee amount from fee schedule
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: adjusted_fee
+        description: Final fee amount after adjustment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: adjustment_impact
+        description: Classification of adjustment impact (major/moderate/minor)
+        tests:
+          - accepted_values:
+              values: ['major', 'moderate', 'minor']
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 50000  # Adjust based on expected volume
+
+      - dbt_utils.expression_is_true:
+          expression: "adjusted_fee >= 0"
+          severity: error
+          name: no_negative_adjusted_fees
+
+      - dbt_utils.expression_is_true:
+          expression: "adjustment_date >= procedure_date"
+          severity: warn
+          name: warn_adjustment_before_procedure
