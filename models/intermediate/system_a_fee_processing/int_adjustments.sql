@@ -1,6 +1,16 @@
 -- int_procedure_adjustments.sql
-WITH ProcedureAdjustments AS (
+WITH AdjustmentDefinitions AS (
+    SELECT 
+        definition_id,
+        item_name,
+        item_value,
+        category_id
+    FROM {{ ref('stg_opendental__definition') }}
+),
+
+ProcedureAdjustments AS (
     SELECT
+        -- Adjustment fields
         a.adjustment_id,
         a.patient_id,
         a.procedure_id,
@@ -17,6 +27,11 @@ WITH ProcedureAdjustments AS (
         a.is_employee_discount,
         a.is_military_discount,
         a.is_courtesy_adjustment,
+        
+        -- Definition linkage
+        def.item_name as adjustment_type_name,
+        def.item_value as adjustment_type_value,
+        def.category_id as adjustment_category_type,
         
         -- Link to procedure data
         pc.procedure_code,
@@ -38,6 +53,8 @@ WITH ProcedureAdjustments AS (
     FROM {{ ref('stg_opendental__adjustment') }} a
     LEFT JOIN {{ ref('int_procedure_complete') }} pc
         ON a.procedure_id = pc.procedure_id
+    LEFT JOIN AdjustmentDefinitions def
+        ON a.adjustment_type_id = def.definition_id
 )
 
 SELECT * FROM ProcedureAdjustments
