@@ -11,15 +11,27 @@ renamed as (
         "LName" as last_name,
         "FName" as first_name,
         "MiddleI" as middle_initial,
-        "IsHidden"::boolean as is_hidden,
+        CASE 
+            WHEN "IsHidden" = 1 THEN true
+            WHEN "IsHidden" = 0 THEN false
+            ELSE null 
+        END as is_hidden,
         "ClockStatus" as clock_status,
         "PhoneExt" as phone_extension,
         "PayrollID" as payroll_id,
         "WirelessPhone" as wireless_phone,
         "EmailWork" as work_email,
         "EmailPersonal" as personal_email,
-        "IsFurloughed"::boolean as is_furloughed,
-        "IsWorkingHome"::boolean as is_working_home,
+        CASE 
+            WHEN "IsFurloughed" = 1 THEN true
+            WHEN "IsFurloughed" = 0 THEN false
+            ELSE null 
+        END as is_furloughed,
+        CASE 
+            WHEN "IsWorkingHome" = 1 THEN true
+            WHEN "IsWorkingHome" = 0 THEN false
+            ELSE null 
+        END as is_working_home,
         "ReportsTo" as reports_to_employee_id
     from source
 )
