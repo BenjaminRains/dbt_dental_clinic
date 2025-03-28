@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='proctp_id'
+    unique_key='proctp_num'
 ) }}
 
 with source as (
@@ -19,7 +19,7 @@ renamed as (
         -- Foreign keys
         "TreatPlanNum" as treatment_plan_id,
         "PatNum" as patient_id,
-        "ProcNumOrig" as procedure_num_orig,
+        "ProcNumOrig" as procedure_id_orig,
         "ProvNum" as provider_id,
         "ClinicNum" as clinic_id,
         "SecUserNumEntry" as user_num_entry,
