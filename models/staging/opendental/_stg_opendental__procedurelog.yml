@@ -2,6 +2,9 @@ version: 2
 
 models:
   - name: stg_opendental__procedurelog
+    config:
+      materialized: incremental
+      unique_key: ProcNum  -- Match source CamelCase name
     description: >
       Staging model for OpenDental procedure log data. Contains detailed information 
       about dental procedures performed on patients. This model is incremental and 
@@ -22,7 +25,7 @@ models:
     
     columns:
       - name: procedure_id
-        description: Unique identifier for the procedure
+        description: Unique identifier for the procedure (from ProcNum)
         tests:
           - unique
           - not_null
@@ -59,14 +62,14 @@ models:
       - name: clinic_id
         description: Foreign key to the clinic where the procedure was performed
       
-      - name: code_id
+      - name: procedure_code_id
         description: >
           Foreign key to the procedure code. 346 unique procedure codes are used.
           When compared to fee schedules, about 17.6% of procedure codes lack standard fee information.
         tests:
           - relationships:
               to: ref('stg_opendental__procedurecode')
-              field: code_id
+              field: procedure_code_id
       
       - name: site_id
         description: Foreign key to the site where the procedure was performed
