@@ -18,24 +18,37 @@ our database queries, reports, and data extraction tools.
 
 ## Source Files and Staging Models
 
-**Source System Convention**: The OpenDental postgre source database uses CamelCase for column names (e.g., "PatNum", "AptDateTime", "ClaimNum").
+**Source System Convention**: 
+- The OpenDental postgre source database uses CamelCase for column names (e.g., "PatNum", "AptDateTime", "ClaimNum")
+- All identifier/key columns in source data use the `Num` suffix (e.g., "PatNum", "ClaimNum", "ProcNum")
 
 **Source YAML Files**: 
 - Document the actual raw database column names in their original CamelCase format
 - Example: In `_sources/claims_sources.yml`, use "ClaimNum", "PatNum", "DateService"
+- Maintain the `Num` suffix for all identifier columns as they appear in the source
 
 **Staging Models**:
 - Transform raw CamelCase column names to snake_case for downstream use
+- Convert all identifier column suffixes from `_num` to `_id`
 - Example: In `stg_opendental__claim.sql`:
   ```sql
   select
-      "ClaimNum" as claim_id,
-      "PatNum" as patient_id,
+      "ClaimNum" as claim_id,        -- Transform from Num to _id
+      "PatNum" as patient_id,        -- Transform from Num to _id
+      "ProcNum" as procedure_id,     -- Transform from Num to _id
       "DateService" as service_date
+  ```
+- Note: When using incremental models, the `unique_key` config must reference the source column name:
+  ```sql
+  {{ config(
+      materialized='incremental',
+      unique_key='claim_num'  -- Use source column name (with _num)
+  ) }}
   ```
 
 **Staging Model YAML Files**:
 - Use snake_case column names that match the output of the staging models (not the source database)
+- Use `_id` suffix for all identifier columns (not `_num`)
 - Example: In `_stg_opendental__adjustment.yml`, use "adjustment_id", "patient_id", "procedure_id"
 - These document the transformed column names that downstream models will reference
 
@@ -181,6 +194,40 @@ full compliance
 
 In some special cases where direct SQL compatibility with external systems is required, these 
 conventions may be modified. Such exceptions should be documented in the code.
+
+## Data Type Conversions
+
+### Boolean Conversions
+
+**Source System Convention**: OpenDental often uses smallint (0/1) for boolean flags, but PostgreSQL requires explicit conversion to boolean.
+
+**Rule**: Use CASE statement for smallint to boolean conversions, not direct casting.
+
+**Wrong**:
+```sql
+"IsHidden"::boolean as is_hidden,         -- Will fail
+cast("IsHidden" as boolean) as is_hidden  -- Will fail
+```
+
+**Correct**:
+```sql
+CASE 
+    WHEN "IsHidden" = 1 THEN true
+    WHEN "IsHidden" = 0 THEN false
+    ELSE null 
+END as is_hidden
+```
+
+**Rationale**: PostgreSQL does not support direct casting from smallint to boolean. The CASE statement 
+explicitly handles the conversion and also provides clarity about the meaning of the values.
+
+**Common Examples**:
+- `IsHidden` → `is_hidden`
+- `IsActive` → `is_active`
+- `IsDeleted` → `is_deleted`
+- `IsSigned` → `is_signed`
+
+This pattern should be used consistently across all staging models where boolean flags are stored as smallint in the source data.
 
 ---
 
