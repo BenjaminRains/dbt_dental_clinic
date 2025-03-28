@@ -104,6 +104,7 @@ ProcedureComplete AS (
         pl.procedure_fee,
         pl.tooth_number,
         pl.surface,
+        pl.old_code,
         
         -- Procedure code information
         pc.procedure_code,
