@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='procedure_id'
+    unique_key='ProcNum'
 ) }}
 
 with source as (
@@ -21,7 +21,7 @@ renamed as (
         "ProvNum" as provider_id,
         "AptNum" as appointment_id,
         "ClinicNum" as clinic_id,
-        "CodeNum" as code_id,
+        "CodeNum" as procedure_code_id,
         "SiteNum" as site_id,
         "PlannedAptNum" as planned_appointment_id,
         "ProcNumLab" as procedure_lab_id,
