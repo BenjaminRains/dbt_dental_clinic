@@ -1,12 +1,11 @@
 {{ config(
     materialized='incremental',
-    unique_key='code_num',
+    unique_key='CodeNum',
     schema='staging'
 ) }}
 
-with Source as (
+with source as (
     select * from {{ source('opendental', 'procedurecode') }}
-    where "DateTStamp" >= '2023-01-01'::timestamp
     
     {% if is_incremental() %}
     AND "DateTStamp"::timestamp > (select max(date_timestamp) from {{ this }})
