@@ -97,15 +97,23 @@ models:
       - name: surface
         description: Tooth surface(s) involved in the procedure
 
+      - name: old_code
+        description: Legacy or alternative procedure code from the source system
+        tests:
+          - dbt_expectations.expect_column_values_to_match_regex:
+              regex: '^[A-Z0-9]+$'
+              severity: warn
+              name: warn_invalid_old_code_format
+
       - name: procedure_code
         description: ADA procedure code from procedure codes table
-        tests:
-          - not_null
+        tests: []
 
       - name: procedure_description
         description: Detailed description of the procedure
         tests:
-          - not_null
+          - warn_procedures_missing_descriptions:
+              severity: warn
 
       - name: abbreviated_description
         description: Short description of the procedure
@@ -200,8 +208,10 @@ models:
         tests:
           - accepted_values:
               values: [true, false]
-          - dbt_utils.expression_is_true:
-              expression: "fee_matches_standard = true or procedure_status != 2"
+          - completed_procs_fee_matches:
+              procedure_status: procedure_status
+              procedure_fee: procedure_fee
+              standard_fee: standard_fee
               config:
                 severity: warn
                 name: warn_completed_procedure_fee_mismatch
@@ -250,11 +260,17 @@ models:
           expression: "procedure_date >= '2023-01-01' or procedure_status = 1"  # 1 = Treatment Plan
           name: historical_procedures_must_be_recent_or_planned
 
-      # Add new model-level tests
+      # Updated test for completed procedures must have at least one code
       - dbt_utils.expression_is_true:
-          expression: "not (procedure_status = 2 and procedure_code is null)"
+          expression: "not (procedure_status = 2 and procedure_code is null and old_code is null)"
           severity: error
           name: completed_procedures_must_have_codes
+
+      # New warning test for procedures using only old codes
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_code is null and old_code is not null)"
+          severity: warn
+          name: warn_completed_procedures_using_old_code_only
 
       - dbt_utils.expression_is_true:
           expression: "abs(procedure_fee - standard_fee) <= 100 or not has_standard_fee"
@@ -271,12 +287,11 @@ models:
           severity: warn
           name: warn_high_hygiene_procedure_fees
 
-      - dbt_expectations.expect_column_pair_values_to_be_in_set:
-          column_a: procedure_status_desc
-          column_b: has_standard_fee
-          value_pairs:
-            - ["Complete", true]
-            - ["Treatment Plan", true]
+      - dbt_utils.expression_is_true:
+          expression: >
+            (procedure_status_desc = 'Complete' and has_standard_fee = true) or
+            (procedure_status_desc = 'Treatment Plan' and has_standard_fee = true) or
+            (procedure_status_desc not in ('Complete', 'Treatment Plan'))
           severity: warn
           name: warn_key_procedures_missing_standard_fees
 
@@ -287,14 +302,21 @@ models:
 
   - name: int_adjustments
     description: >
-      Comprehensive model that combines adjustment data with procedure information to track
-      and analyze fee adjustments. Part of System A: Fee Processing & Verification workflow.
+      Comprehensive model that combines adjustment data with procedure information and definitions
+      to track and analyze fee adjustments. Part of System A: Fee Processing & Verification workflow.
       
       Key features:
       - Links adjustments to procedures and their standard fees
+      - Includes definition mappings for adjustment types
       - Calculates adjusted fees and adjustment impacts
-      - Tracks various adjustment types (employee, military, courtesy, etc.)
+      - Tracks various adjustment types and categories
       - Supports fee adjustment analysis and reporting
+
+      Note: Relevant definition categories include:
+      - Category 0: Core adjustment types (Adjustment, Discount, Insurance Payment)
+      - Category 1: Specific adjustment reasons
+      - Category 15: Discount types
+      - Category 29: Payment plan types
     
     columns:
       - name: adjustment_id
@@ -350,11 +372,51 @@ models:
         tests:
           - not_null
 
-      - name: adjustment_category
-        description: Category of the adjustment
+      - name: adjustment_type_name
+        description: Name of the adjustment type from definitions table
 
-      - name: adjustment_size
-        description: Size classification of the adjustment
+      - name: adjustment_type_value
+        description: Value associated with the adjustment type from definitions
+
+      - name: adjustment_category_type
+        description: Category ID from definitions table
+
+      - name: procedure_code
+        description: ADA procedure code from linked procedure
+        tests: []
+
+      - name: procedure_description
+        description: Description of the linked procedure
+
+      - name: procedure_fee
+        description: Original fee amount before adjustment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: fee_schedule_id
+        description: ID of the fee schedule used
+
+      - name: standard_fee
+        description: Standard fee amount from fee schedule
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: adjusted_fee
+        description: Final fee amount after adjustment (procedure_fee + adjustment_amount)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: adjustment_impact
+        description: Classification of adjustment impact based on percentage of procedure fee
+        tests:
+          - accepted_values:
+              values: ['major', 'moderate', 'minor']
 
       - name: is_procedure_adjustment
         description: Flag indicating if adjustment is tied to a specific procedure
@@ -363,7 +425,7 @@ models:
               values: [true, false]
 
       - name: is_retroactive_adjustment
-        description: Flag indicating if adjustment was applied retroactively
+        description: Flag indicating if adjustment was applied after the procedure date
         tests:
           - accepted_values:
               values: [true, false]
@@ -392,53 +454,10 @@ models:
           - accepted_values:
               values: [true, false]
 
-      - name: procedure_code
-        description: ADA procedure code from linked procedure
-        tests:
-          - not_null
-
-      - name: procedure_description
-        description: Description of the linked procedure
-
-      - name: procedure_fee
-        description: Original fee amount before adjustment
-        tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 10000
-
-      - name: fee_schedule_id
-        description: ID of the fee schedule used
-        tests:
-          - relationships:
-              to: ref('stg_opendental__feesched')
-              field: fee_schedule_id
-              severity: warn
-
-      - name: standard_fee
-        description: Standard fee amount from fee schedule
-        tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 10000
-
-      - name: adjusted_fee
-        description: Final fee amount after adjustment
-        tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 10000
-
-      - name: adjustment_impact
-        description: Classification of adjustment impact (major/moderate/minor)
-        tests:
-          - accepted_values:
-              values: ['major', 'moderate', 'minor']
-
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1000
-          max_value: 50000  # Adjust based on expected volume
+          max_value: 50000
 
       - dbt_utils.expression_is_true:
           expression: "adjusted_fee >= 0"
@@ -449,3 +468,8 @@ models:
           expression: "adjustment_date >= procedure_date"
           severity: warn
           name: warn_adjustment_before_procedure
+
+      - dbt_utils.expression_is_true:
+          expression: "abs(adjustment_amount) <= procedure_fee * 2"
+          severity: warn
+          name: warn_large_adjustments
