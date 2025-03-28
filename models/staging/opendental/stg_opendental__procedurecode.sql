@@ -1,24 +1,16 @@
 {{ config(
     materialized='incremental',
-    unique_key='procedure_code_id',
+    unique_key='code_num',
     schema='staging'
 ) }}
 
-with source as (
+with Source as (
     select * from {{ source('opendental', 'procedurecode') }}
     where "DateTStamp" >= '2023-01-01'::timestamp
     
     {% if is_incremental() %}
     AND "DateTStamp"::timestamp > (select max(date_timestamp) from {{ this }})
     {% endif %}
-),
-
-with_prefixes as (
-    select 
-        *,
-        -- Extract just the prefix (D0, D1, etc.)
-        REGEXP_SUBSTR(procedure_code, '^D[0-9]') as code_prefix
-    from source
 ),
 
 renamed as (
@@ -28,6 +20,7 @@ renamed as (
         
         -- Attributes
         "ProcCode"::varchar as procedure_code,
+        REGEXP_SUBSTR("ProcCode", '^D[0-9]') as code_prefix,
         "Descript"::varchar as description,
         "AbbrDesc"::varchar as abbreviated_description,
         "ProcTime"::varchar as procedure_time,
@@ -65,9 +58,8 @@ renamed as (
         "DiagnosticCodes"::varchar as diagnostic_codes,
         
         -- Metadata
-        current_timestamp as _loaded_at,
-        code_prefix
-    from with_prefixes
+        current_timestamp as _loaded_at
+    from source
 )
 
 select * from renamed
