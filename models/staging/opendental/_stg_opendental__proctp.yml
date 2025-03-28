@@ -27,7 +27,7 @@ models:
         tests:
           - not_null
 
-      - name: procedure_num_orig
+      - name: procedure_id_orig
         description: >
           Foreign key to the original procedure if this planned procedure has been converted to a completed procedure
           (references stg_opendental__procedurelog.procedure_id)
