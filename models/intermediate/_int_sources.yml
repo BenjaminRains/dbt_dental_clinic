@@ -1,0 +1,61 @@
+version: 2
+
+sources:
+  - name: staging
+    schema: staging
+    description: Staging models used in fee processing intermediate models
+    tables:
+      - name: stg_opendental__procedurelog
+        description: >
+          Staged procedure log data. Contains actual fees charged (procedure_fee)
+          and related procedure information.
+        columns:
+          - name: procedure_id
+            description: Primary key
+            tests:
+              - unique
+              - not_null
+          - name: procedure_fee
+            description: The actual fee charged for the procedure
+          - name: procedure_date
+            description: Date of the procedure
+
+      - name: stg_opendental__fee
+        description: >
+          Staged fee schedule reference data. Contains standard/reference fees
+          for procedures.
+        columns:
+          - name: fee_amount
+            description: The reference/standard fee amount
+          - name: procedure_code_id
+            description: Foreign key to procedure codes
+
+      - name: stg_opendental__feesched
+        description: >
+          Staged fee schedule definitions. Provides context for different
+          fee schedules in use.
+        columns:
+          - name: fee_schedule_id
+            description: Primary key
+            tests:
+              - unique
+              - not_null
+          - name: fee_schedule_description
+            description: Description of the fee schedule
+
+      - name: stg_opendental__adjustment
+        description: >
+          Staged adjustment data. Contains modifications to procedure fees
+          including discounts, write-offs, and other adjustments.
+        columns:
+          - name: adjustment_id
+            description: Primary key
+            tests:
+              - unique
+              - not_null
+          - name: procedure_id
+            description: Foreign key to procedures
+          - name: adjustment_amount
+            description: The amount of the adjustment
+          - name: adjustment_category
+            description: Type/category of the adjustment
