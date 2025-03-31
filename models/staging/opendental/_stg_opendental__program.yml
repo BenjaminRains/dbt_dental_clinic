@@ -2,10 +2,20 @@ version: 2
 
 models:
   - name: stg_opendental__program
-    description: Staging model for OpenDental program configurations. Contains information about integrated software programs, their paths, and settings.
+    description: >
+      Staging model for OpenDental program configurations. Contains information about integrated software programs, 
+      their paths, and settings.
+      
+      Note: This table does not include two commonly referenced program_ids from the commlog table:
+      - program_id = 0: Represents system default/no specific program
+      - program_id = 95: Represents legacy communication system
+      
+      These IDs are intentionally excluded as they are internal system references rather than actual integrated programs.
     columns:
       - name: program_id
-        description: Primary key of the program table
+        description: >
+          Primary key of the program table. 
+          Note: program_ids 0 and 95 are special cases used in communication logs but not stored in this table.
         tests:
           - unique
           - not_null
