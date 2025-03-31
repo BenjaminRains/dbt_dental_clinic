@@ -3,7 +3,9 @@
 ## Current State (as of [Current Date])
 
 ### Overview
-Our staging layer is now stable with successfully compiling models that provide standardized, cleaned data from OpenDental source tables. All models follow consistent naming conventions and implement standard transformations.
+Our staging layer is now stable with successfully compiling models that provide standardized, 
+cleaned data from OpenDental source tables. All models follow consistent naming conventions and 
+implement standard transformations.
 
 ### Implemented Features
 1. **Temporal Scope**
