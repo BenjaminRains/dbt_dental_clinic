@@ -1,11 +1,25 @@
 {{ config(
     materialized='incremental',
-    unique_key='ProcNum'
+    unique_key='"ProcNum"'
 ) }}
 
 with source as (
     select * from {{ source('opendental', 'procedurelog') }}
     where "ProcDate" >= '2023-01-01'
+    or "ProcNum" in (
+        select i."ProcNum" 
+        from {{ source('opendental', 'insbluebook') }} i
+        where i."DateTEntry" >= '2023-01-01'
+    )
+    or "ProcNum" in (
+        select "ProcNum"
+        from {{ source('opendental', 'procgroupitem') }}
+    )
+    or "ProcNum" in (
+        select "ProcNum"
+        from {{ source('opendental', 'procnote') }}
+        where "EntryDateTime" >= '2023-01-01'
+    )
     {% if is_incremental() %}
         and "DateTStamp" > (select max(date_timestamp) from {{ this }})
     {% endif %}
