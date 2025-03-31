@@ -28,7 +28,7 @@ models:
       - name: mount_item_id
         description: Foreign key to the mount item table
       - name: provider_id
-        description: Foreign key to the provider table
+        description: Foreign key to the provider table. Provider ID 0 represents system-generated documents.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
