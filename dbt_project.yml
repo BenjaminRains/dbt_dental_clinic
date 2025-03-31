@@ -8,8 +8,9 @@ profile: 'dbt_dental_clinic'
 
 # Paths configuration
 model-paths: ["models"]
-# Comment out analysis-paths since these are for DBeaver only
-# analysis-paths: ["analysis"]  
+# Comment out analysis-paths. these scripts are for EDA. 
+# analysis-paths: ["analysis"] 
+# analysis_intermediate: ["analysis_intermediate"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
 seed-paths: ["seeds"]
