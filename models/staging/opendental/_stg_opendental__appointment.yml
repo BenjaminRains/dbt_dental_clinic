@@ -5,7 +5,14 @@ models:
     description: >
       Staging model for appointments from the OpenDental system.
       Contains normalized and cleaned appointment data with standardized naming conventions.
-      This represents the current state of appointments, while historical changes are tracked in histappointment.
+      This represents both current and future appointments, while historical changes are tracked in histappointment.
+      
+      Key characteristics:
+      - Includes all appointments from 2023-01-01 onwards
+      - Contains future-dated appointments for treatment planning
+      - Supports scheduling and capacity planning
+      - Tracks appointment status transitions
+      - Links to procedures, providers, and patients
     
     tests:
       # High-level model tests
@@ -13,10 +20,10 @@ models:
           expression: "appointment_status in (1,2,3,5,6)"
           severity: error  # This must pass
       
-      # Future appointments check
+      # Future appointments check - update to allow future dates
       - dbt_utils.expression_is_true:
           expression: "appointment_status != 2 OR appointment_datetime <= current_date"
-          severity: error  # This must pass
+          severity: error  # Completed appointments cannot be in the future
           
     # Documentation of data quality tests that are defined as standalone SQL files
     meta:
@@ -45,6 +52,16 @@ models:
           jira_ticket: "DQ-124"
           identified_date: "2025-03-25"
           test: "appt_broken_wo_procs"
+
+      usage_notes: >
+        This model includes future appointments to support:
+        - Treatment planning and scheduling
+        - Capacity planning and resource allocation
+        - Patient appointment tracking
+        - Procedure and provider scheduling
+        
+        Future appointments are a critical part of dental practice management
+        and should be included in all relevant analyses.
 
     columns:
       - name: appointment_id
@@ -99,10 +116,12 @@ models:
         description: Foreign key to the user who created this appointment record
         
       - name: appointment_datetime
-        description: Date and time of the scheduled appointment
+        description: >
+          Date and time of the scheduled appointment. 
+          Can be in the future for planned appointments (status = 1).
+          Used for both scheduling and capacity planning.
         tests:
           - not_null
-          # Remove redundant date test since it's covered in appointment_data_quality.sql
       
       - name: date_timestamp
         description: System timestamp when the record was last updated
@@ -125,11 +144,14 @@ models:
       - name: appointment_status
         description: >
           Status code for the appointment:
-          1 = Scheduled
-          2 = Completed
+          1 = Scheduled (includes future appointments)
+          2 = Completed (must be in the past)
           3 = Unknown (requires investigation)
           5 = Broken/Missed
           6 = Unscheduled
+          
+          Note: Status 1 (Scheduled) is valid for both upcoming and future appointments,
+          supporting treatment planning and capacity management.
         tests:
           - not_null
           - accepted_values:
