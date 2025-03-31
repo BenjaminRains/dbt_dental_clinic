@@ -16,7 +16,7 @@ renamed as (
         "PatNum" as patient_id,
         "DocCategory" as document_category_id,
         "MountItemNum" as mount_item_id,
-        "ProvNum" as provider_id,
+        NULLIF("ProvNum", 0) as provider_id,
         
         -- String Fields
         "Description" as description,
