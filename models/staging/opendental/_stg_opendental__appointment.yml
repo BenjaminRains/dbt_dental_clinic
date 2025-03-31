@@ -6,6 +6,7 @@ models:
       Staging model for appointments from the OpenDental system.
       Contains normalized and cleaned appointment data with standardized naming conventions.
       This represents both current and future appointments, while historical changes are tracked in histappointment.
+      Currently contains 20,384 appointment records.
       
       Key characteristics:
       - Includes all appointments from 2023-01-01 onwards
@@ -197,7 +198,10 @@ models:
         description: Hash value for security purposes
         
       - name: procedure_description
-        description: Text description of procedures associated with this appointment
+        description: >
+          Text description of procedures associated with this appointment.
+          Note: This field may be null for hygiene appointments (is_hygiene = 1)
+          as procedures are not required to be specified for these appointment types.
         
       - name: _loaded_at
         description: Timestamp when this record was loaded into the warehouse
