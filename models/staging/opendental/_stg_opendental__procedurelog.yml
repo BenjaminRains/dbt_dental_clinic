@@ -8,20 +8,31 @@ models:
     description: >
       Staging model for OpenDental procedure log data. Contains detailed information 
       about dental procedures performed on patients. This model is incremental and 
-      only includes procedures dated 2023-01-01 or later. This is a core table that links
-      with procedurecode, adjustment, appointment, patient, statement and other tables.
+      includes:
+      - All procedures dated 2023-01-01 or later
+      - Historical procedures (pre-2023) that are referenced by recent insurance bluebook entries
+      - Historical procedures (pre-2023) that are referenced by procedure groups
+      - Historical procedures (pre-2023) that are referenced by recent procedure notes
+      
+      This is a core table that links with procedurecode, adjustment, appointment, 
+      patient, statement and other tables.
       
       Key data characteristics:
-      - Approximately 88,759 procedures for 4,518 unique patients (avg 19.6 procedures per patient)
+      - Approximately 101,142 procedures for 4,518 unique patients (avg 22.4 procedures per patient)
+      - Includes historical procedures referenced by recent (2023+) insurance records
+      - Includes historical procedures referenced by procedure groups
+      - Includes historical procedures referenced by recent procedure notes
       - Fee comparison with standard fees shows ~29% exact matches, with ~37% higher and ~34% lower than standard
       - Median fee difference is $0, while average difference is -$39.20
       - Future-dated procedures are valid and represent planned treatments
     
     # Add some general model-level tests
     tests:
-      - dbt_utils.equal_rowcount:
-          compare_model: source('opendental', 'procedurelog')
-          where: "ProcDate >= '2023-01-01'"
+      - compare_source_staging_rowcount:
+          source_relation: source('opendental', 'procedurelog')
+          source_column: '"ProcDate"'
+          staged_column: 'procedure_date'
+          date_value: '2023-01-01'
     
     columns:
       - name: procedure_id
@@ -49,15 +60,18 @@ models:
       - name: appointment_id
         description: >
           Foreign key to the appointment where the procedure was performed.
-          Note: Null or non-matching appointment IDs are expected for walk-ins 
-          and same-day procedures that don't require scheduled appointments.
+          Note: 
+          - Zero (0) indicates no appointment needed/scheduled yet
+          - Common for Ordered/Planned (status 6) and Treatment Planned (status 1) procedures
+          - Historical procedures (pre-2023) may reference appointments outside our date window
+          - Null indicates the field is not applicable
         tests:
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
               config:
-                severity: warn  # Change to warning since missing appointments can be valid
-          - not_null
+                severity: warn
+              where: "appointment_id != 0 and procedure_date >= '2023-01-01'"  # Single quotes for date literal
       
       - name: clinic_id
         description: Foreign key to the clinic where the procedure was performed
@@ -76,28 +90,43 @@ models:
       
       - name: planned_appointment_id
         description: >
-          Foreign key to a planned future appointment. This field may reference appointments
-          that haven't been created yet or are scheduled beyond our current dataset timeframe.
+          Foreign key to a planned future appointment. This field may be:
+          - Zero (0) indicating no planned appointment
+          - NULL if no future appointment is needed
+          - A reference to a future appointment that may not exist yet
+          - A reference to an existing appointment
+          - May retain historical planned appointment references even after completion
+          
+          Note: Completed procedures (status 2) may retain their original planned_appointment_id 
+          even after completion, which might reference appointments that were cancelled or rescheduled.
         tests:
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
               config:
                 severity: warn
-              where: "planned_appointment_id is not null and procedure_date >= '2023-01-01'"
+              where: "planned_appointment_id != 0 and procedure_date >= '2023-01-01' and procedure_status = 1"
       
       - name: statement_id
         description: >
-          Reference to the statement. Future-dated procedures (treatment plans) and same-day 
-          treatments may not have statements. Analysis shows:
-          - Future treatment plans (2025-2026) typically have 2-3 procedures per visit
-          - Common fee combinations suggest standard procedure groupings
-          - Same-day treatments may not require statements
+          Reference to the statement. Values can be:
+          - Zero (0) indicating no statement needed/created
+          - NULL if no statement is required
+          - A reference to an actual statement
+          
+          Note: The following may not have statements:
+          - Future-dated procedures (treatment plans)
+          - Same-day treatments
+          - Historical procedures (pre-2023)
+          - Procedures with $0 fee
         tests:
           - relationships:
               to: ref('stg_opendental__statement')
               field: statement_id
-              where: "procedure_date <= current_date"
+              where: >
+                statement_id is not null 
+                and statement_id != 0 
+                and procedure_date <= current_date
               severity: warn
       
       # Date and time fields with validity tests
@@ -105,9 +134,13 @@ models:
         description: >
           Date when the procedure was performed or is planned to be performed.
           Future dates are valid and represent planned procedures that haven't occurred yet.
+          Null dates are only valid for:
+          - Status 4 (Existing Prior): Historical procedures from before patient record creation
+          - Status 6 (Ordered/Planned): Procedures ordered but not yet scheduled
           Data spans from 2023-01-01 to 2026-03-04.
         tests:
-          - not_null
+          - not_null:
+              where: "procedure_status not in (4, 6)"
       
       - name: date_original_prosthesis
         description: Date of the original prosthesis
@@ -127,10 +160,15 @@ models:
         description: Timestamp when the security user entered the procedure
       
       - name: date_complete
-        description: Date when the procedure was completed
+        description: >
+          Date when the procedure was completed. Note:
+          - Should typically be on or after the procedure date
+          - Some procedures may be marked complete slightly before their official procedure date
+          - Historical procedures may have backdated procedure dates
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "date_complete >= procedure_date or date_complete is null"
+          - date_complete_valid:
+              config:
+                severity: warn
       
       - name: procedure_time
         description: Time when the procedure started
@@ -148,23 +186,46 @@ models:
           - Despite average fees being $39.20 below standard, total revenue impact is positive at $14.8M
           - Approximately 50% of procedure codes have outlier fees (significantly different from standard)
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "procedure_fee >= 0 or procedure_fee is null"
+          - non_negative_or_null
       
       - name: old_code
         description: Legacy procedure code
       
       - name: surface
-        description: Tooth surface(s) involved in the procedure
+        description: >
+          Tooth surface(s) involved in the procedure. Uses two different coding systems:
+          
+          1. Standard Surface Codes:
+          - B = Buccal
+          - D = Distal
+          - F = Facial
+          - I = Incisal
+          - L = Lingual
+          - M = Mesial
+          - O = Occlusal
+          - U = Universal
+          - R = Root
+          - V = Vestibular
+          
+          2. Special Numeric Codes for Odontoplasty (D9971) procedures:
+          For procedure codes 523 and 1440:
+          - 1 = Treatment region 1
+          - 2 = Treatment region 2
+          - 5 = Treatment region 5 (multiple teeth)
+          - 6 = Treatment region 6
+          
+          Note: Numeric codes are valid only for odontoplasty procedures (D9971) 
+          where traditional surface notation may not apply due to the nature of 
+          the treatment (reshaping/smoothing enamel).
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "surface ~ '^[BDFILO]+$' OR surface IS NULL"
+          - valid_tooth_surface:
+              config:
+                where: "procedure_code_id not in (523, 1440)"  # Skip validation for odontoplasty procedures
       
       - name: tooth_number
         description: Tooth number for the procedure
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "tooth_number ~ '^[A-T]$' OR tooth_number ~ '^[1-9][0-9]?$' OR tooth_number IS NULL"
+          - valid_tooth_number
       
       - name: tooth_range
         description: Range of teeth involved in the procedure
@@ -175,13 +236,13 @@ models:
       - name: procedure_status
         description: >
           Status of the procedure:
-          1 = Treatment Planned (22.2% of procedures)
-          2 = Completed (49.6% of procedures)
-          3 = Administrative/Documentation (5.3% of procedures)
-          4 = Existing Prior (0.5% of procedures)
-          5 = Referred (1.5% of procedures)
-          6 = Ordered/Planned (16.3% of procedures)
-          7 = Condition (4.4% of procedures)
+          1 = Treatment Planned (19.5% of procedures)
+          2 = Completed (55.6% of procedures)
+          3 = Administrative/Documentation (4.6% of procedures)
+          4 = Existing Prior (0.6% of procedures)
+          5 = Referred (1.4% of procedures)
+          6 = Ordered/Planned (14.4% of procedures)
+          7 = Condition (3.9% of procedures)
           8 = In Progress (0.1% of procedures)
         tests:
           - not_null
@@ -258,8 +319,7 @@ models:
       - name: discount
         description: Discount amount applied to the procedure. Analysis reveals systematic discounting for certain procedure types.
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "discount >= 0 or discount is null"
+          - non_negative_or_null
       
       - name: is_date_prosthesis_estimated
         description: Flag indicating if the prosthesis date is estimated
@@ -273,27 +333,23 @@ models:
       - name: tax_amount
         description: Tax amount for the procedure
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "tax_amount >= 0 or tax_amount is null"
+          - non_negative_or_null
       
       - name: discount_plan_amount
         description: Discount amount from the plan
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "discount_plan_amount >= 0 or discount_plan_amount is null"
+          - non_negative_or_null
       
       # Advanced business logic tests
       - name: is_locked
         description: Flag indicating if the procedure is locked
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "(is_locked = 0 OR is_locked = 1) OR is_locked is null"
+          - is_boolean_or_null
       
       - name: is_cpoe
         description: Flag indicating if this is a Computerized Physician Order Entry
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "(is_cpoe = 0 OR is_cpoe = 1) OR is_cpoe is null"
+          - is_boolean_or_null
       
       # Metadata columns
       - name: _airbyte_ab_id
