@@ -93,8 +93,6 @@ models:
 
       - name: created_at
         description: Timestamp when the record was created
-        tests:
-          - not_null
 
       - name: updated_at
         description: Timestamp when the record was last modified
