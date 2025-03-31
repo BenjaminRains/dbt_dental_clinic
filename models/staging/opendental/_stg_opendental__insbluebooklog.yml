@@ -21,11 +21,13 @@ models:
       - name: claimprocedure_id
         description: Foreign key to claim procedures table
         tests:
-          - relationships:
+          - relationships_with_source_filter:
               to: ref('stg_opendental__claimproc')
+              column_name: claimprocedure_id
               field: claim_procedure_id
-              config:
-                severity: warn  # Change to warning since UCR Fee records won't have matches
+              source_relation: source('opendental', 'claimproc')
+              source_column: '"ClaimProcNum"'
+              source_filter: '"ProcDate" >= ''2023-01-01'' and "ProcDate" is not null'
 
       # Other Fields
       - name: allowed_fee
