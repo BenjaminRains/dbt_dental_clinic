@@ -61,12 +61,12 @@ from {{ source('opendental', 'patient') }}
 2. **Intermediate Models**
    - Materialized as: `table`
    - Schema: `intermediate`
-   - Refresh: Daily
+   - Refresh: weekly
 
 3. **Marts Models**
    - Materialized as: `table`
    - Schema: `marts`
-   - Refresh: Daily
+   - Refresh: weekly
 
 ## Testing Strategy
 
@@ -101,10 +101,13 @@ from {{ source('opendental', 'patient') }}
 # Install dependencies
 dbt deps
 
-# Run models
+# compile (verify the code works)
+dbt compile
+
+# Run models (load the data)
 dbt run
 
-# Test models
+# Test models (run the tests)
 dbt test
 
 # Generate docs
