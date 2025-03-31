@@ -1,4 +1,4 @@
-{{
+image.png{{
     config(
         materialized='view'
     )
