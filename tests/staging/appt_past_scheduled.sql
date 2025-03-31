@@ -6,7 +6,15 @@ select
     appointment_datetime,
     appointment_status,
     current_date as today,
-    current_date - appointment_datetime as days_overdue
-from {{ ref('stg_opendental__appointment') }}
+    current_date - appointment_datetime as days_overdue,
+    note,
+    is_hygiene,
+    entered_by_user_id,
+    username
+from "opendental_analytics"."public_staging"."stg_opendental__appointment" a
+left join "opendental_analytics"."public_staging"."stg_opendental__userod" u 
+    on a.entered_by_user_id = u.user_id
 where appointment_status = 1  -- Scheduled
-  and appointment_datetime < current_date
+  and appointment_datetime < current_date  -- Only past appointments
+  and appointment_datetime < '2025-01-01'  -- Exclude future appointments
+order by appointment_datetime desc
