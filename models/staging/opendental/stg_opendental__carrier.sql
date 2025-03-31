@@ -4,7 +4,6 @@
 
 with source as (
     select * from {{ source('opendental', 'carrier') }}
-    where "SecDateTEdit" >= '2023-01-01'
 ),
 
 renamed as (
