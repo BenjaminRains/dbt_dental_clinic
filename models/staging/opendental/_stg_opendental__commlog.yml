@@ -20,8 +20,18 @@ models:
       - name: user_id
         description: >
           Foreign key to stg_opendental__userod, represents the user who created/handled the communication. 
-          Links to user_id (formerly UserNum) in userod table which contains user account details, 
-          including username, clinic assignments, and access information.
+          Links to user_id (formerly UserNum) in userod table.
+
+          Special cases:
+          - user_id = 0: System-generated communications (no specific user)
+            Represents approximately 54,578 records from 2023-01-01 to 2025-02-17
+          - Excluded inactive users: 20, 36, 43, 45, 51, 54, 9280, 9281
+            * Jennifer Berg (20) - Active provider, no commlog entries
+            * Becky Solomey (36) - Hidden provider
+            * LocalMed (43) - Hidden provider
+            * Maria Barajas (45) - Hidden provider
+            * Edward Karateew (51) - Hidden provider
+            * System/unknown users (54, 9280, 9281)
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
@@ -29,17 +39,33 @@ models:
               where: "user_id NOT IN (20, 36, 43, 45, 51, 54, 9280, 9281)"  # Exclude known inactive users
               severity: warn
               config:
-                description: "Excluding inactive provider accounts and system users"
+                description: >
+                  Warning expected for user_id = 0 (system-generated communications) 
+                  and excluded inactive/system users.
+                  Approximately 54,578 records are system-generated (user_id = 0).
 
       - name: program_id
-        description: Foreign key to stg_opendental__program, represents the program/system used for communication
+        description: >
+          Foreign key to stg_opendental__program, represents the program/system used for communication.
+          Special cases:
+          - program_id = 0: System default/no specific program (51.74% of records)
+            Used for basic system communications where no specific external program is involved
+          - program_id = 95: Legacy communication system (48.26% of records)
+            Primarily used for communications with:
+            * Mode 5 communications (26,392 records)
+            * Mode 1 communications (18,405 records)
+            * Mode 3 communications (15,761 records)
+            * Mode 0 communications (357 records)
         tests:
           - relationships:
               to: ref('stg_opendental__program')
               field: program_id
               severity: warn
               config:
-                description: "51.74% zero values, 48.26% legacy program_id=95"
+                description: >
+                  Known data pattern: 51.74% of records use program_id=0 (system default) 
+                  and 48.26% use program_id=95 (legacy system).
+                  These IDs are not present in the program table by design.
 
       # Other important fields
       - name: communication_datetime
