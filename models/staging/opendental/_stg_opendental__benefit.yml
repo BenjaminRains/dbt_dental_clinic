@@ -19,12 +19,18 @@ models:
               field: insurance_plan_id
 
       - name: patient_plan_id
-        description: Foreign key to stg_opendental__patplan. Links benefit to patient's plan assignment
+        description: >
+          Foreign key to stg_opendental__patplan. Links benefit to patient's plan assignment.
+          patient_plan_id = 0 represents template/default benefits, particularly common in:
+          - Type 5 benefits (27k+ template rules)
+          - Type 2 benefits (limitations/deductibles)
+          - Type 1 benefits (coverage percentages)
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patplan')
               field: patplan_id
+              where: "patient_plan_id != 0"  # Exclude template benefits from relationship test
 
       - name: coverage_category_id
         description: Foreign key to coverage categories. Defines the type of service category this benefit applies to
@@ -38,7 +44,12 @@ models:
         description: Foreign key to code groups. Links to group of procedures when benefit applies to multiple codes
 
       - name: benefit_type
-        description: Type of benefit (e.g., limitations, coverage, deductible)
+        description: >
+          Type of benefit rule:
+          1 = Coverage percentage rules
+          2 = Limitations/Deductibles
+          5 = Template/Default rules
+          6 = Special category-specific rules
         tests:
           - not_null
 
