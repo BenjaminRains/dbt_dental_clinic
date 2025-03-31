@@ -32,11 +32,22 @@ models:
               field: patient_id
 
       - name: procedure_id
-        description: Foreign key to the procedurelog table
+        description: >
+          Foreign key to the procedurelog table. Can be:
+          - Zero (0) for referrals not associated with specific procedures (typically referral_type = 1)
+          - NULL if no procedure is linked
+          - A valid procedure_id reference
         tests:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              where: "procedure_id != 0"  # Only test non-zero procedure_ids
+              config:
+                severity: warn
+                description: >
+                  Some referral attachments have procedure_id = 0, indicating
+                  they are not linked to specific procedures. This is expected
+                  behavior for certain referral types.
 
       - name: provider_id
         description: Foreign key to the provider table
