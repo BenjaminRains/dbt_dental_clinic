@@ -27,20 +27,8 @@ models:
           expression: "history_timestamp >= '2023-01-01'"
           config:
             severity: warn
-      # Add the chronology test here
-      - dbt_utils.expression_is_true:
-          expression: >
-            NOT EXISTS (
-              SELECT 1 
-              FROM {{ this }} t2 
-              WHERE t2.appointment_id = {{ this }}.appointment_id 
-              AND t2.history_timestamp < {{ this }}.history_timestamp 
-              AND t2.history_timestamp > LAG({{ this }}.history_timestamp) 
-                OVER (PARTITION BY {{ this }}.appointment_id ORDER BY {{ this }}.history_timestamp)
-            )
-          config:
-            severity: error
-          name: chronological_order_check
+      # Replace the problematic chronological order test with our custom test
+      - histappointment_chronology
       # High-level tests - keeping valid ones
       - dbt_utils.expression_is_true:
           expression: "history_action in (0,1,2,3,4)"
