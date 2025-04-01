@@ -6,6 +6,44 @@ models:
       Staging model for OpenDental fee data. Contains standardized fee information including 
       procedure costs, fee schedules, and statistical measures. Some historical or inactive 
       fee schedules may not exist in current data.
+    
+    # Adding data quality notes section
+    notes: >
+      Known Data Quality Issues:
+      - Fee ID 217113: Decimal point error where $116.11 was entered as $11,611.00 for procedure code D0180
+      - Fee ID 219409: Decimal point error where $255.00 was entered as $25,500.00 for AOX procedure (fee schedule 8293)
+      - Fee ID 218252: Decimal point error where $255.00 was entered as $25,500.00 for AOX procedure (fee schedule 8292)
+      - All three errors follow a pattern of 100x multiplication due to decimal point misplacement
+      - Two of the errors are future-dated (2025-01-14) and should be investigated
+      - Evidence for AOX fee errors:
+        * Exceeds highest legitimate implant fee ($9,000) by nearly 3x
+        * Both entries are identical and future-dated
+        * Amount is 100x normal fee pattern
+        * No other procedures in system approach this amount
+      
+      Underutilized Fee Schedules:
+      - Fee Schedule 8285 (Cleveland Cliffs): Single fee ($56.43) for D0120 only
+      - Fee Schedule 8290 (IMAGE FIRST): Single fee ($11,611.00) for D0180 only, contains known error
+      - Both schedules appear to be inactive corporate fee schedules and should be excluded from analysis
+
+      High Fee Variations:
+      1. Extreme Variations (>$2,000 range):
+         - D6040 (Eposteal Implant): $3,978 - $9,999 (range: $6,021)
+         - D5725 (Rebase Hybrid): $596 - $4,000 (range: $3,404)
+         - D6055 (Implant Bar): $1,110 - $3,500 (range: $2,390)
+         - D6010 (Endosteal Implant): $500 - $2,518 (range: $2,018)
+
+      2. Suspicious Fee Patterns:
+         - Zero-fee entries found in surgical procedures (D7261, D7270, D7272)
+         - Inconsistent minimum fees for implant procedures ($250 minimum seems too low)
+         - Large variations in diagnostic procedures (D0474-D0481: $298 - $999)
+         - Overdentures showing significant variation (D5863/D5865: $934 - $2,600)
+
+      3. Fee Standardization Needed:
+         - Implant crown fees vary from $250 to $1,900 (D6059-D6066)
+         - Basic crown fees range from $126 to $1,288 (D2740)
+         - Consider implementing procedure-specific fee ranges based on complexity
+
     columns:
       - name: fee_id
         description: Primary key of the fee table (maps to FeeNum in source)
@@ -31,8 +69,7 @@ models:
           longer exists in the fee schedule table
         tests:
           - not_null
-          - accepted_values:
-              values: [true, false]
+          - boolean_values
 
       - name: procedure_code_id
         description: >
@@ -50,8 +87,10 @@ models:
         tests:
           - not_null
           - dbt_utils.accepted_range:
-              min_value: 0  # Fees should not be negative
-              
+              min_value: 0
+          - suspicious_fee_amounts:
+              severity: warn
+
       - name: ada_code
         description: ADA procedure code (maps to OldCode in source)
         tests:
@@ -103,89 +142,43 @@ models:
             - provider_id
 
       # Statistical validation tests
-      - dbt_utils.expression_is_true:
+      - fee_variation:
           name: fee_high_variation_check
-          expression: "procedure_code_id NOT IN (
-              select procedure_code_id 
-              from {{ ref('stg_opendental__fee') }}
-              group by procedure_code_id 
-              having max(fee_amount) - min(fee_amount) > 500
-            )"
           severity: warn
 
-      - dbt_utils.expression_is_true:
+      - fee_statistical_outlier:
           name: fee_statistical_outlier_check
-          expression: "NOT EXISTS (
-              select 1
-              from (
-                select 
-                  procedure_code_id, 
-                  avg(fee_amount) as avg_amount, 
-                  stddev(fee_amount) as fee_stddev
-                from {{ ref('stg_opendental__fee') }}
-                group by procedure_code_id
-              ) stats
-              where stats.procedure_code_id = stg_opendental__fee.procedure_code_id
-              and stats.fee_stddev > 0
-              and abs(fee_amount - stats.avg_amount) > 2 * stats.fee_stddev
-          )"
           severity: warn
 
-      - dbt_utils.expression_is_true:
+      - fee_schedule_usage:
           name: fee_schedule_usage_check
-          expression: "fee_schedule_id NOT IN (
-              select fee_schedule_id
-              from {{ ref('stg_opendental__fee') }}
-              group by fee_schedule_id
-              having count(*) < 5
-            )"
           severity: warn
 
       # Date validation tests
       - dbt_utils.expression_is_true:
           name: fee_date_check
-          expression: "created_at >= '2023-01-01'::date 
-            and created_at <= {{ current_date() }}
-            and updated_at <= {{ current_date() }}"
+          expression: >
+            created_at >= '2023-01-01'::date 
+            AND created_at <= {{ current_date() }}
+            AND updated_at <= {{ current_date() }}
           severity: warn
 
-      # Fee amount validation tests
-      - dbt_utils.expression_is_true:
+      - fee_relative_amount:
           name: fee_relative_amount_check
-          expression: "NOT EXISTS (
-              select 1
-              from (
-                select 
-                  procedure_code_id,
-                  avg(fee_amount) as avg_fee
-                from {{ ref('stg_opendental__fee') }}
-                group by procedure_code_id
-              ) stats
-              where stats.procedure_code_id = stg_opendental__fee.procedure_code_id
-              and (
-                  fee_amount > stats.avg_fee * 3
-                  or 
-                  fee_amount < stats.avg_fee * 0.25
-              )
-          )"
           severity: warn
 
-      - dbt_utils.expression_is_true:
+      - fee_default_zero:
           name: fee_default_zero_check
-          expression: "NOT (
-              is_default_fee = 1 
-              and fee_amount = 0 
-              and procedure_code_id in (
-                select procedure_code_id
-                from {{ ref('stg_opendental__fee') }}
-                group by procedure_code_id
-                having avg(fee_amount) > 0
-              )
-            )"
           severity: warn
 
       # Provider validation test
       - dbt_utils.expression_is_true:
           name: fee_provider_missing_check
-          expression: "provider_id is not null"
-          severity: warn 
+          expression: >
+            provider_id IS NOT NULL
+          severity: warn
+
+      # Adding a specific test for fee variations with exclusions
+      - fee_variation_exclusions:
+          name: fee_variation_check
+          severity: warn
