@@ -25,6 +25,11 @@ fee_stats as (
     group by "CodeNum"
 ),
 
+valid_fee_schedules as (
+    select distinct fee_schedule_id
+    from {{ ref('stg_opendental__feesched') }}
+),
+
 renamed as (
     select
         -- Primary Key
@@ -54,11 +59,18 @@ renamed as (
         "SecDateEntry"::date as created_at,
         "SecDateTEdit"::timestamp as updated_at,
         
+        -- Missing Fee Schedule Flag
+        case 
+            when vfs.fee_schedule_id is null then true 
+            else false 
+        end as has_missing_fee_schedule,
+        
         -- Metadata
         current_timestamp as _loaded_at
         
     from source
     left join fee_stats fs on fs.procedure_code_id = source."CodeNum"
+    left join valid_fee_schedules vfs on vfs.fee_schedule_id = source."FeeSched"
 )
 
 select * from renamed
