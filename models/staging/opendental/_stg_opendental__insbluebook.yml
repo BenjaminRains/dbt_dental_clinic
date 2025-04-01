@@ -2,8 +2,9 @@ version: 2
 
 models:
   - name: stg_opendental__insbluebook
-    description: Staging model for insurance bluebook entries. Contains current insurance payment 
-    information and allowed fee overrides.
+    description: >
+      Staging model for insurance bluebook entries. Contains current insurance payment 
+      information and allowed fee overrides.
     columns:
       - name: insbluebook_id
         description: Primary key for the insurance bluebook entry
