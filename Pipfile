@@ -34,10 +34,11 @@ dbt-postgres = "==1.7.9"
 dbt-mysql = "==1.7.0"
 requests = ">=2.31.0"
 charset-normalizer = ">=3.0.0"
+thefuzz = ">=0.19.0"
+python-Levenshtein = ">=0.25.0"
 
 [dev-packages]
 jupyter = ">=1.0.0"
-ipykernel = ">=6.29.0"
 black = ">=24.1.1"
 isort = ">=5.13.2"
 pylint = ">=3.0.3"
