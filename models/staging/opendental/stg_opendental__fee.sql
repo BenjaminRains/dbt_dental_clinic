@@ -15,7 +15,7 @@ with source as (
     {% endif %}
 ),
 
-fee_stats as (
+FeeStats as (
     select 
         "CodeNum" as procedure_code_id,
         avg("Amount") as avg_fee_amount,
@@ -25,7 +25,7 @@ fee_stats as (
     group by "CodeNum"
 ),
 
-valid_fee_schedules as (
+ValidFeeSchedules as (
     select distinct fee_schedule_id
     from {{ ref('stg_opendental__feesched') }}
 ),
@@ -69,8 +69,8 @@ renamed as (
         current_timestamp as _loaded_at
         
     from source
-    left join fee_stats fs on fs.procedure_code_id = source."CodeNum"
-    left join valid_fee_schedules vfs on vfs.fee_schedule_id = source."FeeSched"
+    left join FeeStats fs on fs.procedure_code_id = source."CodeNum"
+    left join ValidFeeSchedules vfs on vfs.fee_schedule_id = source."FeeSched"
 )
 
 select * from renamed
