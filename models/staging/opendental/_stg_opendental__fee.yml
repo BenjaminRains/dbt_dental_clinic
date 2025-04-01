@@ -15,9 +15,17 @@ models:
         tests:
           - not_null
           - relationships:
+              name: fee_schedule_relationship
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
               severity: warn  # Change to warning since some fee schedules might be historical
+
+      - name: has_missing_fee_schedule
+        description: Boolean flag indicating if the fee schedule referenced by fee_schedule_id no longer exists in the fee schedule table
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: procedure_code_id
         description: Foreign key to procedure code table. Some procedure codes may be deprecated or not yet added to the procedure code table.
