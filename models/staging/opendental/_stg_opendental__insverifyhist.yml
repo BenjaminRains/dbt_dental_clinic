@@ -73,8 +73,9 @@ models:
     tests:
       # Test that verify_type=1 records have valid inssub references
       - dbt_utils.relationships_where:
+          column_name: foreign_key_id
           to: ref('stg_opendental__inssub')
-          field: foreign_key_id
+          field: inssub_id
           from_condition: "verify_type = 1"
           to_condition: "inssub_id is not null"
 
