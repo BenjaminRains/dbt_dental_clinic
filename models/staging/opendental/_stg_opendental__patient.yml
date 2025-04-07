@@ -49,6 +49,7 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              where: "patient_status = 0 AND secondary_provider_id IS NOT NULL AND secondary_provider_id != 0 AND primary_provider_id IS NOT NULL"
       - name: clinic_id
         description: "Foreign key to clinic"
       - name: fee_schedule_id
