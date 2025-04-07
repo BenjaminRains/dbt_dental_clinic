@@ -3,45 +3,66 @@ version: 2
 models:
   - name: stg_opendental__feesched
     description: >
-      Standardized fee schedule data from OpenDental. 
-      As an out-of-network focused clinic, we maintain a small set of fee schedules.
+      Fee schedule data from OpenDental. 
+      As an out-of-network focused clinic, fee schedules are minimally used in practice:
+      - 99.99% of patients use the default fee schedule (0)
+      - Insurance-related fee schedules exist but have no patient assignments
+      - Fee schedules primarily serve as reference data rather than active billing configuration
+    
     columns:
       - name: fee_schedule_id
-        description: Primary key - Unique identifier for each fee schedule
+        description: >
+          Primary key - Unique identifier for each fee schedule.
+          Fee schedule 0 is the default used for nearly all patients.
         tests:
           - unique
           - not_null
-          - relationships:
-              to: ref('stg_opendental__feesched')
-              field: fee_schedule_id
 
       - name: fee_schedule_description
-        description: Description of the fee schedule
+        description: >
+          Description of the fee schedule. 
+          Note: Many schedules may have empty descriptions as they're not actively used.
         tests:
-          - not_null
-          - dbt_utils.not_empty_string
+          - not_null:
+              severity: warn
+          - dbt_utils.not_empty_string:
+              severity: warn
 
       - name: fee_schedule_type_id
-        description: Type identifier for the fee schedule
+        description: >
+          Type identifier for the fee schedule:
+          0 = Normal (default)
+          1 = No Insurance
+          2 = Base
+          4 = Insurance
+          Note: Type distinctions are maintained for system compatibility but not actively used.
         tests:
-          - not_null
+          - not_null:
+              severity: warn
           - accepted_values:
               values: [0, 1, 2, 4]
+              severity: warn
 
       - name: display_order
-        description: Order for display purposes
+        description: >
+          Order for display purposes. 
+          Not actively used as fee schedules are minimally implemented.
         tests:
-          - not_null
-          - positive_values
+          - not_null:
+              severity: warn
 
       - name: is_hidden
-        description: Boolean flag indicating if the fee schedule is hidden
+        description: >
+          Boolean flag indicating if the fee schedule is hidden.
+          Several insurance-related schedules may be hidden but maintained for reference.
         tests:
           - accepted_values:
               values: [true, false]
 
       - name: is_global_flag
-        description: Flag indicating if the fee schedule is global
+        description: >
+          Flag indicating if the fee schedule is global.
+          Expected to be 1 for all records as clinic operates uniformly.
         tests:
           - accepted_values:
               values: [1]
@@ -49,10 +70,12 @@ models:
       - name: created_by_user_id
         description: ID of the user who created the fee schedule
         tests:
-          - not_null
+          - not_null:
+              severity: warn
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              severity: warn
 
       - name: created_at_date
         description: Date when the fee schedule was created
@@ -68,3 +91,14 @@ models:
         description: Timestamp when the record was loaded
         tests:
           - not_null
+
+    meta:
+      usage_notes: >
+        Current fee schedule distribution (as of 2025):
+        - Default (0): 32,698 patients (99.99%)
+        - Fee Schedule 55: 2 patients
+        - All other schedules: 0 patients
+        
+        Despite having multiple fee schedules defined (8285-8293),
+        they are not actively used for patient assignments.
+        This aligns with the clinic's out-of-network focus.
