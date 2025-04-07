@@ -118,11 +118,13 @@ models:
         description: |
           Timestamp when the record was created.
           Business rules:
-          - Default date '0001-01-01' is converted to NULL
-          - Some records have empty created_at dates
-          - Most records were created in 2020-2021
+          - ~71% of records have NULL created_at dates, primarily from a bulk update on 2024-12-18
+          - These NULL values likely represent imported or migrated records where original creation dates were not preserved
+          - Valid dates start from 2020-04-27
+          - Some records have future update dates (2025) suggesting planned insurance plans
         tests:
-          - not_null
+          - not_null:
+              severity: warn
           - dbt_expectations.expect_column_values_to_be_between:
               column_name: created_at
               min_value: "'2020-01-01 00:00:00'::timestamp"
