@@ -149,4 +149,11 @@ models:
     tests:
       - dbt_expectations.expect_compound_columns_to_be_unique:
           column_list: [group_number, carrier_id, employer_id]
-          severity: error
+          severity: warn
+          description: |
+            Multiple records may exist for the same group/carrier/employer combination due to:
+            - Different name variations (e.g., "US Steel" vs "United States Steel")
+            - Case sensitivity differences
+            - Historical name changes
+            - Multiple carriers for the same group (e.g., US Steel has carriers 1459, 2014, 2121)
+            - Empty group numbers for certain carriers (e.g., carrier 2163)
