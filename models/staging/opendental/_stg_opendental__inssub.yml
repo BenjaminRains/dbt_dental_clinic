@@ -58,16 +58,85 @@ models:
 
     tests:
       - dbt_utils.relationships_where:
+          column_name: inssub_id
           to: ref('stg_opendental__insverify')
           field: foreign_key_id
-          from_condition: "foreign_key_id is not null"
-          to_condition: "verify_type = 1"  # 95% match rate with inssub records
+          from_condition: >
+            inssub_id is not null 
+            and effective_date is not null 
+            and effective_date >= '2020-01-01'
+            and effective_date <= current_date
+            and (termination_date is null or termination_date >= current_date)
+            and insurance_plan_id not in (
+              select insurance_plan_id 
+              from public_staging.stg_opendental__insplan 
+              where hide_from_verify_list = true
+            )
+            and (
+              -- For January records (new year insurance changes)
+              (DATE_PART('month', effective_date) = 1 
+               and effective_date <= current_date
+               and effective_date >= current_date - interval '90 days'
+               and effective_date <= current_date - interval '7 days'
+               and insurance_plan_id in (
+                 select insurance_plan_id
+                 from public_staging.stg_opendental__inssub
+                 group by insurance_plan_id
+                 having COUNT(*) FILTER (WHERE DATE_PART('month', effective_date) = 1) / COUNT(*) >= 0.8
+               ))
+              or
+              -- For non-January records (standard verification)
+              (DATE_PART('month', effective_date) != 1 
+               and effective_date <= current_date
+               and effective_date >= current_date - interval '45 days'
+               and insurance_plan_id in (
+                 select insurance_plan_id
+                 from public_staging.stg_opendental__inssub
+                 group by insurance_plan_id
+                 having COUNT(*) FILTER (WHERE DATE_PART('month', effective_date) = 1) / COUNT(*) < 0.8
+               ))
+            )
+          to_condition: "verify_type = 1"
 
       - dbt_utils.relationships_where:
+          column_name: inssub_id
           to: ref('stg_opendental__insverifyhist')
           field: foreign_key_id
-          from_condition: "foreign_key_id is not null"
-          to_condition: "verify_type = 1"  # 95% match rate with inssub records
+          from_condition: >
+            inssub_id is not null 
+            and effective_date is not null 
+            and effective_date >= '2020-01-01'
+            and effective_date <= current_date
+            and (termination_date is null or termination_date >= current_date)
+            and insurance_plan_id not in (
+              select insurance_plan_id 
+              from public_staging.stg_opendental__insplan 
+              where hide_from_verify_list = true
+            )
+            and (
+              -- For January records (new year insurance changes)
+              (DATE_PART('month', effective_date) = 1 
+               and effective_date <= current_date
+               and effective_date >= current_date - interval '90 days'
+               and insurance_plan_id in (
+                 select insurance_plan_id
+                 from public_staging.stg_opendental__inssub
+                 group by insurance_plan_id
+                 having COUNT(*) FILTER (WHERE DATE_PART('month', effective_date) = 1) / COUNT(*) >= 0.8
+               ))
+              or
+              -- For non-January records (standard verification)
+              (DATE_PART('month', effective_date) != 1 
+               and effective_date <= current_date
+               and effective_date >= current_date - interval '45 days'
+               and insurance_plan_id in (
+                 select insurance_plan_id
+                 from public_staging.stg_opendental__inssub
+                 group by insurance_plan_id
+                 having COUNT(*) FILTER (WHERE DATE_PART('month', effective_date) = 1) / COUNT(*) < 0.8
+               ))
+            )
+          to_condition: "verify_type = 1"
 
     config:
       tags: ['staging', 'insurance', 'daily']
