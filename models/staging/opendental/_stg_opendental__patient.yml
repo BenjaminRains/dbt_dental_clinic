@@ -70,7 +70,7 @@ models:
       
       # Status and Classification
       - name: patient_status
-        description: "Current status of the patient (0=Active, 1=Inactive, 2=Archived, 3=Deceased, 4=NonPatient, 5=Deleted)"
+        description: "Current status of the patient (0=Patient, 1=NonPatient, 2=Inactive, 3=Archived, 4=Deceased, 5=Deleted)"
         tests:
           - accepted_values:
               values: [0, 1, 2, 3, 4, 5]
