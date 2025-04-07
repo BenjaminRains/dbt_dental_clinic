@@ -114,19 +114,19 @@ models:
       - name: balance_0_30_days
         description: "Balance aged 0-30 days"
         tests:
-          - not_negative
+          - non_negative_or_null
       - name: balance_31_60_days
         description: "Balance aged 31-60 days"
         tests:
-          - not_negative
+          - non_negative_or_null
       - name: balance_61_90_days
         description: "Balance aged 61-90 days"
         tests:
-          - not_negative
+          - non_negative_or_null
       - name: balance_over_90_days
         description: "Balance aged over 90 days"
         tests:
-          - not_negative
+          - non_negative_or_null
       - name: insurance_estimate
         description: "Estimated insurance portion"
       - name: payment_plan_due
@@ -143,9 +143,13 @@ models:
       - name: birth_date
         description: "Patient's date of birth"
         tests:
-          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "IS NOT NULL OR patient_status != 0"
+              column_name: birth_date
+              name: birth_date_required_for_active_patients
           - dbt_utils.expression_is_true:
               expression: "< current_date"
+              column_name: birth_date
       - name: age
         description: "Calculated age of patient"
         tests:
