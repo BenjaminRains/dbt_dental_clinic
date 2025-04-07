@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: _stg_opendental__insplan
+  - name: stg_opendental__insplan
     description: Staging model for insurance plan records from OpenDental. This model handles various data quality patterns including case sensitivity, multiple carriers per group, and future-dated records.
     columns:
       - name: insurance_plan_id
