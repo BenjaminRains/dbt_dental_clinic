@@ -13,11 +13,18 @@ function BodyLoaded() {//an array is always passed in.  First element is this pa
                 return;//then don't bother trying to get or format the TOC
             }
         }
-		if(typeof isAuthenticated !== "undefined" && isAuthenticated){//this variable was set in autoLogin.aspx
-		   document.getElementById("TocTree").outerHTML=GetTocAuth();
+		function getCookie(name) {
+			return document.cookie
+        		.split('; ')
+        		.find(row => row.startsWith(name + '='))
+        		?.split('=')[1] ?? undefined;
+		}
+		var isAuthenticated = getCookie("isAuthenticated") === "true";//this variable was set in autoLogin.aspx
+		if(isAuthenticated){
+			document.getElementById("TocTree").outerHTML=GetTocAuth();
 		}
 		else{
-		   document.getElementById("TocTree").outerHTML=GetTocUnauth();
+			document.getElementById("TocTree").outerHTML=GetTocUnauth();
 		}
     }
     //in manual.html, we never load the TOC, but we always continue with formatting of the TOC
