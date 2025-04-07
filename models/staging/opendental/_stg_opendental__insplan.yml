@@ -118,6 +118,7 @@ models:
         description: |
           Timestamp when the record was created.
           Business rules:
+          - Default date '0001-01-01' is converted to NULL
           - Some records have empty created_at dates
           - Most records were created in 2020-2021
         tests:

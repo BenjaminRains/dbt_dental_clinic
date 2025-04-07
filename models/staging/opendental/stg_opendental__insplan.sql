@@ -86,7 +86,10 @@ renamed as (
         "ExclusionFeeRule" as exclusion_fee_rule,
         
         -- Audit Fields
-        "SecDateEntry" as created_at,
+        CASE 
+            WHEN "SecDateEntry" = '0001-01-01' THEN NULL
+            ELSE "SecDateEntry"
+        END as created_at,
         "SecDateTEdit" as updated_at
 
     from source
