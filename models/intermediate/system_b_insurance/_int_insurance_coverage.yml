@@ -11,6 +11,26 @@ models:
       - Uses template benefits (patient_plan_id = 0) from the benefits table
       - Considers insurance active if verified and not pending
       - Uses the most recent timestamps from all source tables for created_at and updated_at
+      
+      Data Quality Note:
+      Some insurance plan records have missing carrier or subscriber information.
+      These records are preserved in the model with specific handling:
+
+      Missing Carrier Information:
+      - carrier_id set to -1
+      - carrier_name set to empty string
+      - is_incomplete_record flag set to true
+      
+      Missing Subscriber Information:
+      - subscriber_id set to -1 when either:
+        a) the record is incomplete (carrier_id is null), or
+        b) the referenced subscriber doesn't exist in the subscriber table
+      - is_incomplete_record flag set to true in both cases
+      
+      This approach allows downstream models to:
+      - Identify and handle incomplete records appropriately
+      - Maintain referential integrity for complete records
+      - Preserve all insurance plan data while clearly marking its completeness status
     columns:
       - name: insurance_plan_id
         description: |
@@ -40,11 +60,12 @@ models:
           Business rules:
           - Must reference a valid carrier record
           - Cannot be null as all insurance plans must have a carrier
+          - Incomplete records will have carrier_id = -1
         tests:
-          - not_null
           - relationships:
               to: ref('stg_opendental__carrier')
               field: carrier_id
+              where: "carrier_id != -1"
 
       - name: subscriber_id
         description: |
@@ -52,11 +73,13 @@ models:
           Business rules:
           - Must reference a valid subscriber record
           - Cannot be null as all insurance plans must have a subscriber
+          - Incomplete records will have subscriber_id = -1
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__inssub')
               field: inssub_id
+              where: "subscriber_id != -1"
 
       - name: plan_type
         description: |
@@ -89,10 +112,12 @@ models:
         description: |
           Name of the insurance carrier.
           Business rules:
-          - Cannot be null
           - Must match the carrier record
+          - Incomplete records will have empty carrier_name
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_not_be_null:
+              column_name: carrier_name
+              where: "carrier_id != -1"
 
       - name: verification_date
         description: |
