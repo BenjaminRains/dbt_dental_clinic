@@ -487,8 +487,10 @@ models:
 
   - name: int_fee_model
     description: >
-      Comprehensive fee model that focuses on fee processing and verification for an out-of-network dental clinic.
-      This model consolidates fee-related information from multiple sources and provides clear fee relationships.
+      Comprehensive fee model that focuses on fee processing and verification for an out-of-network
+       dental clinic.
+      This model consolidates fee-related information from multiple sources and provides clear 
+      fee relationships.
       
       Key features:
       - Tracks applied fees vs. standard fees
