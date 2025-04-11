@@ -1,0 +1,112 @@
+version: 2
+
+models:
+  - name: int_claim_details
+    description: >
+      Comprehensive insurance claim information combining claim details, procedures, payments, and tracking status.
+      This model only includes procedures that are part of insurance claims (excluding patient-pay procedures).
+    columns:
+      - name: claim_id
+        description: Primary key for the insurance claim
+        tests:
+          - not_null
+          - unique
+      - name: patient_id
+        description: Foreign key to the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      - name: insurance_plan_id
+        description: Foreign key to the insurance plan
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_insurance_coverage')
+              field: insurance_plan_id
+      - name: carrier_id
+        description: Foreign key to the insurance carrier
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__carrier')
+              field: carrier_id
+      - name: subscriber_id
+        description: Foreign key to the insurance subscriber
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: subscriber_id
+      - name: procedure_id
+        description: Foreign key to the procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+      - name: claim_status
+        description: Current status of the insurance claim
+        tests:
+          - not_null
+      - name: claim_type
+        description: Type of claim (e.g., primary, secondary)
+        tests:
+          - not_null
+      - name: claim_date
+        description: Date when the claim was created
+        tests:
+          - not_null
+      - name: procedure_code
+        description: Procedure code for the claim
+        tests:
+          - not_null
+      - name: procedure_description
+        description: Description of the procedure
+      - name: billed_amount
+        description: Amount billed to insurance
+        tests:
+          - not_null
+      - name: allowed_amount
+        description: Amount allowed by insurance
+      - name: paid_amount
+        description: Amount paid by insurance
+      - name: write_off_amount
+        description: Amount written off
+      - name: patient_responsibility
+        description: Amount patient is responsible for
+      - name: tracking_status
+        description: Current tracking status of the claim
+      - name: last_tracking_date
+        description: Date of last tracking status update
+      - name: last_payment_amount
+        description: Amount of the most recent payment
+      - name: last_payment_date
+        description: Date of the most recent payment
+      - name: is_partial_payment
+        description: Whether the payment was partial
+      - name: plan_type
+        description: Type of insurance plan (e.g., PPO, HMO)
+      - name: group_number
+        description: Insurance group number
+      - name: group_name
+        description: Insurance group name
+      - name: verification_status
+        description: Whether the insurance is currently active
+      - name: verification_date
+        description: Date of last insurance verification
+      - name: benefit_details
+        description: JSON containing benefit details
+      - name: effective_date
+        description: Date when the insurance coverage became effective
+      - name: termination_date
+        description: Date when the insurance coverage was terminated (if applicable)
+      - name: created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+      - name: updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null 
