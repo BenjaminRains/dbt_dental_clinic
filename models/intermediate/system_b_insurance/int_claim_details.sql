@@ -76,41 +76,6 @@ InsuranceCoverage as (
     from {{ ref('int_insurance_coverage') }}
 ),
 
-ClaimTracking as (
-    select
-        claim_id,
-        tracking_type,
-        entry_timestamp,
-        note as tracking_note
-    from (
-        select
-            claim_id,
-            tracking_type,
-            entry_timestamp,
-            note,
-            row_number() over (partition by claim_id order by entry_timestamp desc) as rn
-        from {{ ref('stg_opendental__claimtracking') }}
-    ) ranked
-    where rn = 1
-),
-
-ClaimPayment as (
-    select
-        cp.claim_id,
-        cpy.check_amount,
-        cpy.check_date,
-        cpy.payment_type_id,
-        cpy.is_partial
-    from (
-        select distinct
-            claim_id,
-            claim_payment_id
-        from {{ ref('stg_opendental__claimproc') }}
-    ) cp
-    left join {{ ref('stg_opendental__claimpayment') }} cpy
-        on cp.claim_payment_id = cpy.claim_payment_id
-),
-
 Final as (
     select
         -- Primary Key
@@ -162,15 +127,6 @@ Final as (
         ic.effective_date,
         ic.termination_date,
 
-        -- Tracking Information
-        ct.tracking_type as tracking_status,
-        c.last_tracking_date,
-
-        -- Payment Information
-        cpy.check_amount as last_payment_amount,
-        cpy.check_date as last_payment_date,
-        cpy.is_partial as is_partial_payment,
-
         -- Meta Fields
         c.claim_date as created_at,
         c.last_tracking_date as updated_at
@@ -185,10 +141,6 @@ Final as (
     left join InsuranceCoverage ic
         on c.patient_id = ic.patient_id
         and c.plan_id = ic.insurance_plan_id
-    left join ClaimTracking ct
-        on c.claim_id = ct.claim_id
-    left join ClaimPayment cpy
-        on c.claim_id = cpy.claim_id
 )
 
 select * from Final 
