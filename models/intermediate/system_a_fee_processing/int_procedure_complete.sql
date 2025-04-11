@@ -97,7 +97,7 @@ ProcedureComplete AS (
         pl.patient_id,
         pl.provider_id,
         pl.clinic_id,
-        pl.code_id AS procedure_code_id,
+        pl.procedure_code_id,
         pl.procedure_date,
         pl.procedure_status,
         ps.procedure_status_desc,
@@ -151,13 +151,13 @@ ProcedureComplete AS (
         
     FROM ProcedureLog pl
     LEFT JOIN ProcedureCodes pc 
-        ON pl.code_id = pc.procedure_code_id
+        ON pl.procedure_code_id = pc.procedure_code_id
     LEFT JOIN StandardFees sf
-        ON pl.code_id = sf.procedure_code_id
+        ON pl.procedure_code_id = sf.procedure_code_id
         AND pl.clinic_id = sf.clinic_id
         AND sf.fee_rank = 1  -- Only get the most recent fee
     LEFT JOIN FeeStats fstat
-        ON pl.code_id = fstat.procedure_code_id
+        ON pl.procedure_code_id = fstat.procedure_code_id
     LEFT JOIN FeeSchedules fs
         ON sf.fee_schedule_id = fs.fee_schedule_id
     LEFT JOIN ProcedureNotes pn
