@@ -8,7 +8,8 @@ sources:
       - name: stg_opendental__procedurelog
         description: >
           Staged procedure log data. Contains actual fees charged (procedure_fee)
-          and related procedure information.
+          and related procedure information. This is the primary source for procedure
+          execution details including dates, statuses, and applied fees.
         columns:
           - name: procedure_id
             description: Primary key
@@ -17,14 +18,50 @@ sources:
               - not_null
           - name: procedure_fee
             description: The actual fee charged for the procedure
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 10000
+                  row_condition: "procedure_status = 2"  # Only test completed procedures
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 1000
+                  row_condition: "is_hygiene_flag = 1"
+                  config:
+                    severity: warn
+                    name: warn_high_hygiene_fees
           - name: procedure_date
             description: Date of the procedure
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2023-01-01'"
+                  max_value: "'2026-12-31'"  # Allows for future planned procedures
+          - name: procedure_status
+            description: Raw status code from source system
+            tests:
+              - not_null
+          - name: patient_id
+            description: Foreign key to patient
+            tests:
+              - not_null
+          - name: provider_id
+            description: Provider who performed the procedure
+          - name: clinic_id
+            description: Clinic where procedure was performed
+            tests:
+              - not_null
+          - name: procedure_code_id
+            description: Foreign key to procedure code
+            tests:
+              - not_null
 
       - name: stg_opendental__procedurecode
         description: >
           Staged procedure codes and descriptions including both standard CDT codes
           and practice-specific custom codes. These codes form the foundation of
-          clinical documentation, billing, and insurance claims.
+          clinical documentation, billing, and insurance claims. Includes flags for
+          special procedure types like hygiene and prosthetic procedures.
         columns:
           - name: procedure_code_id
             description: Primary key for procedure codes
@@ -39,14 +76,23 @@ sources:
             description: Extracted prefix from procedure code (e.g., D0, D1, etc.)
           - name: description
             description: Full description of the procedure
+            tests:
+              - warn_procedures_missing_descriptions:
+                  severity: warn
           - name: abbreviated_description
             description: Short description of the procedure
           - name: procedure_category_id
             description: Category classification for the procedure
           - name: is_prosthetic_flag
             description: Indicates if procedure is prosthetic-related
+            tests:
+              - accepted_values:
+                  values: [0, 1]
           - name: is_hygiene_flag
             description: Indicates if procedure is hygiene-related
+            tests:
+              - accepted_values:
+                  values: [0, 1]
           - name: no_bill_insurance_flag
             description: Indicates if procedure should not be billed to insurance
           - name: date_timestamp
@@ -57,17 +103,30 @@ sources:
       - name: stg_opendental__fee
         description: >
           Staged fee schedule reference data. Contains standard/reference fees
-          for procedures.
+          for procedures. Used as the baseline for fee verification and comparison
+          against actual applied fees.
         columns:
           - name: fee_amount
             description: The reference/standard fee amount
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 10000
+                  severity: warn  # Downgraded to warn since fees may vary for out-of-network
           - name: procedure_code_id
             description: Foreign key to procedure codes
+            tests:
+              - not_null
+          - name: fee_schedule_id
+            description: ID of the fee schedule this fee belongs to
+            tests:
+              - not_null
 
       - name: stg_opendental__feesched
         description: >
           Staged fee schedule definitions. Provides context for different
-          fee schedules in use.
+          fee schedules in use. Includes schedule types, descriptions, and
+          visibility flags.
         columns:
           - name: fee_schedule_id
             description: Primary key
@@ -76,11 +135,18 @@ sources:
               - not_null
           - name: fee_schedule_description
             description: Description of the fee schedule
+          - name: fee_schedule_type_id
+            description: Type identifier for the fee schedule
+          - name: is_hidden
+            description: Flag indicating if the fee schedule is hidden
+          - name: is_global_flag
+            description: Flag indicating if the fee schedule is global
 
       - name: stg_opendental__adjustment
         description: >
           Staged adjustment data. Contains modifications to procedure fees
-          including discounts, write-offs, and other adjustments.
+          including discounts, write-offs, and other adjustments. Tracks both
+          procedure-specific and general adjustments.
         columns:
           - name: adjustment_id
             description: Primary key
@@ -91,5 +157,21 @@ sources:
             description: Foreign key to procedures
           - name: adjustment_amount
             description: The amount of the adjustment
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: -10000
+                  max_value: 10000
           - name: adjustment_category
             description: Type/category of the adjustment
+          - name: adjustment_date
+            description: Date when adjustment was applied
+            tests:
+              - not_null
+          - name: patient_id
+            description: Foreign key to patient
+            tests:
+              - not_null
+          - name: provider_id
+            description: Provider who authorized the adjustment
+          - name: clinic_id
+            description: Clinic where adjustment was made
