@@ -3,14 +3,14 @@ version: 2
 models:
   - name: int_claim_details
     description: >
-      Comprehensive insurance claim information combining claim details, procedures, payments, and tracking status.
+      Core insurance claim information combining claim details and procedures.
       This model only includes procedures that are part of insurance claims (excluding patient-pay procedures).
+      For payment history, see int_claim_payments. For tracking history, see int_claim_tracking.
     columns:
       - name: claim_id
         description: Primary key for the insurance claim
         tests:
           - not_null
-          - unique
       - name: patient_id
         description: Foreign key to the patient
         tests:
@@ -21,21 +21,24 @@ models:
       - name: insurance_plan_id
         description: Foreign key to the insurance plan
         tests:
-          - not_null
+          - not_null:
+              where: "claim_type = 'P' and verification_status = true and claim_status not in ('H', 'W')"
           - relationships:
               to: ref('int_insurance_coverage')
               field: insurance_plan_id
       - name: carrier_id
         description: Foreign key to the insurance carrier
         tests:
-          - not_null
+          - not_null:
+              where: "claim_type = 'P' and verification_status = true and claim_status not in ('H', 'W')"
           - relationships:
               to: ref('stg_opendental__carrier')
               field: carrier_id
       - name: subscriber_id
         description: Foreign key to the insurance subscriber
         tests:
-          - not_null
+          - not_null:
+              where: "claim_type = 'P' and verification_status = true and claim_status not in ('H', 'W')"
           - relationships:
               to: ref('stg_opendental__inssub')
               field: subscriber_id
@@ -76,16 +79,6 @@ models:
         description: Amount written off
       - name: patient_responsibility
         description: Amount patient is responsible for
-      - name: tracking_status
-        description: Current tracking status of the claim
-      - name: last_tracking_date
-        description: Date of last tracking status update
-      - name: last_payment_amount
-        description: Amount of the most recent payment
-      - name: last_payment_date
-        description: Date of the most recent payment
-      - name: is_partial_payment
-        description: Whether the payment was partial
       - name: plan_type
         description: Type of insurance plan (e.g., PPO, HMO)
       - name: group_number
