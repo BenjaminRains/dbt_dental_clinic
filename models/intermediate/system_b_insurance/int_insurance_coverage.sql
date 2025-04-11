@@ -5,6 +5,14 @@
     )
 }}
 
+/*
+Data Quality Note:
+Incomplete records are preserved with:
+- carrier_id = -1 and empty carrier_name when carrier info is missing
+- subscriber_id = -1 when carrier info is missing or subscriber doesn't exist
+- is_incomplete_record = true in both cases
+*/
+
 with Source as (
     select * from {{ ref('stg_opendental__insplan') }}
 ),
@@ -107,14 +115,33 @@ Final as (
 
         -- Foreign Keys
         pp.patient_id,
-        ip.carrier_id,
-        pp.insurance_subscriber_id as subscriber_id,
+        case 
+            when ip.carrier_id is null then -1
+            else ip.carrier_id
+        end as carrier_id,
+        case
+            when ip.carrier_id is null then -1
+            when s.subscriber_id is null then -1
+            else pp.insurance_subscriber_id
+        end as subscriber_id,
 
         -- Plan Details
-        ip.plan_type,
-        ip.group_number,
-        ip.group_name,
-        c.carrier_name,
+        case 
+            when ip.carrier_id is null then ''
+            else ip.plan_type
+        end as plan_type,
+        case 
+            when ip.carrier_id is null then ''
+            else ip.group_number
+        end as group_number,
+        case 
+            when ip.group_name is null then ''
+            else ip.group_name
+        end as group_name,
+        case 
+            when ip.carrier_id is null then ''
+            else c.carrier_name
+        end as carrier_name,
 
         -- Verification Status
         v.last_verified_date as verification_date,
@@ -128,19 +155,35 @@ Final as (
             when v.last_verified_date is not null then true
             else false
         end as is_active,
+        case
+            when ip.carrier_id is null then true
+            when s.subscriber_id is null then true
+            else false
+        end as is_incomplete_record,
 
         -- Dates
-        pp.patient_plan_created_at as effective_date,
+        case
+            when pp.patient_plan_created_at is not null and pp.patient_plan_created_at::text != '' then pp.patient_plan_created_at
+            when pp.patient_plan_updated_at is not null and pp.patient_plan_updated_at::text != '' then pp.patient_plan_updated_at
+            else '2020-01-01'::timestamp
+        end as effective_date,
         case
             when pp.is_pending = 1 then pp.patient_plan_updated_at
             else null
         end as termination_date,
 
         -- Meta Fields
-        greatest(
-            ip.created_at,
-            pp.patient_plan_created_at,
-            v.entry_timestamp
+        coalesce(
+            greatest(
+                ip.created_at,
+                pp.patient_plan_created_at,
+                v.entry_timestamp
+            ),
+            greatest(
+                ip.updated_at,
+                pp.patient_plan_updated_at,
+                v.last_modified_at
+            )
         ) as created_at,
         greatest(
             ip.updated_at,
