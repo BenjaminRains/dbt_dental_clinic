@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: int_claim_payments
+    description: >
+      Detailed payment information for insurance claims, preserving the complete payment history.
+      Each record represents a payment associated with a specific procedure within a claim.
+    columns:
+      - name: claim_id
+        description: Foreign key to the claim
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_claim_details')
+              field: claim_id
+      - name: procedure_id
+        description: Foreign key to the procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_claim_details')
+              field: procedure_id
+      - name: claim_payment_id
+        description: Primary key for the payment record
+        tests:
+          - not_null
+      - name: billed_amount
+        description: Amount billed to insurance for this procedure
+        tests:
+          - not_null
+      - name: allowed_amount
+        description: Amount allowed by insurance for this procedure
+      - name: paid_amount
+        description: Amount paid by insurance for this procedure
+      - name: write_off_amount
+        description: Amount written off for this procedure
+      - name: patient_responsibility
+        description: Amount patient is responsible for this procedure
+      - name: check_amount
+        description: Amount of the payment check
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+      - name: check_date
+        description: Date of the payment check
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+      - name: payment_type_id
+        description: Type of payment (e.g., check, electronic)
+      - name: is_partial
+        description: Whether this is a partial payment
+      - name: created_at
+        description: Timestamp when the payment was created
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+      - name: updated_at
+        description: Timestamp when the payment was last updated
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0" 
