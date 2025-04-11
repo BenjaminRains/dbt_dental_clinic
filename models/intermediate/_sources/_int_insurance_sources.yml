@@ -1,0 +1,118 @@
+version: 2
+
+sources:
+  - name: opendental
+    tables:
+      - name: insplan
+        description: Insurance plan information including plan type, group details, and fee schedules
+        columns:
+          - name: PlanNum
+            description: Primary key for insurance plan
+          - name: CarrierNum
+            description: Foreign key to carrier
+          - name: GroupName
+            description: Name of the insurance group
+          - name: GroupNum
+            description: Number of the insurance group
+          - name: PlanType
+            description: Type of insurance plan
+
+      - name: inssub
+        description: Insurance subscriber information including subscriber details and relationships
+        columns:
+          - name: SubscriberNum
+            description: Primary key for subscriber
+          - name: SubscriberID
+            description: Subscriber's ID number
+          - name: Relationship
+            description: Relationship to patient
+
+      - name: carrier
+        description: Insurance carrier information
+        columns:
+          - name: CarrierNum
+            description: Primary key for carrier
+          - name: CarrierName
+            description: Name of the insurance carrier
+
+      - name: benefit
+        description: Insurance benefit details and coverage information
+        columns:
+          - name: BenefitNum
+            description: Primary key for benefit
+          - name: PlanNum
+            description: Foreign key to insurance plan
+          - name: Category
+            description: Benefit category
+          - name: Percent
+            description: Coverage percentage
+
+      - name: insverify
+        description: Insurance verification information
+        columns:
+          - name: VerifyNum
+            description: Primary key for verification
+          - name: PlanNum
+            description: Foreign key to insurance plan
+          - name: VerifyStatus
+            description: Verification status
+          - name: VerifyDate
+            description: Date of verification
+
+      - name: claimproc
+        description: Claim procedure information
+        columns:
+          - name: ClaimProcNum
+            description: Primary key for claim procedure
+          - name: ClaimNum
+            description: Foreign key to claim
+          - name: ProcNum
+            description: Foreign key to procedure
+          - name: InsPayAmt
+            description: Insurance payment amount
+
+      - name: claimpayment
+        description: Claim payment information
+        columns:
+          - name: ClaimPaymentNum
+            description: Primary key for claim payment
+          - name: ClaimNum
+            description: Foreign key to claim
+          - name: CheckNum
+            description: Check number
+          - name: CheckAmt
+            description: Check amount
+
+      - name: claimtracking
+        description: Claim tracking status and history
+        columns:
+          - name: ClaimTrackingNum
+            description: Primary key for claim tracking
+          - name: ClaimNum
+            description: Foreign key to claim
+          - name: TrackingStatus
+            description: Current tracking status
+          - name: TrackingDate
+            description: Date of status update
+
+      - name: procedurelog
+        description: Procedure information
+        columns:
+          - name: ProcNum
+            description: Primary key for procedure
+          - name: PatNum
+            description: Foreign key to patient
+          - name: ProcDate
+            description: Date of procedure
+          - name: ProcFee
+            description: Procedure fee
+
+      - name: procedurecode
+        description: Procedure code information
+        columns:
+          - name: CodeNum
+            description: Primary key for procedure code
+          - name: ProcCode
+            description: Procedure code
+          - name: Descript
+            description: Procedure description
