@@ -1,0 +1,180 @@
+version: 2
+
+models:
+  - name: int_insurance_coverage
+    description: |
+      Intermediate model for insurance coverage information. Combines data from insurance plans,
+      patient plans, verifications, and benefits to provide a comprehensive view of insurance coverage.
+      
+      Business rules:
+      - Only includes non-pending patient plans
+      - Uses template benefits (patient_plan_id = 0) from the benefits table
+      - Considers insurance active if verified and not pending
+      - Uses the most recent timestamps from all source tables for created_at and updated_at
+    columns:
+      - name: insurance_plan_id
+        description: |
+          Primary key for the insurance plan.
+          Business rules:
+          - Derived from patplan_id in the final output
+          - Must be unique across all insurance plans
+        tests:
+          - unique
+          - not_null
+
+      - name: patient_id
+        description: |
+          Foreign key to the patient.
+          Business rules:
+          - Must reference a valid patient record
+          - Cannot be null as all insurance plans must be associated with a patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: carrier_id
+        description: |
+          Foreign key to the insurance carrier.
+          Business rules:
+          - Must reference a valid carrier record
+          - Cannot be null as all insurance plans must have a carrier
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__carrier')
+              field: carrier_id
+
+      - name: subscriber_id
+        description: |
+          Foreign key to the insurance subscriber.
+          Business rules:
+          - Must reference a valid subscriber record
+          - Cannot be null as all insurance plans must have a subscriber
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: inssub_id
+
+      - name: plan_type
+        description: |
+          Type of insurance plan.
+          Business rules:
+          - Cannot be null
+          - Should match the plan type from the insurance plan record
+        tests:
+          - not_null
+
+      - name: group_number
+        description: |
+          Insurance group number.
+          Business rules:
+          - Cannot be null
+          - May be shared across multiple carriers
+        tests:
+          - not_null
+
+      - name: group_name
+        description: |
+          Name of the insurance group.
+          Business rules:
+          - Cannot be null
+          - May vary slightly for same group across carriers
+        tests:
+          - not_null
+
+      - name: carrier_name
+        description: |
+          Name of the insurance carrier.
+          Business rules:
+          - Cannot be null
+          - Must match the carrier record
+        tests:
+          - not_null
+
+      - name: verification_date
+        description: |
+          Date when the insurance was last verified.
+          Business rules:
+          - Should be within a reasonable date range (2020-01-01 to 2030-12-31)
+          - Null values indicate unverified insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              column_name: verification_date
+              min_value: "'2020-01-01'::date"
+              max_value: "'2030-12-31'::date"
+              severity: warn
+
+      - name: is_active
+        description: |
+          Flag indicating if the insurance coverage is currently active.
+          Business rules:
+          - True if verified and not pending
+          - False if pending or unverified
+          - Cannot be null
+        tests:
+          - not_null
+
+      - name: effective_date
+        description: |
+          Date when the insurance coverage became effective.
+          Business rules:
+          - Cannot be null
+          - Should be within a reasonable date range (2020-01-01 to 2030-12-31)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              column_name: effective_date
+              min_value: "'2020-01-01'::date"
+              max_value: "'2030-12-31'::date"
+              severity: warn
+
+      - name: termination_date
+        description: |
+          Date when the insurance coverage was terminated (if applicable).
+          Business rules:
+          - Null for active insurance
+          - Should be within a reasonable date range (2020-01-01 to 2030-12-31) if not null
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              column_name: termination_date
+              min_value: "'2020-01-01'::date"
+              max_value: "'2030-12-31'::date"
+              severity: warn
+
+      - name: created_at
+        description: |
+          Timestamp when the record was created.
+          Business rules:
+          - Cannot be null
+          - Should be the greatest of all source table creation dates
+          - Should be within a reasonable date range (2020-01-01 to 2030-12-31)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              column_name: created_at
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "'2030-12-31 23:59:59'::timestamp"
+              severity: warn
+
+      - name: updated_at
+        description: |
+          Timestamp when the record was last updated.
+          Business rules:
+          - Cannot be null
+          - Should be the greatest of all source table update dates
+          - Should be within a reasonable date range (2020-01-01 to 2030-12-31)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              column_name: updated_at
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "'2030-12-31 23:59:59'::timestamp"
+              severity: warn
+
+    tests:
+      - dbt_expectations.expect_compound_columns_to_be_unique:
+          column_list: [insurance_plan_id, patient_id]
+          severity: warn 
