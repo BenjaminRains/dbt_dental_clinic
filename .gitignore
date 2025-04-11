@@ -70,6 +70,11 @@ connection.json
 !.sqlfluff
 !.sqlfluffignore
 
+# Sensitive files in scripts directory
+scripts/check_env.py
+scripts/run_dbt.ps1
+scripts/run_dbt.sh
+
 # Documentation with sensitive business info
 # (add specific paths here)
 
@@ -86,4 +91,4 @@ temp/
 *.log.*.*
 *.log.*.*.*
 *.log.*.*.*.*
-*.log.*.*.*.*.*
+*.log.*.*.*.*.* 
