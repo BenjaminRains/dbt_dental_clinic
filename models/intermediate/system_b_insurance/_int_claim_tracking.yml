@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: int_claim_tracking
+    description: >
+      Complete tracking history for insurance claims, preserving all status updates and notes.
+      Each record represents a tracking entry for a claim, showing its progression through the insurance process.
+    columns:
+      - name: claim_id
+        description: Foreign key to the claim
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_claim_details')
+              field: claim_id
+      - name: claim_tracking_id
+        description: Primary key for the tracking record
+        tests:
+          - not_null
+      - name: tracking_type
+        description: Type of tracking entry (e.g., sent, received, paid)
+        tests:
+          - not_null
+      - name: entry_timestamp
+        description: Timestamp when the tracking entry was created
+        tests:
+          - not_null
+      - name: tracking_note
+        description: Additional notes or comments about the tracking entry
+      - name: created_at
+        description: Timestamp when the tracking entry was created
+        tests:
+          - not_null
+      - name: updated_at
+        description: Timestamp when the tracking entry was last updated
+        tests:
+          - not_null
+    tests:
+      - dbt_expectations.expect_compound_columns_to_be_unique:
+          column_list: [claim_id, claim_tracking_id, tracking_type, entry_timestamp]
+          quote_columns: true
+          ignore_row_if: "any_value_is_missing"
+          severity: warn 
