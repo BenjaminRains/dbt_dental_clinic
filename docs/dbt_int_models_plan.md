@@ -1,93 +1,76 @@
-# STILL IN DEVELOPMENT. NOT CURRENTLY IMPLEMENTED
-
 # Dental Practice DBT Project - Intermediate Models Plan
 
 ## Overview
 
-This document outlines the intermediate models in our dental practice analytics DBT project. These models transform the staging tables into business-focused entities that align with our core business processes. The intermediate layer serves as a bridge between raw staging data and final analytics models.
+This document outlines the intermediate models in our dental practice analytics DBT project. 
+These models transform the staging tables into business-focused entities that align with our 
+core business processes. The intermediate layer serves as a bridge between raw staging data 
+and final analytics models.
 
-## Relationship to Process Flow Systems
+## Current Implementation Status
 
-Our intermediate models are directly aligned with the seven key systems identified in our business process flow diagram (`mdc_process_flow_diagram.mmd`):
+### Foundation Layer (✅ Implemented)
+- `int_patient_profile`: Comprehensive patient information model combining demographics, status,
+ relationships, and financial data
+  - Includes detailed patient attributes and contact preferences
+  - Tracks patient status and important dates
+  - Contains financial flags and balance information
+  - Fully documented with tests and metadata
 
-| Process Flow System | Intermediate Models |
-|---------------------|---------------------|
-| System A: Fee Processing & Verification | `int_procedure_complete` |
-| System B: Insurance Processing | `int_insurance_coverage`, `int_claim_details` |
-| System C: Payment Allocation & Reconciliation | `int_payment_allocated` |
-| System D: AR Analysis | `int_account_aging` |
-| System E: Collection Process | (Uses data from AR Analysis) |
-| System F: Patient-Clinic Communications | `int_patient_communication` |
-| System G: Scheduling & Referrals | `int_appointment_details` |
+### System A: Fee Processing & Verification (✅ Implemented)
+- `int_procedure_complete`: Comprehensive procedure model with fee schedules and validation
+  - Tracks procedure details, codes, and clinical information
+  - Includes fee validation statuses and statistics
+  - Supports fee verification workflow
+  - Contains detailed tests for fee validation
 
-Additionally, we've created cross-system models that represent end-to-end business flows:
-- `int_patient_financial`: Connects systems A, B, and C (procedures, insurance, payments)
-- `int_treatment_journey`: Tracks the complete patient journey across all systems
+- `int_adjustments`: Model for tracking and analyzing fee adjustments
+  - Links adjustments to procedures and standard fees
+  - Calculates adjusted fees and impact
+  - Tracks various adjustment types and categories
 
-For visualization of how these systems interconnect, please refer to `mdc_process_flow_diagram.md`.
+- `int_fee_model`: Focused on fee processing and verification
+  - Tracks applied vs. standard fees
+  - Calculates fee variances and relationships
+  - Integrates adjustment information
+  - Provides fee statistics per procedure code
 
-## Model Structure
+### System B: Insurance Processing (✅ Implemented)
+- `int_claim_details`: Core insurance claim information model
+  - Combines claim details with procedures
+  - Tracks claim status and type
+  - Includes billing and payment amounts
+  - Contains detailed validation rules
 
-### Foundation Models
+- `int_claim_payments`: Detailed payment information for insurance claims
+  - Preserves complete payment history
+  - Tracks payment amounts and dates
+  - Includes payment type and status
+  - Links to claim procedures
 
-1. **`int_patient_profile`**
-   - Base patient demographic information
-   - Combines patient, patientlink, and zipcode tables
-   - Primary patient attributes used by all downstream models
+- `int_claim_tracking`: Complete tracking history for insurance claims
+  - Records status updates and notes
+  - Tracks claim progression
+  - Includes timestamp information
+  - Maintains audit trail
 
-### System-Specific Models
+### System C: Payment Allocation & Reconciliation (✅ Implemented)
+- `int_payment_allocated`: Payment allocation model
+  - Combines patient and insurance payments
+  - Tracks payment splits and allocations
+  - Includes detailed payment type information
+  - Contains comprehensive validation rules
 
-2. **`int_appointment_details`** (System G)
-   - Appointment information enhanced with type and provider details
-   - Adds status descriptions for reporting
-   - Supports scheduling analysis and operational metrics
-
-3. **`int_procedure_complete`** (System A)
-   - Comprehensive procedure data with codes, fees and clinical notes
-   - Links procedures to fee schedules and appointments
-   - Enables procedure analysis and production reporting
-
-4. **`int_insurance_coverage`** (System B)
-   - Patient insurance plan and carrier information
-   - Tracks insurance verification status
-   - Supports insurance eligibility reporting
-
-5. **`int_claim_details`** (System B)
-   - Detailed claim information with procedures and payments
-   - Includes claim tracking status and aging
-   - Enables insurance claim management and follow-up
-
-6. **`int_payment_allocated`** (System C)
-   - Payment data with allocation to procedures
-   - Handles different payment split types
-   - Supports financial reconciliation and payment analysis
-
-7. **`int_account_aging`** (System D)
-   - Aging buckets for accounts receivable (0-30, 31-60, 61-90, 91+)
-   - Both patient-level and family-level aging metrics
-   - Enables AR analysis and collections prioritization
-
-8. **`int_patient_communication`** (System F)
-   - All patient communications consolidated
-   - Categorizes by type, mode, and delivery status
-   - Supports communication analysis and patient engagement metrics
-
-### Cross-System Models
-
-9. **`int_patient_financial`**
-   - Complete financial picture for each patient
-   - Aggregates procedures, payments, insurance, and adjustments
-   - Enables comprehensive financial analysis
-
-10. **`int_treatment_journey`**
-    - End-to-end patient treatment journey
-    - Tracks flow from appointment through procedure, claim, and payment
-    - Enables process analysis and bottleneck identification
+### Pending Implementation
+- System D: AR Analysis
+- System E: Collection Process
+- System F: Patient-Clinic Communications
+- System G: Scheduling & Referrals
+- Cross-system models
 
 ## Implementation Approach
 
 Each intermediate model follows a consistent structure:
-
 1. **CTEs for Source Data**: Each model starts with CTEs that reference staging models
 2. **Joining Logic**: CTEs are joined to create comprehensive entities
 3. **Business Logic**: Status descriptors and calculated fields are added
@@ -95,63 +78,28 @@ Each intermediate model follows a consistent structure:
 
 ## Testing Strategy
 
-Our testing strategy is defined in the `schema.yml` file and includes:
-
-### Data Quality Tests
-- **Not Null Tests**: Critical fields like patient_id, procedure_id
-- **Unique Tests**: Primary keys for each model
-- **Relationship Tests**: Foreign key relationships between models
-
-### Business Logic Tests
-- **Accepted Values**: Ensuring status fields contain valid values
-- **Freshness Tests**: Verifying data is current
-- **Custom SQL Tests**: Special validation for complex business rules
-
-### Example Tests
-
-```yaml
-models:
-  - name: int_procedure_complete
-    columns:
-      - name: procedure_id
-        tests:
-          - unique
-          - not_null
-      - name: procedure_status
-        tests:
-          - accepted_values:
-              values: ['C', 'EC', 'EO', 'R', 'TP']
-  
-  - name: int_payment_allocated
-    columns:
-      - name: payment_id
-        tests:
-          - relationships:
-              to: ref('stg_opendental__payment')
-              field: payment_id
-      - name: split_amount
-        tests:
-          - custom_test_positive_amount
-```
+Our testing strategy includes:
+- Data Quality Tests (not null, unique, relationships)
+- Business Logic Tests (accepted values, custom validations)
+- Performance Tests (row counts, data freshness)
+- Custom Tests for specific business rules
 
 ## Documentation
 
-For each intermediate model, we maintain:
+Each implemented model includes:
+- Detailed column descriptions
+- Business context and rules
+- Test coverage
+- Metadata and ownership information
+- Refresh frequency and data quality requirements
 
-1. **Column Descriptions**: Field definitions in `schema.yml`
-2. **Business Context**: Comments in SQL explaining purpose
-3. **Lineage Documentation**: Source-to-target mappings
-4. **Process Flow**: Relationship to `mdc_process_flow_diagram.mmd`
+## Next Steps
 
-## Implementation Schedule
-
-The recommended implementation order:
-
-1. Foundation models: `int_patient_profile`, `int_procedure_complete`
-2. Financial models: `int_insurance_coverage`, `int_claim_details`, `int_payment_allocated`
-3. Operational models: `int_appointment_details`, `int_patient_communication`
-4. Analysis models: `int_account_aging`
-5. Cross-system models: `int_patient_financial`, `int_treatment_journey`
+1. Implement remaining system-specific models (D-G)
+2. Develop cross-system models
+3. Enhance existing models with additional business rules
+4. Expand test coverage for edge cases
+5. Improve documentation and lineage tracking
 
 ## Maintenance and Governance
 
@@ -163,10 +111,7 @@ The recommended implementation order:
 ## Downstream Usage
 
 These intermediate models serve as the foundation for:
-
 1. **Analytics Models**: Final reporting tables in the mart layer
 2. **Dashboards**: Power BI/Tableau dashboards for operational monitoring
 3. **Data Science**: Machine learning models for patient behavior and revenue prediction
 4. **Operational Reports**: Daily/weekly operational reports for clinic staff
-
-For more detailed information about the business processes these models support, please refer to the `mdc_process_flow_diagram.md` document.
