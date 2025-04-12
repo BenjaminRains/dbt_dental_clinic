@@ -1,0 +1,407 @@
+version: 2
+
+models:
+  - name: int_payment_allocated
+    description: >
+      Intermediate model for payment allocations that combines patient payments and insurance payments.
+      This model serves as the foundation for payment reconciliation and accounts receivable analysis.
+      Part of System C: Payment Allocation & Reconciliation.
+      
+      Insurance claims are filtered to only include:
+      - Status 1 (Received) or 3 (Supplemental) claims
+      - Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
+    
+    columns:
+      - name: payment_allocation_id
+        description: Unique identifier for each payment allocation record
+        tests:
+          - unique
+          - not_null
+
+      - name: payment_source_type
+        description: Type of payment source (PATIENT or INSURANCE)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['PATIENT', 'INSURANCE']
+
+      - name: payment_id
+        description: Foreign key to either patient payment or insurance claim payment
+        tests:
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: clinic_id
+        description: Foreign key to the clinic
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+
+      - name: provider_id
+        description: Foreign key to the provider
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: procedure_id
+        description: Foreign key to the procedure
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+
+      - name: adjustment_id
+        description: Foreign key to the adjustment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__adjustment')
+              field: adjustment_id
+
+      - name: payplan_id
+        description: Foreign key to the payment plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__payplan')
+              field: payplan_id
+
+      - name: payplan_charge_id
+        description: Foreign key to the payment plan charge
+        tests:
+          - relationships:
+              to: ref('stg_opendental__payplancharge')
+              field: payplan_charge_id
+
+      - name: forward_split_id
+        description: Reference to another split record if this is a forwarded payment
+
+      - name: split_amount
+        description: Amount allocated in this payment split
+        tests:
+          - not_null
+
+      - name: payment_date
+        description: Date when the payment was made
+        tests:
+          - not_null
+
+      - name: procedure_date
+        description: Date of the associated procedure
+
+      - name: payment_type_id
+        description: |
+          Type of payment. Current patterns (2023-present):
+          - 71: Most common type (8,335 payments), avg $293
+          - 0: Administrative entries (1,110 payments), must be $0
+          - 69: High value payments (965 payments)
+              * Average: $1,036
+              * Warning Tiers:
+                - LOW: > $5,000
+                - MEDIUM: > $10,000
+                - HIGH: > $25,000
+                - CRITICAL: > $50,000
+          - 70: Regular payments (609 payments), avg $348
+          - 391: High value (482 payments), avg $922
+          - 412: Newer payment type (187 payments), avg $199
+          - 72: Refunds (50 payments), always negative
+          - 634: New type since Sept 2024 (16 payments), avg $6,009
+          - 574: Very high value (6 payments), avg $26,071
+          - 417: Special cases (6 payments), avg $2,967
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+              config:
+                severity: warn
+
+      - name: payment_source
+        description: Source of the payment
+
+      - name: payment_status
+        description: Status of the payment
+
+      - name: process_status
+        description: Processing status of the payment
+
+      - name: is_discount_flag
+        description: Flag indicating if this is a discount
+        tests:
+          - not_null
+
+      - name: discount_type
+        description: Type of discount if applicable
+
+      - name: unearned_type
+        description: >
+          Classification for unearned payment types. 
+          Special attention required for types:
+          - Type 288: Represents one type of unearned income
+          - Type 439: Represents another type of unearned income
+          - Zero-amount splits with type 288 are valid for administrative tracking
+        tests:
+          - accepted_values:
+              values: [288, 439]
+              where: "payment_source_type = 'PATIENT' AND unearned_type IS NOT NULL"
+
+      - name: payplan_debit_type
+        description: Type of payment plan debit
+
+      - name: merchant_fee
+        description: Merchant fee associated with the payment
+
+      - name: payment_notes
+        description: Additional notes about the payment
+
+      - name: check_number
+        description: Check number for the payment
+
+      - name: bank_branch
+        description: Bank branch information
+
+      - name: created_by_user_id
+        description: ID of the user who created the record
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+
+      - name: entry_date
+        description: Date when the record was entered
+        tests:
+          - not_null
+
+      - name: updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+
+      - name: deposit_id
+        description: Foreign key to the deposit record
+        tests:
+          - relationships:
+              to: ref('stg_opendental__deposit')
+              field: deposit_id
+
+      - name: external_id
+        description: External system reference ID for the payment
+
+      - name: is_cc_completed_flag
+        description: Flag indicating if credit card payment is completed
+
+      - name: recurring_charge_date
+        description: Next scheduled date for recurring payment
+
+      - name: receipt_text
+        description: Text content of the payment receipt
+
+      - name: carrier_name
+        description: Name of the insurance carrier
+
+      - name: is_partial
+        description: Flag indicating if this is a partial insurance payment
+
+      - name: payment_group_id
+        description: Group identifier for related payments
+
+      - name: insurance_subscriber_id
+        description: Foreign key to the insurance subscriber
+        tests:
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: inssub_id
+
+      - name: claim_id
+        description: Foreign key to the insurance claim
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+
+      - name: plan_id
+        description: Foreign key to the insurance plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+
+      - name: deductible_applied
+        description: Amount of deductible applied to this payment
+
+      - name: write_off
+        description: Amount written off for this payment
+
+      - name: allowed_override
+        description: Manual override for allowed amount
+
+      - name: copay_amount
+        description: Copay amount for this payment
+
+      - name: paid_other_insurance
+        description: Amount paid by other insurance
+
+      - name: base_estimate
+        description: Base estimate before adjustments
+
+      - name: insurance_estimate_total
+        description: Total estimate from insurance
+
+      - name: status
+        description: Status of the claim procedure
+
+      - name: percentage
+        description: Percentage of coverage for this procedure
+
+      - name: is_transfer
+        description: Flag indicating if this is a transfer payment
+
+      - name: is_overpay
+        description: Flag indicating if this is an overpayment
+
+      - name: remarks
+        description: Additional remarks about the claim procedure
+
+      - name: code_sent
+        description: Procedure code sent to insurance
+
+      - name: estimate_note
+        description: Notes about the insurance estimate
+
+      - name: payment_type_description
+        description: Human-readable description of the payment type
+        tests:
+          - not_null
+
+      - name: payment_status_description
+        description: Human-readable description of the payment status
+        tests:
+          - not_null
+
+      - name: process_status_description
+        description: Human-readable description of the process status
+        tests:
+          - not_null
+
+      - name: split_type_description
+        description: Human-readable description of the split type
+        tests:
+          - not_null
+
+      - name: include_in_ar
+        description: Flag indicating if this payment should be included in AR calculations
+        tests:
+          - not_null
+
+      - name: model_created_at
+        description: Timestamp when this model was created
+        tests:
+          - not_null
+
+      - name: model_updated_at
+        description: Timestamp when this model was last updated
+        tests:
+          - not_null
+
+      - name: claim_payment_id
+        description: >
+          Foreign key to the insurance claim payment. Records with claim_payment_id = 0
+          are excluded as they represent claims without payments.
+
+    tests:
+      # Date range validation
+      - dbt_utils.expression_is_true:
+          expression: "payment_date >= '2023-01-01'"
+          config:
+            severity: warn
+
+      # Payment amount validation based on payment type
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'PATIENT' AND
+              (
+                (payment_type_id = 0 AND split_amount != 0) OR
+                (payment_type_id = 72 AND split_amount >= 0) OR
+                (payment_type_id = 69 AND split_amount > 50000) OR
+                (payment_type_id = 574 AND split_amount > 50000)
+              )
+            )
+          config:
+            severity: error
+            description: "Payment amounts must match their type constraints"
+
+      # Payment split allocation validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            procedure_id IS NOT NULL OR 
+            adjustment_id IS NOT NULL OR 
+            payplan_charge_id IS NOT NULL
+          config:
+            severity: error
+            description: >
+              Each payment split must be allocated to a procedure, adjustment,
+              or payment plan
+
+      # Zero-amount split validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              split_amount = 0 AND
+              is_discount_flag = false AND
+              unearned_type != 288 AND
+              procedure_id IS NULL
+            )
+          config:
+            severity: error
+            description: >
+              Zero-amount splits must be either discounts, unearned type 288,
+              or have a procedure
+
+      # Provider assignment for unearned types
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'PATIENT' AND
+              unearned_type IN (288, 439) AND
+              provider_id IS NULL
+            )
+          config:
+            severity: error
+            description: "Unearned payment types (288, 439) must have a provider assigned"
+
+      # Insurance payment validation
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payment_source_type = 'INSURANCE' AND payment_id IS NULL)"
+          config:
+            severity: error
+            description: "Insurance payments must have a valid claim_payment_id"
+
+    meta:
+      owner: "dental_finance_team"
+      contains_pii: true
+      business_process: "Payment Allocation & Reconciliation"
+      refresh_frequency: "hourly"
+      business_impact: "High"
+      data_quality_requirements:
+        - "All payment allocations must have a valid payment_id"
+        - "Split amounts must be positive unless explicitly marked as refunds"
+        - "Payment dates must be within valid business date ranges"
+        - "Insurance payments must be properly linked to claim procedures"
+        - "Deposit IDs must be valid when present"
+        - "Insurance subscriber IDs must be valid when present"
+        - "Claim IDs must be valid when present"
+        - "Plan IDs must be valid when present"
+        - "Payment amounts must match their type constraints (e.g., type 0 must be $0)"
+        - "Each payment split must be allocated to a procedure, adjustment, or payment plan"
+        - "Zero-amount splits must be either discounts, unearned type 288, or have a procedure"
+        - "Unearned payment types (288, 439) must have a provider assigned"
+        - "Monitor high-value payments for potential fraud or errors"
+        - "Insurance claims must have a valid claim_payment_id (excludes claim_payment_id = 0)" 
