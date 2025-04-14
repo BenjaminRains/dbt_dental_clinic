@@ -1,0 +1,366 @@
+version: 2
+
+models:
+  - name: int_ar_analysis
+    description: >
+      Comprehensive Accounts Receivable analysis model that combines patient balances,
+      insurance claims, payment activity, and adjustments. This model serves as the
+      foundation for AR reporting and analysis, providing a complete view of both
+      patient and insurance receivables. It includes detailed tracking of claim
+      processing, payment activities, statements, and adjustments.
+      
+      This model maintains a one-to-one relationship with the patient profile model,
+      ensuring that every patient has exactly one AR analysis record. All financial
+      metrics are aggregated at the patient level, providing a complete financial
+      picture for each patient in the system.
+    
+    columns:
+      - name: patient_id
+        description: > 
+          Primary key - Unique identifier for the patient. This field maintains
+          a one-to-one relationship with the patient profile model.
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+
+      - name: total_ar_balance
+        description: Total outstanding AR balance for the patient
+        tests:
+          - not_null
+
+      - name: balance_0_30_days
+        description: AR balance aged 0-30 days
+        tests:
+          - not_null
+
+      - name: balance_31_60_days
+        description: AR balance aged 31-60 days
+        tests:
+          - not_null
+
+      - name: balance_61_90_days
+        description: AR balance aged 61-90 days
+        tests:
+          - not_null
+
+      - name: balance_over_90_days
+        description: AR balance aged over 90 days
+        tests:
+          - not_null
+
+      - name: estimated_insurance_ar
+        description: Estimated amount pending from insurance
+        tests:
+          - not_null
+
+      - name: payment_plan_balance
+        description: Outstanding balance on payment plans
+        tests:
+          - not_null
+
+      - name: pending_claims_count
+        description: Number of pending insurance claims
+        tests:
+          - not_null
+
+      - name: pending_claims_amount
+        description: Total amount of pending insurance claims
+        tests:
+          - not_null
+
+      - name: denied_claims_count
+        description: Number of denied insurance claims (from claim tracking)
+        tests:
+          - not_null
+
+      - name: denied_claims_amount
+        description: Total amount of denied insurance claims (from claim tracking)
+        tests:
+          - not_null
+
+      - name: last_payment_date
+        description: Most recent payment date from any source
+        tests:
+          - not_null
+
+      - name: total_payment_amount
+        description: Total amount of all payments received, including merchant fees
+        tests:
+          - not_null
+
+      - name: total_merchant_fees
+        description: Total fees paid to payment processors (e.g., credit card fees)
+        tests:
+          - not_null
+
+      - name: split_payment_count
+        description: Number of payments that were split across multiple procedures or adjustments
+        tests:
+          - not_null
+
+      - name: recurring_cc_payment_count
+        description: Number of recurring credit card payments set up
+        tests:
+          - not_null
+
+      - name: completed_cc_payment_count
+        description: Number of successfully completed credit card payments
+        tests:
+          - not_null
+
+      - name: completed_payment_count
+        description: Total number of successfully completed payments
+        tests:
+          - not_null
+
+      - name: voided_payment_count
+        description: Number of voided or cancelled payments
+        tests:
+          - not_null
+
+      - name: cash_payment_count
+        description: Number of cash payments received
+        tests:
+          - not_null
+
+      - name: check_payment_count
+        description: Number of check payments received
+        tests:
+          - not_null
+
+      - name: credit_card_payment_count
+        description: Number of credit card payments received
+        tests:
+          - not_null
+
+      - name: patient_insurance_payment_count
+        description: Number of insurance payments made by patients (from payment table)
+        tests:
+          - not_null
+
+      - name: insurance_payment_count
+        description: >
+          Number of insurance payments received from insurance
+          companies (from claimpayment table)
+        tests:
+          - not_null
+
+      - name: total_payments
+        description: Total amount of non-discount payments received from patients
+        tests:
+          - not_null
+
+      - name: total_discounts
+        description: Total amount of discounts applied to patient payments
+        tests:
+          - not_null
+
+      - name: active_payment_plans
+        description: Number of active payment plans
+        tests:
+          - not_null
+
+      - name: payment_plan_payments
+        description: Total payments received through payment plans
+        tests:
+          - not_null
+
+      - name: unearned_income_count
+        description: Number of unearned income entries (prepayments or deposits)
+        tests:
+          - not_null
+
+      - name: unearned_income_amount
+        description: Total amount of unearned income (prepayments or deposits)
+        tests:
+          - not_null
+
+      - name: last_insurance_payment_date
+        description: Date of most recent insurance payment
+        tests:
+          - not_null
+
+      - name: total_insurance_payments
+        description: Total payments received from insurance
+        tests:
+          - not_null
+
+      - name: last_statement_date
+        description: Date of most recent statement sent
+        tests:
+          - not_null
+
+      - name: statement_count
+        description: Total number of statements sent
+        tests:
+          - not_null
+
+      - name: total_statement_balance
+        description: Total balance across all statements
+        tests:
+          - not_null
+
+      - name: total_statement_insurance_estimate
+        description: Total insurance estimate across all statements
+        tests:
+          - not_null
+
+      - name: receipt_count
+        description: Number of receipt-type statements
+        tests:
+          - not_null
+
+      - name: invoice_count
+        description: Number of invoice-type statements
+        tests:
+          - not_null
+
+      - name: write_off_amount
+        description: Total amount written off
+        tests:
+          - not_null
+
+      - name: credit_amount
+        description: Total credit adjustments
+        tests:
+          - not_null
+
+      - name: insurance_writeoff_count
+        description: Number of insurance write-off adjustments
+        tests:
+          - not_null
+
+      - name: insurance_writeoff_amount
+        description: Total amount of insurance write-offs
+        tests:
+          - not_null
+
+      - name: procedure_adjustment_count
+        description: Number of procedure-specific adjustments
+        tests:
+          - not_null
+
+      - name: retroactive_adjustment_count
+        description: Number of retroactive adjustments
+        tests:
+          - not_null
+
+      - name: provider_discount_count
+        description: Number of provider discount adjustments
+        tests:
+          - not_null
+
+      - name: provider_discount_amount
+        description: Total amount of provider discounts
+        tests:
+          - not_null
+
+      - name: submitted_claims_count
+        description: Number of claims submitted to insurance
+        tests:
+          - not_null
+
+      - name: received_claims_count
+        description: Number of claims received by insurance
+        tests:
+          - not_null
+
+      - name: tracking_denied_claims_count
+        description: Number of claims denied by insurance (from claim tracking history)
+        tests:
+          - not_null
+
+      - name: first_claim_submission_date
+        description: Date of first claim submission
+        tests:
+          - not_null
+
+      - name: last_claim_submission_date
+        description: Date of most recent claim submission
+        tests:
+          - not_null
+
+      - name: first_claim_received_date
+        description: Date of first claim receipt by insurance
+        tests:
+          - not_null
+
+      - name: last_claim_received_date
+        description: Date of most recent claim receipt by insurance
+        tests:
+          - not_null
+
+      - name: first_claim_denied_date
+        description: Date of first claim denial
+        tests:
+          - not_null
+
+      - name: last_claim_denied_date
+        description: Date of most recent claim denial
+        tests:
+          - not_null
+
+      - name: completed_procedures_count
+        description: Number of procedures with status 2 (Completed)
+        tests:
+          - not_null
+
+      - name: treatment_planned_procedures_count
+        description: Number of procedures with status 1 (Treatment Planned)
+        tests:
+          - not_null
+
+      - name: ordered_planned_procedures_count
+        description: Number of procedures with status 6 (Ordered/Planned)
+        tests:
+          - not_null
+
+      - name: in_progress_procedures_count
+        description: Number of procedures with status 8 (In Progress)
+        tests:
+          - not_null
+
+      - name: locked_procedures_count
+        description: Number of procedures that are locked from changes
+        tests:
+          - not_null
+
+      - name: created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+
+      - name: updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+
+    meta:
+      business_owners: ["dental_finance_team", "insurance_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "Total AR balance should equal sum of aging buckets"
+        - "Insurance AR should be non-negative"
+        - "Payment plan balance should be non-negative"
+        - "Write-off and credit amounts should be non-negative"
+        - "Claim counts should be non-negative"
+        - "Statement counts should be non-negative"
+        - "Payment amounts should be non-negative"
+        - "Adjustment amounts should be non-negative"
+        - "Dates should be in chronological order (first dates before last dates)"
+        - "Total payment amount should be greater than or equal to total merchant fees"
+        - "Payment counts should be non-negative"
+        - "Unearned income amount should be non-negative"
+        - "Procedure status counts should be non-negative"
+        - "Completed procedures count should be less than or equal to total procedures"
+        - "Treatment planned procedures should have future procedure dates"
+        - "Every patient must have exactly one AR analysis record"
+        - "AR analysis record count must match patient profile record count"
+        - "All financial metrics must be properly aggregated at the patient level" 
