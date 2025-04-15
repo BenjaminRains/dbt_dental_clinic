@@ -733,10 +733,8 @@ models:
             description: "Treatment planned procedures must have payment dates"
 
       # Patient record validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            (SELECT COUNT(*) FROM {{ ref('int_patient_profile') }}) =
-            (SELECT COUNT(*) FROM {{ this }})
+      - dbt_utils.equal_rowcount:
+          compare_model: ref('int_patient_profile')
           config:
             severity: error
             description: "AR analysis record count must match patient profile record count"
