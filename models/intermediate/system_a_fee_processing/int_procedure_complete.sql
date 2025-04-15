@@ -48,6 +48,18 @@ FeeSchedules AS (
     FROM {{ ref('stg_opendental__feesched') }}
 ),
 
+-- Get definitions for various coded values
+Definitions AS (
+    SELECT
+        definition_id,
+        category_id,
+        item_name,
+        item_value,
+        item_order,
+        item_color
+    FROM {{ ref('stg_opendental__definition') }}
+),
+
 -- Standard fees with ranking to get the most relevant fee per procedure code
 StandardFees AS (
     SELECT
@@ -77,19 +89,6 @@ FeeStats AS (
     GROUP BY procedure_code_id
 ),
 
--- Map procedure status to a descriptive string
-ProcedureStatusMap AS (
-    SELECT 1 AS procedure_status, 'Treatment Plan' AS procedure_status_desc 
-    UNION ALL SELECT 2, 'Complete'
-    UNION ALL SELECT 3, 'Existing Current'
-    UNION ALL SELECT 4, 'Existing Other'
-    UNION ALL SELECT 5, 'Referred'
-    UNION ALL SELECT 6, 'Deleted'
-    UNION ALL SELECT 7, 'Condition'
-    UNION ALL SELECT 8, 'EHR Planned'
-    UNION ALL SELECT 9, 'Draft'
-),
-
 -- Combine everything
 ProcedureComplete AS (
     SELECT
@@ -100,7 +99,7 @@ ProcedureComplete AS (
         pl.procedure_code_id,
         pl.procedure_date,
         pl.procedure_status,
-        ps.procedure_status_desc,
+        def_status.item_name as procedure_status_desc,
         pl.procedure_fee,
         pl.tooth_number,
         pl.surface,
@@ -112,6 +111,7 @@ ProcedureComplete AS (
         pc.abbreviated_description,
         pc.is_hygiene_flag,
         pc.treatment_area,
+        def_treatment.item_name as treatment_area_desc,
         pc.is_prosthetic_flag,
         pc.is_multi_visit_flag,
         
@@ -121,6 +121,7 @@ ProcedureComplete AS (
         sf.standard_fee,
         fs.fee_schedule_description,
         fs.fee_schedule_type_id,
+        def_fee_type.item_name as fee_schedule_type_desc,
         
         -- Fee statistics
         fstat.available_fee_options,
@@ -162,8 +163,16 @@ ProcedureComplete AS (
         ON sf.fee_schedule_id = fs.fee_schedule_id
     LEFT JOIN ProcedureNotes pn
         ON pl.procedure_id = pn.procedure_id
-    LEFT JOIN ProcedureStatusMap ps
-        ON pl.procedure_status = ps.procedure_status
+    -- Join with definitions for various coded values
+    LEFT JOIN Definitions def_status
+        ON def_status.category_id = 4  -- Assuming category_id 4 is for procedure status
+        AND def_status.item_value = pl.procedure_status::text
+    LEFT JOIN Definitions def_treatment
+        ON def_treatment.category_id = 5  -- Assuming category_id 5 is for treatment areas
+        AND def_treatment.item_value = pc.treatment_area::text
+    LEFT JOIN Definitions def_fee_type
+        ON def_fee_type.category_id = 6  -- Assuming category_id 6 is for fee schedule types
+        AND def_fee_type.item_value = fs.fee_schedule_type_id::text
 )
 
 SELECT * FROM ProcedureComplete
