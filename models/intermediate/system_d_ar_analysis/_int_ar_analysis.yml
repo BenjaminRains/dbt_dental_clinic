@@ -330,6 +330,31 @@ models:
         tests:
           - not_null
 
+      - name: patient_status
+        description: Current status of the patient
+        tests:
+          - not_null
+
+      - name: patient_status_description
+        description: Human-readable description of the patient's status
+        tests:
+          - not_null
+
+      - name: claim_status
+        description: Current status of the insurance claim
+        tests:
+          - not_null
+
+      - name: claim_status_description
+        description: Human-readable description of the claim's status
+        tests:
+          - not_null
+
+      - name: adjustment_type_description
+        description: Human-readable description of the adjustment type
+        tests:
+          - not_null
+
       - name: created_at
         description: Timestamp when the record was created
         tests:
