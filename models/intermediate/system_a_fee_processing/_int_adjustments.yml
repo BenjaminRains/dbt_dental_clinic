@@ -59,7 +59,7 @@ models:
 
       - name: clinic_id
         description: Clinic where adjustment was made
-        tests: []  # Remove all tests for clinic_id
+        tests: [] # MDC clinic only. No need to test.
 
       - name: adjustment_amount
         description: Amount of the adjustment (can be positive or negative)
@@ -78,14 +78,42 @@ models:
         tests:
           - not_null
 
+      - name: adjustment_category
+        description: Category of the adjustment
+        tests:
+          - not_null
+
+      - name: adjustment_size
+        description: Size classification of the adjustment
+        tests:
+          - not_null
+
       - name: adjustment_type_name
-        description: Name of the adjustment type from definitions table
+        description: Human-readable name of the adjustment type from definitions table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              config:
+                severity: warn
 
       - name: adjustment_type_value
-        description: Value associated with the adjustment type from definitions
+        description: Value associated with the adjustment type from definitions table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_value
+              config:
+                severity: warn
 
       - name: adjustment_category_type
-        description: Category ID from definitions table
+        description: Category ID from definitions table indicating the type of adjustment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: category_id
+              config:
+                severity: warn
 
       - name: procedure_code
         description: ADA procedure code from linked procedure
@@ -110,7 +138,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
-              severity: warn  # Downgraded to warn since fees may vary for out-of-network
+              severity: warn
 
       - name: adjusted_fee
         description: Final fee amount after adjustment (procedure_fee + adjustment_amount)
@@ -118,7 +146,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
-              severity: warn  # Downgraded to warn since fees may vary for out-of-network
+              severity: warn
 
       - name: adjustment_impact
         description: Classification of adjustment impact based on percentage of procedure fee
@@ -175,3 +203,13 @@ models:
           expression: "abs(adjustment_amount) <= procedure_fee * 2"
           severity: warn
           name: warn_large_adjustments
+
+      - dbt_utils.expression_is_true:
+          expression: "not (adjustment_type_name is null and adjustment_type_id is not null)"
+          severity: warn
+          name: warn_missing_adjustment_type_description
+
+      - dbt_utils.expression_is_true:
+          expression: "not (adjustment_category is null and adjustment_type_id is not null)"
+          severity: warn
+          name: warn_missing_adjustment_category
