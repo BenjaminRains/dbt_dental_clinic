@@ -6,6 +6,14 @@ models:
       Comprehensive procedure model that combines clinical procedure data with fee schedules
       and validation flags. Part of System A: Fee Processing & Verification workflow.
       
+      Data Sources:
+      - stg_opendental__procedurelog: Base procedure records, statuses, and fees
+      - stg_opendental__procedurecode: Procedure code definitions and descriptions
+      - stg_opendental__fee: Standard fee amounts and schedules
+      - stg_opendental__feesched: Fee schedule definitions and types
+      - stg_opendental__definition: Status descriptions, treatment areas, and fee types
+      - stg_opendental__procedurenote: Clinical notes and documentation
+      
       Key metrics:
       - Approximately 88,000 procedures from staging
       - Fee validation statuses track discrepancies between standard and applied fees
