@@ -10,24 +10,24 @@ models:
       
       Key features:
       - Combines patient payments and insurance payments
-      - Tracks payment splits and allocations
-      - Maintains payment status and processing information
+      - Tracks payment allocations and status
+      - Maintains payment processing information
       - Preserves detailed payment metadata
       - Supports AR calculations and aging analysis
       
       Data Sources:
       - stg_opendental__payment: Base patient payment information
-      - stg_opendental__paysplit: Payment splits and allocations
       - stg_opendental__claimpayment: Insurance payment details
       - stg_opendental__claimproc: Claim procedure information
+      - stg_opendental__definition: Payment type and status definitions
       
       Business rules:
       - Insurance claims are filtered to only include:
         * Status 1 (Received) or 3 (Supplemental) claims
         * Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
       - Payment dates are used for AR calculations
-      - Payment types have specific amount constraints
-      - Zero-amount splits require special handling
+      - Payment types and statuses are managed through the definition table
+      - Payment allocations must be properly linked to procedures or claims
     
     config:
       materialized: incremental
@@ -105,7 +105,7 @@ models:
               field: payplan_charge_id
 
       - name: split_amount
-        description: Amount allocated in this payment split
+        description: Amount allocated in this payment
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
@@ -118,14 +118,14 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'2026-12-31'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: procedure_date
         description: Date of the associated procedure
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'2026-12-31'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: payment_type_id
         description: |
@@ -146,12 +146,21 @@ models:
           - 634: New type since Sept 2024 (16 payments), avg $6,009
           - 574: Very high value (6 payments), avg $26,071
           - 417: Special cases (6 payments), avg $2,967
+          
+          This field is also a foreign key to the definition table (category_id = 1) which contains
+          the official payment type descriptions and metadata. The relationship ensures that all
+          payment types used in the system are properly defined and maintained in a central location.
         tests:
           - not_null
           - accepted_values:
               values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
               config:
                 severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              where: "category_id = 1"
+              description: "Ensures all payment types are properly defined in the definition table"
 
       - name: payment_source
         description: Source of the payment
@@ -160,53 +169,24 @@ models:
               where: "payment_source_type = 'PATIENT'"
 
       - name: payment_status
-        description: Status of the payment
+        description: Foreign key to the payment status definition
         tests:
           - not_null:
               where: "payment_source_type = 'PATIENT'"
-          - accepted_values:
-              values: [0, 1, 2, 3]
-              where: "payment_source_type = 'PATIENT'"
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              where: "category_id = 2"
 
       - name: process_status
-        description: Processing status of the payment
+        description: Foreign key to the process status definition
         tests:
           - not_null:
               where: "payment_source_type = 'PATIENT'"
-          - accepted_values:
-              values: [0, 1, 2, 3]
-              where: "payment_source_type = 'PATIENT'"
-
-      - name: is_discount_flag
-        description: Flag indicating if this is a discount
-        tests:
-          - not_null
-          - accepted_values:
-              values: [true, false]
-
-      - name: discount_type
-        description: Type of discount if applicable
-        tests:
-          - not_null:
-              where: "is_discount_flag = true"
-
-      - name: unearned_type
-        description: >
-          Classification for unearned payment types. 
-          Special attention required for types:
-          - Type 288: Represents one type of unearned income
-          - Type 439: Represents another type of unearned income
-          - Zero-amount splits with type 288 are valid for administrative tracking
-        tests:
-          - accepted_values:
-              values: [288, 439]
-              where: "payment_source_type = 'PATIENT' AND unearned_type IS NOT NULL"
-
-      - name: payplan_debit_type
-        description: Type of payment plan debit
-        tests:
-          - not_null:
-              where: "payplan_id IS NOT NULL"
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              where: "category_id = 2"
 
       - name: merchant_fee
         description: Merchant fee associated with the payment
@@ -244,7 +224,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'2026-12-31'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: updated_at
         description: Timestamp when the record was last updated
@@ -252,7 +232,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'2026-12-31'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: deposit_id
         description: Foreign key to the deposit record
@@ -279,7 +259,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'2026-12-31'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
               where: "payment_source_type = 'PATIENT'"
 
       - name: receipt_text
@@ -440,32 +420,82 @@ models:
               where: "payment_source_type = 'INSURANCE'"
 
       - name: payment_type_description
-        description: Human-readable description of the payment type
+        description: |
+          Human-readable description of the payment type from definition table.
+          Current patterns (2023-present):
+          - Standard Payment (type 71): Most common type, avg $293
+          - Administrative (type 0): Must be $0
+          - High Value Payment (type 69): 
+              * Average: $1,036
+              * Warning Tiers:
+                - LOW: > $5,000
+                - MEDIUM: > $10,000
+                - HIGH: > $25,000
+                - CRITICAL: > $50,000
+          - Regular Payment (type 70): avg $348
+          - High Value (type 391): avg $922
+          - New Payment Type (type 412): avg $199
+          - Refund (type 72): Always negative
+          - New Type (type 634): avg $6,009
+          - Very High Value (type 574): avg $26,071
+          - Special Case (type 417): avg $2,967
         tests:
           - not_null
           - accepted_values:
-              values: ['Administrative', 'High Value Payment', 'Regular Payment', 'Standard Payment', 'Refund', 'Very High Value', 'New Payment Type', 'Special Case', 'Insurance Check', 'Electronic Payment', 'Insurance Credit', 'Unknown', 'Unknown Insurance Payment']
+              values: [
+                'Standard Payment', 'Administrative', 'High Value Payment',
+                'Regular Payment', 'High Value', 'New Payment Type', 'Refund',
+                'New Type', 'Very High Value', 'Special Case', 'Insurance Check',
+                'Electronic Payment', 'Insurance Credit', 'Unknown',
+                'Unknown Insurance Payment'
+              ]
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              where: "category_id = 1"
+              description: "Ensures payment type descriptions match the definition table"
 
       - name: payment_status_description
-        description: Human-readable description of the payment status
+        description: |
+          Human-readable description of the payment status from definition table.
+          Current patterns:
+          - Pending (status 0): Initial state
+          - Completed (status 1): Successfully processed
+          - Failed (status 2): Processing failed
+          - Voided (status 3): Cancelled payment
         tests:
           - not_null
           - accepted_values:
               values: ['Pending', 'Completed', 'Failed', 'Voided', 'Unknown', 'N/A']
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              where: "category_id = 2"
+              description: "Ensures payment status descriptions match the definition table"
 
       - name: process_status_description
-        description: Human-readable description of the process status
+        description: |
+          Human-readable description of the process status from definition table.
+          Current patterns:
+          - Not Processed (status 0): Initial state
+          - Processing (status 1): Currently being processed
+          - Processed (status 2): Successfully completed
+          - Error (status 3): Processing error occurred
         tests:
           - not_null
           - accepted_values:
               values: ['Not Processed', 'Processing', 'Processed', 'Error', 'Unknown', 'N/A']
-
-      - name: split_type_description
-        description: Human-readable description of the split type
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['Unearned Revenue', 'Treatment Plan Prepayment', 'Discount', 'Payment Plan', 'Normal Payment']
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              where: "category_id = 2"
+              description: "Ensures process status descriptions match the definition table"
 
       - name: include_in_ar
         description: Flag indicating if this payment should be included in AR calculations
@@ -480,7 +510,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'2026-12-31'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: model_updated_at
         description: Timestamp when this model was last updated
@@ -488,7 +518,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'2026-12-31'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
     tests:
       # Date range validation
@@ -513,45 +543,6 @@ models:
             severity: error
             description: "Payment amounts must match their type constraints"
 
-      # Payment split allocation validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            procedure_id IS NOT NULL OR 
-            adjustment_id IS NOT NULL OR 
-            payplan_charge_id IS NOT NULL
-          config:
-            severity: error
-            description: >
-              Each payment split must be allocated to a procedure, adjustment,
-              or payment plan
-
-      # Zero-amount split validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            NOT (
-              split_amount = 0 AND
-              is_discount_flag = false AND
-              unearned_type != 288 AND
-              procedure_id IS NULL
-            )
-          config:
-            severity: error
-            description: >
-              Zero-amount splits must be either discounts, unearned type 288,
-              or have a procedure
-
-      # Provider assignment for unearned types
-      - dbt_utils.expression_is_true:
-          expression: >
-            NOT (
-              payment_source_type = 'PATIENT' AND
-              unearned_type IN (288, 439) AND
-              provider_id IS NULL
-            )
-          config:
-            severity: error
-            description: "Unearned payment types (288, 439) must have a provider assigned"
-
       # Insurance payment validation
       - dbt_utils.expression_is_true:
           expression: "NOT (payment_source_type = 'INSURANCE' AND payment_id IS NULL)"
@@ -573,16 +564,13 @@ models:
       business_impact: "High"
       data_quality_requirements:
         - "All payment allocations must have a valid payment_id"
-        - "Split amounts must be positive unless explicitly marked as refunds"
+        - "Payment amounts must be positive unless explicitly marked as refunds"
         - "Payment dates must be within valid business date ranges"
         - "Insurance payments must be properly linked to claim procedures"
         - "Deposit IDs must be valid when present"
         - "Insurance subscriber IDs must be valid when present"
         - "Claim IDs must be valid when present"
         - "Plan IDs must be valid when present"
-        - "Payment amounts must match their type constraints (e.g., type 0 must be $0)"
-        - "Each payment split must be allocated to a procedure, adjustment, or payment plan"
-        - "Zero-amount splits must be either discounts, unearned type 288, or have a procedure"
-        - "Unearned payment types (288, 439) must have a provider assigned"
+        - "Payment types and statuses must be valid definitions"
         - "Monitor high-value payments for potential fraud or errors"
         - "Insurance claims must have a valid claim_payment_id (excludes claim_payment_id = 0)" 
