@@ -196,6 +196,7 @@ StatementActivity as (
 Adjustments as (
     select
         patient_id,
+        max(adjustment_category) as adjustment_category,
         sum(case 
             when adjustment_amount < 0 
             then abs(adjustment_amount) 
@@ -305,26 +306,11 @@ EnrichedData as (
         adj.*, -- Adjustment metrics including write-offs and credits
         ct.*, -- Claim tracking metrics including submission and denial dates
         -- Patient Status Description
-        (
-            select item_name 
-            from Definitions 
-            where category_id = 1 
-            and item_value = pb.patient_status::text
-        ) as patient_status_description,
+        def_patient.item_name as patient_status_description,
         -- Claim Status Description
-        (
-            select item_name 
-            from Definitions 
-            where category_id = 2 
-            and item_value = ia.claim_status::text
-        ) as claim_status_description,
+        def_claim.item_name as claim_status_description,
         -- Adjustment Type Descriptions
-        (
-            select item_name 
-            from Definitions 
-            where category_id = 3 
-            and item_value = adj.adjustment_category::text
-        ) as adjustment_type_description,
+        def_adj.item_name as adjustment_type_description,
         current_timestamp as created_at,
         current_timestamp as updated_at
     from PatientBalances pb
@@ -342,6 +328,16 @@ EnrichedData as (
         on pb.patient_id = adj.patient_id
     left join ClaimTracking ct
         on pb.patient_id = ct.patient_id
+    -- Join with definitions for descriptions
+    left join Definitions def_patient
+        on def_patient.category_id = 1 
+        and def_patient.item_value = pb.patient_status::text
+    left join Definitions def_claim
+        on def_claim.category_id = 2 
+        and def_claim.item_value = ia.claim_status::text
+    left join Definitions def_adj
+        on def_adj.category_id = 3 
+        and def_adj.item_value = adj.adjustment_category::text
 )
 
 select * from EnrichedData
