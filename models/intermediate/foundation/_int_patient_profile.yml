@@ -324,7 +324,7 @@ models:
             description: "Active patients should have recent updates"
 
       - dbt_utils.expression_is_true:
-          expression: "NOT(has_insurance_flag = true AND emergency_contact_name IS NULL)"
+          expression: "NOT(has_insurance_flag = 'I' AND emergency_contact_name IS NULL)"
           config:
             severity: error
             where: "patient_status = 2"
