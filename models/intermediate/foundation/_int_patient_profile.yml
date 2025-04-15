@@ -78,7 +78,8 @@ models:
         description: Patient's preferred language
         tests:
           - not_null
-            - severity: warn
+          - config:
+              severity: warn
 
       - name: birth_date
         description: Patient's date of birth
@@ -182,12 +183,16 @@ models:
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
+              config:
+                severity: error
 
       - name: emergency_contact_phone
         description: Phone number of emergency contact
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
+              config:
+                severity: error
 
       - name: medical_notes
         description: General medical notes
@@ -206,6 +211,8 @@ models:
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
+              config:
+                severity: error
 
       - name: first_visit_date
         description: Date of patient's first visit
@@ -272,20 +279,23 @@ models:
 
       - dbt_utils.expression_is_true:
           expression: "NOT(patient_updated_at < CURRENT_DATE - INTERVAL '2 years' AND patient_status = 2)"
-          severity: warn
-          where: "patient_status = 2"
-          description: "Active patients should have recent updates"
+          config:
+            severity: warn
+            where: "patient_status = 2"
+            description: "Active patients should have recent updates"
 
       - dbt_utils.expression_is_true:
           expression: "NOT(has_insurance_flag = true AND emergency_contact_name IS NULL)"
-          severity: error
-          where: "patient_status = 2"
-          description: "Active patients with insurance must have emergency contact"
+          config:
+            severity: error
+            where: "patient_status = 2"
+            description: "Active patients with insurance must have emergency contact"
 
       - dbt_utils.expression_is_true:
           expression: "NOT(patient_status = 2 AND first_visit_date IS NULL)"
-          severity: error
-          description: "Active patients must have a first visit date"
+          config:
+            severity: error
+            description: "Active patients must have a first visit date"
 
     meta:
       owner: 'data_team'
