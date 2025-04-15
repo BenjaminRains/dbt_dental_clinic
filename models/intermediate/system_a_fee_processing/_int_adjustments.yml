@@ -6,6 +6,11 @@ models:
       Comprehensive model that combines adjustment data with procedure information and definitions
       to track and analyze fee adjustments. Part of System A: Fee Processing & Verification workflow.
       
+      Data Sources:
+      - stg_opendental__adjustment: Base adjustment records and amounts
+      - stg_opendental__definition: Adjustment type definitions and categories
+      - int_procedure_complete: Procedure details and standard fees
+      
       Key features:
       - Links adjustments to procedures and their standard fees
       - Includes definition mappings for adjustment types
