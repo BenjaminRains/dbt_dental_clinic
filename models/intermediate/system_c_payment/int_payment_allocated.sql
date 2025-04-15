@@ -15,7 +15,7 @@
     3. Payment plan allocations
 */
 
-WITH patient_payments AS (
+WITH PatientPayments AS (
     SELECT
         payment_id,
         patient_id,
@@ -43,7 +43,7 @@ WITH patient_payments AS (
     FROM {{ ref('stg_opendental__payment') }}
 ),
 
-payment_splits AS (
+PaymentSplits AS (
     SELECT
         paysplit_id,
         payment_id,
@@ -67,7 +67,7 @@ payment_splits AS (
     FROM {{ ref('stg_opendental__paysplit') }}
 ),
 
-insurance_payments AS (
+InsurancePayments AS (
     SELECT
         claim_payment_id,
         check_date,
@@ -88,7 +88,7 @@ insurance_payments AS (
     FROM {{ ref('stg_opendental__claimpayment') }}
 ),
 
-claim_procedures AS (
+ClaimProcedures AS (
     SELECT
         claim_procedure_id,
         procedure_id,
@@ -125,7 +125,7 @@ claim_procedures AS (
 ),
 
 -- Combine all payment allocations
-payment_allocations AS (
+PaymentAllocations AS (
     -- Patient payment splits
     SELECT
         ps.paysplit_id AS payment_allocation_id,
@@ -181,8 +181,8 @@ payment_allocations AS (
         NULL AS remarks,
         NULL AS code_sent,
         NULL AS estimate_note
-    FROM payment_splits ps
-    LEFT JOIN patient_payments pp 
+    FROM PaymentSplits ps
+    LEFT JOIN PatientPayments pp 
         ON ps.payment_id = pp.payment_id
 
     UNION ALL
@@ -242,8 +242,8 @@ payment_allocations AS (
         cp.remarks,
         cp.code_sent,
         cp.estimate_note
-    FROM claim_procedures cp
-    LEFT JOIN insurance_payments ip 
+    FROM ClaimProcedures cp
+    LEFT JOIN InsurancePayments ip 
         ON cp.claim_payment_id = ip.claim_payment_id
 )
 
@@ -318,4 +318,4 @@ SELECT
     -- Tracking fields
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM payment_allocations pa 
+FROM PaymentAllocations pa 
