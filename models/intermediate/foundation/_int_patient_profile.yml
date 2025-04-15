@@ -178,16 +178,16 @@ models:
         description: >
           Indicates if patient has insurance.
           
-          Values in source data (OpenDental notation):
+          Values in source data (as of 2025):
           - 'I': Patient has insurance (59.28% of records)
-          - NULL/empty: No insurance or unknown (40.72% of records)
+          - '': No insurance or unknown (40.72% of records)
           
           Note: The 'I' notation is OpenDental's single-character flag for "Insurance".
           This is a common pattern in the system where single letters are used as flags.
           The exact meaning should be verified with stakeholders.
         tests:
           - accepted_values:
-              values: ['I', null]
+              values: ['I', '']
 
       - name: family_id
         description: ID linking to related family members
