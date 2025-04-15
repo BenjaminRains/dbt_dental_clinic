@@ -83,7 +83,12 @@ models:
       - name: birth_date
         description: >
           Patient's date of birth
-          Note: '1900-01-01' is a default placeholder date indicating missing data
+          Note: 
+          - '1900-01-01' is a default placeholder date indicating missing data
+          - As of 2025, approximately 2,614 patients have missing birth dates
+          - Most of these patients have first visits from the 1990s or 2006
+          - Stakeholders should collect birth date information when these patients visit
+          - This affects age calculation (these patients will have NULL ages)
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
@@ -97,6 +102,8 @@ models:
           - Ages over 120 (11 records) include:
             - 2 records with placeholder birth_date (1900-01-01)
             - 9 records with likely typo birth dates (1900-1903)
+          - Approximately 2,614 patients have NULL ages due to missing birth dates
+          - See birth_date field documentation for details on missing data
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
