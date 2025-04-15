@@ -12,6 +12,7 @@ models:
       - Includes procedure notes and signature tracking
       - Supports fee verification workflow
       - Includes fee statistics (min, max, avg) per procedure code
+      - Uses definition tables for standardized descriptions of statuses, treatment areas, and fee types
       
       Note: As an out-of-network focused clinic:
       - 99.99% of patients use the default fee schedule (0)
@@ -75,12 +76,14 @@ models:
           - not_null
 
       - name: procedure_status_desc
-        description: Human-readable procedure status
+        description: Human-readable procedure status from definitions table
         tests:
           - not_null
-          - accepted_values:
-              values: ['Treatment Plan', 'Complete', 'Existing Current', 'Existing Other', 
-                      'Referred', 'Deleted', 'Condition', 'EHR Planned', 'Draft']
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              config:
+                severity: warn
 
       - name: procedure_fee
         description: Fee amount from procedurelog
@@ -250,6 +253,24 @@ models:
         tests:
           - not_null
 
+      - name: treatment_area_desc
+        description: Human-readable description of the treatment area from definitions table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              config:
+                severity: warn
+
+      - name: fee_schedule_type_desc
+        description: Human-readable description of the fee schedule type from definitions table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              config:
+                severity: warn
+
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 80000
@@ -309,3 +330,18 @@ models:
           expression: "not (procedure_status = 2 and procedure_notes is null)"
           severity: warn
           name: warn_completed_procedures_without_notes
+
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status_desc is null and procedure_status is not null)"
+          severity: warn
+          name: warn_missing_procedure_status_description
+
+      - dbt_utils.expression_is_true:
+          expression: "not (treatment_area_desc is null and treatment_area is not null)"
+          severity: warn
+          name: warn_missing_treatment_area_description
+
+      - dbt_utils.expression_is_true:
+          expression: "not (fee_schedule_type_desc is null and fee_schedule_type_id is not null)"
+          severity: warn
+          name: warn_missing_fee_schedule_type_description
