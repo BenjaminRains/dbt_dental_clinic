@@ -6,6 +6,50 @@ models:
       Staging model for OpenDental payment splits. Payment splits represent individual allocations
       of payments to specific procedures, adjustments, or payment plans. This model includes
       data from 2023-01-01 onwards and is incrementally loaded.
+
+      Purpose:
+      - Allocate income to clinics, production, providers, or unearned income types
+      - Track payment allocations to procedures, adjustments, or payment plans
+      - Support prepayment and unearned income tracking
+      - Enable hidden splits for prepayments and treatment planning
+      
+      Split Types:
+      - Regular splits: Visible on account, attached to completed procedures/adjustments
+      - Hidden splits: Not shown on account, used for prepayments and treatment planning
+      - Unearned splits: Track prepayments and deferred income
+      
+      Split Patterns:
+      - Most payments have 1-2 splits (median = 2)
+      - Some administrative entries (payment_type_id = 0) can have hundreds of splits
+      - High-split patterns (100+ splits) are typically:
+        * Administrative/batch operations
+        * Treatment plan allocations
+        * System-generated entries
+        * Characterized by payment_amount = 0.0
+        * Recent dates (typically within current month)
+      
+      Common Split Amounts:
+      - Most frequent: $31.00, $60.00, $109.00
+      - Common refund amounts: -$29.00, -$53.00, -$30.00
+      - Small amounts (<$10) often represent adjustments or fees
+      
+      Business Rules:
+      - Each split must be allocated to either a procedure, adjustment, or payment plan
+      - Zero amount splits must be valid (discounts, unearned revenue)
+      - Unearned revenue splits must have a provider
+      - Split amounts must be within reasonable ranges
+      - High-split administrative entries require special validation
+      - Payment type 0 entries need additional verification
+      - Clinic and Provider inherit from attached procedures/adjustments
+      - Rigorous validation when attached to procedures
+      - Prevents overpayment with warnings
+      
+      Hidden Split Rules:
+      - Must have an Unearned Type flagged as "Do Not Show on Account"
+      - Typically used for payment plan prepayments or treatment planned procedures
+      - Tracked separately in Account Module
+      - Automatically transfer to visible splits when procedures complete
+      - Generate income transfers when moved between hidden/visible status
     
     tests:
       # Comment out this test until we can fix the custom macro
@@ -38,7 +82,9 @@ models:
 
       # Relationship columns
       - name: payment_id
-        description: Foreign key to the parent payment record
+        description: |
+          Foreign key to the parent payment record.
+          Note: Some administrative payments (type 0) can have hundreds of splits.
         tests:
           - not_null
 
@@ -73,7 +119,12 @@ models:
 
       # Split details
       - name: split_amount
-        description: The monetary amount of this payment split
+        description: |
+          The monetary amount of this payment split.
+          Common patterns:
+          - Most frequent: $31.00, $60.00, $109.00
+          - Common refunds: -$29.00, -$53.00, -$30.00
+          - Small amounts (<$10) often represent adjustments
         tests:
           - not_null
 
@@ -126,3 +177,5 @@ models:
         - "Unearned Types: Special handling for types 288 and 439"
         - "Provider Assignment: Required for unearned income types"
         - "Amount Thresholds: Monitoring for statistical outliers in split amounts"
+        - "Split Count Patterns: Monitoring for high-split administrative entries (100+ splits)"
+        - "Payment Type Patterns: Special handling for payment_type_id = 0 entries"
