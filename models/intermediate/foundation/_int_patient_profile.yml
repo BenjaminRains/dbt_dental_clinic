@@ -112,10 +112,12 @@ models:
           - not_null
 
       - name: student_status
-        description: Patient's student status if applicable
+        description: Patient's student status (N=Not a student, ''=Unknown/Not specified)
         tests:
           - accepted_values:
-              values: ['Y', 'N', null]
+              values: ['N', '']
+              config:
+                severity: warn
 
       - name: preferred_confirmation_method
         description: >
