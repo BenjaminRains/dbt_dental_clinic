@@ -1,0 +1,356 @@
+version: 2
+
+models:
+  - name: int_payment_split
+    description: >
+      Intermediate model focused on payment split categorization and validation.
+      Part of System C: Payment Allocation & Reconciliation workflow.
+      
+      Data Sources:
+      - stg_opendental__paysplit: Base split records and amounts
+      - stg_opendental__definition: Split type definitions and categories
+      - int_procedure_complete: Procedure details and fees
+      - int_adjustments: Adjustment details and types
+      - stg_opendental__payplan: Payment plan information
+      
+      Key features:
+      - Categorizes splits by type (normal, discount, unearned, payment plan)
+      - Validates split business rules and allocations
+      - Provides split impact analysis and amount categorization
+      - Maintains relationships with procedures and adjustments
+      - Tracks split validation status and metadata
+      
+      Business rules:
+      - Zero-amount splits must be either:
+        * Marked as a discount
+        * Have unearned_type = 288
+        * Have a valid procedure_id
+      - Unearned types (288, 439) must have a provider assigned
+      - Each split must be allocated to either:
+        * A procedure
+        * An adjustment
+        * A payment plan charge
+    
+    config:
+      materialized: incremental
+      unique_key: paysplit_id
+      schema: intermediate
+    
+    columns:
+      - name: paysplit_id
+        description: Primary key from paysplit table
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__paysplit')
+              field: paysplit_id
+
+      - name: payment_id
+        description: Foreign key to the parent payment record
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__payment')
+              field: payment_id
+
+      - name: patient_id
+        description: Foreign key to the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: clinic_id
+        description: Foreign key to the clinic
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+
+      - name: provider_id
+        description: Foreign key to the provider
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: procedure_id
+        description: Foreign key to the procedure
+        tests:
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+
+      - name: adjustment_id
+        description: Foreign key to the adjustment
+        tests:
+          - relationships:
+              to: ref('int_adjustments')
+              field: adjustment_id
+
+      - name: payplan_id
+        description: Foreign key to the payment plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__payplan')
+              field: payplan_id
+
+      - name: payplan_charge_id
+        description: Foreign key to the payment plan charge
+        tests:
+          - relationships:
+              to: ref('stg_opendental__payplancharge')
+              field: payplan_charge_id
+
+      - name: forward_split_id
+        description: Reference to another split if this is a forwarded payment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__paysplit')
+              field: paysplit_id
+
+      - name: split_amount
+        description: Amount of the payment split
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: payment_date
+        description: Date when the payment was made
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: procedure_date
+        description: Date of the associated procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: is_discount_flag
+        description: Flag indicating if this is a discount split
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: discount_type
+        description: Type of discount if applicable
+        tests:
+          - not_null:
+              where: "is_discount_flag = true"
+
+      - name: unearned_type
+        description: >
+          Classification for unearned payment types.
+          Special attention required for types:
+          - Type 288: Represents one type of unearned income
+          - Type 439: Represents another type of unearned income
+        tests:
+          - accepted_values:
+              values: [288, 439]
+              where: "unearned_type IS NOT NULL"
+
+      - name: payplan_debit_type
+        description: Type of debit if associated with a payment plan
+        tests:
+          - not_null:
+              where: "payplan_id IS NOT NULL"
+
+      - name: entry_date
+        description: Date when the split was entered
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: updated_at
+        description: Timestamp when the split was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: created_by_user_id
+        description: ID of the user who created the split
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+
+      - name: procedure_code
+        description: ADA procedure code from linked procedure
+        tests:
+          - not_null:
+              where: "procedure_id IS NOT NULL"
+
+      - name: procedure_description
+        description: Description of the linked procedure
+        tests:
+          - not_null:
+              where: "procedure_id IS NOT NULL"
+
+      - name: procedure_fee
+        description: Fee amount from linked procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "procedure_id IS NOT NULL"
+
+      - name: adjustment_amount
+        description: Amount from linked adjustment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+              where: "adjustment_id IS NOT NULL"
+
+      - name: adjustment_type_name
+        description: Type name from linked adjustment
+        tests:
+          - not_null:
+              where: "adjustment_id IS NOT NULL"
+
+      - name: adjustment_category_type
+        description: Category type from linked adjustment
+        tests:
+          - not_null:
+              where: "adjustment_id IS NOT NULL"
+
+      - name: payplan_amount
+        description: Amount from linked payment plan
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              where: "payplan_id IS NOT NULL"
+
+      - name: payplan_status
+        description: Status of linked payment plan
+        tests:
+          - not_null:
+              where: "payplan_id IS NOT NULL"
+
+      - name: payplan_terms
+        description: Terms of linked payment plan
+        tests:
+          - not_null:
+              where: "payplan_id IS NOT NULL"
+
+      - name: split_type
+        description: Categorization of the split
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['DISCOUNT', 'UNEARNED_REVENUE', 'TREATMENT_PLAN_PREPAYMENT', 'PAYMENT_PLAN', 'NORMAL_PAYMENT']
+
+      - name: is_valid_zero_amount
+        description: Flag indicating if zero-amount split is valid
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_valid_unearned_type
+        description: Flag indicating if unearned type assignment is valid
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_valid_allocation
+        description: Flag indicating if split allocation is valid
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: split_impact
+        description: Classification of split impact based on percentage of procedure fee
+        tests:
+          - accepted_values:
+              values: ['major', 'moderate', 'minor']
+
+      - name: amount_category
+        description: Categorization of split amount
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['REFUND', 'ZERO', 'SMALL', 'MEDIUM', 'LARGE', 'VERY_LARGE']
+
+      - name: model_created_at
+        description: Timestamp when this model record was created
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: model_updated_at
+        description: Timestamp when this model record was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 10000
+          max_value: 100000
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (split_amount = 0 AND NOT is_valid_zero_amount)"
+          severity: error
+          name: invalid_zero_amount_splits
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (unearned_type IN (288, 439) AND NOT is_valid_unearned_type)"
+          severity: error
+          name: invalid_unearned_type_assignments
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (NOT is_valid_allocation)"
+          severity: error
+          name: invalid_split_allocations
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (is_discount_flag = true AND discount_type IS NULL)"
+          severity: error
+          name: missing_discount_types
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payplan_id IS NOT NULL AND payplan_debit_type IS NULL)"
+          severity: error
+          name: missing_payplan_debit_types
+
+    meta:
+      owner: "dental_finance_team"
+      contains_pii: true
+      business_process: "Payment Allocation & Reconciliation"
+      refresh_frequency: "hourly"
+      business_impact: "High"
+      data_quality_requirements:
+        - "All splits must have a valid payment_id"
+        - "Zero-amount splits must meet specific criteria"
+        - "Unearned types must have provider assignments"
+        - "Each split must be properly allocated"
+        - "Discount splits must have a discount type"
+        - "Payment plan splits must have a debit type"
+        - "Split amounts must be within valid ranges"
+        - "Dates must be within valid business ranges"
+        - "Provider assignments must be valid when required"
+        - "Procedure links must be valid when present"
+        - "Adjustment links must be valid when present"
+        - "Payment plan links must be valid when present"
