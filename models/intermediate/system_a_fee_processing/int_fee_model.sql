@@ -1,6 +1,7 @@
 {{
     config(
         materialized='incremental',
+        schema='intermediate',
         unique_key='procedure_id'
     )
 }}
