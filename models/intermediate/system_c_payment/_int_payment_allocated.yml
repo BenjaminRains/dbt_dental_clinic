@@ -8,9 +8,31 @@ models:
       and accounts receivable analysis.
       Part of System C: Payment Allocation & Reconciliation.
       
-      Insurance claims are filtered to only include:
-      - Status 1 (Received) or 3 (Supplemental) claims
-      - Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
+      Key features:
+      - Combines patient payments and insurance payments
+      - Tracks payment splits and allocations
+      - Maintains payment status and processing information
+      - Preserves detailed payment metadata
+      - Supports AR calculations and aging analysis
+      
+      Data Sources:
+      - stg_opendental__payment: Base patient payment information
+      - stg_opendental__paysplit: Payment splits and allocations
+      - stg_opendental__claimpayment: Insurance payment details
+      - stg_opendental__claimproc: Claim procedure information
+      
+      Business rules:
+      - Insurance claims are filtered to only include:
+        * Status 1 (Received) or 3 (Supplemental) claims
+        * Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
+      - Payment dates are used for AR calculations
+      - Payment types have specific amount constraints
+      - Zero-amount splits require special handling
+    
+    config:
+      materialized: incremental
+      unique_key: payment_allocation_id
+      schema: intermediate
     
     columns:
       - name: payment_allocation_id
@@ -82,21 +104,28 @@ models:
               to: ref('stg_opendental__payplancharge')
               field: payplan_charge_id
 
-      - name: forward_split_id
-        description: Reference to another split record if this is a forwarded payment
-
       - name: split_amount
         description: Amount allocated in this payment split
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
 
       - name: payment_date
         description: Date when the payment was made
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"
 
       - name: procedure_date
         description: Date of the associated procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"
 
       - name: payment_type_id
         description: |
@@ -126,20 +155,40 @@ models:
 
       - name: payment_source
         description: Source of the payment
+        tests:
+          - not_null:
+              where: "payment_source_type = 'PATIENT'"
 
       - name: payment_status
         description: Status of the payment
+        tests:
+          - not_null:
+              where: "payment_source_type = 'PATIENT'"
+          - accepted_values:
+              values: [0, 1, 2, 3]
+              where: "payment_source_type = 'PATIENT'"
 
       - name: process_status
         description: Processing status of the payment
+        tests:
+          - not_null:
+              where: "payment_source_type = 'PATIENT'"
+          - accepted_values:
+              values: [0, 1, 2, 3]
+              where: "payment_source_type = 'PATIENT'"
 
       - name: is_discount_flag
         description: Flag indicating if this is a discount
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: discount_type
         description: Type of discount if applicable
+        tests:
+          - not_null:
+              where: "is_discount_flag = true"
 
       - name: unearned_type
         description: >
@@ -155,18 +204,32 @@ models:
 
       - name: payplan_debit_type
         description: Type of payment plan debit
+        tests:
+          - not_null:
+              where: "payplan_id IS NOT NULL"
 
       - name: merchant_fee
         description: Merchant fee associated with the payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              where: "payment_source_type = 'PATIENT'"
 
       - name: payment_notes
         description: Additional notes about the payment
 
       - name: check_number
         description: Check number for the payment
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: bank_branch
         description: Bank branch information
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: created_by_user_id
         description: ID of the user who created the record
@@ -179,11 +242,17 @@ models:
         description: Date when the record was entered
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"
 
       - name: updated_at
         description: Timestamp when the record was last updated
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"
 
       - name: deposit_id
         description: Foreign key to the deposit record
@@ -194,24 +263,49 @@ models:
 
       - name: external_id
         description: External system reference ID for the payment
+        tests:
+          - not_null:
+              where: "payment_source_type = 'PATIENT'"
 
       - name: is_cc_completed_flag
         description: Flag indicating if credit card payment is completed
+        tests:
+          - accepted_values:
+              values: [true, false]
+              where: "payment_source_type = 'PATIENT'"
 
       - name: recurring_charge_date
         description: Next scheduled date for recurring payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"
+              where: "payment_source_type = 'PATIENT'"
 
       - name: receipt_text
         description: Text content of the payment receipt
+        tests:
+          - not_null:
+              where: "payment_source_type = 'PATIENT'"
 
       - name: carrier_name
         description: Name of the insurance carrier
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: is_partial
         description: Flag indicating if this is a partial insurance payment
+        tests:
+          - accepted_values:
+              values: [true, false]
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: payment_group_id
         description: Group identifier for related payments
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: insurance_subscriber_id
         description: Foreign key to the insurance subscriber
@@ -219,6 +313,8 @@ models:
           - relationships:
               to: ref('stg_opendental__inssub')
               field: inssub_id
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: claim_id
         description: Foreign key to the insurance claim
@@ -226,6 +322,8 @@ models:
           - relationships:
               to: ref('stg_opendental__claim')
               field: claim_id
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: plan_id
         description: Foreign key to the insurance plan
@@ -233,88 +331,164 @@ models:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: deductible_applied
         description: Amount of deductible applied to this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: write_off
         description: Amount written off for this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: allowed_override
         description: Manual override for allowed amount
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: copay_amount
         description: Copay amount for this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: paid_other_insurance
         description: Amount paid by other insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: base_estimate
         description: Base estimate before adjustments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: insurance_estimate_total
         description: Total estimate from insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: status
         description: Status of the claim procedure
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
+          - accepted_values:
+              values: [1, 3]
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: percentage
         description: Percentage of coverage for this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: is_transfer
         description: Flag indicating if this is a transfer payment
+        tests:
+          - accepted_values:
+              values: [true, false]
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: is_overpay
         description: Flag indicating if this is an overpayment
+        tests:
+          - accepted_values:
+              values: [true, false]
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: remarks
         description: Additional remarks about the claim procedure
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: code_sent
         description: Procedure code sent to insurance
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: estimate_note
         description: Notes about the insurance estimate
+        tests:
+          - not_null:
+              where: "payment_source_type = 'INSURANCE'"
 
       - name: payment_type_description
         description: Human-readable description of the payment type
         tests:
           - not_null
+          - accepted_values:
+              values: ['Administrative', 'High Value Payment', 'Regular Payment', 'Standard Payment', 'Refund', 'Very High Value', 'New Payment Type', 'Special Case', 'Insurance Check', 'Electronic Payment', 'Insurance Credit', 'Unknown', 'Unknown Insurance Payment']
 
       - name: payment_status_description
         description: Human-readable description of the payment status
         tests:
           - not_null
+          - accepted_values:
+              values: ['Pending', 'Completed', 'Failed', 'Voided', 'Unknown', 'N/A']
 
       - name: process_status_description
         description: Human-readable description of the process status
         tests:
           - not_null
+          - accepted_values:
+              values: ['Not Processed', 'Processing', 'Processed', 'Error', 'Unknown', 'N/A']
 
       - name: split_type_description
         description: Human-readable description of the split type
         tests:
           - not_null
+          - accepted_values:
+              values: ['Unearned Revenue', 'Treatment Plan Prepayment', 'Discount', 'Payment Plan', 'Normal Payment']
 
       - name: include_in_ar
         description: Flag indicating if this payment should be included in AR calculations
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: model_created_at
         description: Timestamp when this model was created
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"
 
       - name: model_updated_at
         description: Timestamp when this model was last updated
         tests:
           - not_null
-
-      - name: claim_payment_id
-        description: >
-          Foreign key to the insurance claim payment. Records with claim_payment_id = 0
-          are excluded as they represent claims without payments.
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"
 
     tests:
       # Date range validation
