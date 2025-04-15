@@ -11,6 +11,7 @@ models:
       - Uses template benefits (patient_plan_id = 0) from the benefits table
       - Considers insurance active if verified and not pending
       - Uses the most recent timestamps from all source tables for created_at and updated_at
+      - Handles incomplete records with specific placeholder values
       
       Data Quality Note:
       Some insurance plan records have missing carrier or subscriber information.
@@ -31,6 +32,20 @@ models:
       - Identify and handle incomplete records appropriately
       - Maintain referential integrity for complete records
       - Preserve all insurance plan data while clearly marking its completeness status
+      
+      Data Sources:
+      - stg_opendental__insplan: Base insurance plan information
+      - stg_opendental__carrier: Carrier details
+      - stg_opendental__inssub: Subscriber information
+      - stg_opendental__patplan: Patient plan associations
+      - stg_opendental__insverify: Verification status
+      - stg_opendental__benefit: Template benefit information
+    
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: insurance_plan_id
+    
     columns:
       - name: insurance_plan_id
         description: |
@@ -87,6 +102,7 @@ models:
           Business rules:
           - Cannot be null
           - Should match the plan type from the insurance plan record
+          - Empty string for incomplete records
         tests:
           - not_null
 
@@ -96,6 +112,7 @@ models:
           Business rules:
           - Cannot be null
           - May be shared across multiple carriers
+          - Empty string for incomplete records
         tests:
           - not_null
 
@@ -105,6 +122,7 @@ models:
           Business rules:
           - Cannot be null
           - May vary slightly for same group across carriers
+          - Empty string for incomplete records
         tests:
           - not_null
 
@@ -113,7 +131,7 @@ models:
           Name of the insurance carrier.
           Business rules:
           - Must match the carrier record
-          - Incomplete records will have empty carrier_name
+          - Empty string for incomplete records
         tests:
           - dbt_expectations.expect_column_values_to_not_be_null:
               column_name: carrier_name
@@ -132,6 +150,19 @@ models:
               max_value: "'2030-12-31'::date"
               severity: warn
 
+      - name: benefit_details
+        description: |
+          JSON containing template benefit information.
+          Business rules:
+          - Aggregated from stg_opendental__benefit where patient_plan_id = 0
+          - Contains benefit_id, coverage_category_id, procedure_code_id, code_group_id,
+            benefit_type, coverage_percent, monetary_amount, time_period, quantity_qualifier,
+            quantity, coverage_level, and treatment_area
+        tests:
+          - dbt_expectations.expect_column_values_to_be_json:
+              column_name: benefit_details
+              severity: warn
+
       - name: is_active
         description: |
           Flag indicating if the insurance coverage is currently active.
@@ -141,6 +172,20 @@ models:
           - Cannot be null
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_incomplete_record
+        description: |
+          Flag indicating if the record is incomplete.
+          Business rules:
+          - True if carrier_id is null or subscriber_id is null
+          - False for complete records
+          - Cannot be null
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: effective_date
         description: |
@@ -148,6 +193,8 @@ models:
           Business rules:
           - Cannot be null
           - Should be within a reasonable date range (2020-01-01 to 2030-12-31)
+          - Uses patient_plan_created_at if available, otherwise patient_plan_updated_at
+          - Defaults to '2020-01-01' if no valid date is found
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
@@ -162,6 +209,7 @@ models:
           Business rules:
           - Null for active insurance
           - Should be within a reasonable date range (2020-01-01 to 2030-12-31) if not null
+          - Set to patient_plan_updated_at when is_pending = 1
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               column_name: termination_date
@@ -202,4 +250,24 @@ models:
     tests:
       - dbt_expectations.expect_compound_columns_to_be_unique:
           column_list: [insurance_plan_id, patient_id]
-          severity: warn 
+          severity: warn
+
+      - dbt_utils.expression_is_true:
+          expression: "not (is_active = true and verification_date is null)"
+          severity: warn
+          name: warn_active_without_verification
+
+      - dbt_utils.expression_is_true:
+          expression: "not (is_incomplete_record = true and carrier_id != -1)"
+          severity: warn
+          name: warn_inconsistent_incomplete_flag
+
+      - dbt_utils.expression_is_true:
+          expression: "not (is_incomplete_record = true and subscriber_id != -1)"
+          severity: warn
+          name: warn_inconsistent_incomplete_flag_subscriber
+
+      - dbt_utils.expression_is_true:
+          expression: "not (termination_date is not null and is_active = true)"
+          severity: warn
+          name: warn_terminated_but_active 
