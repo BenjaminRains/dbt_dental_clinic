@@ -1,7 +1,8 @@
 {{
     config(
         materialized='table',
-        schema='intermediate'
+        schema='intermediate',
+        unique_key='claim_id'
     )
 }}
 
