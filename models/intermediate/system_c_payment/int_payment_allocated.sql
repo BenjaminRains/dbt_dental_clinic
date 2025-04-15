@@ -27,51 +27,61 @@ WITH PaymentDefinitions AS (
 
 PatientPayments AS (
     SELECT
-        payment_id,
-        patient_id,
-        payment_date,
-        payment_amount,
-        payment_type_id,
-        check_number,
-        bank_branch,
-        payment_source,
-        is_split_flag,
-        is_recurring_cc_flag,
-        payment_status,
-        process_status,
-        merchant_fee,
-        payment_notes,
-        clinic_id,
-        created_by_user_id,
-        entry_date,
-        updated_at,
-        deposit_id,
-        external_id,
-        is_cc_completed_flag,
-        recurring_charge_date,
-        receipt_text
-    FROM {{ ref('stg_opendental__payment') }}
+        p.payment_id,
+        p.patient_id,
+        p.payment_date,
+        p.payment_amount,
+        p.payment_type_id,
+        p.check_number,
+        p.bank_branch,
+        p.payment_source,
+        p.is_split_flag,
+        p.is_recurring_cc_flag,
+        p.payment_status,
+        p.process_status,
+        p.merchant_fee,
+        p.payment_notes,
+        p.clinic_id,
+        p.created_by_user_id,
+        p.entry_date,
+        p.updated_at,
+        p.deposit_id,
+        p.external_id,
+        p.is_cc_completed_flag,
+        p.recurring_charge_date,
+        p.receipt_text,
+        ps.procedure_id,
+        ps.procedure_date,
+        proc.provider_id
+    FROM {{ ref('stg_opendental__payment') }} p
+    LEFT JOIN {{ ref('stg_opendental__paysplit') }} ps
+        ON p.payment_id = ps.payment_id
+    LEFT JOIN {{ ref('stg_opendental__procedurelog') }} proc
+        ON ps.procedure_id = proc.procedure_id
 ),
 
 InsurancePayments AS (
     SELECT
-        claim_payment_id,
-        check_date,
-        date_issued,
-        check_amount,
-        check_number,
-        bank_branch,
-        carrier_name,
-        is_partial,
-        payment_type_id,
-        payment_group_id,
-        clinic_id,
-        created_by_user_id,
-        created_date,
-        last_modified_at,
-        deposit_id,
-        note
-    FROM {{ ref('stg_opendental__claimpayment') }}
+        ip.claim_payment_id,
+        ip.check_date,
+        ip.date_issued,
+        ip.check_amount,
+        ip.check_number,
+        ip.bank_branch,
+        ip.carrier_name,
+        ip.is_partial,
+        ip.payment_type_id,
+        ip.payment_group_id,
+        ip.clinic_id,
+        ip.created_by_user_id,
+        ip.created_date,
+        ip.last_modified_at,
+        ip.deposit_id,
+        ip.note,
+        cp.provider_id
+    FROM {{ ref('stg_opendental__claimpayment') }} ip
+    LEFT JOIN {{ ref('stg_opendental__claimproc') }} cp
+        ON ip.claim_payment_id = cp.claim_payment_id
 ),
 
 ClaimProcedures AS (
@@ -114,7 +124,6 @@ ClaimProcedures AS (
 PaymentAllocations AS (
     -- Patient payments
     SELECT
-        pp.payment_id AS payment_allocation_id,
         'PATIENT' AS payment_source_type,
         pp.payment_id,
         pp.patient_id,
@@ -151,22 +160,22 @@ PaymentAllocations AS (
         NULL AS is_partial,
         NULL AS payment_group_id,
         NULL AS insurance_subscriber_id,
-        pp.claim_id,
-        pp.plan_id,
-        pp.deductible_applied,
-        pp.write_off,
-        pp.allowed_override,
-        pp.copay_amount,
-        pp.paid_other_insurance,
-        pp.base_estimate,
-        pp.insurance_estimate_total,
-        pp.status,
-        pp.percentage,
-        pp.is_transfer,
-        pp.is_overpay,
-        pp.remarks,
-        pp.code_sent,
-        pp.estimate_note,
+        NULL AS claim_id,
+        NULL AS plan_id,
+        NULL AS deductible_applied,
+        NULL AS write_off,
+        NULL AS allowed_override,
+        NULL AS copay_amount,
+        NULL AS paid_other_insurance,
+        NULL AS base_estimate,
+        NULL AS insurance_estimate_total,
+        NULL AS status,
+        NULL AS percentage,
+        NULL AS is_transfer,
+        NULL AS is_overpay,
+        NULL AS remarks,
+        NULL AS code_sent,
+        NULL AS estimate_note,
         pd.item_name AS payment_type_description,
         psd.item_name AS payment_status_description,
         prsd.item_name AS process_status_description,
@@ -179,19 +188,18 @@ PaymentAllocations AS (
     FROM PatientPayments pp
     LEFT JOIN PaymentDefinitions pd
         ON pp.payment_type_id = pd.definition_id
-        AND pd.category_id = 1  -- Payment type category
+        AND pd.category_id = 1
     LEFT JOIN PaymentDefinitions psd
         ON pp.payment_status = psd.definition_id
-        AND psd.category_id = 2  -- Payment status category
+        AND psd.category_id = 2
     LEFT JOIN PaymentDefinitions prsd
         ON pp.process_status = prsd.definition_id
-        AND prsd.category_id = 2  -- Process status category
+        AND prsd.category_id = 2
 
     UNION ALL
 
     -- Insurance claim payments
     SELECT
-        cp.claim_procedure_id AS payment_allocation_id,
         'INSURANCE' AS payment_source_type,
         ip.claim_payment_id AS payment_id,
         cp.patient_id,
@@ -258,16 +266,16 @@ PaymentAllocations AS (
         ON cp.claim_payment_id = ip.claim_payment_id
     LEFT JOIN PaymentDefinitions pd
         ON ip.payment_type_id = pd.definition_id
-        AND pd.category_id = 1  -- Payment type category
+        AND pd.category_id = 1
     LEFT JOIN PaymentDefinitions psd
         ON ip.payment_type_id = psd.definition_id
-        AND psd.category_id = 1  -- Payment type category
+        AND psd.category_id = 1
     LEFT JOIN PaymentDefinitions prsd
         ON ip.payment_type_id = prsd.definition_id
-        AND prsd.category_id = 1  -- Payment type category
+        AND prsd.category_id = 1
 )
 
 SELECT
-    ROW_NUMBER() OVER (ORDER BY payment_source_type, payment_allocation_id) AS payment_allocation_id,
+    ROW_NUMBER() OVER (ORDER BY payment_source_type, payment_id) AS payment_allocation_id,
     *
 FROM PaymentAllocations 
