@@ -6,16 +6,26 @@
 
 /*
     Intermediate model for payment allocations
-    Connects payments with their splits across procedures and insurance claims
+    Connects payments with their allocations across procedures and insurance claims
     Part of System C: Payment Allocation & Reconciliation
     
     This model combines:
-    1. Patient payments and their splits
+    1. Patient payments and their allocations
     2. Insurance claim payments and their allocations
     3. Payment plan allocations
 */
 
-WITH PatientPayments AS (
+WITH PaymentDefinitions AS (
+    SELECT 
+        definition_id,
+        item_name,
+        item_value,
+        category_id
+    FROM {{ ref('stg_opendental__definition') }}
+    WHERE category_id IN (1, 2)  -- Payment type categories
+),
+
+PatientPayments AS (
     SELECT
         payment_id,
         patient_id,
@@ -41,30 +51,6 @@ WITH PatientPayments AS (
         recurring_charge_date,
         receipt_text
     FROM {{ ref('stg_opendental__payment') }}
-),
-
-PaymentSplits AS (
-    SELECT
-        paysplit_id,
-        payment_id,
-        patient_id,
-        clinic_id,
-        provider_id,
-        procedure_id,
-        adjustment_id,
-        payplan_id,
-        payplan_charge_id,
-        forward_split_id,
-        split_amount,
-        payment_date,
-        procedure_date,
-        is_discount_flag,
-        discount_type,
-        unearned_type,
-        payplan_debit_type,
-        entry_date,
-        updated_at
-    FROM {{ ref('stg_opendental__paysplit') }}
 ),
 
 InsurancePayments AS (
@@ -126,36 +112,36 @@ ClaimProcedures AS (
 
 -- Combine all payment allocations
 PaymentAllocations AS (
-    -- Patient payment splits
+    -- Patient payments
     SELECT
-        ps.paysplit_id AS payment_allocation_id,
+        pp.payment_id AS payment_allocation_id,
         'PATIENT' AS payment_source_type,
         pp.payment_id,
         pp.patient_id,
         pp.clinic_id,
-        ps.provider_id,
-        ps.procedure_id,
-        ps.adjustment_id,
-        ps.payplan_id,
-        ps.payplan_charge_id,
-        ps.split_amount,
-        COALESCE(ps.payment_date, pp.payment_date) AS payment_date,
-        ps.procedure_date,
+        NULL AS provider_id,
+        NULL AS procedure_id,
+        NULL AS adjustment_id,
+        NULL AS payplan_id,
+        NULL AS payplan_charge_id,
+        pp.payment_amount AS split_amount,
+        pp.payment_date,
+        NULL AS procedure_date,
         pp.payment_type_id,
         pp.payment_source,
         pp.payment_status,
         pp.process_status,
-        ps.is_discount_flag,
-        ps.discount_type,
-        ps.unearned_type,
-        ps.payplan_debit_type,
+        FALSE AS is_discount_flag,
+        NULL AS discount_type,
+        NULL AS unearned_type,
+        NULL AS payplan_debit_type,
         pp.merchant_fee,
         pp.payment_notes,
         pp.check_number,
         pp.bank_branch,
         pp.created_by_user_id,
-        COALESCE(ps.entry_date, pp.entry_date) AS entry_date,
-        COALESCE(ps.updated_at, pp.updated_at) AS updated_at,
+        pp.entry_date,
+        pp.updated_at,
         pp.deposit_id,
         pp.external_id,
         pp.is_cc_completed_flag,
@@ -181,9 +167,7 @@ PaymentAllocations AS (
         NULL AS remarks,
         NULL AS code_sent,
         NULL AS estimate_note
-    FROM PaymentSplits ps
-    LEFT JOIN PatientPayments pp 
-        ON ps.payment_id = pp.payment_id
+    FROM PatientPayments pp
 
     UNION ALL
 
@@ -249,65 +233,14 @@ PaymentAllocations AS (
 
 SELECT
     pa.*,
-    -- Payment type descriptions
-    CASE
-        WHEN pa.payment_source_type = 'PATIENT' THEN
-            CASE pa.payment_type_id
-                WHEN 0 THEN 'Administrative'
-                WHEN 69 THEN 'High Value Payment'
-                WHEN 70 THEN 'Regular Payment'
-                WHEN 71 THEN 'Standard Payment'
-                WHEN 72 THEN 'Refund'
-                WHEN 391 THEN 'High Value Payment'
-                WHEN 412 THEN 'New Payment Type'
-                WHEN 417 THEN 'Special Case'
-                WHEN 574 THEN 'Very High Value'
-                WHEN 634 THEN 'New Payment Type'
-                ELSE 'Unknown'
-            END
-        WHEN pa.payment_source_type = 'INSURANCE' THEN
-            CASE pa.payment_type_id
-                WHEN 1 THEN 'Insurance Check'
-                WHEN 2 THEN 'Electronic Payment'
-                WHEN 3 THEN 'Insurance Credit'
-                ELSE 'Unknown Insurance Payment'
-            END
-    END AS payment_type_description,
+    -- Payment type descriptions from definition table
+    pd.item_name AS payment_type_description,
     
-    -- Payment status descriptions
-    CASE
-        WHEN pa.payment_source_type = 'PATIENT' THEN
-            CASE pa.payment_status
-                WHEN 0 THEN 'Pending'
-                WHEN 1 THEN 'Completed'
-                WHEN 2 THEN 'Failed'
-                WHEN 3 THEN 'Voided'
-                ELSE 'Unknown'
-            END
-        ELSE 'N/A'
-    END AS payment_status_description,
+    -- Payment status descriptions from definition table
+    psd.item_name AS payment_status_description,
     
-    -- Process status descriptions
-    CASE
-        WHEN pa.payment_source_type = 'PATIENT' THEN
-            CASE pa.process_status
-                WHEN 0 THEN 'Not Processed'
-                WHEN 1 THEN 'Processing'
-                WHEN 2 THEN 'Processed'
-                WHEN 3 THEN 'Error'
-                ELSE 'Unknown'
-            END
-        ELSE 'N/A'
-    END AS process_status_description,
-    
-    -- Split type descriptions
-    CASE
-        WHEN pa.unearned_type = 288 THEN 'Unearned Revenue'
-        WHEN pa.unearned_type = 439 THEN 'Treatment Plan Prepayment'
-        WHEN pa.is_discount_flag THEN 'Discount'
-        WHEN pa.payplan_id IS NOT NULL THEN 'Payment Plan'
-        ELSE 'Normal Payment'
-    END AS split_type_description,
+    -- Process status descriptions from definition table
+    prsd.item_name AS process_status_description,
     
     -- AR calculation flags
     CASE
@@ -318,4 +251,13 @@ SELECT
     -- Tracking fields
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM PaymentAllocations pa 
+FROM PaymentAllocations pa
+LEFT JOIN PaymentDefinitions pd
+    ON pa.payment_type_id = pd.definition_id
+    AND pd.category_id = 1  -- Payment type category
+LEFT JOIN PaymentDefinitions psd
+    ON pa.payment_status = psd.definition_id
+    AND psd.category_id = 2  -- Payment status category
+LEFT JOIN PaymentDefinitions prsd
+    ON pa.process_status = prsd.definition_id
+    AND prsd.category_id = 2  -- Process status category 
