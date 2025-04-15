@@ -3,8 +3,9 @@ version: 2
 models:
   - name: int_payment_allocated
     description: >
-      Intermediate model for payment allocations that combines patient payments and insurance payments.
-      This model serves as the foundation for payment reconciliation and accounts receivable analysis.
+      Intermediate model for payment allocations that combines patient payments and 
+      insurance payments. This model serves as the foundation for payment reconciliation 
+      and accounts receivable analysis.
       Part of System C: Payment Allocation & Reconciliation.
       
       Insurance claims are filtered to only include:
@@ -383,6 +384,12 @@ models:
           config:
             severity: error
             description: "Insurance payments must have a valid claim_payment_id"
+
+      # AR balance alignment with patient aging buckets
+      - payment_balance_alignment:
+          config:
+            severity: error
+            description: "Payment allocations must sum to match patient total balance"
 
     meta:
       owner: "dental_finance_team"
