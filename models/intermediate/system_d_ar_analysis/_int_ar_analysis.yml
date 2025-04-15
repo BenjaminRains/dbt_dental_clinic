@@ -16,6 +16,7 @@ models:
       - Maintains statement history
       - Records adjustment details
       - Tracks claim submission and processing
+      - Maintains one-to-one relationship with patients (32,700 records as of 2025)
       
       Data Sources:
       - stg_opendental__patient: Base patient information and balances
@@ -41,6 +42,8 @@ models:
       - Only includes denied claims (claim_status = 'D')
       - Aggregates all financial metrics at the patient level
       - Uses definition lookups for status descriptions
+      - Maintains one record per patient (32,700 records)
+      - Record count must match int_patient_profile
       
     config:
       materialized: table
