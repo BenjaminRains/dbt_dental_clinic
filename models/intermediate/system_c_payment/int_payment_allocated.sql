@@ -119,14 +119,14 @@ PaymentAllocations AS (
         pp.payment_id,
         pp.patient_id,
         pp.clinic_id,
-        NULL AS provider_id,
-        NULL AS procedure_id,
+        pp.provider_id,
+        pp.procedure_id,
         NULL AS adjustment_id,
         NULL AS payplan_id,
         NULL AS payplan_charge_id,
         pp.payment_amount AS split_amount,
         pp.payment_date,
-        NULL AS procedure_date,
+        pp.procedure_date,
         pp.payment_type_id,
         pp.payment_source,
         pp.payment_status,
@@ -151,23 +151,41 @@ PaymentAllocations AS (
         NULL AS is_partial,
         NULL AS payment_group_id,
         NULL AS insurance_subscriber_id,
-        NULL AS claim_id,
-        NULL AS plan_id,
-        NULL AS deductible_applied,
-        NULL AS write_off,
-        NULL AS allowed_override,
-        NULL AS copay_amount,
-        NULL AS paid_other_insurance,
-        NULL AS base_estimate,
-        NULL AS insurance_estimate_total,
-        NULL AS status,
-        NULL AS percentage,
-        NULL AS is_transfer,
-        NULL AS is_overpay,
-        NULL AS remarks,
-        NULL AS code_sent,
-        NULL AS estimate_note
+        pp.claim_id,
+        pp.plan_id,
+        pp.deductible_applied,
+        pp.write_off,
+        pp.allowed_override,
+        pp.copay_amount,
+        pp.paid_other_insurance,
+        pp.base_estimate,
+        pp.insurance_estimate_total,
+        pp.status,
+        pp.percentage,
+        pp.is_transfer,
+        pp.is_overpay,
+        pp.remarks,
+        pp.code_sent,
+        pp.estimate_note,
+        pd.item_name AS payment_type_description,
+        psd.item_name AS payment_status_description,
+        prsd.item_name AS process_status_description,
+        CASE
+            WHEN pp.payment_date <= CURRENT_DATE THEN TRUE
+            ELSE FALSE
+        END AS include_in_ar,
+        CURRENT_TIMESTAMP AS model_created_at,
+        CURRENT_TIMESTAMP AS model_updated_at
     FROM PatientPayments pp
+    LEFT JOIN PaymentDefinitions pd
+        ON pp.payment_type_id = pd.definition_id
+        AND pd.category_id = 1  -- Payment type category
+    LEFT JOIN PaymentDefinitions psd
+        ON pp.payment_status = psd.definition_id
+        AND psd.category_id = 2  -- Payment status category
+    LEFT JOIN PaymentDefinitions prsd
+        ON pp.process_status = prsd.definition_id
+        AND prsd.category_id = 2  -- Process status category
 
     UNION ALL
 
@@ -181,7 +199,7 @@ PaymentAllocations AS (
         cp.provider_id,
         cp.procedure_id,
         NULL AS adjustment_id,
-        cp.payment_plan_id AS payplan_id,
+        NULL AS payplan_id,
         NULL AS payplan_charge_id,
         cp.insurance_payment_amount AS split_amount,
         COALESCE(cp.insurance_finalized_date, ip.check_date) AS payment_date,
@@ -225,39 +243,31 @@ PaymentAllocations AS (
         cp.is_overpay,
         cp.remarks,
         cp.code_sent,
-        cp.estimate_note
+        cp.estimate_note,
+        pd.item_name AS payment_type_description,
+        psd.item_name AS payment_status_description,
+        prsd.item_name AS process_status_description,
+        CASE
+            WHEN COALESCE(cp.insurance_finalized_date, ip.check_date) <= CURRENT_DATE THEN TRUE
+            ELSE FALSE
+        END AS include_in_ar,
+        CURRENT_TIMESTAMP AS model_created_at,
+        CURRENT_TIMESTAMP AS model_updated_at
     FROM ClaimProcedures cp
     LEFT JOIN InsurancePayments ip 
         ON cp.claim_payment_id = ip.claim_payment_id
+    LEFT JOIN PaymentDefinitions pd
+        ON ip.payment_type_id = pd.definition_id
+        AND pd.category_id = 1  -- Payment type category
+    LEFT JOIN PaymentDefinitions psd
+        ON ip.payment_type_id = psd.definition_id
+        AND psd.category_id = 1  -- Payment type category
+    LEFT JOIN PaymentDefinitions prsd
+        ON ip.payment_type_id = prsd.definition_id
+        AND prsd.category_id = 1  -- Payment type category
 )
 
 SELECT
-    pa.*,
-    -- Payment type descriptions from definition table
-    pd.item_name AS payment_type_description,
-    
-    -- Payment status descriptions from definition table
-    psd.item_name AS payment_status_description,
-    
-    -- Process status descriptions from definition table
-    prsd.item_name AS process_status_description,
-    
-    -- AR calculation flags
-    CASE
-        WHEN pa.payment_date <= CURRENT_DATE THEN TRUE
-        ELSE FALSE
-    END AS include_in_ar,
-    
-    -- Tracking fields
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
-FROM PaymentAllocations pa
-LEFT JOIN PaymentDefinitions pd
-    ON pa.payment_type_id = pd.definition_id
-    AND pd.category_id = 1  -- Payment type category
-LEFT JOIN PaymentDefinitions psd
-    ON pa.payment_status = psd.definition_id
-    AND psd.category_id = 2  -- Payment status category
-LEFT JOIN PaymentDefinitions prsd
-    ON pa.process_status = prsd.definition_id
-    AND prsd.category_id = 2  -- Process status category 
+    ROW_NUMBER() OVER (ORDER BY payment_source_type, payment_allocation_id) AS payment_allocation_id,
+    *
+FROM PaymentAllocations 
