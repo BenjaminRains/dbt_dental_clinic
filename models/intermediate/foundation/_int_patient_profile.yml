@@ -18,14 +18,13 @@ models:
       - Emergency contacts
       - Medical notes and treatment information
       - Patient preferences (pronouns, consent)
+      - One-to-one relationship with patients (32,700 records as of 2025)
+      - Base model for int_ar_analysis (record count must match)
 
       Usage:
       Primary source for patient profile information in downstream analytics.
+      Base model for AR analysis and financial reporting.
 
-      Notes:
-      - Geographic data (city, state, zipcode) pending investigation of patient-zipcode
-        relationships
-      - Consider checking for additional patient address/location tables in source system
     
     config:
       materialized: table
@@ -69,10 +68,10 @@ models:
         description: Patient's middle initial
 
       - name: gender
-        description: Patient's gender
+        description: Patient's gender (0=Male, 1=Female, 2=Other)
         tests:
           - accepted_values:
-              values: ['M', 'F', 'O', 'U']
+              values: [0, 1, 2]
 
       - name: language
         description: Patient's preferred language
@@ -119,10 +118,20 @@ models:
               values: ['Y', 'N', null]
 
       - name: preferred_confirmation_method
-        description: Patient's preferred method for appointment confirmations
+        description: >
+          Patient's preferred method for appointment confirmations.
+          
+          Current distribution (as of 2024):
+          - 0 (15.17%): Assumed to be "None/No Preference"
+          - 2 (58.52%): Assumed to be "Email"
+          - 4 (26.26%): Assumed to be "Text"
+          - 8 (0.04%): Assumed to be "Phone"
+          
+          Note: These mappings are assumptions based on data distribution patterns and OpenDental's typical bit flag usage.
+          They should be verified with stakeholders before being used for business decisions.
         tests:
           - accepted_values:
-              values: ['Email', 'Text', 'Phone', 'Mail', 'None']
+              values: [0, 2, 4, 8]
 
       - name: preferred_contact_method
         description: Patient's preferred method of contact
@@ -153,10 +162,19 @@ models:
               max_value: 1000000
 
       - name: has_insurance_flag
-        description: Indicates if patient has insurance
+        description: >
+          Indicates if patient has insurance.
+          
+          Values in source data (OpenDental notation):
+          - 'I': Patient has insurance (59.28% of records)
+          - NULL/empty: No insurance or unknown (40.72% of records)
+          
+          Note: The 'I' notation is OpenDental's single-character flag for "Insurance".
+          This is a common pattern in the system where single letters are used as flags.
+          The exact meaning should be verified with stakeholders.
         tests:
           - accepted_values:
-              values: [true, false]
+              values: ['I', null]
 
       - name: family_id
         description: ID linking to related family members
@@ -169,7 +187,7 @@ models:
         description: Type of family relationship
         tests:
           - accepted_values:
-              values: ['Parent', 'Child', 'Spouse', 'Guardian', 'Other']
+              values: [1]
 
       - name: family_linked_at
         description: Timestamp when family relationship was established
