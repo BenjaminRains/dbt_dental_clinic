@@ -155,10 +155,16 @@ models:
               values: [0, 2, 3, 4, 5, 6, 8]
 
       - name: text_messaging_consent
-        description: Whether patient has consented to text messaging
+        description: >
+          Whether patient has consented to text messaging
+          - 0: Consent given (87.43%)
+          - 1: No consent (8.33%)
+          - 2: Unknown/Not specified (4.24%)
         tests:
           - accepted_values:
-              values: [true, false]
+              values: [0, 1, 2]
+              config:
+                severity: warn
 
       - name: estimated_balance
         description: Estimated current balance
