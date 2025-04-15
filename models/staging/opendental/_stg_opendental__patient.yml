@@ -61,7 +61,7 @@ models:
       - name: preferred_name
         description: "Patient's preferred name"
       - name: gender
-        description: "Patient's gender (0=Unknown, 1=Male, 2=Female)"
+        description: "Patient's gender (0=Male, 1=Female, 2=Other)"
         tests:
           - accepted_values:
               values: [0, 1, 2]
