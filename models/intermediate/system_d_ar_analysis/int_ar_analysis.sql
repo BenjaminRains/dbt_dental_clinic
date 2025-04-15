@@ -65,11 +65,11 @@ InsuranceAR as (
             then c.claim_fee 
             else 0 
         end) as denied_claims_amount,
-        c.claim_status
+        max(c.claim_status) as claim_status
     from {{ ref('stg_opendental__claimproc') }} cp
     left join {{ ref('stg_opendental__claim') }} c
         on cp.claim_id = c.claim_id
-    group by 1, c.claim_status
+    group by 1
 ),
 
 PaymentSummary as (
@@ -297,14 +297,81 @@ Definitions as (
 -- Join definitions for descriptive values
 EnrichedData as (
     select
-        pb.*, -- Patient balance metrics including total AR and aging buckets
-        pf.*, -- Procedure financial metrics including completed and planned procedures
-        ia.*, -- Insurance AR metrics including pending and denied claims
-        pa.*, -- Payment activity metrics including payment counts and amounts
-        ip.*, -- Insurance payment metrics including payment dates and amounts
-        sa.*, -- Statement activity metrics including statement counts and dates
-        adj.*, -- Adjustment metrics including write-offs and credits
-        ct.*, -- Claim tracking metrics including submission and denial dates
+        pb.patient_id,
+        pb.total_ar_balance,
+        pb.balance_0_30_days,
+        pb.balance_31_60_days,
+        pb.balance_61_90_days,
+        pb.balance_over_90_days,
+        pb.estimated_insurance_ar,
+        pb.payment_plan_balance,
+        pb.patient_status,
+        -- Procedure Financials
+        pf.total_procedure_fees,
+        pf.total_procedure_discounts,
+        pf.total_discount_plan_amount,
+        pf.total_procedure_tax,
+        pf.completed_procedures_count,
+        pf.treatment_planned_procedures_count,
+        pf.ordered_planned_procedures_count,
+        pf.in_progress_procedures_count,
+        pf.locked_procedures_count,
+        -- Insurance AR
+        ia.pending_claims_count,
+        ia.pending_claims_amount,
+        ia.denied_claims_count,
+        ia.denied_claims_amount,
+        ia.claim_status,
+        -- Payment Activity
+        pa.last_payment_date,
+        pa.total_payment_amount,
+        pa.total_merchant_fees,
+        pa.split_payment_count,
+        pa.recurring_cc_payment_count,
+        pa.completed_cc_payment_count,
+        pa.completed_payment_count,
+        pa.voided_payment_count,
+        pa.cash_payment_count,
+        pa.check_payment_count,
+        pa.credit_card_payment_count,
+        pa.patient_insurance_payment_count,
+        pa.total_payments,
+        pa.total_discounts,
+        pa.active_payment_plans,
+        pa.payment_plan_payments,
+        pa.unearned_income_count,
+        pa.unearned_income_amount,
+        -- Insurance Payments
+        ip.last_insurance_payment_date,
+        ip.total_insurance_payments,
+        ip.insurance_payment_count,
+        -- Statement Activity
+        sa.last_statement_date,
+        sa.statement_count,
+        sa.total_statement_balance,
+        sa.total_statement_insurance_estimate,
+        sa.receipt_count,
+        sa.invoice_count,
+        -- Adjustments
+        adj.adjustment_category,
+        adj.write_off_amount,
+        adj.credit_amount,
+        adj.insurance_writeoff_count,
+        adj.insurance_writeoff_amount,
+        adj.procedure_adjustment_count,
+        adj.retroactive_adjustment_count,
+        adj.provider_discount_count,
+        adj.provider_discount_amount,
+        -- Claim Tracking
+        ct.submitted_claims_count,
+        ct.received_claims_count,
+        ct.tracking_denied_claims_count,
+        ct.first_claim_submission_date,
+        ct.last_claim_submission_date,
+        ct.first_claim_received_date,
+        ct.last_claim_received_date,
+        ct.first_claim_denied_date,
+        ct.last_claim_denied_date,
         -- Patient Status Description
         def_patient.item_name as patient_status_description,
         -- Claim Status Description
