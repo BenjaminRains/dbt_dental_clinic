@@ -3,9 +3,34 @@ version: 2
 models:
   - name: int_patient_profile
     description: >
-      Foundation layer model combining core patient information from various staging models
-      to create a comprehensive patient profile. This model serves as the primary source
-      of truth for patient-related information.
+      Foundation model combining core patient information from staging models to 
+      create comprehensive patient profiles.
+
+      Data Sources:
+      - stg_opendental__patient: Base patient information, demographics, and financial data
+      - stg_opendental__patientlink: Family relationships and linkages
+      - stg_opendental__patientnote: Medical notes, treatment information, and emergency contacts
+      - stg_opendental__provider: Provider assignments and relationships
+
+      Key Features:
+      - Basic demographics and contact information
+      - Family relationships
+      - Emergency contacts
+      - Medical notes and treatment information
+      - Patient preferences (pronouns, consent)
+
+      Usage:
+      Primary source for patient profile information in downstream analytics.
+
+      Notes:
+      - Geographic data (city, state, zipcode) pending investigation of patient-zipcode
+        relationships
+      - Consider checking for additional patient address/location tables in source system
+    
+    config:
+      materialized: table
+      unique_key: patient_id
+      tags: ['foundation', 'weekly']
     
     columns:
       - name: patient_id
@@ -14,21 +39,63 @@ models:
           - unique
           - not_null
 
-      # Demographics
+      - name: guarantor_id
+        description: ID of the guarantor responsible for patient's account
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: primary_provider_id
+        description: ID of the patient's primary provider
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: secondary_provider_id
+        description: ID of the patient's secondary provider
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
       - name: preferred_name
         description: Patient's preferred name
+        tests:
+          - not_null
+
       - name: middle_initial
         description: Patient's middle initial
+
       - name: gender
         description: Patient's gender
+        tests:
+          - accepted_values:
+              values: ['M', 'F', 'O', 'U']
+
       - name: language
         description: Patient's preferred language
-      - name: birthdate
+        tests:
+          - not_null
+            - severity: warn
+
+      - name: birth_date
         description: Patient's date of birth
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'1900-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
       - name: age
         description: Patient's calculated age
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
 
-      # Status and Classification
       - name: patient_status
         description: >
           Current status of the patient
@@ -36,72 +103,125 @@ models:
           - Other statuses indicate various inactive states
         tests:
           - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
       - name: position_code
         description: Patient position classification
+        tests:
+          - not_null
+
       - name: student_status
         description: Patient's student status if applicable
+        tests:
+          - accepted_values:
+              values: ['Y', 'N', null]
 
-      # Relationships and IDs
-      - name: guarantor_id
-        description: ID of the guarantor responsible for patient's account
-      - name: primary_provider_id
-        description: ID of the patient's primary provider
-      - name: secondary_provider_id
-        description: ID of the patient's secondary provider
-      - name: clinic_id
-        description: ID of the patient's primary clinic
-      - name: family_id
-        description: ID linking to related family members
-      - name: family_link_type
-        description: Type of family relationship
-      - name: family_linked_at
-        description: Timestamp when family relationship was established
-
-      # Contact Preferences
       - name: preferred_confirmation_method
         description: Patient's preferred method for appointment confirmations
+        tests:
+          - accepted_values:
+              values: ['Email', 'Text', 'Phone', 'Mail', 'None']
+
       - name: preferred_contact_method
         description: Patient's preferred method of contact
+        tests:
+          - accepted_values:
+              values: ['Email', 'Text', 'Phone', 'Mail', 'None']
+
       - name: text_messaging_consent
         description: Whether patient has consented to text messaging
+        tests:
+          - accepted_values:
+              values: [true, false]
 
-      # Financial Information
       - name: estimated_balance
         description: Estimated current balance
         tests:
           - not_null
-          - has_non_zero_balance:
-              severity: warn
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000000
+              max_value: 1000000
+
       - name: total_balance
         description: Total balance on account
         tests:
           - not_null
-          - has_non_zero_balance:
-              severity: warn
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000000
+              max_value: 1000000
+
       - name: has_insurance_flag
         description: Indicates if patient has insurance
+        tests:
+          - accepted_values:
+              values: [true, false]
 
-      # Emergency Contact and Medical
+      - name: family_id
+        description: ID linking to related family members
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: family_link_type
+        description: Type of family relationship
+        tests:
+          - accepted_values:
+              values: ['Parent', 'Child', 'Spouse', 'Guardian', 'Other']
+
+      - name: family_linked_at
+        description: Timestamp when family relationship was established
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
       - name: emergency_contact_name
         description: Name of emergency contact (ICE)
+        tests:
+          - not_null:
+              where: "patient_status = 2"  # Required for active patients
+
       - name: emergency_contact_phone
         description: Phone number of emergency contact
+        tests:
+          - not_null:
+              where: "patient_status = 2"  # Required for active patients
+
       - name: medical_notes
         description: General medical notes
+
       - name: treatment_notes
         description: Notes related to treatment
+
       - name: pronoun
         description: Patient's preferred pronouns
+        tests:
+          - accepted_values:
+              values: ['he/him', 'she/her', 'they/them', 'other', null]
+
       - name: consent
         description: Patient's recorded consents
+        tests:
+          - not_null:
+              where: "patient_status = 2"  # Required for active patients
 
-      # Important Dates
       - name: first_visit_date
         description: Date of patient's first visit
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
-      # Metadata
       - name: patient_created_at
         description: Timestamp when patient record was created
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
       - name: patient_updated_at
         description: >
           Timestamp when patient record was last updated.
@@ -109,29 +229,63 @@ models:
           the patient may be effectively inactive despite their active status.
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
       - name: notes_created_at
         description: Timestamp when patient notes were created
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
       - name: notes_updated_at
         description: Timestamp when patient notes were last updated
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
       - name: model_created_at
         description: Timestamp when this model record was created
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
       - name: model_updated_at
         description: Timestamp when this model record was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
 
     tests:
       - dbt_utils.equal_rowcount:
           compare_model: ref('stg_opendental__patient')
-      # Test for inactive patients
+          config:
+            severity: error
+            description: "Patient count must match source data"
+
       - dbt_utils.expression_is_true:
           expression: "NOT(patient_updated_at < CURRENT_DATE - INTERVAL '2 years' AND patient_status = 2)"
           severity: warn
-          where: "patient_status = 2"  # Only check active patients
+          where: "patient_status = 2"
+          description: "Active patients should have recent updates"
 
-    config:
-      tags:
-        - 'foundation'
-        - 'patient'
-        - 'daily'
+      - dbt_utils.expression_is_true:
+          expression: "NOT(has_insurance_flag = true AND emergency_contact_name IS NULL)"
+          severity: error
+          where: "patient_status = 2"
+          description: "Active patients with insurance must have emergency contact"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT(patient_status = 2 AND first_visit_date IS NULL)"
+          severity: error
+          description: "Active patients must have a first visit date"
 
     meta:
       owner: 'data_team'
@@ -141,3 +295,14 @@ models:
         - 'stg_opendental__patient'
         - 'stg_opendental__patientlink'
         - 'stg_opendental__patientnote'
+      data_quality_requirements:
+        - "All active patients must have emergency contact information"
+        - "All active patients must have a first visit date"
+        - "Patient status must be valid (0-9)"
+        - "Age must be between 0 and 120"
+        - "Balances must be within reasonable ranges"
+        - "Dates must be within valid ranges"
+        - "Gender must be one of M, F, O, U"
+        - "Contact preferences must be valid"
+        - "Family relationships must be valid"
+        - "Patient updates must be recent for active patients"
