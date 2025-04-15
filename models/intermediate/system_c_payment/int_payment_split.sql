@@ -12,7 +12,7 @@
     Part of System C: Payment Allocation & Reconciliation
     
     This model:
-    1. Categorizes splits by type (normal, discount, unearned, payment plan)
+    1. Categorizes splits by type (normal, discount, unearned)
     2. Validates split business rules
     3. Provides split analytics and metadata
     4. Maintains relationships with procedures and adjustments
@@ -37,8 +37,6 @@ BaseSplits AS (
         ps.provider_id,
         ps.procedure_id,
         ps.adjustment_id,
-        ps.payplan_id,
-        ps.payplan_charge_id,
         ps.forward_split_id,
         
         -- Split details
@@ -50,7 +48,6 @@ BaseSplits AS (
         ps.is_discount_flag,
         ps.discount_type,
         ps.unearned_type,
-        ps.payplan_debit_type,
         
         -- Metadata
         ps.entry_date,
@@ -65,20 +62,13 @@ BaseSplits AS (
         -- Link to adjustment data if available
         adj.adjustment_amount,
         adj.adjustment_type_name,
-        adj.adjustment_category_type,
-        
-        -- Link to payment plan data if available
-        pp.payplan_amount,
-        pp.payplan_status,
-        pp.payplan_terms
+        adj.adjustment_category_type
         
     FROM {{ ref('stg_opendental__paysplit') }} ps
     LEFT JOIN {{ ref('int_procedure_complete') }} pc
         ON ps.procedure_id = pc.procedure_id
     LEFT JOIN {{ ref('int_adjustments') }} adj
         ON ps.adjustment_id = adj.adjustment_id
-    LEFT JOIN {{ ref('stg_opendental__payplan') }} pp
-        ON ps.payplan_id = pp.payplan_id
 ),
 
 SplitCategorization AS (
@@ -90,7 +80,6 @@ SplitCategorization AS (
             WHEN is_discount_flag THEN 'DISCOUNT'
             WHEN unearned_type = 288 THEN 'UNEARNED_REVENUE'
             WHEN unearned_type = 439 THEN 'TREATMENT_PLAN_PREPAYMENT'
-            WHEN payplan_id IS NOT NULL THEN 'PAYMENT_PLAN'
             ELSE 'NORMAL_PAYMENT'
         END AS split_type,
         
@@ -110,8 +99,7 @@ SplitCategorization AS (
         
         CASE
             WHEN procedure_id IS NULL AND 
-                 adjustment_id IS NULL AND 
-                 payplan_charge_id IS NULL THEN FALSE
+                 adjustment_id IS NULL THEN FALSE
             ELSE TRUE
         END AS is_valid_allocation,
         
