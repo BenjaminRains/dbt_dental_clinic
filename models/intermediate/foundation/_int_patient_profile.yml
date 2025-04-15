@@ -134,10 +134,23 @@ models:
               values: [0, 2, 4, 8]
 
       - name: preferred_contact_method
-        description: Patient's preferred method of contact
+        description: >
+          Patient's preferred method for general contact.
+          
+          Current distribution (as of 2024):
+          - 0 (13.35%): Assumed to be "None/No Preference"
+          - 2 (58.53%): Assumed to be "Email"
+          - 3 (0.01%): Assumed to be "Mail"
+          - 4 (28.08%): Assumed to be "Phone"
+          - 5 (0.01%): Assumed to be "Text"
+          - 6 (0.00%): Assumed to be "Other"
+          - 8 (0.02%): Assumed to be "Portal"
+          
+          Note: These mappings are assumptions based on data distribution patterns and OpenDental's typical bit flag usage.
+          They should be verified with stakeholders before being used for business decisions.
         tests:
           - accepted_values:
-              values: ['Email', 'Text', 'Phone', 'Mail', 'None']
+              values: [0, 2, 3, 4, 5, 6, 8]
 
       - name: text_messaging_consent
         description: Whether patient has consented to text messaging
