@@ -1,0 +1,292 @@
+version: 2
+
+models:
+  - name: int_fee_model
+    description: >
+      Comprehensive fee model that focuses on fee processing and verification for an out-of-network
+       dental clinic.
+      This model consolidates fee-related information from multiple sources and provides clear 
+      fee relationships.
+      
+      Key features:
+      - Tracks applied fees vs. standard fees
+      - Calculates fee variances and relationships
+      - Integrates adjustment information
+      - Provides fee statistics per procedure code
+      - Supports fee verification workflow
+      
+      Note: As an out-of-network focused clinic:
+      - Applied fees often differ significantly from standard fees
+      - Fee schedules primarily serve as reference data
+      - Adjustments are common and reflect patient-specific arrangements
+      - Fee validation should account for this out-of-network reality
+    
+    config:
+      materialized: incremental
+      unique_key: procedure_id
+    
+    columns:
+      - name: procedure_id
+        description: Primary key from procedurelog
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+
+      - name: patient_id
+        description: Foreign key to patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: provider_id
+        description: Provider who performed the procedure
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: clinic_id
+        description: Clinic where procedure was performed
+        tests:
+          - not_null
+
+      - name: procedure_code_id
+        description: Foreign key to procedure code
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: procedure_code_id
+
+      - name: procedure_date
+        description: Date when procedure was performed or planned
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'2026-12-31'"  # Allows for future planned procedures
+
+      - name: procedure_status
+        description: Raw status code from source system
+        tests:
+          - not_null
+
+      - name: applied_fee
+        description: Fee amount from procedurelog (renamed from procedure_fee)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "procedure_status = 2"  # Only test completed procedures
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              row_condition: "is_hygiene_flag = 1"
+              config:
+                severity: warn
+                name: warn_high_hygiene_fees
+
+      - name: standard_fee_id
+        description: ID of the standard fee record used
+        tests:
+          - relationships:
+              to: ref('stg_opendental__fee')
+              field: fee_id
+              severity: warn  # Some procedures might not have standard fees
+
+      - name: standard_fee
+        description: Standard fee amount from fee schedule
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "has_standard_fee = true"
+              severity: warn  # Downgraded to warn since fees may vary for out-of-network
+
+      - name: fee_schedule_id
+        description: ID of the fee schedule used
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+              severity: warn  # Some procedures might not have fee schedules
+
+      - name: fee_schedule_description
+        description: Name/description of the fee schedule
+
+      - name: fee_schedule_type_id
+        description: Type identifier for the fee schedule
+
+      - name: is_hidden
+        description: Flag indicating if the fee schedule is hidden
+
+      - name: is_global_flag
+        description: Flag indicating if the fee schedule is global
+
+      - name: available_fee_options
+        description: Count of different fee options available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+
+      - name: min_available_fee
+        description: Minimum fee amount available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: max_available_fee
+        description: Maximum fee amount available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: avg_fee_amount
+        description: Average fee amount for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: procedure_code
+        description: ADA procedure code from procedure codes table
+        tests: []
+
+      - name: procedure_description
+        description: Detailed description of the procedure
+        tests:
+          - warn_procedures_missing_descriptions:
+              severity: warn
+
+      - name: abbreviated_description
+        description: Short description of the procedure
+
+      - name: is_hygiene_flag
+        description: Flag indicating if this is a hygiene procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: is_prosthetic_flag
+        description: Flag indicating if this is a prosthetic procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: is_multi_visit_flag
+        description: Flag indicating if procedure requires multiple visits
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: has_standard_fee
+        description: Flag indicating if a standard fee was found for this procedure
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: fee_matches_standard
+        description: Flag indicating if the applied fee matches the standard fee
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: fee_relationship
+        description: Relationship between applied fee and standard fee
+        tests:
+          - accepted_values:
+              values: ['above_standard', 'below_standard', 'matches_standard']
+
+      - name: fee_variance_pct
+        description: Percentage difference between applied fee and standard fee
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100
+              max_value: 1000
+              row_condition: "has_standard_fee = true"
+              severity: warn  # Downgraded to warn since fees may vary for out-of-network
+
+      - name: total_adjustments
+        description: Sum of all adjustments applied to the procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+
+      - name: adjustment_count
+        description: Number of adjustments applied to the procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+
+      - name: adjustment_types
+        description: Comma-separated list of adjustment types applied to the procedure
+
+      - name: first_adjustment_date
+        description: Date of the first adjustment applied to the procedure
+
+      - name: last_adjustment_date
+        description: Date of the most recent adjustment applied to the procedure
+
+      - name: effective_fee
+        description: Final fee amount after all adjustments (applied_fee + total_adjustments)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn  # Downgraded to warn since fees may vary for out-of-network
+
+      - name: adjustment_impact
+        description: Classification of adjustment impact based on percentage of applied fee
+        tests:
+          - accepted_values:
+              values: ['major', 'moderate', 'minor']
+
+      - name: _loaded_at
+        description: Timestamp when record was processed by the int model
+        tests:
+          - not_null
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 80000
+          max_value: 100000  # Adjusted based on expected volume
+
+      # Custom composite tests
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and applied_fee = 0)"
+          severity: warn
+          name: warn_completed_procedure_zero_fee
+
+      - dbt_utils.expression_is_true:
+          expression: "not (has_standard_fee = false and procedure_status = 2)"
+          severity: warn
+          name: warn_completed_procedure_no_standard_fee
+
+      - dbt_utils.expression_is_true:
+          expression: "procedure_date >= '2023-01-01'"
+          name: procedures_must_be_recent
+
+      - dbt_utils.expression_is_true:
+          expression: "effective_fee >= 0"
+          severity: error
+          name: no_negative_effective_fees
+
+      - dbt_utils.expression_is_true:
+          expression: "abs(applied_fee - standard_fee) <= 1000 or not has_standard_fee"
+          severity: warn
+          name: warn_extreme_fee_differences
+
+      - dbt_utils.expression_is_true:
+          expression: "not (is_hygiene_flag = 1 and applied_fee > 500)"
+          severity: warn
+          name: warn_high_hygiene_procedure_fees
