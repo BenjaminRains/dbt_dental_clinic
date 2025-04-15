@@ -18,12 +18,65 @@ models:
       - Provides split impact analysis and amount categorization
       - Maintains relationships with procedures and adjustments
       - Tracks split validation status and metadata
+      - Handles high-split administrative entries (100+ splits)
+      - Supports hidden splits and prepayment tracking
+      
+      Split Categories:
+      1. Regular Payment Splits:
+         - Visible on account
+         - Attached to completed procedures/adjustments
+         - Immediate impact on patient balance
+         - Rigorous validation on procedure attachments
+      
+      2. Hidden Payment Splits:
+         - Not shown on account or statements
+         - Used for prepayments and treatment planning
+         - Tracked in separate Account Module tab
+         - Automatically transfer when procedures complete
+         - Generate income transfers on status changes
+      
+      3. Unearned/Prepayment Splits:
+         - Track deferred income
+         - Must have valid unearned type (288, 439)
+         - Require provider assignment
+         - Can be hidden from account view
+         - Common for payment plans and future procedures
+      
+      Split Patterns:
+      - Most payments have 1-2 splits (median = 2)
+      - Some administrative entries (payment_type_id = 0) can have hundreds of splits
+      - High-split patterns (100+ splits) are typically:
+        * Administrative/batch operations
+        * Treatment plan allocations
+        * System-generated entries
+        * Characterized by payment_amount = 0.0
+        * Recent dates (typically within current month)
+      
+      Common Split Amounts:
+      - Most frequent: $31.00, $60.00, $109.00
+      - Common refund amounts: -$29.00, -$53.00, -$30.00
+      - Small amounts (<$10) often represent adjustments or fees
+      
+      Payment Breakdown Tracking:
+      - Fee amounts and procedure links
+      - Write-offs and adjustments
+      - Insurance payments and estimates
+      - Patient payment allocations
+      - Remaining balances
+      - Overpayment warnings
       
       Business rules:
       - Splits must be properly allocated to procedures or adjustments
       - Zero amount splits must be valid (discounts, unearned revenue)
       - Unearned revenue splits must have a provider
       - Split amounts must be within reasonable ranges
+      - High-split administrative entries require special validation
+      - Payment type 0 entries need additional verification
+      - Clinic and Provider inherit from attached procedures/adjustments
+      - Rigorous validation when attached to procedures
+      - Prevents overpayment with warnings
+      - Hidden splits must have appropriate unearned type flags
+      - Income transfers track movement between visible/hidden status
     
     config:
       materialized: incremental
@@ -38,7 +91,10 @@ models:
           - not_null
 
       - name: payment_id
-        description: Foreign key to the payment
+        description: |
+          Foreign key to the payment.
+          Note: Some administrative payments (type 0) can have hundreds of splits.
+          For hidden splits, tracks the original payment that was prepaid.
         tests:
           - not_null
           - relationships:
@@ -46,7 +102,9 @@ models:
               field: payment_id
 
       - name: patient_id
-        description: Foreign key to the patient
+        description: |
+          Foreign key to the patient.
+          Can be from different family if "Is from another family" is checked.
         tests:
           - not_null
           - relationships:
@@ -54,7 +112,9 @@ models:
               field: patient_id
 
       - name: clinic_id
-        description: Foreign key to the clinic
+        description: |
+          Foreign key to the clinic.
+          Inherits from procedure/adjustment if attached, otherwise from payment preferences.
         tests:
           - not_null
           - relationships:
@@ -62,35 +122,51 @@ models:
               field: clinic_id
 
       - name: provider_id
-        description: Foreign key to the provider
+        description: |
+          Foreign key to the provider.
+          Required for unearned types.
+          Inherits from procedure/adjustment if attached.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
 
       - name: procedure_id
-        description: Foreign key to the procedure
+        description: |
+          Foreign key to the procedure.
+          Can link to completed or treatment planned procedures.
+          Detached when hidden splits transfer to visible.
         tests:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
 
       - name: adjustment_id
-        description: Foreign key to the adjustment
+        description: |
+          Foreign key to the adjustment.
+          Cannot be attached if procedure_id exists.
+          Used for tracking non-procedure payment allocations.
         tests:
           - relationships:
               to: ref('stg_opendental__adjustment')
               field: adjustment_id
 
       - name: forward_split_id
-        description: Reference to a forward split if this is a refund
+        description: |
+          Reference to a forward split if this is a refund.
+          Used to track split payment chains.
         tests:
           - relationships:
               to: ref('stg_opendental__paysplit')
               field: paysplit_id
 
       - name: split_amount
-        description: Amount of the split
+        description: |
+          Amount of the split.
+          Common patterns:
+          - Most frequent: $31.00, $60.00, $109.00
+          - Common refunds: -$29.00, -$53.00, -$30.00
+          - Small amounts (<$10) often represent adjustments
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
@@ -300,3 +376,9 @@ models:
         - "Split types must be valid"
         - "Split impact must be properly calculated"
         - "Amount categories must be properly assigned"
+        - "High-split administrative entries must be properly validated"
+        - "Payment type 0 entries require additional verification"
+        - "Hidden splits must have appropriate unearned type flags"
+        - "Income transfers must be tracked for hidden/visible status changes"
+        - "Clinic and provider inheritance rules must be followed"
+        - "Overpayment warnings must be generated appropriately"
