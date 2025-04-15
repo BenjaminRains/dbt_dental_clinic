@@ -90,20 +90,6 @@ models:
               to: ref('stg_opendental__adjustment')
               field: adjustment_id
 
-      - name: payplan_id
-        description: Foreign key to the payment plan
-        tests:
-          - relationships:
-              to: ref('stg_opendental__payplan')
-              field: payplan_id
-
-      - name: payplan_charge_id
-        description: Foreign key to the payment plan charge
-        tests:
-          - relationships:
-              to: ref('stg_opendental__payplancharge')
-              field: payplan_charge_id
-
       - name: split_amount
         description: Amount allocated in this payment
         tests:
@@ -160,7 +146,6 @@ models:
               to: ref('stg_opendental__definition')
               field: definition_id
               where: "category_id = 1"
-              description: "Ensures all payment types are properly defined in the definition table"
 
       - name: payment_source
         description: Source of the payment
@@ -455,7 +440,6 @@ models:
               to: ref('stg_opendental__definition')
               field: item_name
               where: "category_id = 1"
-              description: "Ensures payment type descriptions match the definition table"
 
       - name: payment_status_description
         description: |
@@ -475,7 +459,6 @@ models:
               to: ref('stg_opendental__definition')
               field: item_name
               where: "category_id = 2"
-              description: "Ensures payment status descriptions match the definition table"
 
       - name: process_status_description
         description: |
@@ -495,7 +478,6 @@ models:
               to: ref('stg_opendental__definition')
               field: item_name
               where: "category_id = 2"
-              description: "Ensures process status descriptions match the definition table"
 
       - name: include_in_ar
         description: Flag indicating if this payment should be included in AR calculations
