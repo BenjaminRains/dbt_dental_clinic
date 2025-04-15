@@ -4,26 +4,32 @@ models:
   - name: int_fee_model
     description: >
       Comprehensive fee model that focuses on fee processing and verification for an out-of-network
-       dental clinic.
-      This model consolidates fee-related information from multiple sources and provides clear 
-      fee relationships.
+      dental clinic. This model consolidates fee-related information from multiple sources and 
+      provides clear fee relationships.
       
       Key features:
       - Tracks applied fees vs. standard fees
       - Calculates fee variances and relationships
-      - Integrates adjustment information
+      - Integrates adjustment information with definition mappings
       - Provides fee statistics per procedure code
       - Supports fee verification workflow
+      - Filters for procedures from 2023 onwards
+      - Uses DISTINCT ON to handle potential duplicates
       
       Note: As an out-of-network focused clinic:
       - Applied fees often differ significantly from standard fees
       - Fee schedules primarily serve as reference data
       - Adjustments are common and reflect patient-specific arrangements
       - Fee validation should account for this out-of-network reality
+      
+      Note: Relevant definition categories include:
+      - Category 0: Provider Discretion adjustments
+      - Category 15: Discount types (Employee, Military, Courtesy)
     
     config:
       materialized: incremental
       unique_key: procedure_id
+      schema: intermediate
     
     columns:
       - name: procedure_id
@@ -256,6 +262,30 @@ models:
         tests:
           - not_null
 
+      - name: is_provider_discretion
+        description: Flag indicating if adjustment was at provider's discretion (based on definition category 0)
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_employee_discount
+        description: Flag indicating if adjustment is an employee discount (based on definition category 15)
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_military_discount
+        description: Flag indicating if adjustment is a military discount (based on definition category 15)
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_courtesy_adjustment
+        description: Flag indicating if adjustment is a courtesy adjustment (based on definition category 15)
+        tests:
+          - accepted_values:
+              values: [true, false]
+
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 80000
@@ -275,6 +305,7 @@ models:
       - dbt_utils.expression_is_true:
           expression: "procedure_date >= '2023-01-01'"
           name: procedures_must_be_recent
+          severity: error
 
       - dbt_utils.expression_is_true:
           expression: "effective_fee >= 0"
@@ -290,3 +321,18 @@ models:
           expression: "not (is_hygiene_flag = 1 and applied_fee > 500)"
           severity: warn
           name: warn_high_hygiene_procedure_fees
+
+      - dbt_utils.expression_is_true:
+          expression: "not (adjustment_type_name is null and adjustment_id is not null)"
+          severity: warn
+          name: warn_missing_adjustment_type_description
+
+      - dbt_utils.expression_is_true:
+          expression: "not (is_provider_discretion = true and adjustment_category_type != 0)"
+          severity: warn
+          name: warn_invalid_provider_discretion_category
+
+      - dbt_utils.expression_is_true:
+          expression: "not ((is_employee_discount = true or is_military_discount = true or is_courtesy_adjustment = true) and adjustment_category_type != 15)"
+          severity: warn
+          name: warn_invalid_discount_category
