@@ -14,11 +14,14 @@ models:
       - Maintains payment processing information
       - Preserves detailed payment metadata
       - Supports AR calculations and aging analysis
+      - Generates unique payment_allocation_id using ROW_NUMBER() over payment_source_type and payment_id
       
       Data Sources:
       - stg_opendental__payment: Base patient payment information
+      - stg_opendental__paysplit: Payment split information and procedure links
       - stg_opendental__claimpayment: Insurance payment details
-      - stg_opendental__claimproc: Claim procedure information
+      - stg_opendental__claimproc: Claim procedure information and provider assignments for insurance payments
+      - stg_opendental__procedurelog: Procedure information and provider assignments for patient payments
       - stg_opendental__definition: Payment type and status definitions
       
       Business rules:
@@ -28,6 +31,15 @@ models:
       - Payment dates are used for AR calculations
       - Payment types and statuses are managed through the definition table
       - Payment allocations must be properly linked to procedures or claims
+      - Provider assignments are sourced from:
+        * stg_opendental__claimproc for insurance payments
+        * stg_opendental__procedurelog for patient payments (via paysplit join)
+      - Patient payment provider assignments are determined through:
+        * Payment -> Paysplit -> Procedurelog join path
+        * Ensures accurate provider attribution for split payments
+      - Payment allocation IDs are generated using:
+        * ROW_NUMBER() over payment_source_type and payment_id
+        * Ensures unique identifiers across both payment types
     
     config:
       materialized: incremental
@@ -36,7 +48,9 @@ models:
     
     columns:
       - name: payment_allocation_id
-        description: Unique identifier for each payment allocation record
+        description: |
+          Unique identifier for each payment allocation record.
+          Generated using ROW_NUMBER() over payment_source_type and payment_id to ensure uniqueness across both patient and insurance payments.
         tests:
           - unique
           - not_null
@@ -49,7 +63,10 @@ models:
               values: ['PATIENT', 'INSURANCE']
 
       - name: payment_id
-        description: Foreign key to either patient payment or insurance claim payment
+        description: |
+          Foreign key to either:
+          - Patient payment (from stg_opendental__payment)
+          - Insurance claim payment (from stg_opendental__claimpayment)
         tests:
           - not_null
 
@@ -61,23 +78,21 @@ models:
               to: ref('stg_opendental__patient')
               field: patient_id
 
-      - name: clinic_id
-        description: Foreign key to the clinic
-        tests:
-          - not_null
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
-
       - name: provider_id
-        description: Foreign key to the provider
+        description: |
+          Foreign key to the provider, sourced through different paths based on payment type:
+          - Insurance payments: Directly from stg_opendental__claimproc
+          - Patient payments: From stg_opendental__procedurelog via stg_opendental__paysplit join
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
 
       - name: procedure_id
-        description: Foreign key to the procedure
+        description: |
+          Foreign key to the procedure, sourced through different paths based on payment type:
+          - Insurance payments: From stg_opendental__claimproc
+          - Patient payments: From stg_opendental__paysplit
         tests:
           - relationships:
               to: ref('stg_opendental__procedurelog')
@@ -107,7 +122,10 @@ models:
               max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: procedure_date
-        description: Date of the associated procedure
+        description: |
+          Date of the associated procedure, sourced through different paths based on payment type:
+          - Insurance payments: From stg_opendental__claimproc
+          - Patient payments: From stg_opendental__paysplit
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
