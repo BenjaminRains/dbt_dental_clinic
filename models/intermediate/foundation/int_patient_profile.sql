@@ -1,30 +1,28 @@
 {{
     config(
         materialized='table',
-        tags=['foundation', 'daily'],
+        unique_key='patient_id',
+        tags=['foundation', 'weekly'],
         description='''
             # int_patient_profile
 
-            This foundation model combines core patient information from various staging models to create a comprehensive patient profile.
+            Foundation model combining core patient information from staging models to 
+            create comprehensive patient profiles.
 
-            Key information included:
+            ## Key Features
             - Basic demographics and contact information
             - Family relationships
-            - Geographic location
             - Emergency contacts
             - Medical notes and treatment information
             - Patient preferences (pronouns, consent)
 
             ## Usage
-            This model serves as a foundation for downstream patient-related analytics and should be used as the primary source of patient profile information.
+            Primary source for patient profile information in downstream analytics.
 
-            ## Materialization
-            Table materialization is used due to the frequent access of this data by downstream models.
-
-            ## Notes:
-            - Geographic/location data (city, state, zipcode) is currently not included as the relationship between
-              patient and zipcode tables needs to be investigated
-            - Consider checking for additional patient address or location tables in the source system
+            ## Notes
+            - Geographic data (city, state, zipcode) pending investigation of patient-zipcode
+             relationships
+            - Consider checking for additional patient address/location tables in source system
         '''
     )
 }}
@@ -41,7 +39,7 @@ WITH patient_base AS (
         preferred_name,
         gender,
         language,
-        birth_date as birthdate,
+        birth_date,
         age,
         patient_status,
         position_code,
@@ -91,7 +89,7 @@ SELECT
     p.middle_initial,
     p.gender,
     p.language,
-    p.birthdate,
+    p.birth_date,
     p.age,
     p.patient_status,
     p.position_code,
