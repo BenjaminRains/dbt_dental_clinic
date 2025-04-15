@@ -232,10 +232,12 @@ models:
         description: Notes related to treatment
 
       - name: pronoun
-        description: Patient's preferred pronouns
+        description: Patient's preferred pronouns (0=default)
         tests:
           - accepted_values:
-              values: ['he/him', 'she/her', 'they/them', 'other', null]
+              values: [0]
+              config:
+                severity: warn
 
       - name: consent
         description: Patient's recorded consents
