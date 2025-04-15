@@ -76,9 +76,9 @@ models:
       - name: language
         description: Patient's preferred language
         tests:
-          - not_null
-          - config:
-              severity: warn
+          - not_null:
+              config:
+                severity: warn
 
       - name: birth_date
         description: Patient's date of birth
