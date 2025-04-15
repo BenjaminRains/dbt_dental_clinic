@@ -263,11 +263,7 @@ models:
       - name: first_visit_date
         description: Date of patient's first visit
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "NOT(patient_status = 2 AND first_visit_date IS NULL)"
-              config:
-                severity: error
-                description: "Active patients must have a first visit date"
+          - not_null
 
       - name: patient_created_at
         description: Timestamp when patient record was created
