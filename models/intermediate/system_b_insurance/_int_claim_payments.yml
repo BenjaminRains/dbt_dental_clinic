@@ -5,6 +5,23 @@ models:
     description: >
       Detailed payment information for insurance claims, preserving the complete payment history.
       Each record represents a payment associated with a specific procedure within a claim.
+      
+      Key features:
+      - Tracks individual payments for procedures within claims
+      - Maintains financial information (billed, allowed, paid amounts)
+      - Preserves payment details (check amount, date, type)
+      - Links to int_claim_details for validation
+      
+      Data Sources:
+      - stg_opendental__claimproc: Base procedure and payment information
+      - stg_opendental__claimpayment: Payment details
+      - int_claim_details: Validation against claim details
+    
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: claim_payment_id
+    
     columns:
       - name: claim_id
         description: Foreign key to the claim
@@ -13,6 +30,7 @@ models:
           - relationships:
               to: ref('int_claim_details')
               field: claim_id
+
       - name: procedure_id
         description: Foreign key to the procedure
         tests:
@@ -20,43 +38,114 @@ models:
           - relationships:
               to: ref('int_claim_details')
               field: procedure_id
+
       - name: claim_payment_id
         description: Primary key for the payment record
         tests:
           - not_null
+          - unique
+          - relationships:
+              to: ref('stg_opendental__claimpayment')
+              field: claim_payment_id
+
       - name: billed_amount
         description: Amount billed to insurance for this procedure
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
       - name: allowed_amount
         description: Amount allowed by insurance for this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
       - name: paid_amount
         description: Amount paid by insurance for this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
       - name: write_off_amount
         description: Amount written off for this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
       - name: patient_responsibility
         description: Amount patient is responsible for this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
       - name: check_amount
         description: Amount of the payment check
         tests:
           - not_null:
               where: "claim_payment_id != 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              where: "claim_payment_id != 0"
+
       - name: check_date
         description: Date of the payment check
         tests:
           - not_null:
               where: "claim_payment_id != 0"
+
       - name: payment_type_id
         description: Type of payment (e.g., check, electronic)
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+
       - name: is_partial
         description: Whether this is a partial payment
+        tests:
+          - accepted_values:
+              values: [true, false]
+              where: "claim_payment_id != 0"
+
       - name: created_at
         description: Timestamp when the payment was created
         tests:
           - not_null:
               where: "claim_payment_id != 0"
+
       - name: updated_at
         description: Timestamp when the payment was last updated
         tests:
           - not_null:
-              where: "claim_payment_id != 0" 
+              where: "claim_payment_id != 0"
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 100000
+
+      - dbt_utils.expression_is_true:
+          expression: "billed_amount >= paid_amount + write_off_amount + patient_responsibility"
+          severity: warn
+          name: warn_inconsistent_financial_totals
+
+      - dbt_utils.expression_is_true:
+          expression: "not (check_amount is null and claim_payment_id != 0)"
+          severity: warn
+          name: warn_missing_check_amount
+
+      - dbt_utils.expression_is_true:
+          expression: "not (check_date is null and claim_payment_id != 0)"
+          severity: warn
+          name: warn_missing_check_date
+
+      - dbt_utils.expression_is_true:
+          expression: "not (payment_type_id is null and claim_payment_id != 0)"
+          severity: warn
+          name: warn_missing_payment_type 
