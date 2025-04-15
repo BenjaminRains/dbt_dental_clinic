@@ -1,6 +1,7 @@
 {{ config(
     materialized='table',
-    schema='intermediate'
+    schema='intermediate',
+    unique_key='patient_id'
 ) }}
 
 with PatientBalances as (
