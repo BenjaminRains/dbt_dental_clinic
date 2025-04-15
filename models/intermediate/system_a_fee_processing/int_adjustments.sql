@@ -1,3 +1,11 @@
+{{
+    config(
+        materialized='table',
+        schema='intermediate',
+        unique_key='adjustment_id'
+    )
+}}
+
 -- int_procedure_adjustments.sql
 WITH AdjustmentDefinitions AS (
     SELECT 
