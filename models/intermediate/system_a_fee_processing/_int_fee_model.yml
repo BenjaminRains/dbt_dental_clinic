@@ -7,6 +7,14 @@ models:
       dental clinic. This model consolidates fee-related information from multiple sources and 
       provides clear fee relationships.
       
+      Data Sources:
+      - stg_opendental__procedurelog: Base procedure records and applied fees
+      - stg_opendental__procedurecode: Procedure code definitions and descriptions
+      - stg_opendental__fee: Standard fee amounts and schedules
+      - stg_opendental__feesched: Fee schedule definitions and types
+      - stg_opendental__definition: Adjustment type definitions and categories
+      - stg_opendental__adjustment: Adjustment records and amounts
+      
       Key features:
       - Tracks applied fees vs. standard fees
       - Calculates fee variances and relationships
