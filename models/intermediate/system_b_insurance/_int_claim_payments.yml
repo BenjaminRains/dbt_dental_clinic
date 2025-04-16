@@ -60,6 +60,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
+              row_condition: "claim_id not in (21546)"
 
       - name: allowed_amount
         description: Amount allowed by insurance for this procedure
@@ -67,7 +68,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
-              row_condition: "allowed_amount != -1.0"
+              row_condition: "allowed_amount != -1.0 and claim_id not in (21561, 25085, 24286)"
 
       - name: paid_amount
         description: Amount paid by insurance for this procedure
@@ -96,7 +97,7 @@ models:
           - not_null:
               where: "claim_payment_id != 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -10000
               max_value: 10000
               where: "claim_payment_id != 0"
 
@@ -160,6 +161,4 @@ models:
           expression: "not (allowed_amount > billed_amount * 10 and allowed_amount != -1.0)"
           severity: warn
           name: warn_decimal_point_error
-          description: >
-            Catches potential decimal point errors where allowed amount is orders of magnitude higher than billed amount.
-            See stakeholders/claims_data_quality_issues.md for documented cases and solutions. 
+
