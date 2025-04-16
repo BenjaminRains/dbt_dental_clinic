@@ -30,11 +30,14 @@ Some claims have allowed amounts that are orders of magnitude higher than expect
 - Causes test failures in `int_claim_details` model
 - Distorts analytics and reporting
 - Affects financial calculations and insurance analysis
+- Currently failing test: `dbt_expectations_expect_column_values_to_be_between_int_claim_payments_allowed_amount__10000__0__allowed_amount_1_0`
+- Failing records: 21561, 25085, 24286
 
 ### Root Cause
 - Data entry errors where decimal point was misplaced
 - Similar procedures in the same claim show normal allowed amounts
 - Typical allowed amounts for these procedures range from $100-$300
+- Patterns show consistent decimal point errors (100x, 77x, 1000x differences)
 
 ### Recommended Solutions
 1. **Immediate Fix**:
