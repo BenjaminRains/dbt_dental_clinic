@@ -52,6 +52,7 @@ models:
           - relationships:
               to: ref('stg_opendental__claimpayment')
               field: claim_payment_id
+              where: "claim_payment_id != 0"
 
       - name: billed_amount
         description: Amount billed to insurance for this procedure
