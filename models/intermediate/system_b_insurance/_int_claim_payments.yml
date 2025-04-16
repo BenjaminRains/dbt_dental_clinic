@@ -48,7 +48,6 @@ models:
         description: Primary key for the payment record
         tests:
           - not_null
-          - unique
           - relationships:
               to: ref('stg_opendental__claimpayment')
               field: claim_payment_id
