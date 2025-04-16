@@ -53,11 +53,25 @@ models:
               field: provider_id
 
       - name: secondary_provider_id
-        description: ID of the patient's secondary provider
+        description: >
+          ID of the patient's secondary provider
+          
+          Note:
+          - As of 2025, approximately 4,662 records have secondary_provider_id = 0
+          - This appears to be a default value rather than an invalid provider ID
+          - Primarily affects:
+            - Prospective patients (status 4)
+            - Inactive patients (status 0)
+            - Some inactive (status 1) and active (status 2) patients
+          - Zero likely indicates "no secondary provider assigned"
+          - Consider updating active patients with zero provider IDs
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              config:
+                severity: warn
+                description: "Provider ID of 0 indicates no secondary provider assigned"
 
       - name: preferred_name
         description: Patient's preferred name
