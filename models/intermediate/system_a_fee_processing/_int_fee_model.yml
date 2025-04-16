@@ -33,6 +33,20 @@ models:
       Note: Relevant definition categories include:
       - Category 0: Provider Discretion adjustments
       - Category 15: Discount types (Employee, Military, Courtesy)
+
+      Known Fee Patterns and Issues:
+      - Implant procedures (D6114, D6115) typically have higher fees ($10,324 - $25,500)
+      - Provider 28 shows consistent patterns of large adjustments and fee variances
+      - Zero-base fee procedures with large adjustments can result in negative effective fees
+      - "Discount Per Dr. Kamp" adjustments are frequently associated with extreme fee reductions
+      - Some procedures show unusually high fees (e.g., MISC Quickpick Button at $51,000)
+      
+      Data Quality Considerations:
+      - Monitor for negative effective fees (98 records identified)
+      - Watch for zero-base fee procedures with large adjustments
+      - Track provider-specific fee patterns, especially provider 28
+      - Validate adjustment timing relative to procedure dates
+      - Review standard fee consistency across similar procedures
     
     config:
       materialized: incremental
@@ -108,6 +122,11 @@ models:
               config:
                 severity: warn
                 name: warn_high_hygiene_fees
+        notes: >
+          Known patterns:
+          - Implant procedures (D6114, D6115) typically range $10,324 - $25,500
+          - Some MISC Quickpick Button procedures show unusually high fees ($51,000)
+          - Zero-base fees are common for certain procedures (e.g., D2919, D5109)
 
       - name: standard_fee_id
         description: ID of the standard fee record used
@@ -238,6 +257,12 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -10000
               max_value: 10000
+        notes: >
+          Known patterns:
+          - "Discount Per Dr. Kamp" adjustments frequently exceed -$10,000
+          - Zero-base fee procedures often have large negative adjustments
+          - Provider 28 shows consistent patterns of large adjustments
+          - Most large adjustments are made within 1-2 weeks of procedure date
 
       - name: adjustment_count
         description: Number of adjustments applied to the procedure
@@ -262,6 +287,12 @@ models:
               min_value: 0
               max_value: 10000
               severity: warn  # Downgraded to warn since fees may vary for out-of-network
+        notes: >
+          Known patterns:
+          - 98 records identified with negative effective fees
+          - Most severe cases involve zero-base fee procedures
+          - Provider 28 accounts for many of the negative effective fees
+          - Common in procedures with "Discount Per Dr. Kamp" adjustments
 
       - name: adjustment_impact
         description: Classification of adjustment impact based on percentage of applied fee
