@@ -2,7 +2,7 @@
     config(
         materialized='table',
         schema='intermediate',
-        unique_key='claim_tracking_id'
+        unique_key=['claim_id', 'claim_tracking_id', 'tracking_type', 'entry_timestamp']
     )
 }}
 

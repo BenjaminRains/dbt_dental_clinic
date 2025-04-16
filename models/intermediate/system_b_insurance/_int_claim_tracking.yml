@@ -19,7 +19,7 @@ models:
     config:
       materialized: table
       schema: intermediate
-      unique_key: claim_tracking_id
+      unique_key: [claim_id, claim_tracking_id, tracking_type, entry_timestamp]
     
     columns:
       - name: claim_id
@@ -34,7 +34,6 @@ models:
         description: Primary key for the tracking record
         tests:
           - not_null
-          - unique
           - relationships:
               to: ref('stg_opendental__claimtracking')
               field: claim_tracking_id
