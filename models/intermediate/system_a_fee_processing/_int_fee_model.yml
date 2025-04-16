@@ -40,6 +40,7 @@ models:
       - Zero-base fee procedures with large adjustments can result in negative effective fees
       - "Discount Per Dr. Kamp" adjustments are frequently associated with extreme fee reductions
       - Some procedures show unusually high fees (e.g., MISC Quickpick Button at $51,000)
+      - D0180 (comprehensive periodontal evaluation) has a known fee entry error in schedule 8290 ($11,611.0 vs normal $116.11)
       
       Data Quality Considerations:
       - Monitor for negative effective fees (98 records identified)
