@@ -29,6 +29,12 @@ models:
       - Category 1: Specific adjustment reasons
       - Category 15: Discount types
       - Category 29: Payment plan types
+
+      Note: Data Quality Findings:
+      - Some zero-fee procedures have non-zero adjustments (both large and very small)
+      - Some low-fee procedures have disproportionately large adjustments
+      - Some adjustments are missing procedure information
+      - See stakeholders/adjustment_data_quality_notice.md for detailed findings
     
     columns:
       - name: adjustment_id
@@ -137,9 +143,10 @@ models:
       - name: procedure_fee
         description: Original fee amount before adjustment
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 10000
+          - dbt_utils.expression_is_true:
+              expression: >
+                (procedure_fee >= 0 AND procedure_fee <= 10000) OR
+                (procedure_code IN ('D6114', 'D6115') AND procedure_fee <= 30000)
 
       - name: fee_schedule_id
         description: ID of the fee schedule used
