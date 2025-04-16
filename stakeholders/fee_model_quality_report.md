@@ -55,7 +55,19 @@ This report documents data quality findings in the fee processing model (`int_fe
   - Common in procedures with zero or low base fees
 - **Impact**: Distorts financial analysis and indicates potential data quality or business process issues
 
-#### E. Adjustment Type Patterns
+#### E. D0180 Fee Entry Error
+- **Issue**: Incorrect fee entry for D0180 (comprehensive periodontal evaluation)
+- **Examples**:
+  - Fee Schedule 8290 (IMAGE FIRST ULTIMATE HOLDINGS LLC): $11,611.0
+  - Normal fees: $116.11 (Cleveland Cliffs, Werner Enterprises)
+  - MDC EDP fee: $56.5
+- **Impact**: 
+  - Causes max_available_fee test to fail
+  - Fee is exactly 100x higher than normal fees
+  - Appears to be a decimal point error
+- **Action**: Documented for review and potential correction
+
+#### F. Adjustment Type Patterns
 - "Discount Per Dr. Kamp" appears on multiple problematic records
 - "MDC EDP" and "Admin Error" types also present
 - All large adjustments were made within 1-2 weeks of procedure date
