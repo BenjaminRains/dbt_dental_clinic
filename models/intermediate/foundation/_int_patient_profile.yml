@@ -238,7 +238,15 @@ models:
                 severity: error
 
       - name: emergency_contact_phone
-        description: Phone number of emergency contact
+        description: >
+          Phone number of emergency contact
+          
+          Note:
+          - As of 2025, approximately 21,686 active patients are missing emergency contact information
+          - These are the same legacy patients (first visits 1985-1997) who are missing consent forms
+          - Emergency contact information was not consistently collected for legacy patients
+          - Stakeholders should collect emergency contact information when these patients visit next
+          - This is a critical patient safety requirement for active patients
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
