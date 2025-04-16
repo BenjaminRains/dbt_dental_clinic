@@ -69,9 +69,16 @@ models:
       - name: adjustment_amount
         description: Amount of the adjustment (can be positive or negative)
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -10000
-              max_value: 10000
+          - dbt_utils.expression_is_true:
+              column_name: adjustment_amount
+              expression: >
+                IS NOT NULL AND (
+                  (procedure_fee = 0 AND adjustment_amount = 0) OR
+                  (procedure_fee > 0 AND procedure_fee <= 1000 AND adjustment_amount BETWEEN -10000 AND 10000) OR
+                  (procedure_fee > 1000 AND adjustment_amount BETWEEN -20000 AND 20000)
+                )
+              severity: error
+              name: adjustment_amount_within_reasonable_range
 
       - name: adjustment_date
         description: Date when adjustment was applied
