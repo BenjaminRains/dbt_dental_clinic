@@ -305,9 +305,22 @@ models:
                 description: "Active patients must have a first visit date"
 
       - name: patient_created_at
-        description: Timestamp when patient record was created
+        description: >
+          Timestamp when patient record was created in OpenDental
+          
+          Note:
+          - As of 2025, approximately 27,789 records are missing creation timestamps
+          - These represent historical patient records from 1985-2006
+          - Creation timestamps were not tracked in OpenDental during this period
+          - For historical records:
+            - first_visit_date can be used as an approximate creation date
+            - model_created_at shows when the record was added to the analytics database (2025-04-15)
+          - All new patient records after 2006 should have creation timestamps
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: "Historical records (1985-2006) do not have creation timestamps"
 
       - name: patient_updated_at
         description: >
