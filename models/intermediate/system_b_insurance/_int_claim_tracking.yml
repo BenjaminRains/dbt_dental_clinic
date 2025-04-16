@@ -44,7 +44,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['sent', 'received', 'paid', 'denied', 'pending', 'processed']
+              values: ['ClaimProcReceived', 'StatusHistory', 'ClaimUser']
 
       - name: entry_timestamp
         description: Timestamp when the tracking entry was created
