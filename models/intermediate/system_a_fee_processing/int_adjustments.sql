@@ -35,6 +35,7 @@ ProcedureAdjustments AS (
         a.is_employee_discount,
         a.is_military_discount,
         a.is_courtesy_adjustment,
+        a.adjustment_type_id,
         
         -- Definition linkage
         def.item_name as adjustment_type_name,
