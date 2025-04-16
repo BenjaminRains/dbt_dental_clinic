@@ -284,9 +284,25 @@ models:
                 severity: error
 
       - name: first_visit_date
-        description: Date of patient's first visit
+        description: >
+          Date of patient's first visit
+          
+          Note:
+          - As of 2025, approximately 3,162 patients have no first visit date recorded
+          - Distribution of patients missing first visit dates:
+            - Status 4 (Prospective): Expected to be NULL until first visit
+            - Status 1 (Inactive): May be missing for historical reasons
+            - Status 2 (Active): ~2,000 records unexpectedly missing first visit dates
+          - Action Items:
+            - Review active patients missing first visit dates
+            - Update first visit dates for active patients based on appointment history
+            - Ensure new patients get first visit date recorded at first appointment
         tests:
-          - not_null
+          - not_null:
+              where: "patient_status = 2"  # Required for active patients
+              config:
+                severity: error
+                description: "Active patients must have a first visit date"
 
       - name: patient_created_at
         description: Timestamp when patient record was created
