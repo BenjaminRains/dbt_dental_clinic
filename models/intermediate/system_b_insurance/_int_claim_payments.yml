@@ -16,6 +16,11 @@ models:
       - stg_opendental__claimproc: Base procedure and payment information
       - stg_opendental__claimpayment: Payment details
       - int_claim_details: Validation against claim details
+
+      Data Quality Notes:
+      - allowed_amount may be -1.0 as a placeholder for undetermined values
+      - Some records show decimal point errors in allowed_amount (e.g., 252.00 recorded as 252252.00)
+      - See stakeholders/claims_data_quality_issues.md for documented cases and solutions
     
     config:
       materialized: table
@@ -62,6 +67,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
+              row_condition: "allowed_amount != -1.0"
 
       - name: paid_amount
         description: Amount paid by insurance for this procedure
@@ -148,4 +154,12 @@ models:
       - dbt_utils.expression_is_true:
           expression: "not (payment_type_id is null and claim_payment_id != 0)"
           severity: warn
-          name: warn_missing_payment_type 
+          name: warn_missing_payment_type
+
+      - dbt_utils.expression_is_true:
+          expression: "not (allowed_amount > billed_amount * 10 and allowed_amount != -1.0)"
+          severity: warn
+          name: warn_decimal_point_error
+          description: >
+            Catches potential decimal point errors where allowed amount is orders of magnitude higher than billed amount.
+            See stakeholders/claims_data_quality_issues.md for documented cases and solutions. 
