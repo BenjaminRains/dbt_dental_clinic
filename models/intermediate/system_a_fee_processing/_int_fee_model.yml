@@ -96,7 +96,11 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
-              row_condition: "procedure_status = 2"  # Only test completed procedures
+              row_condition: "procedure_status = 2 AND procedure_code NOT IN ('D6114', 'D6115')"  # Standard threshold for non-implant procedures
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 30000
+              row_condition: "procedure_status = 2 AND procedure_code IN ('D6114', 'D6115')"  # Higher threshold for implant procedures
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
