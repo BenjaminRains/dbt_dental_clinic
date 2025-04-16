@@ -73,17 +73,14 @@ models:
         tests: [] # MDC clinic only. No need to test.
 
       - name: adjustment_amount
-        description: Amount of the adjustment (can be positive or negative)
-        tests:
-          - dbt_expectations.expression_is_true:
-              expression: >
-                CASE 
-                  WHEN procedure_fee = 0 THEN adjustment_amount = 0
-                  WHEN procedure_fee > 0 AND procedure_fee <= 1000 THEN adjustment_amount BETWEEN -10000 AND 10000
-                  WHEN procedure_fee > 1000 THEN adjustment_amount BETWEEN -20000 AND 20000
-                  ELSE FALSE
-                END
-              severity: error
+        description: >
+          Amount of the adjustment (can be positive or negative).
+          
+          # Test: Model-level expression_is_true validates these constraints:
+          # - Zero-fee procedures must have zero adjustment
+          # - Procedures ≤ 1,000: adjustment between -10,000 and 10,000
+          # - Procedures > 1,000: adjustment between -20,000 and 20,000
+        tests: []
 
       - name: adjustment_date
         description: Date when adjustment was applied
@@ -140,15 +137,13 @@ models:
         description: Description of the linked procedure
 
       - name: procedure_fee
-        description: Original fee amount before adjustment
-        tests:
-          - dbt_expectations.expression_is_true:
-              expression: >
-                CASE 
-                  WHEN procedure_code IN ('D6114', 'D6115') THEN procedure_fee >= 0 AND procedure_fee <= 30000
-                  ELSE procedure_fee >= 0 AND procedure_fee <= 10000
-                END
-              severity: error
+        description: >
+          Original fee amount before adjustment.
+          
+          # Test: Model-level expression_is_true validates these ranges:
+          # - For implant procedures (D6114, D6115): 0 to 30,000
+          # - For all other procedures: 0 to 10,000
+        tests: []
 
       - name: fee_schedule_id
         description: ID of the fee schedule used
@@ -162,7 +157,10 @@ models:
               severity: warn
 
       - name: adjusted_fee
-        description: Final fee amount after adjustment (procedure_fee + adjustment_amount)
+        description: >
+          Final fee amount after adjustment (procedure_fee + adjustment_amount).
+          
+          # Test: Model-level expression_is_true ensures non-negative values
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
@@ -206,26 +204,52 @@ models:
           - not_null
 
     tests:
+      # Test: Validates overall table size
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1000
           max_value: 50000
 
+      # Test: Validates adjusted_fee column
       - dbt_expectations.expression_is_true:
           expression: "adjusted_fee >= 0"
           severity: error
 
+      # Test: Validates adjustment_date and procedure_date columns
       - dbt_expectations.expression_is_true:
           expression: "adjustment_date >= procedure_date"
           severity: warn
 
+      # Test: Validates adjustment_amount column
       - dbt_expectations.expression_is_true:
           expression: "abs(adjustment_amount) <= procedure_fee * 2"
           severity: warn
 
+      # Test: Validates adjustment_type_name column
       - dbt_expectations.expression_is_true:
           expression: "not (adjustment_type_name is null and adjustment_type_id is not null)"
           severity: warn
 
+      # Test: Validates adjustment_category column
       - dbt_expectations.expression_is_true:
           expression: "not (adjustment_category is null and adjustment_type_id is not null)"
           severity: warn
+
+      # Test: Validates adjustment_amount column ranges
+      - dbt_expectations.expression_is_true:
+          expression: >
+            CASE 
+              WHEN procedure_fee = 0 THEN adjustment_amount = 0
+              WHEN procedure_fee > 0 AND procedure_fee <= 1000 THEN adjustment_amount BETWEEN -10000 AND 10000
+              WHEN procedure_fee > 1000 THEN adjustment_amount BETWEEN -20000 AND 20000
+              ELSE FALSE
+            END
+          severity: error
+
+      # Test: Validates procedure_fee column ranges
+      - dbt_expectations.expression_is_true:
+          expression: >
+            CASE 
+              WHEN procedure_code IN ('D6114', 'D6115') THEN procedure_fee >= 0 AND procedure_fee <= 30000
+              ELSE procedure_fee >= 0 AND procedure_fee <= 10000
+            END
+          severity: error
