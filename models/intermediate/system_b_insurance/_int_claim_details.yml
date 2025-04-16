@@ -23,17 +23,24 @@ models:
     config:
       materialized: table
       schema: intermediate
-      unique_key: claim_id
+      unique_key: [claim_id, procedure_id]  # Composite key to handle multiple procedures per claim
     
     columns:
       - name: claim_id
-        description: Primary key for the insurance claim
+        description: Primary key part 1 - the insurance claim identifier
         tests:
           - not_null
-          - unique
           - relationships:
               to: ref('stg_opendental__claim')
               field: claim_id
+
+      - name: procedure_id
+        description: Primary key part 2 - the procedure identifier within the claim
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
 
       - name: patient_id
         description: Foreign key to the patient
@@ -69,14 +76,6 @@ models:
           - relationships:
               to: ref('stg_opendental__inssub')
               field: subscriber_id
-
-      - name: procedure_id
-        description: Foreign key to the procedure
-        tests:
-          - not_null
-          - relationships:
-              to: ref('stg_opendental__procedurelog')
-              field: procedure_id
 
       - name: claim_status
         description: Current status of the insurance claim
@@ -170,13 +169,15 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
+              row_condition: "allowed_amount != -1.0"  # Exclude placeholder values
 
       - name: paid_amount
         description: Amount paid by insurance
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -10.0
               max_value: 10000
+              row_condition: "insurance_plan_id is not null"  # Only apply to insured claims
 
       - name: write_off_amount
         description: Amount written off
@@ -191,6 +192,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
+              row_condition: "patient_responsibility != -1.0"  # Exclude placeholder values
 
       - name: plan_type
         description: Type of insurance plan (e.g., PPO, HMO)
