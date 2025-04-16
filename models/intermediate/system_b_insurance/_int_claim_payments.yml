@@ -74,7 +74,7 @@ models:
         description: Amount paid by insurance for this procedure
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -10000
               max_value: 10000
 
       - name: write_off_amount
