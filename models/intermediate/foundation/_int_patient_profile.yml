@@ -159,8 +159,9 @@ models:
           - 4 (26.26%): Assumed to be "Text"
           - 8 (0.04%): Assumed to be "Phone"
           
-          Note: These mappings are assumptions based on data distribution patterns and OpenDental's typical bit flag usage.
-          They should be verified with stakeholders before being used for business decisions.
+          Note: These mappings are assumptions based on data distribution patterns and 
+          OpenDental's typical bit flag usage. They should be verified with stakeholders
+          before being used for business decisions.
         tests:
           - accepted_values:
               values: [0, 2, 4, 8]
@@ -178,8 +179,9 @@ models:
           - 6 (0.00%): Assumed to be "Other"
           - 8 (0.02%): Assumed to be "Portal"
           
-          Note: These mappings are assumptions based on data distribution patterns and OpenDental's typical bit flag usage.
-          They should be verified with stakeholders before being used for business decisions.
+          Note: These mappings are assumptions based on data distribution patterns and
+          OpenDental's typical bit flag usage. They should be verified with stakeholders
+          before being used for business decisions.
         tests:
           - accepted_values:
               values: [0, 2, 3, 4, 5, 6, 8]
