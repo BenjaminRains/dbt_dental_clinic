@@ -75,16 +75,15 @@ models:
       - name: adjustment_amount
         description: Amount of the adjustment (can be positive or negative)
         tests:
-          - dbt_utils.expression_is_true:
-              column_name: adjustment_amount
+          - dbt_expectations.expression_is_true:
               expression: >
-                IS NOT NULL AND (
-                  (procedure_fee = 0 AND adjustment_amount = 0) OR
-                  (procedure_fee > 0 AND procedure_fee <= 1000 AND adjustment_amount BETWEEN -10000 AND 10000) OR
-                  (procedure_fee > 1000 AND adjustment_amount BETWEEN -20000 AND 20000)
-                )
+                CASE 
+                  WHEN procedure_fee = 0 THEN adjustment_amount = 0
+                  WHEN procedure_fee > 0 AND procedure_fee <= 1000 THEN adjustment_amount BETWEEN -10000 AND 10000
+                  WHEN procedure_fee > 1000 THEN adjustment_amount BETWEEN -20000 AND 20000
+                  ELSE FALSE
+                END
               severity: error
-              name: adjustment_amount_within_reasonable_range
 
       - name: adjustment_date
         description: Date when adjustment was applied
@@ -143,10 +142,13 @@ models:
       - name: procedure_fee
         description: Original fee amount before adjustment
         tests:
-          - dbt_utils.expression_is_true:
+          - dbt_expectations.expression_is_true:
               expression: >
-                (procedure_fee >= 0 AND procedure_fee <= 10000) OR
-                (procedure_code IN ('D6114', 'D6115') AND procedure_fee <= 30000)
+                CASE 
+                  WHEN procedure_code IN ('D6114', 'D6115') THEN procedure_fee >= 0 AND procedure_fee <= 30000
+                  ELSE procedure_fee >= 0 AND procedure_fee <= 10000
+                END
+              severity: error
 
       - name: fee_schedule_id
         description: ID of the fee schedule used
@@ -208,27 +210,22 @@ models:
           min_value: 1000
           max_value: 50000
 
-      - dbt_utils.expression_is_true:
+      - dbt_expectations.expression_is_true:
           expression: "adjusted_fee >= 0"
           severity: error
-          name: no_negative_adjusted_fees
 
-      - dbt_utils.expression_is_true:
+      - dbt_expectations.expression_is_true:
           expression: "adjustment_date >= procedure_date"
           severity: warn
-          name: warn_adjustment_before_procedure
 
-      - dbt_utils.expression_is_true:
+      - dbt_expectations.expression_is_true:
           expression: "abs(adjustment_amount) <= procedure_fee * 2"
           severity: warn
-          name: warn_large_adjustments
 
-      - dbt_utils.expression_is_true:
+      - dbt_expectations.expression_is_true:
           expression: "not (adjustment_type_name is null and adjustment_type_id is not null)"
           severity: warn
-          name: warn_missing_adjustment_type_description
 
-      - dbt_utils.expression_is_true:
+      - dbt_expectations.expression_is_true:
           expression: "not (adjustment_category is null and adjustment_type_id is not null)"
           severity: warn
-          name: warn_missing_adjustment_category
