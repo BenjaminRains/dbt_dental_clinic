@@ -159,9 +159,9 @@ models:
             benefit_type, coverage_percent, monetary_amount, time_period, quantity_qualifier,
             quantity, coverage_level, and treatment_area
         tests:
-          - dbt_expectations.expect_column_values_to_be_json:
+          - dbt_expectations.expect_column_values_to_be_of_type:
               column_name: benefit_details
-              severity: warn
+              column_type: jsonb
 
       - name: is_active
         description: |
