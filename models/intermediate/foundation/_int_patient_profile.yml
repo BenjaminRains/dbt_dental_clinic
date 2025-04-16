@@ -244,28 +244,38 @@ models:
         description: Timestamp when family relationship was established
 
       - name: emergency_contact_name
-        description: Name of emergency contact (ICE)
+        description: >
+          Name of emergency contact (ICE)
+          
+          Note:
+          - CRITICAL: 21,686 active patients are missing emergency contacts
+          - These are the same legacy patients missing consent forms
+          - Missing emergency contacts represent a patient safety risk
+          - URGENT: Collect emergency contact info at next visit
+          - Consider a targeted outreach campaign for this information
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
               config:
                 severity: error
+                description: "Active patients must have emergency contacts"
 
       - name: emergency_contact_phone
         description: >
           Phone number of emergency contact
           
           Note:
-          - As of 2025, approximately 21,686 active patients are missing emergency contact information
-          - These are the same legacy patients (first visits 1985-1997) who are missing consent forms
-          - Emergency contact information was not consistently collected for legacy patients
-          - Stakeholders should collect emergency contact information when these patients visit next
-          - This is a critical patient safety requirement for active patients
+          - CRITICAL: 21,686 active patients are missing emergency contact phones
+          - These are the same legacy patients missing other critical info
+          - Missing emergency contact phones represent a patient safety risk
+          - URGENT: Collect this information along with other missing data
+          - Consider adding to new patient registration requirements
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
               config:
                 severity: error
+                description: "Active patients must have emergency contact phones"
 
       - name: medical_notes
         description: General medical notes
@@ -286,16 +296,17 @@ models:
           Patient's recorded consents
           
           Note:
-          - As of 2025, approximately 21,686 active patients are missing consent records
-          - Most of these are legacy patients with first visits from 1985-1997
-          - These patients have text messaging consent records but no general consent forms
-          - Stakeholders should collect consent forms when these patients visit next
-          - This is separate from text_messaging_consent which is well populated
+          - CRITICAL: 21,686 active patients are missing consent records
+          - These are legacy patients with first visits from 1985-1997
+          - Missing consents represent a significant compliance risk
+          - URGENT: Collect consent forms from these patients at their next visit
+          - Track consent collection progress in a separate system
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
               config:
                 severity: error
+                description: "Active patients must have consent records"
 
       - name: first_visit_date
         description: >
