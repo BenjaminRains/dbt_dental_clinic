@@ -7,12 +7,24 @@ This document tracks data quality issues identified in the claims data model. Ea
 ### Description
 Some claims have allowed amounts that are orders of magnitude higher than expected, indicating data entry errors.
 
-### Example
-- **Claim ID**: 21561
-- **Procedure**: D2391 (resin-based composite - one surface, posterior)
-- **Billed Amount**: $252.00
-- **Allowed Amount**: $252,252.00 (1000x the expected amount)
-- **Date**: 2024-01-05
+### Examples
+1. **Claim ID**: 21561
+   - **Procedure**: D2391 (resin-based composite - one surface, posterior)
+   - **Billed Amount**: $252.00
+   - **Allowed Amount**: $252,252.00 (1000x the expected amount)
+   - **Date**: 2024-01-05
+
+2. **Claim ID**: 25085
+   - **Billed Amount**: $109.00
+   - **Allowed Amount**: $10,934.00 (100x the billed amount)
+   - **Paid Amount**: $109.00
+   - **Pattern**: Decimal point error (should be $109.34)
+
+3. **Claim ID**: 24286
+   - **Billed Amount**: $134.00
+   - **Allowed Amount**: $10,380.00 (77x the billed amount)
+   - **Paid Amount**: $103.00
+   - **Pattern**: Decimal point error (should be $103.80)
 
 ### Impact
 - Causes test failures in `int_claim_details` model
@@ -20,26 +32,28 @@ Some claims have allowed amounts that are orders of magnitude higher than expect
 - Affects financial calculations and insurance analysis
 
 ### Root Cause
-- Data entry error where decimal point was misplaced
+- Data entry errors where decimal point was misplaced
 - Similar procedures in the same claim show normal allowed amounts
-- Typical allowed amounts for this procedure range from $126.00 to $252.00
+- Typical allowed amounts for these procedures range from $100-$300
 
 ### Recommended Solutions
 1. **Immediate Fix**:
-   - Correct the allowed amount to $252.00 to match the billed amount
+   - Correct the allowed amounts to match the billed amounts or paid amounts
    - Or set to $-1.00 to match the duplicate procedure in the same claim
 
 2. **Preventive Measures**:
    - Add validation in the source system to prevent orders of magnitude differences between billed and allowed amounts
    - Implement automated checks for values that are significantly different from historical averages
+   - Add a ratio check between billed and allowed amounts in the source system
 
 3. **Test Enhancement**:
    - Modify the test to check for values that are orders of magnitude different from the billed amount
    - Add a ratio check between billed and allowed amounts
+   - Set threshold at 10x to catch decimal point errors while allowing for legitimate variations
 
 ### Status
 - [ ] Issue fixed
-- [ ] Test modified
+- [x] Test modified
 - [ ] Preventive measures implemented
 
 ## Issue Template
