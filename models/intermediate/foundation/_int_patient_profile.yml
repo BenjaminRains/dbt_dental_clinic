@@ -260,7 +260,15 @@ models:
                 severity: warn
 
       - name: consent
-        description: Patient's recorded consents
+        description: >
+          Patient's recorded consents
+          
+          Note:
+          - As of 2025, approximately 21,686 active patients are missing consent records
+          - Most of these are legacy patients with first visits from 1985-1997
+          - These patients have text messaging consent records but no general consent forms
+          - Stakeholders should collect consent forms when these patients visit next
+          - This is separate from text_messaging_consent which is well populated
         tests:
           - not_null:
               where: "patient_status = 2"  # Required for active patients
