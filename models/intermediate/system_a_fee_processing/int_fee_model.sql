@@ -94,12 +94,12 @@ FeeAdjustments AS (
             WHEN a.adjustment_amount < 0 AND ABS(a.adjustment_amount) >= p.applied_fee * 0.25 THEN 'moderate'
             ELSE 'minor'
         END AS adjustment_impact,
-        CASE WHEN a.procedure_id IS NOT NULL THEN true ELSE false END AS is_procedure_adjustment,
-        CASE WHEN a.adjustment_date > p.procedure_date THEN true ELSE false END AS is_retroactive_adjustment,
-        CASE WHEN d.category_id = 0 AND d.item_value = 'Provider Discretion' THEN true ELSE false END AS is_provider_discretion,
-        CASE WHEN d.category_id = 15 AND d.item_value LIKE '%Employee%' THEN true ELSE false END AS is_employee_discount,
-        CASE WHEN d.category_id = 15 AND d.item_value LIKE '%Military%' THEN true ELSE false END AS is_military_discount,
-        CASE WHEN d.category_id = 15 AND d.item_value LIKE '%Courtesy%' THEN true ELSE false END AS is_courtesy_adjustment
+        CASE WHEN a.procedure_id IS NOT NULL THEN 'True' ELSE 'False' END AS is_procedure_adjustment,
+        CASE WHEN a.adjustment_date > p.procedure_date THEN 'True' ELSE 'False' END AS is_retroactive_adjustment,
+        CASE WHEN d.category_id = 0 AND d.item_value = 'Provider Discretion' THEN 'True' ELSE 'False' END AS is_provider_discretion,
+        CASE WHEN d.category_id = 15 AND d.item_value LIKE '%Employee%' THEN 'True' ELSE 'False' END AS is_employee_discount,
+        CASE WHEN d.category_id = 15 AND d.item_value LIKE '%Military%' THEN 'True' ELSE 'False' END AS is_military_discount,
+        CASE WHEN d.category_id = 15 AND d.item_value LIKE '%Courtesy%' THEN 'True' ELSE 'False' END AS is_courtesy_adjustment
     FROM {{ ref('stg_opendental__adjustment') }} a
     LEFT JOIN ProcedureFees p
         ON a.procedure_id = p.procedure_id
@@ -111,7 +111,7 @@ FeeComparison AS (
     SELECT
         p.*,
         CASE WHEN p.standard_fee IS NOT NULL THEN true ELSE false END AS has_standard_fee,
-        CASE WHEN p.applied_fee = p.standard_fee THEN true ELSE false END AS fee_matches_standard,
+        CASE WHEN p.applied_fee = p.standard_fee THEN 'True' ELSE 'False' END AS fee_matches_standard,
         CASE 
             WHEN p.applied_fee > p.standard_fee THEN 'above_standard'
             WHEN p.applied_fee < p.standard_fee THEN 'below_standard'
@@ -131,7 +131,11 @@ FeeComparison AS (
             WHEN COALESCE(SUM(a.adjustment_amount), 0) < 0 AND ABS(COALESCE(SUM(a.adjustment_amount), 0)) >= p.applied_fee * 0.5 THEN 'major'
             WHEN COALESCE(SUM(a.adjustment_amount), 0) < 0 AND ABS(COALESCE(SUM(a.adjustment_amount), 0)) >= p.applied_fee * 0.25 THEN 'moderate'
             ELSE 'minor'
-        END AS adjustment_impact
+        END AS adjustment_impact,
+        CASE WHEN BOOL_OR(a.is_provider_discretion::boolean) THEN 'True' ELSE 'False' END AS is_provider_discretion,
+        CASE WHEN BOOL_OR(a.is_employee_discount::boolean) THEN 'True' ELSE 'False' END AS is_employee_discount,
+        CASE WHEN BOOL_OR(a.is_military_discount::boolean) THEN 'True' ELSE 'False' END AS is_military_discount,
+        CASE WHEN BOOL_OR(a.is_courtesy_adjustment::boolean) THEN 'True' ELSE 'False' END AS is_courtesy_adjustment
     FROM ProcedureFees p
     LEFT JOIN FeeAdjustments a
         ON p.procedure_id = a.procedure_id
@@ -160,7 +164,13 @@ FeeComparison AS (
         p.abbreviated_description,
         p.is_hygiene_flag,
         p.is_prosthetic_flag,
-        p.is_multi_visit_flag
+        p.is_multi_visit_flag,
+        a.adjustment_type_name,
+        a.adjustment_category_type,
+        a.is_provider_discretion,
+        a.is_employee_discount,
+        a.is_military_discount,
+        a.is_courtesy_adjustment
 )
 
 SELECT DISTINCT ON (procedure_id)
