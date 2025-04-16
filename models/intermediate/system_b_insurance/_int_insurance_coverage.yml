@@ -161,7 +161,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_of_type:
               column_name: benefit_details
-              column_type: jsonb
+              column_type: json
 
       - name: is_active
         description: |
