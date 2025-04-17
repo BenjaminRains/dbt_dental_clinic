@@ -637,6 +637,19 @@ models:
             severity: error
             description: "Insurance payments must have a valid claim_payment_id"
 
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'INSURANCE' AND
+              (
+                (status = 1 AND split_amount <= 0) OR
+                (status = 3 AND split_amount > 0)
+              )
+            )
+          config:
+            severity: error
+            description: "Insurance payment amounts must align with claim status"
+
       # AR balance alignment with patient aging buckets
       - payment_balance_alignment:
           config:
@@ -659,19 +672,6 @@ models:
       - dbt_utils.expression_is_true:
           expression: >
             NOT (
-              payment_source_type = 'INSURANCE' AND
-              (
-                (status = 1 AND insurance_payment_amount <= 0) OR
-                (status = 3 AND insurance_payment_amount > 0)
-              )
-            )
-          config:
-            severity: error
-            description: "Insurance payment amounts must align with claim status"
-
-      - dbt_utils.expression_is_true:
-          expression: >
-            NOT (
               payment_source_type = 'PATIENT' AND
               payment_type_id = 72 AND
               is_cc_completed_flag = true
@@ -684,7 +684,7 @@ models:
           expression: >
             NOT (
               payment_source_type = 'PATIENT' AND
-              is_recurring_cc_flag = true AND
+              is_cc_completed_flag = true AND
               recurring_charge_date IS NULL
             )
           config:
