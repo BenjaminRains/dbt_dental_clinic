@@ -113,15 +113,64 @@ These systems and their interconnections are visually represented in the
 
 ## Current Status
 
-The project is currently focused on the **staging layer** with a systematic approach to validating 
-all OpenDental source tables:
+The project has made significant progress in both staging and intermediate layers:
 
-- **Completed**: Payment module validation with comprehensive testing
-- **In Progress**: Core data entity validation (patients, procedures, appointments)
-- **Upcoming**: Insurance, claims, and provider data validation
+### Completed Components ✅
 
-The intermediate and marts layers are in the planning stage, with detailed specifications available
- in `dbt_int_models_plan.md`.
+1. **Staging Layer**
+   - All OpenDental source tables validated and tested
+   - Comprehensive data quality checks implemented
+   - Historical data validation complete
+   - Full documentation and lineage tracking
+
+2. **Intermediate Layer - Completed Systems**
+   - **System A: Fee Processing & Verification**
+     - `int_procedure_complete`: Comprehensive procedure model
+     - `int_adjustments`: Fee adjustment tracking
+     - `int_fee_model`: Fee processing and verification
+   
+   - **System B: Insurance Processing**
+     - `int_claim_details`: Core insurance claim information
+     - `int_claim_payments`: Detailed payment tracking
+     - `int_claim_tracking`: Complete claim history
+   
+   - **System C: Payment Allocation & Reconciliation**
+     - `int_payment_allocated`: Payment allocation model
+     - Comprehensive validation rules implemented
+     - Test coverage for edge cases
+
+### In Progress 🚧
+
+1. **Intermediate Layer - Remaining Systems**
+   - System D: AR Analysis (Planning)
+   - System E: Collection Process (Planning)
+   - System F: Patient-Clinic Communications (Planning)
+   - System G: Scheduling & Referrals (Planning)
+
+2. **Mart Layer**
+   - Initial planning and design
+   - Business requirements gathering
+   - Performance optimization strategies
+
+### Upcoming Work 📅
+
+1. **Intermediate Layer**
+   - Implement remaining systems (D-G)
+   - Develop cross-system models
+   - Enhance existing models with additional business rules
+   - Expand test coverage for edge cases
+
+2. **Mart Layer**
+   - Begin implementation of core analytics models
+   - Develop reporting views
+   - Create data marts for specific business areas
+
+3. **Documentation**
+   - Update technical documentation
+   - Create user guides for new models
+   - Document data lineage and dependencies
+
+For detailed information about the intermediate models, see `dbt_int_models_plan.md`.
 
 ## Technical Implementation
 
@@ -136,16 +185,45 @@ The intermediate and marts layers are in the planning stage, with detailed speci
 ### Directory Structure
 
 ```
-dbt_dental_practice/
-├── dbeaver_validation/       # DBeaver SQL scripts for initial exploration
-├── docs/                     # Documentation and validation logs
-├── models/                   # DBT models organized by layer
-│   ├── staging/              # Initial validation models
-│   ├── intermediate/         # Business process models (planned)
-│   └── marts/                # Business-specific analytical views (planned)
-├── tests/                    # Data quality tests and validations
+dbt_dental_clinic/
+├── analysis/                  # Ad-hoc analysis SQL queries
+├── analysis_intermediate/     # Intermediate analysis workspace
+├── api/                      # API integration components
+├── config/                   # Configuration files
+├── dbt_docs/                 # Generated dbt documentation
+├── dbt_packages/             # Installed dbt packages
+├── docs/                     # Project documentation
+├── etl_job/                  # ETL job configurations
+├── frontend/                 # Frontend components
+├── logs/                     # Log files
 ├── macros/                   # Reusable SQL templates
-└── seeds/                    # Static reference data
+├── models/                   # DBT models
+│   ├── intermediate/         # Business process models
+│   │   ├── cross_system/    # Cross-system integrations
+│   │   ├── foundation/      # Core entity models
+│   │   ├── system_a_fee_processing/
+│   │   ├── system_b_insurance/
+│   │   ├── system_c_payment/
+│   │   ├── system_d_ar_analysis/
+│   │   ├── system_e_collection/
+│   │   ├── system_f_communications/
+│   │   └── system_g_scheduling/
+│   ├── marts/               # Business-specific analytical views
+│   └── staging/             # Initial staging models
+├── scripts/                 # Utility scripts
+├── stakeholders/           # Stakeholder documentation
+├── target/                 # DBT compilation output
+├── tests/                  # Data quality tests
+├── .gitignore
+├── .user.yml
+├── dbt_project.yml        # DBT project configuration
+├── dependency_graph.txt   # Project dependencies
+├── package-lock.yml
+├── packages.yml          # Package dependencies
+├── Pipfile              # Python dependencies
+├── Pipfile.lock
+├── profiles.yml         # Connection profiles
+└── README.md           # Project documentation
 ```
 
 ### Validation Workflow
