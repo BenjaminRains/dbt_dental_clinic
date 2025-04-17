@@ -514,42 +514,6 @@ models:
               to: ref('stg_opendental__definition')
               field: item_name
 
-      - name: payment_status_description
-        description: |
-          Human-readable description of the payment status from definition table.
-          Current patterns:
-          - Pending (status 0): Initial state
-          - Completed (status 1): Successfully processed
-          - Failed (status 2): Processing failed
-          - Voided (status 3): Cancelled payment
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['Pending', 'Completed', 'Failed', 'Voided', 'Unknown', 'N/A']
-              config:
-                severity: warn
-          - relationships:
-              to: ref('stg_opendental__definition')
-              field: item_name
-
-      - name: process_status_description
-        description: |
-          Human-readable description of the process status from definition table.
-          Current patterns:
-          - Not Processed (status 0): Initial state
-          - Processing (status 1): Currently being processed
-          - Processed (status 2): Successfully completed
-          - Error (status 3): Processing error occurred
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['Not Processed', 'Processing', 'Processed', 'Error', 'Unknown', 'N/A']
-              config:
-                severity: warn
-          - relationships:
-              to: ref('stg_opendental__definition')
-              field: item_name
-
       - name: include_in_ar
         description: Flag indicating if this payment should be included in AR calculations
         tests:
