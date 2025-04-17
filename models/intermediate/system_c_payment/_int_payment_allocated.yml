@@ -730,16 +730,13 @@ models:
               WHEN payment_source_type = 'INSURANCE' AND status = 1 THEN
                 -- Must have a non-zero payment amount unless:
                 -- 1. It's a denied claim (has remarks indicating denial)
-                -- 2. It's a pre-authorization (future dated)
-                -- 3. It's part of a payment group
+                -- 2. It's part of a payment group
                 split_amount > 0
                 OR (
                   split_amount = 0
                   AND (
                     -- Has explicit remarks about denial/non-payment
                     (remarks IS NOT NULL AND remarks != '')
-                    -- OR is future dated (pre-auth)
-                    OR COALESCE(insurance_finalized_date, claim_procedure_date) > CURRENT_DATE
                     -- OR is part of a payment group
                     OR payment_group_id != 0
                   )
@@ -752,7 +749,7 @@ models:
             END
           config:
             severity: error
-            description: "Insurance payment amounts must align with claim status, excluding denied claims and pre-authorizations"
+            description: "Insurance payment amounts must align with claim status, excluding denied claims"
 
     meta:
       owner: "dental_finance_team"
