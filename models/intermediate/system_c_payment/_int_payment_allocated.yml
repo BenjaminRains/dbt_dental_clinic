@@ -205,8 +205,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::date"
 
       - name: procedure_date
         description: |
@@ -215,8 +215,8 @@ models:
           - Patient payments: From stg_opendental__paysplit
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::date"
 
       - name: payment_type_id
         description: |
@@ -313,16 +313,16 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::timestamp"
 
       - name: updated_at
         description: Timestamp when the record was last updated
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::timestamp"
 
       - name: deposit_id
         description: Foreign key to the deposit record
@@ -348,8 +348,8 @@ models:
         description: Next scheduled date for recurring payment
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::date"
               where: "payment_source_type = 'PATIENT'"
 
       - name: receipt_text
@@ -596,16 +596,16 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::timestamp"
 
       - name: model_updated_at
         description: Timestamp when this model was last updated
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::timestamp"
 
     tests:
       # Date range validation
