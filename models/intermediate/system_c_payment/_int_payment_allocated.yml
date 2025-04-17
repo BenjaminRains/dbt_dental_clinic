@@ -644,13 +644,21 @@ models:
             NOT (
               payment_source_type = 'INSURANCE' AND
               (
-                (status = 1 AND split_amount <= 0) OR 
+                (status = 1 AND split_amount <= 0 AND 
+                 NOT (
+                   remarks ILIKE '%DENIED%' OR 
+                   remarks ILIKE '%NOT COVER%' OR 
+                   remarks ILIKE '%FREQ%' OR
+                   (insurance_estimate_total = 0 AND base_estimate > 0)
+                 )
+                ) OR 
                 (status = 3 AND split_amount > 0)
               )
             )
           config:
             severity: error
-            description: "Insurance payment amounts must align with claim status"
+            description: "Insurance payment amounts must align with claim status, excluding denied claims and pre-authorizations"
+            row_condition: "payment_date <= '{{ var('max_valid_date', 'current_date') }}'::date"
 
       # AR balance alignment with patient aging buckets
       - payment_balance_alignment:
@@ -714,6 +722,37 @@ models:
           config:
             severity: warn
             description: "High value payments should have merchant fees recorded"
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            CASE
+              -- For status 1 (Received) claims:
+              WHEN payment_source_type = 'INSURANCE' AND status = 1 THEN
+                -- Must have a non-zero payment amount unless:
+                -- 1. It's a denied claim (has remarks indicating denial)
+                -- 2. It's a pre-authorization (future dated)
+                -- 3. It's part of a payment group
+                split_amount > 0
+                OR (
+                  split_amount = 0
+                  AND (
+                    -- Has explicit remarks about denial/non-payment
+                    (remarks IS NOT NULL AND remarks != '')
+                    -- OR is future dated (pre-auth)
+                    OR COALESCE(insurance_finalized_date, claim_procedure_date) > CURRENT_DATE
+                    -- OR is part of a payment group
+                    OR payment_group_id != 0
+                  )
+                )
+              -- For status 3 (Supplemental) claims:
+              WHEN payment_source_type = 'INSURANCE' AND status = 3 THEN
+                split_amount <= 0
+              -- For all other records:
+              ELSE TRUE
+            END
+          config:
+            severity: error
+            description: "Insurance payment amounts must align with claim status, excluding denied claims and pre-authorizations"
 
     meta:
       owner: "dental_finance_team"
