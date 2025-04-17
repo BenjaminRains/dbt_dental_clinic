@@ -10,7 +10,7 @@ profile: 'dbt_dental_clinic'
 model-paths: ["models"]
 # Comment out analysis-paths. these scripts are for EDA. 
 # analysis-paths: ["analysis"] 
-# analysis_intermediate: ["analysis_intermediate"]
+# analysis_intermediate-paths: ["analysis_intermediate"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
 seed-paths: ["seeds"]
@@ -32,23 +32,30 @@ models:
     
     # Configure materializations by folder
     staging:
-      +materialized: view
+      +materialized: view  # Default materialization, some models override this to be tables
       +schema: staging  # Optional: organize models in different schemas
+      +description: "Staging models for raw data transformation"
     
     intermediate:
       +materialized: table
       +schema: intermediate
+      +description: "Intermediate models for business logic implementation"
     
     marts:
       +materialized: table
       +schema: marts
+      +description: "Mart models for business reporting and analytics"
 
 # Add vars for flexible configuration
 vars:
   # Set a variable for your dental practice database name
   dental_database: opendental_analytics
+  # Set maximum valid date for data validation
+  max_valid_date: '2025-02-28'
 
 # Package dependencies
 packages:
   - package: dbt-labs/dbt_utils
     version: 1.3.0
+  - package: dbt-labs/dbt_expectations
+    version: 0.8.0
