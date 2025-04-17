@@ -62,7 +62,7 @@ PatientPayments AS (
         p.payment_id,
         p.patient_id,
         p.payment_date,
-        p.payment_amount,
+        COALESCE(ps.split_amount, p.payment_amount) as payment_amount,  -- Use split amount if available
         p.payment_type_id,
         p.check_number,
         p.bank_branch,
@@ -84,7 +84,11 @@ PatientPayments AS (
         p.receipt_text,
         ps.procedure_id,
         ps.procedure_date,
-        proc.provider_id
+        proc.provider_id,
+        ps.adjustment_id,  -- Add adjustment_id from paysplit
+        ps.is_discount_flag,  -- Add discount flag from paysplit
+        ps.discount_type,  -- Add discount type from paysplit
+        ps.unearned_type  -- Add unearned type from paysplit
     FROM {{ ref('stg_opendental__payment') }} p
     LEFT JOIN {{ ref('stg_opendental__paysplit') }} ps
         ON p.payment_id = ps.payment_id
@@ -167,19 +171,19 @@ PaymentAllocations AS (
         pp.clinic_id,
         pp.provider_id,
         pp.procedure_id,
-        NULL::INTEGER AS adjustment_id,
+        pp.adjustment_id,  -- Use adjustment_id from PatientPayments
         NULL AS payplan_id,
         NULL AS payplan_charge_id,
-        pp.payment_amount AS split_amount,
+        pp.payment_amount AS split_amount,  -- This is now correctly using split amounts
         pp.payment_date,
         pp.procedure_date,
         pp.payment_type_id,
         pp.payment_source,
         pp.payment_status,
         pp.process_status,
-        FALSE AS is_discount_flag,
-        NULL AS discount_type,
-        NULL AS unearned_type,
+        pp.is_discount_flag,  -- Use is_discount_flag from PatientPayments
+        pp.discount_type,  -- Use discount_type from PatientPayments
+        pp.unearned_type,  -- Use unearned_type from PatientPayments
         NULL AS payplan_debit_type,
         pp.merchant_fee,
         pp.payment_notes,
