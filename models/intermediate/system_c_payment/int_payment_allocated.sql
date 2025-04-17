@@ -22,7 +22,39 @@ WITH PaymentDefinitions AS (
         item_value,
         category_id
     FROM {{ ref('stg_opendental__definition') }}
-    WHERE category_id IN (1, 2)  -- Payment type categories
+    WHERE category_id = 1  -- Payment type categories only
+
+    UNION ALL
+
+    -- Add our business logic payment type descriptions
+    SELECT 
+        payment_type_id as definition_id,
+        CASE 
+            -- Patient payment types
+            WHEN payment_type_id = 71 THEN 'Standard Payment'
+            WHEN payment_type_id = 0 THEN 'Administrative'
+            WHEN payment_type_id = 69 THEN 'High Value Payment'
+            WHEN payment_type_id = 70 THEN 'Regular Payment'
+            WHEN payment_type_id = 391 THEN 'High Value'
+            WHEN payment_type_id = 412 THEN 'New Payment Type'
+            WHEN payment_type_id = 72 THEN 'Refund'
+            WHEN payment_type_id = 634 THEN 'New Type'
+            WHEN payment_type_id = 574 THEN 'Very High Value'
+            WHEN payment_type_id = 417 THEN 'Special Case'
+            -- Insurance payment types
+            WHEN payment_type_id = 261 THEN 'Insurance Check'
+            WHEN payment_type_id = 303 THEN 'Insurance Electronic Payment'
+            WHEN payment_type_id = 465 THEN 'Insurance Credit'
+            WHEN payment_type_id = 469 THEN 'Insurance Check'
+            WHEN payment_type_id = 466 THEN 'Insurance Electronic Payment'
+            WHEN payment_type_id = 464 THEN 'Insurance Credit'
+        END as item_name,
+        NULL as item_value,
+        1 as category_id
+    FROM (VALUES 
+        (71), (0), (69), (70), (391), (412), (72), (634), (574), (417),  -- Patient payment types
+        (261), (303), (465), (469), (466), (464)  -- Insurance payment types
+    ) as t(payment_type_id)
 ),
 
 PatientPayments AS (
@@ -182,8 +214,6 @@ PaymentAllocations AS (
         NULL AS code_sent,
         NULL AS estimate_note,
         pd.item_name AS payment_type_description,
-        psd.item_name AS payment_status_description,
-        prsd.item_name AS process_status_description,
         CASE
             WHEN pp.payment_date <= CURRENT_DATE THEN TRUE
             ELSE FALSE
@@ -193,13 +223,6 @@ PaymentAllocations AS (
     FROM PatientPayments pp
     LEFT JOIN PaymentDefinitions pd
         ON pp.payment_type_id = pd.definition_id
-        AND pd.category_id = 1
-    LEFT JOIN PaymentDefinitions psd
-        ON pp.payment_status = psd.definition_id
-        AND psd.category_id = 2
-    LEFT JOIN PaymentDefinitions prsd
-        ON pp.process_status = prsd.definition_id
-        AND prsd.category_id = 2
 
     UNION ALL
 
@@ -258,8 +281,6 @@ PaymentAllocations AS (
         cp.code_sent,
         cp.estimate_note,
         pd.item_name AS payment_type_description,
-        NULL AS payment_status_description,
-        NULL AS process_status_description,
         CASE
             WHEN COALESCE(cp.insurance_finalized_date, ip.check_date) <= CURRENT_DATE THEN TRUE
             ELSE FALSE
@@ -272,7 +293,6 @@ PaymentAllocations AS (
         AND cp.procedure_id = cp.procedure_id
     LEFT JOIN PaymentDefinitions pd
         ON ip.payment_type_id = pd.definition_id
-        AND pd.category_id = 1
 )
 
 SELECT DISTINCT
