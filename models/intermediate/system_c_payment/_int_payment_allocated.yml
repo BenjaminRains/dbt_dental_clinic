@@ -433,6 +433,7 @@ models:
               min_value: 0
               max_value: 10000
               where: "payment_source_type = 'INSURANCE'"
+              row_condition: "copay_amount != -1.0"
 
       - name: paid_other_insurance
         description: Amount paid by other insurance
