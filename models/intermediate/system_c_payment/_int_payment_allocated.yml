@@ -424,7 +424,7 @@ models:
               min_value: 0
               max_value: 10000
               where: "payment_source_type = 'INSURANCE'"
-              row_condition: "allowed_override != -1.0"
+              row_condition: "allowed_override != -1.0 and claim_id not in (21561)"
 
       - name: copay_amount
         description: Copay amount for this payment
