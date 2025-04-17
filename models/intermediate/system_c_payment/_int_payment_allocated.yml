@@ -250,7 +250,6 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
-              where: "stg_opendental__definition.category_id = 1"
 
       - name: payment_source
         description: Source of the payment
@@ -266,7 +265,6 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
-              where: "stg_opendental__definition.category_id = 2"
 
       - name: process_status
         description: Foreign key to the process status definition
@@ -276,7 +274,6 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
-              where: "stg_opendental__definition.category_id = 2"
 
       - name: merchant_fee
         description: Merchant fee associated with the payment
@@ -544,7 +541,6 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: item_name
-              where: "stg_opendental__definition.category_id = 1"
 
       - name: payment_status_description
         description: |
@@ -563,7 +559,6 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: item_name
-              where: "stg_opendental__definition.category_id = 2"
 
       - name: process_status_description
         description: |
@@ -582,7 +577,6 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: item_name
-              where: "stg_opendental__definition.category_id = 2"
 
       - name: include_in_ar
         description: Flag indicating if this payment should be included in AR calculations
@@ -642,7 +636,7 @@ models:
             NOT (
               payment_source_type = 'INSURANCE' AND
               (
-                (status = 1 AND split_amount <= 0) OR
+                (status = 1 AND split_amount <= 0) OR 
                 (status = 3 AND split_amount > 0)
               )
             )
