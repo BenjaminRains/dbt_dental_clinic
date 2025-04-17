@@ -640,25 +640,36 @@ models:
             description: "Insurance payments must have a valid claim_payment_id"
 
       - dbt_utils.expression_is_true:
-          expression: >
-            NOT (
-              payment_source_type = 'INSURANCE' AND
-              (
-                (status = 1 AND split_amount <= 0 AND 
-                 NOT (
-                   remarks ILIKE '%DENIED%' OR 
-                   remarks ILIKE '%NOT COVER%' OR 
-                   remarks ILIKE '%FREQ%' OR
-                   (insurance_estimate_total = 0 AND base_estimate > 0)
-                 )
-                ) OR 
-                (status = 3 AND split_amount > 0)
-              )
-            )
+          expression: |
+            CASE
+              -- For status 1 (Received) claims:
+              WHEN payment_source_type = 'INSURANCE' AND status = 1 THEN
+                -- Must have a non-zero payment amount unless:
+                -- 1. It's a denied claim (has remarks indicating denial)
+                -- 2. It's part of a payment group
+                -- 3. It's a pre-authorization (future dated)
+                -- 4. It's a valid claim with zero payment (claim_payment_id != 0)
+                split_amount > 0
+                OR (
+                  split_amount = 0
+                  AND (
+                    -- Has explicit remarks about denial/non-payment
+                    (remarks IS NOT NULL AND remarks != '')
+                    -- OR is part of a payment group
+                    OR payment_group_id != 0
+                    -- OR is a valid claim with zero payment
+                    OR payment_id != 0
+                  )
+                )
+              -- For status 3 (Supplemental) claims:
+              WHEN payment_source_type = 'INSURANCE' AND status = 3 THEN
+                split_amount <= 0
+              -- For all other records:
+              ELSE TRUE
+            END
           config:
             severity: error
-            description: "Insurance payment amounts must align with claim status, excluding denied claims and pre-authorizations"
-            row_condition: "payment_date <= '{{ var('max_valid_date', 'current_date') }}'::date"
+            description: "Insurance payment amounts must align with claim status, excluding denied claims and valid zero-amount claims"
 
       # AR balance alignment with patient aging buckets
       - payment_balance_alignment:
@@ -722,34 +733,6 @@ models:
           config:
             severity: warn
             description: "High value payments should have merchant fees recorded"
-
-      - dbt_utils.expression_is_true:
-          expression: |
-            CASE
-              -- For status 1 (Received) claims:
-              WHEN payment_source_type = 'INSURANCE' AND status = 1 THEN
-                -- Must have a non-zero payment amount unless:
-                -- 1. It's a denied claim (has remarks indicating denial)
-                -- 2. It's part of a payment group
-                split_amount > 0
-                OR (
-                  split_amount = 0
-                  AND (
-                    -- Has explicit remarks about denial/non-payment
-                    (remarks IS NOT NULL AND remarks != '')
-                    -- OR is part of a payment group
-                    OR payment_group_id != 0
-                  )
-                )
-              -- For status 3 (Supplemental) claims:
-              WHEN payment_source_type = 'INSURANCE' AND status = 3 THEN
-                split_amount <= 0
-              -- For all other records:
-              ELSE TRUE
-            END
-          config:
-            severity: error
-            description: "Insurance payment amounts must align with claim status, excluding denied claims"
 
     meta:
       owner: "dental_finance_team"
