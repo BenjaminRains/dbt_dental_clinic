@@ -14,14 +14,100 @@ models:
       - Maintains payment processing information
       - Preserves detailed payment metadata
       - Supports AR calculations and aging analysis
-      - Generates unique payment_allocation_id using ROW_NUMBER() over payment_source_type and payment_id
+      - Generates unique payment_allocation_id using ROW_NUMBER() over payment_source_type
+       and payment_id
+      - Note: Payment plan functionality is reserved for future implementation (OpenDental 
+        supports payment plans but they are not currently used by MDC clinic)
       
       Data Sources:
       - stg_opendental__payment: Base patient payment information
       - stg_opendental__paysplit: Payment split information and procedure links
       - stg_opendental__claimpayment: Insurance payment details
-      - stg_opendental__claimproc: Claim procedure information and provider assignments for insurance payments
-      - stg_opendental__procedurelog: Procedure information and provider assignments for patient payments
+      - stg_opendental__claimproc: Claim procedure information and provider assignments.
+      - stg_opendental__procedurelog: Procedure information and provider assignments.
+      - stg_opendental__definition: Payment type and status definitions
+      
+      Business rules:
+      - Insurance claims are filtered to only include:
+        * Status 1 (Received) or 3 (Supplemental) claims
+        * Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
+      - Payment dates are used for AR calculations
+      - Payment types and statuses are managed through the definition table
+      - Payment allocations must be properly linked to procedures or claims
+      - Provider assignments are sourced from:
+        * stg_opendental__claimproc for insurance payments
+        * stg_opendental__procedurelog for patient payments (via paysplit join)
+      - Patient payment provider assignments are determined through:
+        * Payment -> Paysplit -> Procedurelog join path
+        * Ensures accurate provider attribution for split payments
+      - Payment allocation IDs are generated using:
+        * ROW_NUMBER() over payment_source_type and payment_id
+        * Ensures unique identifiers across both payment types
+
+      Date Handling and COALESCE Logic:
+      - Insurance Payment Dates:
+        * Primary: insurance_finalized_date from claimproc
+        * Fallback: check_date from claimpayment
+        * Used for: payment_date, entry_date, updated_at
+      - Patient Payment Dates:
+        * Primary: payment_date from payment
+        * Used for: payment_date, entry_date, updated_at
+      - Procedure Dates:
+        * Primary: procedure_date from paysplit/claimproc
+        * Used for: procedure_date
+      - AR Inclusion Logic:
+        * include_in_ar = TRUE when payment_date <= CURRENT_DATE
+        * Ensures future-dated payments are excluded from AR calculations
+
+      Common Payment Allocation Scenarios:
+      1. Standard Patient Payment:
+         - Single procedure payment
+         - Direct provider attribution
+         - Immediate AR inclusion
+         Example: $500 payment for a cleaning, paid by credit card
+
+      2. Split Patient Payment:
+         - Multiple procedures in one payment
+         - Provider attribution via paysplit
+         - Proportional allocation across procedures
+         Example: $1000 payment split between two procedures with different providers
+
+      3. Insurance Primary Payment:
+         - Status 1 (Received) claim
+         - Direct carrier payment
+         - Full procedure coverage
+         Example: $800 insurance payment for a crown procedure
+
+      4. Insurance Supplemental Payment:
+         - Status 3 (Supplemental) claim
+         - Additional payment after initial claim
+         - Partial coverage completion
+         Example: $200 supplemental payment after initial $800 payment
+
+      5. High Value Patient Payment:
+         - Payment type 69 or 574
+         - Requires merchant fee recording
+         - Special monitoring for fraud prevention
+         Example: $10,000 payment for full mouth reconstruction
+
+      6. Refund Payment:
+         - Payment type 72
+         - Negative amount
+         - Cannot be credit card completed
+         Example: -$500 refund for overpayment
+
+      7. Recurring Credit Card Payment:
+         - is_recurring_cc_flag = true
+         - Requires recurring_charge_date
+         - Future-dated until processed
+         Example: $200 monthly payment plan for orthodontics
+      
+      Data Sources:
+      - stg_opendental__payment: Base patient payment information
+      - stg_opendental__paysplit: Payment split information and procedure links
+      - stg_opendental__claimpayment: Insurance payment details
+      - stg_opendental__claimproc: Claim procedure information and provider assignments.
+      - stg_opendental__procedurelog: Procedure information and provider assignments.
       - stg_opendental__definition: Payment type and status definitions
       
       Business rules:
@@ -50,7 +136,8 @@ models:
       - name: payment_allocation_id
         description: |
           Unique identifier for each payment allocation record.
-          Generated using ROW_NUMBER() over payment_source_type and payment_id to ensure uniqueness across both patient and insurance payments.
+          Generated using ROW_NUMBER() over payment_source_type and payment_id
+          to ensure uniqueness across both patient and insurance payments.
         tests:
           - unique
           - not_null
@@ -555,6 +642,76 @@ models:
           config:
             severity: error
             description: "Payment allocations must sum to match patient total balance"
+
+      # Suggested additional tests:
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payment_source_type = 'PATIENT' AND payment_date > CURRENT_DATE)"
+          config:
+            severity: error
+            description: "Patient payments cannot have future dates"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payment_source_type = 'INSURANCE' AND carrier_name IS NULL)"
+          config:
+            severity: error
+            description: "Insurance payments must have a carrier name"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'INSURANCE' AND
+              (
+                (status = 1 AND insurance_payment_amount <= 0) OR
+                (status = 3 AND insurance_payment_amount > 0)
+              )
+            )
+          config:
+            severity: error
+            description: "Insurance payment amounts must align with claim status"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'PATIENT' AND
+              payment_type_id = 72 AND
+              is_cc_completed_flag = true
+            )
+          config:
+            severity: error
+            description: "Refund payments cannot be credit card completed"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'PATIENT' AND
+              is_recurring_cc_flag = true AND
+              recurring_charge_date IS NULL
+            )
+          config:
+            severity: error
+            description: "Recurring credit card payments must have a next charge date"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'INSURANCE' AND
+              is_partial = true AND
+              payment_group_id IS NULL
+            )
+          config:
+            severity: error
+            description: "Partial insurance payments must have a payment group ID"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'PATIENT' AND
+              payment_type_id IN (69, 574) AND
+              merchant_fee IS NULL
+            )
+          config:
+            severity: warn
+            description: "High value payments should have merchant fees recorded"
 
     meta:
       owner: "dental_finance_team"
