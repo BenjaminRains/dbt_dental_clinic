@@ -61,7 +61,7 @@ PatientPayments AS (
 ),
 
 InsurancePayments AS (
-    SELECT
+    SELECT DISTINCT
         ip.claim_payment_id,
         ip.check_date,
         ip.date_issued,
@@ -80,8 +80,11 @@ InsurancePayments AS (
         ip.note,
         cp.provider_id
     FROM {{ ref('stg_opendental__claimpayment') }} ip
-    LEFT JOIN {{ ref('stg_opendental__claimproc') }} cp
+    INNER JOIN {{ ref('stg_opendental__claimproc') }} cp
         ON ip.claim_payment_id = cp.claim_payment_id
+        AND cp.status IN (1, 3)  -- Only include Received and Supplemental claims
+        AND cp.claim_payment_id != 0  -- Exclude records with no payment
+    WHERE ip.claim_payment_id IS NOT NULL
 ),
 
 ClaimProcedures AS (
@@ -275,7 +278,7 @@ PaymentAllocations AS (
         AND prsd.category_id = 1
 )
 
-SELECT
+SELECT DISTINCT
     ROW_NUMBER() OVER (ORDER BY payment_source_type, payment_id) AS payment_allocation_id,
     *
 FROM PaymentAllocations 
