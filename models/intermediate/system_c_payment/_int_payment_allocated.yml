@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: int_payment_allocated
-    description: >
+    description: |
       Intermediate model for payment allocations that combines patient payments and 
       insurance payments. This model serves as the foundation for payment reconciliation 
       and accounts receivable analysis.
@@ -14,8 +14,7 @@ models:
       - Maintains payment processing information
       - Preserves detailed payment metadata
       - Supports AR calculations and aging analysis
-      - Generates unique payment_allocation_id using ROW_NUMBER() over payment_source_type
-       and payment_id
+      - Generates unique payment_allocation_id using ROW_NUMBER() over payment_source_type and payment_id
       - Note: Payment plan functionality is reserved for future implementation (OpenDental 
         supports payment plans but they are not currently used by MDC clinic)
       
@@ -23,8 +22,8 @@ models:
       - stg_opendental__payment: Base patient payment information
       - stg_opendental__paysplit: Payment split information and procedure links
       - stg_opendental__claimpayment: Insurance payment details
-      - stg_opendental__claimproc: Claim procedure information and provider assignments.
-      - stg_opendental__procedurelog: Procedure information and provider assignments.
+      - stg_opendental__claimproc: Claim procedure information and provider assignments
+      - stg_opendental__procedurelog: Procedure information and provider assignments
       - stg_opendental__definition: Payment type and status definitions
       
       Business rules:
@@ -101,32 +100,6 @@ models:
          - Requires recurring_charge_date
          - Future-dated until processed
          Example: $200 monthly payment plan for orthodontics
-      
-      Data Sources:
-      - stg_opendental__payment: Base patient payment information
-      - stg_opendental__paysplit: Payment split information and procedure links
-      - stg_opendental__claimpayment: Insurance payment details
-      - stg_opendental__claimproc: Claim procedure information and provider assignments.
-      - stg_opendental__procedurelog: Procedure information and provider assignments.
-      - stg_opendental__definition: Payment type and status definitions
-      
-      Business rules:
-      - Insurance claims are filtered to only include:
-        * Status 1 (Received) or 3 (Supplemental) claims
-        * Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
-      - Payment dates are used for AR calculations
-      - Payment types and statuses are managed through the definition table
-      - Payment allocations must be properly linked to procedures or claims
-      - Provider assignments are sourced from:
-        * stg_opendental__claimproc for insurance payments
-        * stg_opendental__procedurelog for patient payments (via paysplit join)
-      - Patient payment provider assignments are determined through:
-        * Payment -> Paysplit -> Procedurelog join path
-        * Ensures accurate provider attribution for split payments
-      - Payment allocation IDs are generated using:
-        * ROW_NUMBER() over payment_source_type and payment_id
-        * Ensures unique identifiers across both payment types
-    
     config:
       materialized: incremental
       unique_key: payment_allocation_id
@@ -330,8 +303,6 @@ models:
 
       - name: external_id
         description: External system reference ID for the payment
-        tests:
-          # Removing not_null test as field is unused in the system
 
       - name: is_cc_completed_flag
         description: Flag indicating if credit card payment is completed
