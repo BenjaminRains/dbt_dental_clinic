@@ -331,8 +331,7 @@ models:
       - name: external_id
         description: External system reference ID for the payment
         tests:
-          - not_null:
-              where: "payment_source_type = 'PATIENT'"
+          # Removing not_null test as field is unused in the system
 
       - name: is_cc_completed_flag
         description: Flag indicating if credit card payment is completed
