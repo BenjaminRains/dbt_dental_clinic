@@ -61,7 +61,7 @@ PatientPayments AS (
 ),
 
 InsurancePayments AS (
-    SELECT DISTINCT
+    SELECT DISTINCT ON (ip.claim_payment_id)
         ip.claim_payment_id,
         ip.check_date,
         ip.date_issued,
@@ -85,10 +85,11 @@ InsurancePayments AS (
         AND cp.status IN (1, 3)  -- Only include Received and Supplemental claims
         AND cp.claim_payment_id != 0  -- Exclude records with no payment
     WHERE ip.claim_payment_id IS NOT NULL
+    ORDER BY ip.claim_payment_id, ip.check_date DESC
 ),
 
 ClaimProcedures AS (
-    SELECT
+    SELECT DISTINCT
         claim_procedure_id,
         procedure_id,
         claim_id,
@@ -121,6 +122,7 @@ ClaimProcedures AS (
     FROM {{ ref('stg_opendental__claimproc') }}
     WHERE status IN (1, 3)  -- Only include Received and Supplemental claims
     AND claim_payment_id != 0  -- Exclude records with no payment
+    AND COALESCE(insurance_finalized_date, claim_procedure_date) <= CURRENT_DATE  -- Exclude future-dated records
 ),
 
 -- Combine all payment allocations
@@ -256,8 +258,8 @@ PaymentAllocations AS (
         cp.code_sent,
         cp.estimate_note,
         pd.item_name AS payment_type_description,
-        psd.item_name AS payment_status_description,
-        prsd.item_name AS process_status_description,
+        NULL AS payment_status_description,
+        NULL AS process_status_description,
         CASE
             WHEN COALESCE(cp.insurance_finalized_date, ip.check_date) <= CURRENT_DATE THEN TRUE
             ELSE FALSE
@@ -267,15 +269,10 @@ PaymentAllocations AS (
     FROM ClaimProcedures cp
     LEFT JOIN InsurancePayments ip 
         ON cp.claim_payment_id = ip.claim_payment_id
+        AND cp.procedure_id = cp.procedure_id
     LEFT JOIN PaymentDefinitions pd
         ON ip.payment_type_id = pd.definition_id
         AND pd.category_id = 1
-    LEFT JOIN PaymentDefinitions psd
-        ON ip.payment_type_id = psd.definition_id
-        AND psd.category_id = 1
-    LEFT JOIN PaymentDefinitions prsd
-        ON ip.payment_type_id = prsd.definition_id
-        AND prsd.category_id = 1
 )
 
 SELECT DISTINCT
