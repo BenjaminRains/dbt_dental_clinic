@@ -593,10 +593,10 @@ models:
           This is used for monitoring ETL run times and data freshness, not for business data validation.
           The timestamp will reflect when the ETL job processed this record.
         tests:
-          - not_null
-          config:
-            severity: warn
-            description: "Used for ETL monitoring and audit purposes only"
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
 
       - name: model_updated_at
         description: |
@@ -604,10 +604,10 @@ models:
           This is used for monitoring ETL run times and data freshness, not for business data validation.
           The timestamp will reflect when the ETL job last processed this record.
         tests:
-          - not_null
-          config:
-            severity: warn
-            description: "Used for ETL monitoring and audit purposes only"
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
 
     tests:
       # Date range validation
