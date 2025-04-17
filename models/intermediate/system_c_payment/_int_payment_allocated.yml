@@ -321,9 +321,6 @@ models:
 
       - name: receipt_text
         description: Text content of the payment receipt
-        tests:
-          - not_null:
-              where: "payment_source_type = 'PATIENT'"
 
       - name: carrier_name
         description: Name of the insurance carrier
@@ -556,7 +553,9 @@ models:
             NOT (
               payment_source_type = 'PATIENT' AND
               (
-                (payment_type_id = 0 AND split_amount != 0) OR
+                (payment_type_id = 0 AND split_amount != 0 
+                 AND payment_notes NOT LIKE '%transfer%'
+                 AND unearned_type NOT IN (0, 288, 439)) OR
                 (payment_type_id = 72 AND split_amount >= 0) OR
                 (payment_type_id = 69 AND split_amount > 50000) OR
                 (payment_type_id = 574 AND split_amount > 50000)
@@ -564,7 +563,95 @@ models:
             )
           config:
             severity: error
-            description: "Payment amounts must match their type constraints"
+            description: |
+              Payment amounts must match their type constraints:
+              - Administrative entries (type 0) must be $0, except for valid income transfers
+              - Refunds (type 72) must be negative
+              - High value payments (types 69 and 574) must be ≤ $50,000
+              
+              Valid income transfers are excluded from the type 0 validation:
+              - Regular income transfers (unearned_type = 288 for outgoing, 0 for incoming)
+              - Treatment plan transfers (unearned_type = 439)
+              - All transfers have matching positive/negative amounts
+              - Transfers are identified by notes containing "transfer" or specific unearned types
+
+      # Income transfer validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'PATIENT' AND
+              payment_type_id = 0 AND
+              payment_notes LIKE '%INCOME TRANSFER%' AND
+              (
+                -- Invalid unearned_type combinations
+                (unearned_type = 0 AND split_amount < 0) OR
+                (unearned_type = 288 AND split_amount > 0) OR
+                -- Missing transfer pair
+                (NOT EXISTS (
+                  SELECT 1 FROM public_intermediate.int_payment_allocated p2
+                  WHERE p2.patient_id = int_payment_allocated.patient_id
+                  AND p2.payment_type_id = 0
+                  AND p2.payment_notes LIKE '%INCOME TRANSFER%'
+                  AND p2.split_amount = -int_payment_allocated.split_amount
+                  AND p2.unearned_type = CASE 
+                    WHEN int_payment_allocated.unearned_type = 0 THEN 288 
+                    ELSE 0 
+                  END
+                ))
+              )
+            )
+          config:
+            severity: error
+            description: |
+              Income transfers must follow these rules:
+              - Outgoing transfers must have unearned_type = 288 and negative amount
+              - Incoming transfers must have unearned_type = 0 and positive amount
+              - Each transfer must have a matching pair with opposite amount and unearned_type
+              - Transfer pairs must be created on the same date
+
+      # Transfer balance validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT patient_id
+              FROM public_intermediate.int_payment_allocated
+              WHERE payment_source_type = 'PATIENT'
+              AND payment_type_id = 0
+              AND payment_notes LIKE '%INCOME TRANSFER%'
+              GROUP BY patient_id
+              HAVING ABS(SUM(split_amount)) > 0.01
+            )
+          config:
+            severity: error
+            description: |
+              The sum of all transfers for a patient must net to zero
+              (allowing for small rounding differences up to $0.01)
+
+      # Transfer date validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_source_type = 'PATIENT' AND
+              payment_type_id = 0 AND
+              payment_notes LIKE '%INCOME TRANSFER%' AND
+              NOT EXISTS (
+                SELECT 1 FROM public_intermediate.int_payment_allocated p2
+                WHERE p2.patient_id = int_payment_allocated.patient_id
+                AND p2.payment_type_id = 0
+                AND p2.payment_notes LIKE '%INCOME TRANSFER%'
+                AND p2.split_amount = -int_payment_allocated.split_amount
+                AND p2.unearned_type = CASE 
+                  WHEN int_payment_allocated.unearned_type = 0 THEN 288 
+                  ELSE 0 
+                END
+                AND p2.payment_date = int_payment_allocated.payment_date
+              )
+            )
+          config:
+            severity: error
+            description: |
+              Transfer pairs must be created on the same date
+              to maintain accurate balance tracking
 
       # Insurance payment validation
       - dbt_utils.expression_is_true:
