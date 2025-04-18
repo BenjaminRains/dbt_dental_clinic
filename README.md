@@ -176,11 +176,53 @@ For detailed information about the intermediate models, see `dbt_int_models_plan
 
 ### Key Components
 
-- **MariaDB v11.6**: Database platform for development and testing
-- **dbt Core**: Data transformation framework
+- **MariaDB v11.6**: Source database platform for operational (OLTP) data
+- **PostgreSQL**: Target database platform for analytics-ready (OLAP) data
+- **ETL Pipeline**: Custom Python-based data transformation pipeline that:
+  - Extracts data from MariaDB source tables
+  - Performs type conversion and data validation
+  - Handles schema evolution and index creation
+  - Manages incremental syncs with tracking
+  - Ensures data quality through comprehensive checks
+- **dbt Core**: Data transformation framework for analytics models
 - **DBeaver**: SQL development environment for exploratory analysis
 - **Git**: Version control for all models and documentation
-- **Python"" v3.8+ (for future ML components)
+- **Python v3.8+**: For ETL pipeline and future ML components
+
+### ETL Pipeline Features
+
+The [`mariadb_postgre_pipe.py`](etl_job/mariadb_postgre_pipe.py) ETL pipeline provides robust data
+ transformation capabilities:
+
+1. **Data Type Handling**
+   - Automatic conversion between MariaDB and PostgreSQL types
+   - Special handling for date/time fields and NULL values
+   - Boolean type detection and conversion
+   - Numeric precision preservation
+
+2. **Schema Management**
+   - Automatic table creation in PostgreSQL
+   - Schema validation and evolution
+   - Index creation and optimization
+   - Primary key preservation
+
+3. **Data Quality**
+   - Row count validation with configurable tolerance
+   - NULL value handling and validation
+   - Data type consistency checks
+   - Comprehensive error logging
+
+4. **Incremental Processing**
+   - Sync status tracking
+   - Incremental updates based on last modified timestamps
+   - Chunked processing for large tables
+   - Transaction management
+
+5. **Error Handling**
+   - Comprehensive error logging
+   - Retry mechanisms
+   - Quality issue tracking
+   - Detailed execution summaries
 
 ### Directory Structure
 
