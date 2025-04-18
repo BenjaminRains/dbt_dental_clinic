@@ -268,6 +268,29 @@ dbt_dental_clinic/
 └── README.md           # Project documentation
 ```
 
+### Frontend Development Plans
+
+The project's long-term goal includes developing a modern web application to visualize and interact
+with the analytics data warehouse. The frontend implementation will utilize:
+
+- **React**: For building the user interface components
+- **Vite**: For fast development and optimized production builds
+- **FastAPI**: For building the backend API services
+- **Modern UI/UX**: Following best practices for data visualization and user experience
+- **Real-time Analytics**: Interactive dashboards and reports
+- **Role-based Access**: Secure access control for different user types
+
+The frontend will provide:
+- Interactive dashboards for key performance indicators
+- Drill-down capabilities for detailed analysis
+- Custom report generation
+- Data export functionality
+- Real-time monitoring of dental practice metrics
+- User-friendly interfaces for non-technical staff
+
+Development of the frontend will begin after the completion of the core data warehouse and 
+analytics models.
+
 ### Validation Workflow
 
 We follow a structured validation workflow for each source table:
