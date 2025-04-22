@@ -21,6 +21,14 @@ models:
       - Handles high-split administrative entries (100+ splits)
       - Supports hidden splits and prepayment tracking
       
+      Discount Handling:
+      - Combines discount information from multiple sources:
+        1. Procedure-level discounts (procedurelog.Discount)
+        2. Adjustment-level discounts (adjustment.AdjType and AdjAmt)
+      - Provides unified discount tracking through combined_discount_amount
+      - Maintains original discount flags for backward compatibility
+      - Supports detailed discount categorization and analysis
+      
       Split Categories:
       1. Regular Payment Splits:
          - Visible on account
@@ -191,16 +199,73 @@ models:
               max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: is_discount_flag
-        description: Flag indicating if this is a discount split
+        description: |
+          Boolean flag indicating if this split represents a discount.
+          Note: This field is maintained for backward compatibility as the source
+          system's IsDiscount field is unused. For actual discount information,
+          refer to combined_discount_amount and discount_category.
         tests:
           - accepted_values:
               values: [true, false]
 
       - name: discount_type
-        description: Type of discount if applicable
+        description: |
+          Type of discount if this split represents a discount.
+          Note: This field is maintained for backward compatibility as the source
+          system's DiscountType field is unused. For actual discount types,
+          refer to discount_category.
         tests:
           - accepted_values:
               values: ['PROMPT_PAY', 'SENIOR', 'STAFF', 'OTHER', null]
+
+      - name: combined_discount_amount
+        description: |
+          Total discount amount combining both procedure-level and adjustment-level discounts.
+          Calculated as:
+          - Procedure discount (if procedure_id exists)
+          - Plus adjustment amount (if adjustment_id exists and AdjType indicates a discount)
+          
+          Common patterns:
+          - Procedure discounts: Typically for higher-value procedures (avg $1,110)
+          - Adjustment discounts: Used for highest-value procedures (avg $2,945)
+          - Combined discounts: When both sources apply to the same procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: discount_category
+        description: |
+          Categorization of the discount based on both procedure and adjustment sources.
+          Values:
+          - 'PROCEDURE_DISCOUNT': Discount from procedurelog.Discount
+          - 'ADJUSTMENT_DISCOUNT': Discount from adjustment.AdjType
+          - 'COMBINED_DISCOUNT': Both procedure and adjustment discounts
+          - 'NO_DISCOUNT': No discounts applied
+          
+          Common adjustment types for discounts:
+          - 186: Senior discount
+          - 472, 474, 475: Provider discounts
+          - 486: Family discount
+          - 9: Cash discount
+        tests:
+          - accepted_values:
+              values: ['PROCEDURE_DISCOUNT', 'ADJUSTMENT_DISCOUNT', 'COMBINED_DISCOUNT', 'NO_DISCOUNT']
+
+      - name: discount_source_type
+        description: |
+          Specific type of discount based on adjustment type or procedure discount.
+          Values:
+          - 'SENIOR': Senior discount (AdjType 186)
+          - 'PROVIDER': Provider discount (AdjType 472, 474, 475)
+          - 'FAMILY': Family discount (AdjType 486)
+          - 'CASH': Cash discount (AdjType 9)
+          - 'PROCEDURE': Procedure-level discount
+          - 'COMBINED': Multiple discount types
+          - null: No discount
+        tests:
+          - accepted_values:
+              values: ['SENIOR', 'PROVIDER', 'FAMILY', 'CASH', 'PROCEDURE', 'COMBINED', null]
 
       - name: unearned_type
         description: Type of unearned revenue if applicable

@@ -100,11 +100,13 @@ BaseSplits AS (
         pc.procedure_description,
         pc.procedure_fee,
         pc.procedure_status,
+        pc.discount as procedure_discount,
         
         -- Link to adjustment data if available
         adj.adjustment_amount,
         adj.adjustment_type_name,
         adj.adjustment_category_type,
+        adj.adjustment_type_id,
         
         -- Payment info
         p.payment_type_id,
@@ -208,6 +210,31 @@ SplitCategorization AS (
             WHEN total_splits > 20 THEN TRUE
             ELSE FALSE
         END AS is_high_split_payment,
+        
+        -- New discount fields
+        COALESCE(procedure_discount, 0) + 
+        COALESCE(CASE 
+            WHEN adjustment_type_id IN (186, 472, 474, 475, 486, 9) 
+            THEN adjustment_amount 
+            ELSE 0 
+        END, 0) as combined_discount_amount,
+        
+        CASE
+            WHEN procedure_discount > 0 AND adjustment_amount < 0 THEN 'COMBINED_DISCOUNT'
+            WHEN procedure_discount > 0 THEN 'PROCEDURE_DISCOUNT'
+            WHEN adjustment_amount < 0 THEN 'ADJUSTMENT_DISCOUNT'
+            ELSE 'NO_DISCOUNT'
+        END as discount_category,
+        
+        CASE
+            WHEN adjustment_type_id = 186 THEN 'SENIOR'
+            WHEN adjustment_type_id IN (472, 474, 475) THEN 'PROVIDER'
+            WHEN adjustment_type_id = 486 THEN 'FAMILY'
+            WHEN adjustment_type_id = 9 THEN 'CASH'
+            WHEN procedure_discount > 0 THEN 'PROCEDURE'
+            WHEN procedure_discount > 0 AND adjustment_amount < 0 THEN 'COMBINED'
+            ELSE NULL
+        END as discount_source_type,
         
         -- Tracking fields
         CURRENT_TIMESTAMP AS model_created_at,
