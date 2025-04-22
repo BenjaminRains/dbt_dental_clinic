@@ -73,6 +73,13 @@ models:
       - dbt_utils.expression_is_true:
           expression: "NOT (unearned_type IN (288, 439) AND provider_id IS NULL)"
 
+      # Simple test for forward_split_id
+      - dbt_utils.expression_is_true:
+          expression: "forward_split_id = 0"
+          config:
+            severity: warn
+            description: "Field is currently unused, 0 is the expected value"
+
     columns:
       - name: paysplit_id
         description: Unique identifier for each payment split record
@@ -112,7 +119,30 @@ models:
         description: Foreign key to the specific payment plan charge
 
       - name: forward_split_id
-        description: Reference to another split record if this is a forwarded payment
+        description: |
+          Legacy field for tracking payment split references. Currently unused in the system.
+          
+          Current State:
+          - Always set to 0 in the source system
+          - Maintained for backward compatibility
+          - Index exists but is not actively used
+          
+          Historical Context:
+          - Originally named "FSplitNum" in source system
+          - Was potentially used for payment plan or prepayment tracking
+          - Field and index remain in place for backward compatibility
+          
+          Business Rules:
+          - Expected value is 0 for all records
+          - No active validation required
+          - No impact on current payment processing
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "= 0"
+              column_name: "forward_split_id"
+              config:
+                severity: warn
+                description: "Field is currently unused, 0 is the expected value"
 
       - name: created_by_user_id
         description: ID of the user who created this payment split record

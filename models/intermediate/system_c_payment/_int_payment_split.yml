@@ -153,12 +153,14 @@ models:
 
       - name: forward_split_id
         description: |
-          Reference to a forward split if this is a refund.
-          Used to track split payment chains.
+          Legacy field for tracking payment split references. Currently unused in the system.
         tests:
-          - relationships:
-              to: ref('stg_opendental__paysplit')
-              field: paysplit_id
+          - dbt_utils.expression_is_true:
+              expression: "= 0"
+              column_name: "forward_split_id"
+              config:
+                severity: warn
+                description: "Field is currently unused, 0 is the expected value"
 
       - name: split_amount
         description: |
