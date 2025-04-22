@@ -1,0 +1,575 @@
+version: 2
+
+models:
+  - name: int_patient_payment_allocated
+    description: |
+      Intermediate model for patient payment allocations.
+      Part of System C: Payment Allocation & Reconciliation.
+      
+      Key features:
+      - Handles patient payments and their allocations
+      - Tracks payment allocations and status
+      - Maintains payment processing information
+      - Preserves detailed payment metadata
+      - Supports AR calculations and aging analysis
+      - Generates unique payment_allocation_id using ROW_NUMBER() over payment_id and procedure_id
+      - Validates transfer pairs and payment types
+      - Note: Payment plan functionality is reserved for future implementation (OpenDental 
+        supports payment plans but they are not currently used by MDC clinic)
+      
+      Data Sources:
+      - stg_opendental__payment: Base patient payment information
+      - stg_opendental__paysplit: Payment split information and procedure links
+      - stg_opendental__procedurelog: Procedure information and provider assignments
+      - stg_opendental__definition: Payment type and status definitions
+      
+      Business rules:
+      - Payment dates are used for AR calculations
+      - Payment types and statuses are managed through the definition table
+      - Payment allocations must be properly linked to procedures
+      - Provider assignments are sourced from stg_opendental__procedurelog via paysplit join
+      - Patient payment provider assignments are determined through:
+        * Payment -> Paysplit -> Procedurelog join path
+        * Ensures accurate provider attribution for split payments
+      - Payment allocation IDs are generated using:
+        * ROW_NUMBER() over payment_id and procedure_id
+        * Ensures unique identifiers for each payment allocation
+
+      Date Handling and COALESCE Logic:
+      - Patient Payment Dates:
+        * Primary: payment_date from payment
+        * Used for: payment_date, entry_date, updated_at
+      - Procedure Dates:
+        * Primary: procedure_date from paysplit
+        * Used for: procedure_date
+      - AR Inclusion Logic:
+        * include_in_ar = TRUE when payment_date <= CURRENT_DATE
+        * Ensures future-dated payments are excluded from AR calculations
+
+      Common Patient Payment Scenarios:
+      1. Standard Patient Payment:
+         - Single procedure payment
+         - Direct provider attribution
+         - Immediate AR inclusion
+         Example: $500 payment for a cleaning, paid by credit card
+
+      2. Split Patient Payment:
+         - Multiple procedures in one payment
+         - Provider attribution via paysplit
+         - Proportional allocation across procedures
+         Example: $1000 payment split between two procedures with different providers
+
+      3. High Value Patient Payment:
+         - Payment type 69 or 574
+         - Requires merchant fee recording
+         - Special monitoring for fraud prevention
+         Example: $10,000 payment for full mouth reconstruction
+
+      4. Refund Payment:
+         - Payment type 72
+         - Negative amount
+         - Cannot be credit card completed
+         Example: -$500 refund for overpayment
+
+      5. Recurring Credit Card Payment:
+         - is_recurring_cc_flag = true
+         - Requires recurring_charge_date
+         - Future-dated until processed
+         Example: $200 monthly payment plan for orthodontics
+    config:
+      materialized: incremental
+      unique_key: payment_allocation_id
+      schema: intermediate
+    
+    columns:
+      - name: payment_allocation_id
+        description: |
+          Unique identifier for each payment allocation record.
+          Generated using ROW_NUMBER() over payment_id and procedure_id
+          to ensure uniqueness for each payment allocation.
+        tests:
+          - unique
+          - not_null
+
+      - name: payment_source_type
+        description: Type of payment source (always 'PATIENT' for this model)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['PATIENT']
+
+      - name: payment_id
+        description: Foreign key to the patient payment (from stg_opendental__payment)
+        tests:
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: provider_id
+        description: |
+          Foreign key to the provider, sourced from stg_opendental__procedurelog via stg_opendental__paysplit join
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: procedure_id
+        description: Foreign key to the procedure, sourced from stg_opendental__paysplit
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+
+      - name: adjustment_id
+        description: Foreign key to the adjustment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__adjustment')
+              field: adjustment_id
+
+      - name: split_amount
+        description: Amount allocated in this payment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: payment_date
+        description: Date when the payment was made
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+
+      - name: procedure_date
+        description: Date of the associated procedure, sourced from stg_opendental__paysplit
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+
+      - name: payment_type_id
+        description: |
+          Type of payment. Current patterns (2023-present):
+          - 71: Most common type (8,335 payments), avg $293
+          - 0: Administrative entries (1,110 payments), must be $0
+          - 69: High value payments (965 payments)
+              * Average: $1,036
+              * Warning Tiers:
+                - LOW: > $5,000
+                - MEDIUM: > $10,000
+                - HIGH: > $25,000
+                - CRITICAL: > $50,000
+          - 70: Regular payments (609 payments), avg $348
+          - 391: High value (482 payments), avg $922
+          - 412: Newer payment type (187 payments), avg $199
+          - 72: Refunds (50 payments), always negative
+          - 634: New type since Sept 2024 (16 payments), avg $6,009
+          - 574: Very high value (6 payments), avg $26,071
+          - 417: Special cases (6 payments), avg $2,967
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+
+      - name: payment_source
+        description: Source of the payment
+        tests:
+          - not_null
+
+      - name: payment_status
+        description: Foreign key to the payment status definition
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+
+      - name: process_status
+        description: Foreign key to the process status definition
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+
+      - name: merchant_fee
+        description: Merchant fee associated with the payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: payment_notes
+        description: Additional notes about the payment
+
+      - name: check_number
+        description: Check number for the payment
+
+      - name: bank_branch
+        description: Bank branch information
+
+      - name: created_by_user_id
+        description: ID of the user who created the record
+        tests:
+          - not_null
+
+      - name: entry_date
+        description: Date when the record was entered
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+
+      - name: updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+
+      - name: deposit_id
+        description: Foreign key to the deposit record
+        tests:
+          - not_null
+
+      - name: external_id
+        description: External system reference ID for the payment
+
+      - name: is_cc_completed_flag
+        description: Flag indicating if credit card payment is completed
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: recurring_charge_date
+        description: Next scheduled date for recurring payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+
+      - name: receipt_text
+        description: Text content of the payment receipt
+
+      - name: payment_type_description
+        description: |
+          Human-readable description of the payment type from definition table.
+          Current patterns (2023-present):
+          - Standard Payment (type 71): Most common type, avg $293
+          - Administrative (type 0): Must be $0
+          - High Value Payment (type 69): 
+              * Average: $1,036
+              * Warning Tiers:
+                - LOW: > $5,000
+                - MEDIUM: > $10,000
+                - HIGH: > $25,000
+                - CRITICAL: > $50,000
+          - Regular Payment (type 70): avg $348
+          - High Value (type 391): avg $922
+          - New Payment Type (type 412): avg $199
+          - Refund (type 72): Always negative
+          - New Type (type 634): avg $6,009
+          - Very High Value (type 574): avg $26,071
+          - Special Case (type 417): avg $2,967
+        tests:
+          - not_null
+          - accepted_values:
+              values: [
+                'Standard Payment', 'Administrative', 'High Value Payment',
+                'Regular Payment', 'High Value', 'New Payment Type', 'Refund',
+                'New Type', 'Very High Value', 'Special Case'
+              ]
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+
+      - name: include_in_ar
+        description: Flag indicating if this payment should be included in AR calculations
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: model_created_at
+        description: |
+          Timestamp when this model was created during ETL execution.
+          This is used for monitoring ETL run times and data freshness, not for business data validation.
+          The timestamp will reflect when the ETL job processed this record.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
+
+      - name: model_updated_at
+        description: |
+          Timestamp when this model was last updated during ETL execution.
+          This is used for monitoring ETL run times and data freshness, not for business data validation.
+          The timestamp will reflect when the ETL job last processed this record.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
+
+    tests:
+      # Date range validation
+      - dbt_utils.expression_is_true:
+          expression: "payment_date >= '2023-01-01'"
+          config:
+            severity: warn
+
+      # Payment amount validation based on payment type
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              (payment_type_id = 0 AND split_amount != 0 
+               AND payment_notes NOT LIKE '%transfer%'
+               AND unearned_type NOT IN (0, 288, 439)) OR
+              (payment_type_id = 72 AND split_amount >= 0) OR
+              (payment_type_id = 69 AND split_amount > 50000) OR
+              (payment_type_id = 574 AND split_amount > 50000)
+            )
+          config:
+            severity: error
+            description: |
+              Payment amounts must match their type constraints:
+              - Administrative entries (type 0) must be $0, except for valid income transfers
+              - Refunds (type 72) must be negative
+              - High value payments (types 69 and 574) must be ≤ $50,000
+              
+              Valid income transfers are excluded from the type 0 validation:
+              - Regular income transfers (unearned_type = 288 for outgoing, 0 for incoming)
+              - Treatment plan transfers (unearned_type = 439)
+              - All transfers have matching positive/negative amounts
+              - Transfers are identified by notes containing "transfer" or specific unearned types
+
+      # Income transfer validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_type_id = 0 AND
+              payment_notes LIKE '%INCOME TRANSFER%' AND
+              (
+                -- Invalid unearned_type combinations
+                (unearned_type = 0 AND split_amount < 0) OR
+                (unearned_type = 288 AND split_amount > 0) OR
+                -- Treatment plan validation
+                (unearned_type = 439 AND NOT EXISTS (
+                  SELECT 1 FROM public_staging.stg_opendental__procedurelog p
+                  WHERE p.procedure_id = int_patient_payment_allocated.procedure_id
+                  AND p.procedure_status = 1
+                )) OR
+                -- Standard transfer pair validation (only for types 0/288)
+                (unearned_type IN (0, 288) AND NOT EXISTS (
+                  SELECT 1 FROM public_staging.stg_opendental__payment p2
+                  JOIN public_staging.stg_opendental__paysplit ps2
+                    ON p2.payment_id = ps2.payment_id
+                  WHERE p2.patient_id = int_patient_payment_allocated.patient_id
+                  AND p2.payment_date = int_patient_payment_allocated.payment_date
+                  AND p2.payment_amount = -int_patient_payment_allocated.split_amount
+                  AND ps2.unearned_type = CASE 
+                    WHEN int_patient_payment_allocated.unearned_type = 0 THEN 288 
+                    ELSE 0 
+                  END
+                  AND p2.payment_notes LIKE '%INCOME TRANSFER%'
+                )) OR
+                -- Detect excessive splits
+                (SELECT COUNT(*) 
+                 FROM public_staging.stg_opendental__paysplit ps2
+                 WHERE ps2.payment_id = int_patient_payment_allocated.payment_id) > 20 OR
+                -- Detect unbalanced transfer pairs
+                (SELECT ABS(SUM(CASE 
+                    WHEN unearned_type = 0 THEN split_amount 
+                    WHEN unearned_type = 288 THEN -split_amount 
+                    ELSE 0 
+                  END))
+                 FROM public_staging.stg_opendental__paysplit ps2
+                 WHERE ps2.payment_id = int_patient_payment_allocated.payment_id
+                 AND ps2.unearned_type IN (0, 288)) > 0.01
+              )
+            )
+          config:
+            severity: error
+            description: |
+              Income transfers must follow strict unearned type rules:
+              
+              1. Type Pairing Rules:
+                 - Type 0: Default/incoming transfers (positive amounts)
+                 - Type 288: Prepayment/outgoing transfers (negative amounts)
+                 - Type 439: Treatment plan prepayments (requires treatment planned procedure)
+                 - Type 641: Refund tracking (hidden type)
+              
+              2. Amount Rules:
+                 - Type 0 must have positive amounts (money coming in)
+                 - Type 288 must have negative amounts (money going out)
+                 - Amounts must match (opposite signs) between pairs
+                 - Total transfer balance must net to zero (within $0.01)
+              
+              3. Transfer Requirements by Type:
+                 a) Standard Transfers (0/288):
+                    - Each transfer must have a matching opposite entry in raw data
+                    - Must be created on same payment_date
+                    - Must be for same patient
+                    - Must have matching amounts (opposite signs)
+                    - Maximum of 20 splits per payment
+                 
+                 b) Treatment Plan (439):
+                    - Must link to a treatment planned procedure
+                    - Used for tracking prepayments before procedure completion
+                    - No matching pair required
+                 
+                 c) Refund (641):
+                    - Internal tracking only
+                    - Not visible in standard reports
+                    - No matching pair required
+              
+              4. Common Issues:
+                 - Wrong type for direction (0 for outgoing or 288 for incoming)
+                 - Missing matching pair for standard transfers
+                 - Missing procedure link for type 439
+                 - Different dates for transfer pairs
+                 - Excessive splits (>20 per payment)
+                 - Unbalanced transfer pairs
+              
+              5. System Behavior:
+                 - New prepayments default to Type 0
+                 - Allocating prepayments creates Type 288
+                 - Treatment plan prepayments use Type 439
+                 - Refunds tracked with Type 641
+                 - All types require provider assignment
+                 - Split counts are monitored for unusual patterns
+
+      # Transfer balance validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT patient_id
+              FROM public_intermediate.int_patient_payment_allocated
+              WHERE payment_type_id = 0
+              AND payment_notes LIKE '%INCOME TRANSFER%'
+              GROUP BY patient_id
+              HAVING ABS(SUM(split_amount)) > 0.01
+            )
+          config:
+            severity: error
+            description: |
+              The sum of all transfers for a patient must net to zero
+              (allowing for small rounding differences up to $0.01)
+
+      # Transfer date validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_type_id = 0 AND
+              payment_notes LIKE '%INCOME TRANSFER%' AND
+              NOT EXISTS (
+                SELECT 1 FROM public_intermediate.int_patient_payment_allocated p2
+                WHERE p2.patient_id = int_patient_payment_allocated.patient_id
+                AND p2.payment_type_id = 0
+                AND p2.payment_notes LIKE '%INCOME TRANSFER%'
+                AND p2.split_amount = -int_patient_payment_allocated.split_amount
+                AND p2.unearned_type = CASE 
+                  WHEN int_patient_payment_allocated.unearned_type = 0 THEN 288 
+                  ELSE 0 
+                END
+                AND p2.payment_date = int_patient_payment_allocated.payment_date
+              )
+            )
+          config:
+            severity: error
+            description: |
+              Transfer pairs must be created on the same date
+              to maintain accurate balance tracking
+
+      # Split count validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_type_id = 0 AND
+              payment_notes LIKE '%INCOME TRANSFER%' AND
+              (SELECT COUNT(*) 
+               FROM public_staging.stg_opendental__paysplit ps2
+               WHERE ps2.payment_id = int_patient_payment_allocated.payment_id) > 20
+            )
+          config:
+            severity: error
+            description: |
+              Payments with income transfers should not have more than 20 splits
+              to prevent excessive transfer creation and maintain data quality
+
+      # Additional patient payment validations
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payment_date > CURRENT_DATE)"
+          config:
+            severity: error
+            description: "Patient payments cannot have future dates"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_type_id = 72 AND
+              is_cc_completed_flag = true
+            )
+          config:
+            severity: error
+            description: "Refund payments cannot be credit card completed"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              is_cc_completed_flag = true AND
+              recurring_charge_date IS NULL
+            )
+          config:
+            severity: error
+            description: "Recurring credit card payments must have a next charge date"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT (
+              payment_type_id IN (69, 574) AND
+              merchant_fee IS NULL
+            )
+          config:
+            severity: warn
+            description: "High value payments should have merchant fees recorded"
+
+      # AR balance alignment
+      - payment_balance_alignment:
+          config:
+            severity: error
+            description: "Payment allocations must sum to match patient total balance"
+
+    meta:
+      owner: "dental_finance_team"
+      contains_pii: true
+      business_process: "Payment Allocation & Reconciliation"
+      refresh_frequency: "hourly"
+      business_impact: "High"
+      data_quality_requirements:
+        - "All payment allocations must have a valid payment_id"
+        - "Payment amounts must be positive unless explicitly marked as refunds"
+        - "Payment dates must be within valid business date ranges"
+        - "Payment types and statuses must be valid definitions"
+        - "Monitor high-value payments for potential fraud or errors"
+        - "Transfer pairs must be properly validated and balanced"
+        - "Provider assignments must be accurate for split payments" 
