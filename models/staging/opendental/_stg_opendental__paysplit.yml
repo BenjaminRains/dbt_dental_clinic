@@ -33,6 +33,23 @@ models:
       - Common refund amounts: -$29.00, -$53.00, -$30.00
       - Small amounts (<$10) often represent adjustments or fees
       
+      Discount Tracking:
+      - Discounts are primarily tracked through two mechanisms:
+        1. Procedure-level discounts:
+           * Stored in procedurelog.Discount
+           * Typically used for higher-value procedures (avg $1,110)
+           * Often accompanied by adjustments (avg -$554)
+        2. Adjustment-level discounts:
+           * Stored in adjustment.AdjType and AdjAmt
+           * Used for highest-value procedures (avg $2,945)
+           * Common adjustment types:
+             - 186: Senior discount
+             - 472, 474, 475: Provider discounts
+             - 486: Family discount
+             - 9: Cash discount
+      - Note: The paysplit.IsDiscount and DiscountType fields are currently unused
+        and should not be relied upon for discount tracking
+      
       Business Rules:
       - Each split must be allocated to either a procedure, adjustment, or payment plan
       - Zero amount splits must be valid (discounts, unearned revenue)
@@ -168,12 +185,36 @@ models:
 
       # Flags and types
       - name: is_discount_flag
-        description: Boolean flag indicating if this split represents a discount
+        description: |
+          Boolean flag indicating if this split represents a discount.
+          
+          Note: This field is currently unused in the source system (always 0).
+          Discounts are primarily tracked through:
+          1. procedurelog.Discount for procedure-level discounts
+          2. adjustment.AdjType and AdjAmt for adjustment-level discounts
+          
+          Common adjustment types for discounts:
+          - 186: Senior discount
+          - 472, 474, 475: Provider discounts
+          - 486: Family discount
+          - 9: Cash discount
         tests:
           - not_null
 
       - name: discount_type
-        description: Type of discount if this split represents a discount
+        description: |
+          Type of discount if this split represents a discount.
+          
+          Note: This field is currently unused in the source system (always 0).
+          For actual discount types, refer to:
+          1. procedurelog.Discount for procedure-level discounts
+          2. adjustment.AdjType for adjustment-level discounts
+          
+          Common adjustment types for discounts:
+          - 186: Senior discount
+          - 472, 474, 475: Provider discounts
+          - 486: Family discount
+          - 9: Cash discount
 
       - name: unearned_type
         description: >
