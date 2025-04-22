@@ -147,11 +147,52 @@ models:
 
       - name: unearned_type
         description: >
-          Classification for unearned payment types. 
-          Special attention required for types:
-          - Type 288: Represents one type of unearned income
-          - Type 439: Represents another type of unearned income
-          - Zero-amount splits with type 288 are valid for administrative tracking
+          Classification for unearned payment types. Critical for income transfer tracking.
+          
+          Category 29 Unearned Types:
+          
+          1. Type 0 (Default/Incoming):
+             * Used for incoming/receiving transfers
+             * Must have positive amounts
+             * Default unearned type for unallocated paysplits
+             * Represents base prepayment/unearned income
+          
+          2. Type 288 (Prepayment/Outgoing):
+             * Used for outgoing/sending transfers
+             * Must have negative amounts
+             * Explicitly defined as "Prepayment"
+             * Used to track money being moved out
+          
+          3. Type 439 (Treatment Plan):
+             * Specific to treatment plan prepayments
+             * Has special handling (item_value = 'X')
+             * Used for treatment planned procedures
+             * Tracks prepayments before procedure completion
+          
+          4. Type 598 (Payment Plan):
+             * Specific to payment plan prepayments
+             * Has special handling (item_value = 'X')
+             * Used for recurring payment tracking
+             * Links prepayments to payment plans
+          
+          5. Type 641 (Refund):
+             * Hidden type for refund tracking
+             * Used internally by the system
+             * Not visible in standard reports
+          
+          Transfer Rules:
+          - Regular transfers use 0/288 pair
+          - Treatment plan prepayments use 439
+          - Payment plan prepayments use 598
+          - Refunds tracked with 641
+          - All types require provider assignment
+          
+          Validation:
+          - Type 0: Must be positive amounts
+          - Type 288: Must be negative amounts
+          - Types 439/598: Must have procedure/plan links
+          - All types: Provider assignment required
+          - Hidden types: Not shown in standard reports
 
       - name: payplan_debit_type
         description: Type of debit if associated with a payment plan
