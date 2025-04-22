@@ -16,15 +16,57 @@
     2. Validates split business rules
     3. Provides split analytics and metadata
     4. Maintains relationships with procedures and adjustments
+    5. Handles high-split payments efficiently
+    6. Implements transfer payment rules
 */
 
 WITH SplitDefinitions AS (
-    SELECT 
+    SELECT DISTINCT
         definition_id,
         item_name,
         item_value,
         category_id
     FROM {{ ref('stg_opendental__definition') }}
+),
+
+-- Get payment information for split validation
+PaymentInfo AS MATERIALIZED (
+    SELECT DISTINCT
+        p.payment_id,
+        p.payment_type_id,
+        p.payment_date,
+        p.payment_notes,
+        p.patient_id,
+        p.payment_amount,
+        p.is_split_flag,
+        p.is_recurring_cc_flag,
+        p.payment_status,
+        p.process_status,
+        p.merchant_fee,
+        p.created_by_user_id,
+        p.entry_date,
+        p.updated_at,
+        p.deposit_id,
+        p.external_id,
+        p.is_cc_completed_flag,
+        p.recurring_charge_date,
+        p.receipt_text
+    FROM {{ ref('stg_opendental__payment') }} p
+    WHERE p.payment_date >= '2023-01-01'
+),
+
+-- Get split counts for validation
+SplitCounts AS MATERIALIZED (
+    SELECT 
+        payment_id,
+        COUNT(*) as total_splits,
+        COUNT(DISTINCT procedure_id) as unique_procedures,
+        COUNT(DISTINCT provider_id) as unique_providers,
+        COUNT(CASE WHEN unearned_type IN (0, 288) THEN 1 END) as transfer_splits,
+        COUNT(CASE WHEN unearned_type = 439 THEN 1 END) as treatment_plan_splits,
+        COUNT(CASE WHEN is_discount_flag THEN 1 END) as discount_splits
+    FROM {{ ref('stg_opendental__paysplit') }}
+    GROUP BY payment_id
 ),
 
 BaseSplits AS (
@@ -58,17 +100,42 @@ BaseSplits AS (
         pc.procedure_code,
         pc.procedure_description,
         pc.procedure_fee,
+        pc.procedure_status,
         
         -- Link to adjustment data if available
         adj.adjustment_amount,
         adj.adjustment_type_name,
-        adj.adjustment_category_type
+        adj.adjustment_category_type,
+        
+        -- Payment info
+        p.payment_type_id,
+        p.payment_notes,
+        p.is_split_flag,
+        p.is_recurring_cc_flag,
+        p.payment_status,
+        p.process_status,
+        p.merchant_fee,
+        p.is_cc_completed_flag,
+        p.recurring_charge_date,
+        
+        -- Split counts
+        sc.total_splits,
+        sc.unique_procedures,
+        sc.unique_providers,
+        sc.transfer_splits,
+        sc.treatment_plan_splits,
+        sc.discount_splits
         
     FROM {{ ref('stg_opendental__paysplit') }} ps
+    LEFT JOIN PaymentInfo p
+        ON ps.payment_id = p.payment_id
     LEFT JOIN {{ ref('int_procedure_complete') }} pc
         ON ps.procedure_id = pc.procedure_id
     LEFT JOIN {{ ref('int_adjustments') }} adj
         ON ps.adjustment_id = adj.adjustment_id
+    LEFT JOIN SplitCounts sc
+        ON ps.payment_id = sc.payment_id
+    WHERE p.payment_date >= '2023-01-01'
 ),
 
 SplitCategorization AS (
@@ -80,6 +147,7 @@ SplitCategorization AS (
             WHEN is_discount_flag THEN 'DISCOUNT'
             WHEN unearned_type = 288 THEN 'UNEARNED_REVENUE'
             WHEN unearned_type = 439 THEN 'TREATMENT_PLAN_PREPAYMENT'
+            WHEN unearned_type = 0 AND payment_notes LIKE '%INCOME TRANSFER%' THEN 'INCOME_TRANSFER'
             ELSE 'NORMAL_PAYMENT'
         END AS split_type,
         
@@ -103,6 +171,22 @@ SplitCategorization AS (
             ELSE TRUE
         END AS is_valid_allocation,
         
+        -- Transfer validation
+        CASE
+            WHEN payment_type_id = 0 AND 
+                 payment_notes LIKE '%INCOME TRANSFER%' AND
+                 total_splits > 20 THEN FALSE
+            ELSE TRUE
+        END AS is_valid_split_count,
+        
+        CASE
+            WHEN payment_type_id = 0 AND 
+                 payment_notes LIKE '%INCOME TRANSFER%' AND
+                 unearned_type = 439 AND
+                 procedure_status != 1 THEN FALSE
+            ELSE TRUE
+        END AS is_valid_treatment_plan,
+        
         -- Split impact classification
         CASE
             WHEN ABS(split_amount) / NULLIF(procedure_fee, 0) > 0.5 THEN 'major'
@@ -120,6 +204,12 @@ SplitCategorization AS (
             ELSE 'VERY_LARGE'
         END AS amount_category,
         
+        -- High split payment flag
+        CASE
+            WHEN total_splits > 20 THEN TRUE
+            ELSE FALSE
+        END AS is_high_split_payment,
+        
         -- Tracking fields
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
@@ -128,3 +218,14 @@ SplitCategorization AS (
 )
 
 SELECT * FROM SplitCategorization
+WHERE 
+    -- Exclude invalid high-split payments
+    (NOT is_high_split_payment OR is_valid_split_count)
+    -- Exclude invalid treatment plan payments
+    AND is_valid_treatment_plan
+    -- Exclude invalid zero amount payments
+    AND is_valid_zero_amount
+    -- Exclude invalid unearned type payments
+    AND is_valid_unearned_type
+    -- Exclude invalid allocations
+    AND is_valid_allocation
