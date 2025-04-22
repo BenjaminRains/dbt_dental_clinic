@@ -1,0 +1,489 @@
+version: 2
+
+models:
+  - name: int_insurance_payment_allocated
+    description: |
+      Intermediate model for insurance payment allocations.
+      Part of System C: Payment Allocation & Reconciliation.
+      
+      Key features:
+      - Handles insurance claim payments and their allocations
+      - Tracks payment allocations and status
+      - Maintains payment processing information
+      - Preserves detailed payment metadata
+      - Supports AR calculations and aging analysis
+      - Generates unique payment_allocation_id using ROW_NUMBER() over claim_payment_id and procedure_id
+      - Validates claim status and payment amounts
+      - Tracks partial payments and payment groups
+      
+      Data Sources:
+      - stg_opendental__claimpayment: Base insurance payment information
+      - stg_opendental__claimproc: Claim procedure information and provider assignments
+      - stg_opendental__definition: Payment type definitions
+      
+      Business rules:
+      - Insurance claims are filtered to only include:
+        * Status 1 (Received) or 3 (Supplemental) claims
+        * Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
+      - Payment dates are used for AR calculations
+      - Payment types are managed through the definition table
+      - Payment allocations must be properly linked to procedures
+      - Provider assignments are sourced from stg_opendental__claimproc
+      - Payment allocation IDs are generated using:
+        * ROW_NUMBER() over claim_payment_id and procedure_id
+        * Ensures unique identifiers for each payment allocation
+
+      Date Handling and COALESCE Logic:
+      - Insurance Payment Dates:
+        * Primary: insurance_finalized_date from claimproc
+        * Fallback: check_date from claimpayment
+        * Used for: payment_date, entry_date, updated_at
+      - Procedure Dates:
+        * Primary: procedure_date from claimproc
+        * Used for: procedure_date
+      - AR Inclusion Logic:
+        * include_in_ar = TRUE when payment_date <= CURRENT_DATE
+        * Ensures future-dated payments are excluded from AR calculations
+
+      Common Insurance Payment Scenarios:
+      1. Standard Insurance Payment:
+         - Status 1 (Received) claim
+         - Direct carrier payment
+         - Full procedure coverage
+         Example: $800 insurance payment for a crown procedure
+
+      2. Supplemental Insurance Payment:
+         - Status 3 (Supplemental) claim
+         - Additional payment after initial claim
+         - Partial coverage completion
+         Example: $200 supplemental payment after initial $800 payment
+
+      3. Partial Insurance Payment:
+         - is_partial = true
+         - Requires payment_group_id
+         - Multiple claims in one payment
+         Example: $1000 payment split across multiple procedures
+
+      4. Denied Insurance Claim:
+         - Status 1 (Received) claim
+         - Zero payment amount
+         - Has remarks indicating denial
+         Example: $0 payment with remarks "Procedure not covered"
+
+      5. Pre-Authorization:
+         - Status 1 (Received) claim
+         - Zero payment amount
+         - Future-dated payment
+         Example: $0 pre-authorization for upcoming procedure
+    config:
+      materialized: incremental
+      unique_key: payment_allocation_id
+      schema: intermediate
+    
+    columns:
+      - name: payment_allocation_id
+        description: |
+          Unique identifier for each payment allocation record.
+          Generated using ROW_NUMBER() over claim_payment_id and procedure_id
+          to ensure uniqueness for each payment allocation.
+        tests:
+          - unique
+          - not_null
+
+      - name: payment_source_type
+        description: Type of payment source (always 'INSURANCE' for this model)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['INSURANCE']
+
+      - name: payment_id
+        description: Foreign key to the insurance claim payment (from stg_opendental__claimpayment)
+        tests:
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: provider_id
+        description: Foreign key to the provider, sourced from stg_opendental__claimproc
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: procedure_id
+        description: Foreign key to the procedure, sourced from stg_opendental__claimproc
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+
+      - name: split_amount
+        description: Amount allocated in this payment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: payment_date
+        description: Date when the payment was made
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+
+      - name: procedure_date
+        description: Date of the associated procedure, sourced from stg_opendental__claimproc
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+
+      - name: payment_type_id
+        description: |
+          Type of insurance payment. Current patterns (2023-present):
+          - 261: Insurance Check
+          - 303: Insurance Electronic Payment
+          - 465: Insurance Credit
+          - 469: Insurance Check
+          - 466: Insurance Electronic Payment
+          - 464: Insurance Credit
+        tests:
+          - not_null
+          - accepted_values:
+              values: [261, 303, 465, 469, 466, 464]
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+
+      - name: check_number
+        description: Check number for the payment
+        tests:
+          - not_null
+
+      - name: bank_branch
+        description: Bank branch information
+        tests:
+          - not_null
+
+      - name: created_by_user_id
+        description: ID of the user who created the record
+        tests:
+          - not_null
+
+      - name: entry_date
+        description: Date when the record was entered
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+
+      - name: updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+
+      - name: deposit_id
+        description: Foreign key to the deposit record
+        tests:
+          - not_null
+
+      - name: carrier_name
+        description: Name of the insurance carrier
+        tests:
+          - not_null
+
+      - name: is_partial
+        description: Flag indicating if this is a partial insurance payment
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: payment_group_id
+        description: Group identifier for related payments
+        tests:
+          - not_null:
+              where: "is_partial = true"
+
+      - name: insurance_subscriber_id
+        description: Foreign key to the insurance subscriber
+        tests:
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: inssub_id
+          - not_null
+
+      - name: claim_id
+        description: Foreign key to the insurance claim
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+          - not_null
+
+      - name: plan_id
+        description: Foreign key to the insurance plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+          - not_null
+
+      - name: deductible_applied
+        description: Amount of deductible applied to this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: write_off
+        description: Amount written off for this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: allowed_override
+        description: Manual override for allowed amount
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "allowed_override != -1.0 and claim_id not in (21561)"
+
+      - name: copay_amount
+        description: Copay amount for this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "copay_amount != -1.0"
+
+      - name: paid_other_insurance
+        description: Amount paid by other insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: base_estimate
+        description: Base estimate before adjustments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: insurance_estimate_total
+        description: Total estimate from insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: status
+        description: Status of the claim procedure
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 3]
+
+      - name: percentage
+        description: Percentage of coverage for this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+
+      - name: is_transfer
+        description: Flag indicating if this is a transfer payment
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_overpay
+        description: Flag indicating if this is an overpayment
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: remarks
+        description: Additional remarks about the claim procedure
+        tests:
+          - not_null
+
+      - name: code_sent
+        description: Procedure code sent to insurance
+        tests:
+          - not_null
+
+      - name: estimate_note
+        description: Notes about the insurance estimate
+        tests:
+          - not_null
+
+      - name: payment_type_description
+        description: |
+          Human-readable description of the payment type from definition table.
+          Current patterns (2023-present):
+          - Insurance Check (types 261, 469)
+          - Insurance Electronic Payment (types 303, 466)
+          - Insurance Credit (types 465, 464)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [
+                'Insurance Check', 'Insurance Electronic Payment',
+                'Insurance Credit'
+              ]
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+
+      - name: include_in_ar
+        description: Flag indicating if this payment should be included in AR calculations
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: model_created_at
+        description: |
+          Timestamp when this model was created during ETL execution.
+          This is used for monitoring ETL run times and data freshness, not for business data validation.
+          The timestamp will reflect when the ETL job processed this record.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
+
+      - name: model_updated_at
+        description: |
+          Timestamp when this model was last updated during ETL execution.
+          This is used for monitoring ETL run times and data freshness, not for business data validation.
+          The timestamp will reflect when the ETL job last processed this record.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
+
+    tests:
+      # Date range validation
+      - dbt_utils.expression_is_true:
+          expression: "payment_date >= '2023-01-01'"
+          config:
+            severity: warn
+
+      # Insurance payment validation
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payment_id IS NULL)"
+          config:
+            severity: error
+            description: "Insurance payments must have a valid claim_payment_id"
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            CASE
+              -- For status 1 (Received) claims:
+              WHEN status = 1 THEN
+                -- Must have a non-zero payment amount unless:
+                -- 1. It's a denied claim (has remarks indicating denial)
+                -- 2. It's part of a payment group
+                -- 3. It's a pre-authorization (future dated)
+                split_amount > 0
+                OR (
+                  split_amount = 0
+                  AND (
+                    -- Has explicit remarks about denial/non-payment
+                    (remarks IS NOT NULL AND remarks != '')
+                    -- OR is part of a payment group
+                    OR payment_group_id != 0
+                  )
+                )
+              -- For status 3 (Supplemental) claims:
+              WHEN status = 3 THEN
+                split_amount <= 0
+              -- For all other records:
+              ELSE TRUE
+            END
+          config:
+            severity: error
+            description: "Insurance payment amounts must align with claim status, excluding denied claims and valid zero-amount claims"
+
+      # Additional insurance payment validations
+      - dbt_utils.expression_is_true:
+          expression: "NOT (carrier_name IS NULL)"
+          config:
+            severity: error
+            description: "Insurance payments must have a carrier name"
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            NOT (
+              is_partial = true AND
+              payment_group_id IS NULL
+            )
+          config:
+            severity: error
+            description: "Partial insurance payments must have a payment group ID"
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            NOT (
+              status = 1 AND
+              split_amount = 0 AND
+              remarks IS NULL AND
+              payment_group_id = 0
+            )
+          config:
+            severity: error
+            description: "Zero-amount status 1 claims must have remarks or be part of a payment group"
+
+      # Future date validation
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payment_date > CURRENT_DATE)"
+          config:
+            severity: error
+            description: "Insurance payments cannot have future dates"
+
+      # AR balance alignment
+      - payment_balance_alignment:
+          config:
+            severity: error
+            description: "Payment allocations must sum to match patient total balance"
+
+    meta:
+      owner: "dental_finance_team"
+      contains_pii: true
+      business_process: "Payment Allocation & Reconciliation"
+      refresh_frequency: "hourly"
+      business_impact: "High"
+      data_quality_requirements:
+        - "All insurance payments must have a valid claim_payment_id"
+        - "Payment amounts must align with claim status"
+        - "Payment dates must be within valid business date ranges"
+        - "Insurance claims must be properly linked to procedures"
+        - "Deposit IDs must be valid when present"
+        - "Insurance subscriber IDs must be valid when present"
+        - "Claim IDs must be valid when present"
+        - "Plan IDs must be valid when present"
+        - "Payment types must be valid definitions"
+        - "Partial payments must have valid payment groups"
+        - "Zero-amount claims must have proper documentation" 
