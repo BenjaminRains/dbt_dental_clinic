@@ -14,14 +14,14 @@ RUN pip install pipenv && \
     pipenv install --deploy --system
 
 # Install additional required packages
-RUN pip install networkx dbt-core dbt-postgres dbt-mysql
-
-# Copy dbt project files (including pre-installed packages)
-COPY . .
+RUN pip install networkx dbt-core dbt-postgres dbt-mysql python-dotenv
 
 # Set environment variables
 ENV DBT_PROFILES_DIR=/usr/app/dbt
 ENV DBT_PROJECT_DIR=/usr/app/dbt
+
+# Copy dbt project files (including pre-installed packages)
+COPY . .
 
 # Default command
 CMD ["dbt", "run"] 
