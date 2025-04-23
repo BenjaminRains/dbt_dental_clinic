@@ -1,0 +1,11 @@
+# Ignore common patterns
+node_modules/
+dist/
+build/
+*.pyc
+__pycache__/
+.DS_Store
+
+# Allow .env template files
+.env
+!.env.template
