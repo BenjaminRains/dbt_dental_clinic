@@ -189,15 +189,9 @@ models:
           Boolean flag indicating if this split represents a discount.
           
           Note: This field is currently unused in the source system (always 0).
-          Discounts are primarily tracked through:
+          Discounts are tracked through:
           1. procedurelog.Discount for procedure-level discounts
           2. adjustment.AdjType and AdjAmt for adjustment-level discounts
-          
-          Common adjustment types for discounts:
-          - 186: Senior discount
-          - 472, 474, 475: Provider discounts
-          - 486: Family discount
-          - 9: Cash discount
         tests:
           - not_null
 
@@ -205,16 +199,17 @@ models:
         description: |
           Type of discount if this split represents a discount.
           
-          Note: This field is currently unused in the source system (always 0).
-          For actual discount types, refer to:
+          Note: This field is currently unused in the source system and is always 0.
+          For actual discount tracking, refer to:
           1. procedurelog.Discount for procedure-level discounts
           2. adjustment.AdjType for adjustment-level discounts
-          
-          Common adjustment types for discounts:
-          - 186: Senior discount
-          - 472, 474, 475: Provider discounts
-          - 486: Family discount
-          - 9: Cash discount
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "= 0"
+              column_name: "discount_type"
+              config:
+                severity: warn
+                description: "Field is currently unused, 0 is the expected value"
 
       - name: unearned_type
         description: >
