@@ -101,6 +101,7 @@ ProcedureComplete AS (
         pl.procedure_status,
         def_status.item_name as procedure_status_desc,
         pl.procedure_fee,
+        pl.discount as procedure_discount,
         pl.tooth_number,
         pl.surface,
         pl.old_code,
