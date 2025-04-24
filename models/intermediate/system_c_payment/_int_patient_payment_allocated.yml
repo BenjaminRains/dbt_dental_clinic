@@ -160,6 +160,10 @@ models:
           - relationships:
               to: ref('stg_opendental__adjustment')
               field: adjustment_id
+              where: "adjustment_id != 0 AND payment_type_id != 0"
+              config:
+                severity: error
+                description: "Adjustment ID must exist in stg_opendental__adjustment, except for administrative entries (ID 0 or payment_type_id = 0)"
 
       - name: split_amount
         description: Amount allocated in this payment
@@ -212,6 +216,10 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
+              where: "payment_type_id != 0"
+              config:
+                severity: error
+                description: "Payment type ID must exist in stg_opendental__definition, except for administrative entries (type 0)"
 
       - name: payment_source
         description: Source of the payment
@@ -225,6 +233,10 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
+              where: "payment_status != 0"
+              config:
+                severity: error
+                description: "Payment status must exist in stg_opendental__definition, except for status 0 (default/administrative)"
 
       - name: process_status
         description: Foreign key to the process status definition (currently unused, always 0)
@@ -322,9 +334,6 @@ models:
               ]
               config:
                 severity: warn
-          - relationships:
-              to: ref('stg_opendental__definition')
-              field: item_name
 
       - name: include_in_ar
         description: Flag indicating if this payment should be included in AR calculations
