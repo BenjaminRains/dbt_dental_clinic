@@ -166,8 +166,8 @@ models:
           Legacy field for tracking payment split references. Currently unused in the system.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "= 0"
               column_name: "forward_split_id"
+              expression: "= 0"
               config:
                 severity: warn
                 description: "Field is currently unused, 0 is the expected value"
@@ -282,11 +282,17 @@ models:
       - name: unearned_type
         description: Type of unearned revenue if applicable
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "unearned_type IN (288, 439) OR unearned_type IS NULL"
+          - accepted_values:
+              values: [0, 288, 439]
+              where: "unearned_type is not null"
               config:
                 severity: error
-                description: "Unearned type must be either 288, 439, or NULL"
+                description: "Non-null unearned type must be 0 (normal payment), 288 (unearned revenue), or 439 (treatment plan)"
+          - not_null:
+              where: "unearned_type is not null"
+              config:
+                severity: error
+                description: "Unearned type must be NULL, 0 (normal payment), 288 (unearned revenue), or 439 (treatment plan)"
 
       - name: entry_date
         description: Date when the record was entered
