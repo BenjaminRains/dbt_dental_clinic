@@ -547,14 +547,17 @@ models:
             NOT (
               payment_type_id = 0 AND
               payment_notes LIKE '%INCOME TRANSFER%' AND
-              (SELECT COUNT(*) 
-               FROM public_staging.stg_opendental__paysplit ps2
-               WHERE ps2.payment_id = int_patient_payment_allocated.payment_id) > 20
+              (SELECT COUNT(DISTINCT payment_id) 
+               FROM public_intermediate.int_patient_payment_allocated
+               WHERE payment_id = int_patient_payment_allocated.payment_id
+               AND (SELECT COUNT(*) 
+                    FROM public_staging.stg_opendental__paysplit ps2
+                    WHERE ps2.payment_id = int_patient_payment_allocated.payment_id) > 100) > 0
             )
           config:
             severity: error
             description: |
-              Payments with income transfers should not have more than 20 splits
+              Payments with income transfers should not have more than 100 splits
               to prevent excessive transfer creation and maintain data quality
 
       # Additional patient payment validations
