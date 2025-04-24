@@ -125,6 +125,34 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              where: >
+                procedure_id > 0 
+                AND payment_date >= '2023-01-01'
+                AND EXISTS (
+                  SELECT 1 FROM public.procedurelog p
+                  WHERE p."ProcNum" = procedure_id
+                  AND p."ProcDate" >= '2021-01-01'
+                  AND (
+                    p."ProcDate" >= '2023-01-01'
+                    OR p."ProcNum" IN (
+                      SELECT i."ProcNum" 
+                      FROM public.insbluebook i
+                      WHERE i."DateTEntry" >= '2023-01-01'
+                    )
+                    OR p."ProcNum" IN (
+                      SELECT "ProcNum"
+                      FROM public.procgroupitem
+                    )
+                    OR p."ProcNum" IN (
+                      SELECT "ProcNum"
+                      FROM public.procnote
+                      WHERE "EntryDateTime" >= '2023-01-01'
+                    )
+                  )
+                )
+              config:
+                severity: error
+                description: "Non-zero procedure ID must exist in stg_opendental__procedurelog for payments after 2023-01-01 and procedures that meet the inclusion criteria (2021 onwards)"
 
       - name: adjustment_id
         description: Foreign key to the adjustment
@@ -199,12 +227,9 @@ models:
               field: definition_id
 
       - name: process_status
-        description: Foreign key to the process status definition
+        description: Foreign key to the process status definition (currently unused, always 0)
         tests:
           - not_null
-          - relationships:
-              to: ref('stg_opendental__definition')
-              field: definition_id
 
       - name: merchant_fee
         description: Merchant fee associated with the payment
