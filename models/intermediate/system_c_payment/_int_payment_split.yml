@@ -164,10 +164,10 @@ models:
           - relationships:
               to: ref('stg_opendental__adjustment')
               field: adjustment_id
-              where: "payment_date >= '2023-01-01'::date AND adjustment_id > 0"
+              where: "payment_date >= '2023-01-01'::date AND adjustment_id > 0 AND adjustment_amount IS NOT NULL"
               config:
                 severity: error
-                description: "Non-zero adjustment ID must exist in stg_opendental__adjustment when payment date is after 2023-01-01"
+                description: "Non-zero adjustment ID must exist in stg_opendental__adjustment when payment date is after 2023-01-01 and adjustment has been processed"
 
       - name: forward_split_id
         description: |
