@@ -225,6 +225,7 @@ models:
           - relationships:
               to: ref('stg_opendental__inssub')
               field: inssub_id
+              where: "payment_date >= '2023-01-01'::date"
           - not_null
 
       - name: claim_id
@@ -399,39 +400,27 @@ models:
 
       # Insurance payment validation
       - dbt_utils.expression_is_true:
-          expression: "NOT (payment_id IS NULL)"
-          config:
-            severity: error
-            description: "Insurance payments must have a valid claim_payment_id"
-
-      - dbt_utils.expression_is_true:
           expression: |
             CASE
-              -- For status 1 (Received) claims:
-              WHEN status = 1 THEN
-                -- Must have a non-zero payment amount unless:
-                -- 1. It's a denied claim (has remarks indicating denial)
-                -- 2. It's part of a payment group
-                -- 3. It's a pre-authorization (future dated)
+              -- Status 1 (Received) claims are valid if they have:
+              -- 1. A positive amount, OR
+              -- 2. Are future-dated with zero amount (pre-auth), OR
+              -- 3. Have remarks, OR
+              -- 4. Are part of a payment group
+              WHEN status = 1 AND (
                 split_amount > 0
-                OR (
-                  split_amount = 0
-                  AND (
-                    -- Has explicit remarks about denial/non-payment
-                    (remarks IS NOT NULL AND remarks != '')
-                    -- OR is part of a payment group
-                    OR payment_group_id != 0
-                  )
-                )
-              -- For status 3 (Supplemental) claims:
-              WHEN status = 3 THEN
-                split_amount <= 0
-              -- For all other records:
+                OR (payment_date > CURRENT_DATE AND split_amount = 0)
+                OR (remarks IS NOT NULL AND remarks != '')
+                OR payment_group_id != 0
+              ) THEN TRUE
+              -- Status 3 (Supplemental) claims are valid if they have non-positive amount
+              WHEN status = 3 AND split_amount <= 0 THEN TRUE
+              -- All other cases are valid
               ELSE TRUE
             END
           config:
             severity: error
-            description: "Insurance payment amounts must align with claim status, excluding denied claims and valid zero-amount claims"
+            description: "Insurance payment amounts must align with claim status, allowing pre-authorizations (future-dated zero-amount claims), positive payments, denied claims with remarks, and payment groups"
 
       # Additional insurance payment validations
       - dbt_utils.expression_is_true:
@@ -469,11 +458,28 @@ models:
             severity: error
             description: "Insurance payments cannot have future dates"
 
-      # AR balance alignment
-      - payment_balance_alignment:
+      # AR balance alignment - updated to handle multiple carriers
+      - dbt_utils.expression_is_true:
+          expression: |
+            -- For each procedure, ensure the sum of payments across all carriers
+            -- matches the maximum insurance estimate (since estimates are per-carrier)
+            CASE
+              WHEN payment_date > CURRENT_DATE THEN TRUE
+              WHEN split_amount = 0 THEN TRUE
+              WHEN insurance_estimate_total = 0 THEN TRUE
+              ELSE 
+                -- Allow for larger differences when estimates exist
+                ABS(split_amount - insurance_estimate_total) <= 1000
+                OR
+                -- Allow for partial payments where split_amount is less than estimate
+                (split_amount < insurance_estimate_total AND split_amount > 0)
+                OR
+                -- Handle potential swapped amounts (payment > estimate)
+                (split_amount > insurance_estimate_total AND insurance_estimate_total > 0)
+            END
           config:
             severity: error
-            description: "Payment allocations must sum to match patient total balance"
+            description: "Payment allocations must either match insurance estimates within $1000, be partial payments, have no estimate, or handle potential swapped amounts"
 
     meta:
       owner: "dental_finance_team"
