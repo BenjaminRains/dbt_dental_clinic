@@ -278,16 +278,22 @@ models:
       - name: unearned_type
         description: Type of unearned revenue if applicable
         tests:
-          - accepted_values:
-              values: [288, 439, null]
+          - dbt_utils.expression_is_true:
+              expression: "unearned_type IN (288, 439) OR unearned_type IS NULL"
+              config:
+                severity: error
+                description: "Unearned type must be either 288, 439, or NULL"
 
       - name: entry_date
         description: Date when the record was entered
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "current_date"
+              config:
+                severity: error
+                description: "Entry date must be between 2023-01-01 and current date"
 
       - name: updated_at
         description: Timestamp when the record was last updated
