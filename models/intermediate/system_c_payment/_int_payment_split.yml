@@ -150,6 +150,10 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              where: "payment_date >= '2023-01-01'::date AND procedure_id > 0"
+              config:
+                severity: error
+                description: "Non-zero procedure ID must exist in stg_opendental__procedurelog when payment date is after 2023-01-01"
 
       - name: adjustment_id
         description: |
