@@ -26,8 +26,10 @@ models:
         1. Procedure-level discounts (procedurelog.Discount)
         2. Adjustment-level discounts (adjustment.AdjType and AdjAmt)
       - Provides unified discount tracking through combined_discount_amount
-      - Maintains original discount flags for backward compatibility
       - Supports detailed discount categorization and analysis
+      
+      Note: The paysplit.IsDiscount and DiscountType fields are unused and always 0.
+      Discount tracking is handled entirely through procedure and adjustment tables.
       
       Split Categories:
       1. Regular Payment Splits:
@@ -201,22 +203,28 @@ models:
       - name: is_discount_flag
         description: |
           Boolean flag indicating if this split represents a discount.
-          Note: This field is maintained for backward compatibility as the source
-          system's IsDiscount field is unused. For actual discount information,
-          refer to combined_discount_amount and discount_category.
+          Note: This field is unused in the source system and is always false.
+          For actual discount information, refer to combined_discount_amount and discount_category.
         tests:
-          - accepted_values:
-              values: [true, false]
+          - dbt_utils.expression_is_true:
+              expression: "= false"
+              column_name: "is_discount_flag"
+              config:
+                severity: warn
+                description: "Field is currently unused, false is the expected value"
 
       - name: discount_type
         description: |
           Type of discount if this split represents a discount.
-          Note: This field is maintained for backward compatibility as the source
-          system's DiscountType field is unused. For actual discount types,
-          refer to discount_category.
+          Note: This field is unused in the source system and is always 0.
+          For actual discount types, refer to discount_category and discount_source_type.
         tests:
-          - accepted_values:
-              values: ['PROMPT_PAY', 'SENIOR', 'STAFF', 'OTHER', null]
+          - dbt_utils.expression_is_true:
+              expression: "= 0"
+              column_name: "discount_type"
+              config:
+                severity: warn
+                description: "Field is currently unused, 0 is the expected value"
 
       - name: combined_discount_amount
         description: |
