@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   dbt:
     build: .
@@ -11,12 +9,6 @@ services:
     environment:
       - DBT_PROFILES_DIR=/usr/app/dbt
       - DBT_PROJECT_DIR=/usr/app/dbt
-      - DBT_TARGET=${DBT_TARGET}
-      - DBT_MYSQL_HOST=${DBT_MYSQL_HOST}
-      - DBT_MYSQL_PORT=${DBT_MYSQL_PORT}
-      - DBT_MYSQL_DATABASE=${DBT_MYSQL_DATABASE}
-      - DBT_MYSQL_USER=${DBT_MYSQL_USER}
-      - DBT_MYSQL_PASSWORD=${DBT_MYSQL_PASSWORD}
     depends_on:
       - postgres
       - mysql
@@ -27,14 +19,8 @@ services:
     image: postgres:14
     env_file:
       - ./config/.env
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - POSTGRES_DB=${POSTGRES_DATABASE}
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -42,28 +28,18 @@ services:
     image: mysql:8.4
     env_file:
       - ./config/.env
-    environment:
-      - MYSQL_ROOT_HOST=${MYSQL_ROOT_HOST}
-      - MYSQL_ROOT_USER=${MYSQL_ROOT_USER}
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_ROOT_PORT=${MYSQL_ROOT_PORT}
     ports:
-      - "${MYSQL_ROOT_PORT}:3306"
+      - 3305:3306
     volumes:
       - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password
+    command: --authentication-plugin=mysql_native_password
 
   mariadb:
     image: mariadb:latest
     env_file:
       - ./config/.env
-    environment:
-      - MARIADB_ROOT_HOST=${MARIADB_ROOT_HOST}
-      - MARIADB_ROOT_USER=${MARIADB_ROOT_USER}
-      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
-      - MARIADB_ROOT_PORT=${MARIADB_ROOT_PORT}
     ports:
-      - "${MARIADB_ROOT_PORT}:3306"
+      - 3307:3307
     volumes:
       - mariadb_data:/var/lib/mysql
 
