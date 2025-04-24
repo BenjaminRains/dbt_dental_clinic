@@ -326,7 +326,10 @@ models:
         description: Code of the associated procedure
         tests:
           - not_null:
-              where: "procedure_id IS NOT NULL"
+              where: "procedure_id IS NOT NULL AND procedure_code IS NOT NULL"
+              config:
+                severity: error
+                description: "Procedure code must be present when procedure_id exists and we have the procedure information"
 
       - name: procedure_description
         description: Description of the associated procedure
