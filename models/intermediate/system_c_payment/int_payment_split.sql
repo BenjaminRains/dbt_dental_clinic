@@ -100,7 +100,6 @@ BaseSplits AS (
         pc.procedure_description,
         pc.procedure_fee,
         pc.procedure_status,
-        pc.discount as procedure_discount,
         
         -- Link to adjustment data if available
         adj.adjustment_amount,
@@ -125,7 +124,12 @@ BaseSplits AS (
         sc.unique_providers,
         sc.transfer_splits,
         sc.treatment_plan_splits,
-        sc.discount_splits
+        sc.discount_splits,
+        
+        -- Discount information from paysplit
+        ps.is_discount_flag,
+        ps.discount_type,
+        ps.unearned_type
         
     FROM {{ ref('stg_opendental__paysplit') }} ps
     LEFT JOIN PaymentInfo p
