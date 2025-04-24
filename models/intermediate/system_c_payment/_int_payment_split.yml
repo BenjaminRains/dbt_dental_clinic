@@ -322,10 +322,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "between '2023-01-01'::timestamp and '{{ var('max_valid_date') }}'::timestamp"
+              expression: "between '2023-01-01'::timestamp and current_timestamp"
               config:
                 severity: error
-                description: "Updated timestamp must be between 2023-01-01 and max_valid_date"
+                description: "Updated timestamp must be between 2023-01-01 and current timestamp"
 
       - name: created_by_user_id
         description: ID of the user who created the record
