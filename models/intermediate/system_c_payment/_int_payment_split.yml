@@ -407,7 +407,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['NORMAL_PAYMENT', 'DISCOUNT', 'UNEARNED_REVENUE', 'TREATMENT_PLAN_PREPAYMENT']
+              values: ['NORMAL_PAYMENT', 'DISCOUNT', 'UNEARNED_REVENUE', 'TREATMENT_PLAN_PREPAYMENT', 'INCOME_TRANSFER']
 
       - name: is_valid_zero_amount
         description: Flag indicating if a zero amount split is valid
