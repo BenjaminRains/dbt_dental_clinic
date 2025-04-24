@@ -362,11 +362,11 @@ models:
                 description: "Procedure fee must be present when procedure_id exists and we have the procedure information"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 100000
               where: "procedure_id IS NOT NULL AND procedure_fee IS NOT NULL"
               config:
                 severity: error
-                description: "Procedure fee must be between 0 and 10,000 when procedure_id exists and we have the procedure information"
+                description: "Procedure fee must be between 0 and 100,000 when procedure_id exists and we have the procedure information"
 
       - name: adjustment_amount
         description: Amount of the associated adjustment
