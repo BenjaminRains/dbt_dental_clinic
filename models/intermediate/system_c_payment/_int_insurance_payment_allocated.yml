@@ -339,15 +339,18 @@ models:
         description: |
           Human-readable description of the payment type from definition table.
           Current patterns (2023-present):
-          - Insurance Check (types 261, 469)
-          - Insurance Electronic Payment (types 303, 466)
-          - Insurance Credit (types 465, 464)
+          - Check (type 261)
+          - Credit card (type 303)
+          - Cigna EFT (type 464)
+          - Delta EFT (type 465)
+          - Echo E Check (type 466)
+          - United Concordia EFT (type 469)
         tests:
           - not_null
           - accepted_values:
               values: [
-                'Insurance Check', 'Insurance Electronic Payment',
-                'Insurance Credit'
+                'Check', 'Credit card', 'Cigna EFT',
+                'Delta EFT', 'Echo E Check', 'United Concordia EFT'
               ]
               config:
                 severity: warn
