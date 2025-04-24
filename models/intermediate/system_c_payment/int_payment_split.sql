@@ -58,15 +58,19 @@ PaymentInfo AS MATERIALIZED (
 -- Get split counts for validation
 SplitCounts AS MATERIALIZED (
     SELECT 
-        payment_id,
+        ps.payment_id,
         COUNT(*) as total_splits,
-        COUNT(DISTINCT procedure_id) as unique_procedures,
-        COUNT(DISTINCT provider_id) as unique_providers,
-        COUNT(CASE WHEN unearned_type IN (0, 288) THEN 1 END) as transfer_splits,
-        COUNT(CASE WHEN unearned_type = 439 THEN 1 END) as treatment_plan_splits,
-        COUNT(CASE WHEN is_discount_flag THEN 1 END) as discount_splits
-    FROM {{ ref('stg_opendental__paysplit') }}
-    GROUP BY payment_id
+        COUNT(DISTINCT ps.procedure_id) as unique_procedures,
+        COUNT(DISTINCT ps.provider_id) as unique_providers,
+        COUNT(CASE WHEN ps.unearned_type IN (0, 288) THEN 1 END) as transfer_splits,
+        COUNT(CASE WHEN ps.unearned_type = 439 THEN 1 END) as treatment_plan_splits,
+        COUNT(CASE WHEN pc.procedure_discount > 0 OR adj.adjustment_type_id IN (186, 472, 474, 475, 486, 9) THEN 1 END) as discount_splits
+    FROM {{ ref('stg_opendental__paysplit') }} ps
+    LEFT JOIN {{ ref('int_procedure_complete') }} pc
+        ON ps.procedure_id = pc.procedure_id
+    LEFT JOIN {{ ref('int_adjustments') }} adj
+        ON ps.adjustment_id = adj.adjustment_id
+    GROUP BY ps.payment_id
 ),
 
 BaseSplits AS (
@@ -100,6 +104,7 @@ BaseSplits AS (
         pc.procedure_description,
         pc.procedure_fee,
         pc.procedure_status,
+        pc.procedure_discount,
         
         -- Link to adjustment data if available
         adj.adjustment_amount,
@@ -124,12 +129,7 @@ BaseSplits AS (
         sc.unique_providers,
         sc.transfer_splits,
         sc.treatment_plan_splits,
-        sc.discount_splits,
-        
-        -- Discount information from paysplit
-        ps.is_discount_flag,
-        ps.discount_type,
-        ps.unearned_type
+        sc.discount_splits
         
     FROM {{ ref('stg_opendental__paysplit') }} ps
     LEFT JOIN PaymentInfo p
@@ -149,7 +149,7 @@ SplitCategorization AS (
         
         -- Split type categorization
         CASE
-            WHEN is_discount_flag THEN 'DISCOUNT'
+            WHEN procedure_discount > 0 OR adjustment_type_id IN (186, 472, 474, 475, 486, 9) THEN 'DISCOUNT'
             WHEN unearned_type = 288 THEN 'UNEARNED_REVENUE'
             WHEN unearned_type = 439 THEN 'TREATMENT_PLAN_PREPAYMENT'
             WHEN unearned_type = 0 AND payment_notes LIKE '%INCOME TRANSFER%' THEN 'INCOME_TRANSFER'
@@ -159,7 +159,8 @@ SplitCategorization AS (
         -- Split validation flags
         CASE
             WHEN split_amount = 0 AND 
-                 NOT is_discount_flag AND 
+                 procedure_discount = 0 AND 
+                 adjustment_type_id NOT IN (186, 472, 474, 475, 486, 9) AND
                  unearned_type != 288 AND 
                  procedure_id IS NULL THEN FALSE
             ELSE TRUE
