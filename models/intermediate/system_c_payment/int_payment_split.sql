@@ -83,6 +83,7 @@ BaseSplits AS (
         ps.provider_id,
         ps.procedure_id,
         ps.adjustment_id,
+        ps.forward_split_id,
         
         -- Split details
         ps.split_amount,
