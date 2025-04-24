@@ -8,8 +8,7 @@ with source as (
     select * 
     from {{ source('opendental', 'adjustment') }}
     where "AdjDate" >= '2023-01-01'::date
-        and "AdjDate" <= current_date
-        and "AdjDate" > '2000-01-01'::date
+        and "AdjDate" <= '{{ var("max_valid_date") }}'::date
     {% if is_incremental() %}
         and "AdjDate" > (select max(adjustment_date) from {{ this }})
     {% endif %}
