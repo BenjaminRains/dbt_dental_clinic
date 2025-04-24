@@ -140,6 +140,10 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              where: "payment_date >= '2023-01-01'::date AND provider_id > 0"
+              config:
+                severity: warn
+                description: "Non-zero provider ID must exist in stg_opendental__provider when payment date is after 2023-01-01. Note: Unearned revenue splits (unearned_type = 288) require a provider assignment."
 
       - name: procedure_id
         description: |
