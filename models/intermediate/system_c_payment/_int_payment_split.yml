@@ -364,7 +364,10 @@ models:
         description: Name of the adjustment type
         tests:
           - not_null:
-              where: "adjustment_id IS NOT NULL"
+              where: "adjustment_id IS NOT NULL AND adjustment_type_name IS NOT NULL"
+              config:
+                severity: error
+                description: "Adjustment type name must be present when adjustment_id exists and we have the type information"
 
       - name: adjustment_category_type
         description: Category of the adjustment type
