@@ -24,7 +24,11 @@ WITH TransferPairs AS (
         p1.payment_amount,
         ps1.unearned_type,
         ps1.procedure_id,
-        ps1.split_amount
+        ps1.split_amount,
+        ROW_NUMBER() OVER (
+            PARTITION BY p1.payment_id, p1.patient_id, p1.payment_date, ps1.split_amount, ps1.unearned_type, ps1.procedure_id
+            ORDER BY p1.entry_date, ps1.entry_date
+        ) as rn
     FROM {{ ref('stg_opendental__payment') }} p1
     JOIN {{ ref('stg_opendental__paysplit') }} ps1
         ON p1.payment_id = ps1.payment_id
@@ -39,6 +43,7 @@ ValidTransfers AS (
     SELECT 
         tp1.payment_id,
         tp1.procedure_id,
+        tp1.split_amount,
         TRUE as has_matching_pair
     FROM TransferPairs tp1
     JOIN TransferPairs tp2
@@ -49,6 +54,7 @@ ValidTransfers AS (
             WHEN tp1.unearned_type = 0 THEN 288 
             ELSE 0 
         END
+    WHERE tp1.rn = 1 AND tp2.rn = 1
 ),
 
 -- Get payment definitions with materialization
@@ -118,7 +124,7 @@ PatientPayments AS MATERIALIZED (
         ps.unearned_type,
         ROW_NUMBER() OVER (
             PARTITION BY p.payment_id, ps.procedure_id, ps.split_amount, ps.unearned_type
-            ORDER BY p.entry_date
+            ORDER BY p.entry_date, ps.entry_date
         ) as rn
     FROM {{ ref('stg_opendental__payment') }} p
     INNER JOIN {{ ref('stg_opendental__paysplit') }} ps
@@ -176,6 +182,7 @@ LEFT JOIN PaymentDefinitions pd
 LEFT JOIN ValidTransfers vt
     ON pp.payment_id = vt.payment_id
     AND pp.procedure_id = vt.procedure_id
+    AND pp.payment_amount = vt.split_amount
 WHERE 
     (vt.payment_id IS NULL 
     OR (vt.payment_id IS NOT NULL AND vt.has_matching_pair))
