@@ -34,6 +34,10 @@ models:
       - Payment allocation IDs are generated using:
         * ROW_NUMBER() over payment_id and procedure_id
         * Ensures unique identifiers for each payment allocation
+      - Payment inclusion in AR calculations:
+        * Type 0 payments are always excluded (include_in_ar = FALSE)
+        * Non-Type 0 payments are included if payment_date <= CURRENT_DATE
+        * Future-dated payments are excluded
 
       Date Handling and COALESCE Logic:
       - Patient Payment Dates:
@@ -199,7 +203,10 @@ models:
         description: |
           Type of payment. Current patterns (2023-present):
           - 71: Most common type (8,335 payments), avg $293
-          - 0: Administrative entries (1,110 payments), must be $0
+          - 0: Administrative entries (1,110 payments)
+              * Excluded from AR calculations (include_in_ar = FALSE)
+              * Can have non-zero amounts
+              * Used for internal transfers and administrative adjustments
           - 69: High value payments (965 payments)
               * Average: $1,036
               * Warning Tiers:
@@ -285,7 +292,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              max_value: "CURRENT_TIMESTAMP"
 
       - name: deposit_id
         description: Foreign key to the deposit record
@@ -316,7 +323,10 @@ models:
           Human-readable description of the payment type from definition table.
           Current patterns (2023-present):
           - Standard Payment (type 71): Most common type, avg $293
-          - Administrative (type 0): Must be $0
+          - Administrative (type 0): 
+              * Excluded from AR calculations
+              * Can have non-zero amounts
+              * Used for internal transfers and administrative adjustments
           - High Value Payment (type 69): 
               * Average: $1,036
               * Warning Tiers:
@@ -370,6 +380,83 @@ models:
               config:
                 severity: warn
                 description: "Used for ETL monitoring and audit purposes only"
+
+    tests:
+      # Income Transfer Validations (using the custom test)
+      - no_problematic_income_transfers:
+          config:
+            severity: error
+            description: |
+              Income transfers must follow strict rules:
+              - Type 0: Incoming transfers (positive amounts)
+              - Type 288: Outgoing transfers (negative amounts)
+              - Type 439: Treatment plan prepayments (requires procedure with status 1)
+
+      # Transfer Balance Validations (using the custom test)
+      - transfer_balance_validation:
+          config:
+            severity: error
+            description: |
+              Transfer balances must have matching pairs:
+              - For type 0: number of positive and negative splits must match
+              - For type 288: all splits must be negative
+              - Each amount must have matching pairs
+
+      # Payment Processing Validations
+      - dbt_utils.expression_is_true:
+          name: future_payment_validation
+          expression: "NOT (payment_date > CURRENT_DATE)"
+          config:
+            severity: error
+            description: "No future-dated payments"
+
+      - dbt_utils.expression_is_true:
+          name: refund_cc_validation
+          expression: >
+            NOT (
+              payment_type_id = 72 AND
+              is_cc_completed_flag = true
+            )
+          config:
+            severity: error
+            description: "Refunds cannot be credit card completed"
+
+      - dbt_utils.expression_is_true:
+          name: recurring_payment_validation
+          expression: >
+            NOT (
+              is_cc_completed_flag = true AND
+              recurring_charge_date IS NULL
+            )
+          config:
+            severity: error
+            description: "Recurring payments must have next charge date"
+
+      # High Value Payment Validations
+      - dbt_utils.expression_is_true:
+          name: high_value_payment_validation
+          expression: >
+            NOT (
+              payment_type_id IN (69, 574) AND
+              merchant_fee IS NULL
+            )
+          config:
+            severity: warn
+            description: "High value payments should have merchant fees"
+
+      # AR Balance Validation (using the custom test)
+      - payment_balance_alignment:
+          config:
+            severity: error
+            description: |
+              Payment allocations must match patient balance:
+              - Excludes all Type 0 payments (administrative entries)
+              - Only includes payments where include_in_ar = TRUE
+              - Allows for small rounding differences ($0.01)
+              - Excludes high-value payments (>$10,000)
+              - Excludes very recent payments (<7 days)
+              - Excludes complex payment patterns (>50 payments)
+              - Includes detailed discrepancy information
 
     meta:
       owner: "dental_finance_team"
