@@ -44,6 +44,7 @@ ValidTransfers AS (
         tp1.payment_id,
         tp1.procedure_id,
         tp1.split_amount,
+        tp1.unearned_type,
         TRUE as has_matching_pair
     FROM TransferPairs tp1
     JOIN TransferPairs tp2
@@ -183,6 +184,7 @@ LEFT JOIN ValidTransfers vt
     ON pp.payment_id = vt.payment_id
     AND pp.procedure_id = vt.procedure_id
     AND pp.payment_amount = vt.split_amount
+    AND pp.unearned_type = vt.unearned_type
 WHERE 
     (vt.payment_id IS NULL 
     OR (vt.payment_id IS NOT NULL AND vt.has_matching_pair))
