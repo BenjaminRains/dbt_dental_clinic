@@ -22,7 +22,9 @@ WITH TransferPairs AS (
         p1.patient_id,
         p1.payment_date,
         p1.payment_amount,
-        ps1.unearned_type
+        ps1.unearned_type,
+        ps1.procedure_id,
+        ps1.split_amount
     FROM {{ ref('stg_opendental__payment') }} p1
     JOIN {{ ref('stg_opendental__paysplit') }} ps1
         ON p1.payment_id = ps1.payment_id
@@ -36,12 +38,13 @@ WITH TransferPairs AS (
 ValidTransfers AS (
     SELECT 
         tp1.payment_id,
+        tp1.procedure_id,
         TRUE as has_matching_pair
     FROM TransferPairs tp1
     JOIN TransferPairs tp2
         ON tp2.patient_id = tp1.patient_id
         AND tp2.payment_date = tp1.payment_date
-        AND tp2.payment_amount = -tp1.payment_amount
+        AND tp2.split_amount = -tp1.split_amount
         AND tp2.unearned_type = CASE 
             WHEN tp1.unearned_type = 0 THEN 288 
             ELSE 0 
@@ -112,7 +115,11 @@ PatientPayments AS MATERIALIZED (
         ps.adjustment_id,
         ps.is_discount_flag,
         ps.discount_type,
-        ps.unearned_type
+        ps.unearned_type,
+        ROW_NUMBER() OVER (
+            PARTITION BY p.payment_id, ps.procedure_id, ps.split_amount, ps.unearned_type
+            ORDER BY p.entry_date
+        ) as rn
     FROM {{ ref('stg_opendental__payment') }} p
     INNER JOIN {{ ref('stg_opendental__paysplit') }} ps
         ON p.payment_id = ps.payment_id
@@ -168,6 +175,8 @@ LEFT JOIN PaymentDefinitions pd
     ON pp.payment_type_id = pd.definition_id
 LEFT JOIN ValidTransfers vt
     ON pp.payment_id = vt.payment_id
+    AND pp.procedure_id = vt.procedure_id
 WHERE 
-    vt.payment_id IS NULL 
-    OR (vt.payment_id IS NOT NULL AND vt.has_matching_pair) 
+    (vt.payment_id IS NULL 
+    OR (vt.payment_id IS NOT NULL AND vt.has_matching_pair))
+    AND pp.rn = 1  -- Only take the first occurrence of each unique combination 
