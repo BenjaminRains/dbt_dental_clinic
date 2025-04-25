@@ -13,10 +13,54 @@
     2. Transfer pair validation
     3. Payment type definitions
     4. Provider attribution via procedurelog
+    5. AR inclusion logic for payments
 */
 
--- First, get all valid transfer pairs in a more efficient way
-WITH TransferPairs AS (
+-- First, identify problematic transfers to exclude them
+WITH ProblematicTransfers AS (
+    SELECT DISTINCT
+        p.payment_id
+    FROM {{ ref('stg_opendental__payment') }} p
+    JOIN {{ ref('stg_opendental__paysplit') }} ps
+        ON p.payment_id = ps.payment_id
+    WHERE p.payment_type_id = 0
+    AND p.payment_notes LIKE '%INCOME TRANSFER%'
+    AND (
+        -- Invalid unearned_type combinations
+        (ps.unearned_type = 0 AND ps.split_amount < 0) OR
+        (ps.unearned_type = 288 AND ps.split_amount > 0) OR
+        -- Treatment plan validation
+        (ps.unearned_type = 439 AND NOT EXISTS (
+            SELECT 1 
+            FROM {{ ref('stg_opendental__procedurelog') }} proc
+            WHERE proc.procedure_id = ps.procedure_id
+            AND proc.procedure_status = 1
+        ))
+    )
+),
+
+-- Identify unbalanced transfers
+UnbalancedTransfers AS (
+    SELECT DISTINCT
+        p.payment_id
+    FROM {{ ref('stg_opendental__payment') }} p
+    JOIN {{ ref('stg_opendental__paysplit') }} ps
+        ON p.payment_id = ps.payment_id
+    WHERE p.payment_type_id = 0
+    AND p.payment_notes LIKE '%INCOME TRANSFER%'
+    AND ps.unearned_type IN (0, 288)
+    GROUP BY p.payment_id, ABS(ps.split_amount), ps.unearned_type
+    HAVING 
+        (ps.unearned_type = 0 AND 
+         COUNT(CASE WHEN ps.split_amount > 0 THEN 1 END) != 
+         COUNT(CASE WHEN ps.split_amount < 0 THEN 1 END))
+        OR
+        (ps.unearned_type = 288 AND 
+         COUNT(CASE WHEN ps.split_amount > 0 THEN 1 END) > 0)
+),
+
+-- Get all valid transfer pairs in a more efficient way
+TransferPairs AS (
     SELECT DISTINCT
         p1.payment_id,
         p1.patient_id,
@@ -36,9 +80,12 @@ WITH TransferPairs AS (
     AND p1.payment_notes LIKE '%INCOME TRANSFER%'
     AND ps1.unearned_type IN (0, 288)
     AND p1.payment_date >= '2023-01-01'
+    -- Exclude problematic transfers
+    AND p1.payment_id NOT IN (SELECT payment_id FROM ProblematicTransfers)
+    AND p1.payment_id NOT IN (SELECT payment_id FROM UnbalancedTransfers)
 ),
 
--- Then get matching pairs
+-- Then get matching pairs with improved validation
 ValidTransfers AS (
     SELECT 
         tp1.payment_id,
@@ -91,7 +138,7 @@ PaymentDefinitions AS MATERIALIZED (
     ) as t(payment_type_id)
 ),
 
--- Get patient payments with materialization and filtering
+-- Get patient payments with materialization and additional filtering
 PatientPayments AS MATERIALIZED (
     SELECT 
         p.payment_id,
@@ -133,6 +180,21 @@ PatientPayments AS MATERIALIZED (
     LEFT JOIN {{ ref('stg_opendental__procedurelog') }} proc
         ON ps.procedure_id = proc.procedure_id
     WHERE p.payment_date >= '2023-01-01'
+    -- Exclude problematic transfers
+    AND (
+        p.payment_type_id != 0 
+        OR p.payment_notes NOT LIKE '%INCOME TRANSFER%'
+        OR (
+            p.payment_id NOT IN (SELECT payment_id FROM ProblematicTransfers)
+            AND p.payment_id NOT IN (SELECT payment_id FROM UnbalancedTransfers)
+        )
+    )
+    -- Exclude future-dated payments
+    AND p.payment_date <= CURRENT_DATE
+    -- Validate refund payments (type 72)
+    AND NOT (p.payment_type_id = 72 AND p.is_cc_completed_flag = true)
+    -- Validate recurring payments
+    AND NOT (p.is_cc_completed_flag = true AND p.recurring_charge_date IS NULL)
 )
 
 -- Final select with patient payment allocations
@@ -171,9 +233,9 @@ SELECT
     pp.receipt_text,
     pd.item_name AS payment_type_description,
     CASE
-        WHEN pp.payment_type_id = 0 THEN FALSE
-        WHEN pp.payment_date <= CURRENT_DATE THEN TRUE
-        ELSE FALSE
+        WHEN pp.payment_type_id = 0 THEN FALSE  -- Always exclude Type 0 (administrative) payments
+        WHEN pp.payment_date <= CURRENT_DATE THEN TRUE  -- Include non-Type 0 payments on or before current date
+        ELSE FALSE  -- Exclude future-dated payments
     END AS include_in_ar,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
@@ -186,6 +248,7 @@ LEFT JOIN ValidTransfers vt
     AND pp.payment_amount = vt.split_amount
     AND pp.unearned_type = vt.unearned_type
 WHERE 
-    (vt.payment_id IS NULL 
-    OR (vt.payment_id IS NOT NULL AND vt.has_matching_pair))
-    AND pp.rn = 1  -- Only take the first occurrence of each unique combination 
+    (pp.payment_type_id != 0  -- Exclude Type 0 payments
+    OR pp.payment_notes NOT LIKE '%INCOME TRANSFER%'  -- Allow non-transfer Type 0 payments
+    OR vt.has_matching_pair = TRUE)  -- Allow valid transfer pairs
+    AND pp.rn = 1  -- Only take the first occurrence of each unique combination
