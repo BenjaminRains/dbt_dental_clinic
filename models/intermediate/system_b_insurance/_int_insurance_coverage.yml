@@ -69,6 +69,22 @@ models:
               to: ref('stg_opendental__patient')
               field: patient_id
 
+      - name: ordinal
+        description: |
+          Order of the insurance plan for the patient.
+          Business rules:
+          - 1 indicates primary insurance
+          - 2 indicates secondary insurance
+          - Higher numbers indicate additional insurance plans
+          - Cannot be null as all insurance plans must have an order
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              column_name: ordinal
+              min_value: 1
+              max_value: 10
+              severity: warn
+
       - name: carrier_id
         description: |
           Foreign key to the insurance carrier.
