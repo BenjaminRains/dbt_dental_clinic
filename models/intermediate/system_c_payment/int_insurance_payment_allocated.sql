@@ -104,6 +104,26 @@ ClaimProcedures AS MATERIALIZED (
     AND claim_payment_id != 0
     AND COALESCE(insurance_finalized_date, claim_procedure_date) <= CURRENT_DATE
     AND COALESCE(insurance_finalized_date, claim_procedure_date) >= '2023-01-01'
+),
+
+-- Get bluebook information for payment validation
+BluebookInfo AS MATERIALIZED (
+    SELECT
+        ib.proc_id,
+        ib.claim_id,
+        ib.plan_id,
+        ib.carrier_id,
+        ib.insurance_payment_amount,
+        ib.allowed_override_amount,
+        ib.group_id,
+        ib.claim_type,
+        ibl.allowed_fee,
+        ibl.description as allowed_fee_description,
+        ibl.created_at as allowed_fee_updated_at
+    FROM {{ ref('stg_opendental__insbluebook') }} ib
+    LEFT JOIN {{ ref('stg_opendental__insbluebooklog') }} ibl
+        ON ib.insbluebook_id = ibl.insbluebooklog_id
+    WHERE ib.created_at >= '2023-01-01'
 )
 
 -- Final select with insurance payment allocations
@@ -161,6 +181,14 @@ SELECT DISTINCT
     cp.code_sent,
     cp.estimate_note,
     pd.item_name AS payment_type_description,
+    -- Bluebook information
+    bb.insurance_payment_amount AS bluebook_payment_amount,
+    bb.allowed_override_amount,
+    bb.group_id,
+    bb.claim_type,
+    bb.allowed_fee,
+    bb.allowed_fee_description,
+    bb.allowed_fee_updated_at,
     CASE
         WHEN COALESCE(cp.insurance_finalized_date, ip.check_date) <= CURRENT_DATE THEN TRUE
         ELSE FALSE
@@ -171,4 +199,8 @@ FROM ClaimProcedures cp
 INNER JOIN InsurancePayments ip 
     ON cp.claim_payment_id = ip.claim_payment_id
 LEFT JOIN PaymentDefinitions pd
-    ON ip.payment_type_id = pd.definition_id 
+    ON ip.payment_type_id = pd.definition_id
+LEFT JOIN BluebookInfo bb
+    ON cp.procedure_id = bb.proc_id
+    AND cp.claim_id = bb.claim_id
+    AND cp.plan_id = bb.plan_id 
