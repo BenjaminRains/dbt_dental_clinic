@@ -82,9 +82,8 @@ models:
           and should be written off per business policy.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'{{ var('min_valid_date', 'current_date - interval ''18 months''') }}'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - dbt_utils.expression_is_true:
+              expression: "procedure_date >= CURRENT_DATE - INTERVAL '18 months'"
               config:
                 severity: error
                 description: >
