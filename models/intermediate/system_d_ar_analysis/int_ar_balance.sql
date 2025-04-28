@@ -14,13 +14,13 @@
     3. Tracks insurance vs patient responsibility
     4. Supports AR reporting and analysis
     
-    Note: Patient responsibility can be negative due to OpenDental's standard -$1.00 copay
-    setting, which affects both insured and self-pay procedures. This is a legitimate
-    business pattern in the source system.
+    Note: Handles duplicate claims by preserving unique procedures while
+    eliminating duplicate claim records. This is necessary due to source
+    system data quality issues where some claims appear multiple times.
 */
 
 WITH ProcedureInfo AS MATERIALIZED (
-    SELECT
+    SELECT DISTINCT ON (pc.procedure_id, cp.claim_id)
         pc.procedure_id,
         pc.patient_id,
         pc.provider_id,
@@ -43,6 +43,7 @@ WITH ProcedureInfo AS MATERIALIZED (
     LEFT JOIN {{ ref('stg_opendental__carrier') }} cr
         ON ci.plan_id = cr.carrier_id
     WHERE pc.procedure_status IN (2, 8)  -- 2 = Completed, 8 = In Progress
+    ORDER BY pc.procedure_id, cp.claim_id, ci.received_date DESC
 ),
 
 BalanceCalculations AS (
