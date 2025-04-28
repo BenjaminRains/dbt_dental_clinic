@@ -116,6 +116,7 @@ Final as (
 
         -- Foreign Keys
         pp.patient_id,
+        pp.ordinal,
         case 
             when ip.carrier_id is null then -1
             else ip.carrier_id
