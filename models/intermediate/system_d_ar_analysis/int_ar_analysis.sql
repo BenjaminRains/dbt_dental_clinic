@@ -324,7 +324,9 @@ SELECT
     pi.deductible_met,
     pi.deductible_remaining,
     pi.annual_max_met,
-    pi.annual_max_remaining
+    pi.annual_max_remaining,
+    CURRENT_TIMESTAMP as model_created_at,
+    CURRENT_TIMESTAMP as model_updated_at
 FROM PatientBalances pb
 LEFT JOIN PaymentActivity pa
     ON pb.patient_id = pa.patient_id
