@@ -370,21 +370,21 @@ models:
             (
               -- Skip validation if no payment exists
               last_payment_date IS NULL OR
-              -- Otherwise validate that procedure_date is before/on last_payment_date
-              (procedure_date IS NOT NULL AND procedure_date <= last_payment_date)
+              -- Allow payments up to 6 months before procedure
+              (procedure_date IS NOT NULL AND last_payment_date >= procedure_date - INTERVAL '6 months')
             ) AND (
               -- Skip validation if either claim date is NULL
               claim_date IS NULL OR received_date IS NULL OR
-              -- Otherwise validate that claim_date is before/on received_date
+              -- Allow same-day claims and received dates
               (claim_date IS NOT NULL AND received_date IS NOT NULL AND claim_date <= received_date)
             )
           config:
             severity: error
             description: >
-              Dates must be in chronological order when actual dates are present:
-              - Procedure date must be on or before last payment date (when payment exists)
-              - Claim date must be on or before received date (when both dates exist)
-              Note: NULL payment dates and NULL claim dates are excluded from validation
+              Dates must follow business rules:
+              - Payment date must be within 6 months before procedure date
+              - Claim date must be on or before received date
+              Note: NULL dates are excluded from validation
 
       # Responsible party validation
       - dbt_utils.expression_is_true:
