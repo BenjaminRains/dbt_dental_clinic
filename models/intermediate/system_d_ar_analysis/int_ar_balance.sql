@@ -13,6 +13,10 @@
     2. Uses shared calculations for aging and payments
     3. Tracks insurance vs patient responsibility
     4. Supports AR reporting and analysis
+    
+    Note: Patient responsibility can be negative due to OpenDental's standard -$1.00 copay
+    setting, which affects both insured and self-pay procedures. This is a legitimate
+    business pattern in the source system.
 */
 
 WITH ProcedureInfo AS MATERIALIZED (
@@ -99,7 +103,9 @@ ARBalances AS (
             ELSE 0
         END AS insurance_pending_amount,
         
-        -- Patient responsibility
+        -- Patient responsibility calculation
+        -- Note: Negative values are valid (see model documentation)
+        -- Implementation handles standard -$1.00 copay from source
         pi.procedure_fee - 
             COALESCE(pi.insurance_estimate, 0) - 
             COALESCE(bc.patient_payment_amount, 0) - 
