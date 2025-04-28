@@ -134,12 +134,21 @@ models:
               max_value: 100000
 
       - name: total_adjustment_amount
-        description: Total amount of adjustments applied to this procedure
+        description: >
+          Total amount of adjustments applied to this procedure.
+          Note: Negative values are valid and expected due to standard copay adjustments,
+          insurance write-offs, and patient discounts in the dental practice management system.
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -2000
               max_value: 100000
+              config:
+                severity: error
+                description: >
+                  Total adjustment amount must be between -$2,000 and $100,000.
+                  Negative values are valid and represent standard adjustments,
+                  copays, and write-offs in the dental practice management system.
 
       - name: current_balance
         description: >
