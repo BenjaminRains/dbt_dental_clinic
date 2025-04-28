@@ -134,13 +134,16 @@ AgingCalculations AS (
         t.payment_id,
         t.adjustment_id,
         CASE
-            WHEN CURRENT_DATE - t.transaction_date <= 30 THEN '0-30'
-            WHEN CURRENT_DATE - t.transaction_date <= 60 THEN '31-60'
-            WHEN CURRENT_DATE - t.transaction_date <= 90 THEN '61-90'
+            WHEN CURRENT_DATE - COALESCE(t.transaction_date, p.procedure_date) <= 30 THEN '0-30'
+            WHEN CURRENT_DATE - COALESCE(t.transaction_date, p.procedure_date) <= 60 THEN '31-60'
+            WHEN CURRENT_DATE - COALESCE(t.transaction_date, p.procedure_date) <= 90 THEN '61-90'
             ELSE '90+'
         END AS aging_bucket,
-        CURRENT_DATE - t.transaction_date AS days_outstanding
+        CURRENT_DATE - COALESCE(t.transaction_date, p.procedure_date) AS days_outstanding
     FROM TransactionsUnion t
+    LEFT JOIN BaseProcedures p
+        ON t.patient_id = p.patient_id
+        AND t.procedure_id = p.procedure_id
 )
 
 SELECT
