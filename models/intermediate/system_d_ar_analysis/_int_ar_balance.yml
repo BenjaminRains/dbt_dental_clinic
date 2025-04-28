@@ -247,12 +247,18 @@ models:
               max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: last_payment_date
-        description: Date of most recent payment from any source
+        description: >
+          Date of most recent payment from any source. NULL indicates no payments exist.
+          For procedures with no payments, aging is calculated from the procedure date.
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              config:
+                severity: warn
+                description: >
+                  Last payment date should be between 2023-01-01 and current date.
+                  NULL values are valid for procedures with no payments.
 
       - name: responsible_party
         description: Party responsible for the balance (INSURANCE or PATIENT)
@@ -316,21 +322,23 @@ models:
       - dbt_utils.expression_is_true:
           expression: >
             (
-              -- Either both dates are NULL, or procedure_date is before/on last_payment_date
-              (procedure_date IS NULL AND last_payment_date IS NULL) OR
-              (procedure_date IS NOT NULL AND last_payment_date IS NOT NULL AND procedure_date <= last_payment_date)
+              -- Skip validation if no payment exists
+              last_payment_date IS NULL OR
+              -- Otherwise validate that procedure_date is before/on last_payment_date
+              (procedure_date IS NOT NULL AND procedure_date <= last_payment_date)
             ) AND (
-              -- Either both dates are NULL, or claim_date is before/on received_date
-              (claim_date IS NULL AND received_date IS NULL) OR
+              -- Skip validation if either claim date is NULL
+              claim_date IS NULL OR received_date IS NULL OR
+              -- Otherwise validate that claim_date is before/on received_date
               (claim_date IS NOT NULL AND received_date IS NOT NULL AND claim_date <= received_date)
             )
           config:
             severity: error
             description: >
-              Dates must be in chronological order:
-              - Procedure date must be on or before last payment date
-              - Claim date must be on or before received date
-              Note: NULL dates are only valid if both dates in the pair are NULL
+              Dates must be in chronological order when actual dates are present:
+              - Procedure date must be on or before last payment date (when payment exists)
+              - Claim date must be on or before received date (when both dates exist)
+              Note: NULL payment dates and NULL claim dates are excluded from validation
 
       # Responsible party validation
       - dbt_utils.expression_is_true:

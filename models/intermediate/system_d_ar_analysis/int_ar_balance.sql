@@ -135,8 +135,8 @@ ARBalances AS (
         bc.last_insurance_payment_date,
         bc.last_patient_payment_date,
         GREATEST(
-            COALESCE(bc.last_insurance_payment_date, '2000-01-01'), 
-            COALESCE(bc.last_patient_payment_date, '2000-01-01')
+            bc.last_insurance_payment_date,
+            bc.last_patient_payment_date
         ) AS last_payment_date,
         
         -- Responsibility determination
