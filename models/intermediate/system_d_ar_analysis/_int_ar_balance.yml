@@ -142,12 +142,21 @@ models:
               max_value: 100000
 
       - name: current_balance
-        description: Current outstanding balance for this procedure
+        description: >
+          Current outstanding balance for this procedure.
+          Note: Negative values are valid and expected due to standard copay adjustments,
+          insurance write-offs, and patient discounts in the dental practice management system.
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -2000
               max_value: 100000
+              config:
+                severity: error
+                description: >
+                  Current balance must be between -$2,000 and $100,000.
+                  Negative values are valid and represent standard adjustments,
+                  copays, and write-offs in the dental practice management system.
 
       - name: insurance_estimate
         description: Original insurance estimate for this procedure
