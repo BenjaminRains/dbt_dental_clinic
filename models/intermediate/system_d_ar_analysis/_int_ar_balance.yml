@@ -76,12 +76,20 @@ models:
                 severity: error
 
       - name: procedure_date
-        description: Date when the procedure was performed
+        description: >
+          Date when the procedure was performed.
+          Note: Balances older than 18 months are considered unenforceable
+          and should be written off per business policy.
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
+              min_value: "'{{ var('min_valid_date', 'current_date - interval ''18 months''') }}'"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              config:
+                severity: error
+                description: >
+                  Procedure date must be within the last 18 months.
+                  Older balances are considered unenforceable and should be written off.
 
       - name: procedure_code
         description: Code identifying the type of procedure performed

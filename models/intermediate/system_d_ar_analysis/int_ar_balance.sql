@@ -43,6 +43,7 @@ WITH ProcedureInfo AS MATERIALIZED (
     LEFT JOIN {{ ref('stg_opendental__carrier') }} cr
         ON ci.plan_id = cr.carrier_id
     WHERE pc.procedure_status IN (2, 8)  -- 2 = Completed, 8 = In Progress
+    AND pc.procedure_date >= CURRENT_DATE - INTERVAL '18 months'  -- Exclude unenforceable balances
     ORDER BY pc.procedure_id, cp.claim_id, ci.received_date DESC
 ),
 
@@ -70,6 +71,7 @@ BalanceCalculations AS (
         MAX(CASE WHEN sc.is_patient_payment THEN sc.payment_date END) 
             OVER (PARTITION BY sc.patient_id, sc.procedure_id) AS last_patient_payment_date
     FROM {{ ref('int_ar_shared_calculations') }} sc
+    WHERE sc.transaction_date >= CURRENT_DATE - INTERVAL '18 months'  -- Exclude unenforceable balances
 ),
 
 ARBalances AS (
