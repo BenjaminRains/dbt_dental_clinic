@@ -81,7 +81,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: procedure_code
         description: Code identifying the type of procedure performed
@@ -205,14 +205,14 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: received_date
         description: Date when the claim was received by insurance
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: carrier_name
         description: Name of the insurance carrier associated with the claim
@@ -228,14 +228,14 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: last_patient_payment_date
         description: Date of most recent patient payment
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: last_payment_date
         description: Date of most recent payment from any source
@@ -243,7 +243,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: responsible_party
         description: Party responsible for the balance (INSURANCE or PATIENT)
@@ -265,7 +265,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: model_updated_at
         description: Timestamp when the record was last updated
@@ -273,7 +273,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
     tests:
       # Balance validation
