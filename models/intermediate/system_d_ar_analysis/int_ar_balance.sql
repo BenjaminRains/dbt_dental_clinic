@@ -113,8 +113,19 @@ ARBalances AS (
             COALESCE(bc.total_adjustment_amount, 0) AS patient_responsibility,
         
         -- Aging information
-        bc.days_outstanding,
-        bc.aging_bucket,
+        COALESCE(
+            bc.days_outstanding,
+            CURRENT_DATE - pi.procedure_date
+        ) AS days_outstanding,
+        COALESCE(
+            bc.aging_bucket,
+            CASE
+                WHEN CURRENT_DATE - pi.procedure_date <= 30 THEN '0-30'
+                WHEN CURRENT_DATE - pi.procedure_date <= 60 THEN '31-60'
+                WHEN CURRENT_DATE - pi.procedure_date <= 90 THEN '61-90'
+                ELSE '90+'
+            END
+        ) AS aging_bucket,
         
         -- Claim information
         pi.claim_id,
