@@ -4,407 +4,334 @@
     unique_key='patient_id'
 ) }}
 
-with PatientBalances as (
-    select
+/*
+    Intermediate model for AR analysis
+    Part of System D: AR Analysis
+    
+    This model:
+    1. Aggregates procedure-level balances to patient level
+    2. Provides comprehensive patient AR analysis
+    3. Builds on int_ar_balance for consistency
+    4. Uses shared calculations for payment and adjustment activity
+    5. Includes patient demographic information
+    6. Integrates with System B insurance models
+*/
+
+WITH PatientBalances AS (
+    SELECT
         patient_id,
-        total_balance as total_ar_balance,
-        balance_0_30_days,
-        balance_31_60_days,
-        balance_61_90_days,
-        balance_over_90_days,
-        insurance_estimate as estimated_insurance_ar,
-        payment_plan_due as payment_plan_balance,
-        patient_status
-    from {{ ref('stg_opendental__patient') }}
+        SUM(current_balance) AS total_ar_balance,
+        SUM(CASE WHEN aging_bucket = '0-30' THEN current_balance ELSE 0 END) AS balance_0_30_days,
+        SUM(CASE WHEN aging_bucket = '31-60' THEN current_balance ELSE 0 END) AS balance_31_60_days,
+        SUM(CASE WHEN aging_bucket = '61-90' THEN current_balance ELSE 0 END) AS balance_61_90_days,
+        SUM(CASE WHEN aging_bucket = '90+' THEN current_balance ELSE 0 END) AS balance_over_90_days,
+        SUM(insurance_pending_amount) AS estimated_insurance_ar,
+        SUM(patient_responsibility) AS patient_responsibility,
+        SUM(CASE WHEN responsible_party = 'INSURANCE' THEN current_balance ELSE 0 END) AS insurance_responsibility,
+        MAX(last_payment_date) AS last_payment_date,
+        COUNT(DISTINCT CASE WHEN current_balance > 0 THEN procedure_id END) AS open_procedures_count,
+        COUNT(DISTINCT CASE WHEN claim_id IS NOT NULL THEN claim_id END) AS active_claims_count
+    FROM {{ ref('int_ar_balance') }}
+    GROUP BY 1
 ),
 
-ProcedureFinancials as (
-    select
+PaymentActivity AS (
+    SELECT
+        p.patient_id,
+        -- Existing metrics
+        COUNT(DISTINCT 
+            CASE WHEN p.is_insurance_payment 
+            THEN p.procedure_id END
+        ) AS insurance_payment_count,
+        COUNT(DISTINCT 
+            CASE WHEN p.is_patient_payment 
+            THEN p.procedure_id END
+        ) AS patient_payment_count,
+        COALESCE(SUM(
+            CASE WHEN p.is_insurance_payment 
+            THEN p.payment_amount ELSE 0 END
+        ), 0) AS total_insurance_payments,
+        COALESCE(SUM(
+            CASE WHEN p.is_patient_payment 
+            THEN p.payment_amount ELSE 0 END
+        ), 0) AS total_patient_payments,
+        MAX(
+            CASE WHEN p.is_insurance_payment 
+            THEN p.payment_date END
+        ) AS last_insurance_payment_date,
+        MAX(
+            CASE WHEN p.is_patient_payment 
+            THEN p.payment_date END
+        ) AS last_patient_payment_date,
+        -- New System C metrics
+        COUNT(DISTINCT 
+            CASE WHEN ps.split_type = 'NORMAL_PAYMENT' 
+            THEN ps.paysplit_id END
+        ) AS split_payment_count,
+        COALESCE(SUM(ipa.merchant_fee), 0) AS total_merchant_fees,
+        COUNT(DISTINCT ipa.payment_group_id) AS payment_group_count,
+        MAX(ipa.payment_type_description) AS last_payment_type,
+        MAX(ipa.check_number) AS last_check_number,
+        MAX(ipa.bank_branch) AS last_bank_branch
+    FROM {{ ref('int_ar_shared_calculations') }} p
+    LEFT JOIN {{ ref('int_payment_split') }} ps
+        ON p.procedure_id = ps.procedure_id
+    LEFT JOIN {{ ref('int_insurance_payment_allocated') }} ipa
+        ON p.procedure_id = ipa.procedure_id
+    WHERE p.payment_date IS NOT NULL
+    GROUP BY 1
+),
+
+AdjustmentActivity AS (
+    SELECT
         patient_id,
-        sum(procedure_fee) as total_procedure_fees,
-        sum(discount) as total_procedure_discounts,
-        sum(discount_plan_amount) as total_discount_plan_amount,
-        sum(tax_amount) as total_procedure_tax,
-        count(distinct case 
-            when procedure_status = 2 then procedure_id 
-        end) as completed_procedures_count,
-        count(distinct case 
-            when procedure_status = 1 then procedure_id 
-        end) as treatment_planned_procedures_count,
-        count(distinct case 
-            when procedure_status = 6 then procedure_id 
-        end) as ordered_planned_procedures_count,
-        count(distinct case 
-            when procedure_status = 8 then procedure_id 
-        end) as in_progress_procedures_count,
-        count(distinct case 
-            when is_locked = 1 then procedure_id 
-        end) as locked_procedures_count
-    from {{ ref('stg_opendental__procedurelog') }}
-    group by 1
+        COUNT(DISTINCT CASE WHEN adjustment_type = 'WRITEOFF' THEN procedure_id END) AS writeoff_count,
+        COUNT(DISTINCT CASE WHEN adjustment_type = 'DISCOUNT' THEN procedure_id END) AS discount_count,
+        COALESCE(SUM(CASE WHEN adjustment_type = 'WRITEOFF' THEN adjustment_amount ELSE 0 END), 0) AS total_writeoffs,
+        COALESCE(SUM(CASE WHEN adjustment_type = 'DISCOUNT' THEN adjustment_amount ELSE 0 END), 0) AS total_discounts,
+        MAX(adjustment_date) AS last_adjustment_date
+    FROM {{ ref('int_ar_shared_calculations') }}
+    WHERE adjustment_date IS NOT NULL
+    GROUP BY 1
 ),
 
-InsuranceAR as (
-    select
-        cp.patient_id,
-        count(distinct case 
-            when c.claim_status not in ('P', 'R') 
-            then c.claim_id 
-        end) as pending_claims_count,
-        sum(case 
-            when c.claim_status not in ('P', 'R') 
-            then c.claim_fee 
-            else 0 
-        end) as pending_claims_amount,
-        count(distinct case 
-            when c.claim_status = 'D' 
-            then c.claim_id 
-        end) as denied_claims_count,
-        sum(case 
-            when c.claim_status = 'D' 
-            then c.claim_fee 
-            else 0 
-        end) as denied_claims_amount,
-        max(c.claim_status) as claim_status
-    from {{ ref('stg_opendental__claimproc') }} cp
-    left join {{ ref('stg_opendental__claim') }} c
-        on cp.claim_id = c.claim_id
-    group by 1
+-- Enhanced ClaimActivity CTE with System B details
+ClaimActivity AS (
+    SELECT
+        cd.patient_id,
+        -- Existing metrics
+        COUNT(DISTINCT CASE 
+            WHEN cd.claim_status = 'P' THEN cd.claim_id 
+        END) AS pending_claims_count,
+        COUNT(DISTINCT CASE 
+            WHEN cd.claim_status = 'D' THEN cd.claim_id 
+        END) AS denied_claims_count,
+        COALESCE(SUM(CASE 
+            WHEN cd.claim_status = 'P' 
+            THEN cd.billed_amount - cd.paid_amount - cd.write_off_amount 
+            ELSE 0 
+        END), 0) AS pending_claims_amount,
+        COALESCE(SUM(CASE 
+            WHEN cd.claim_status = 'D' 
+            THEN cd.billed_amount - cd.paid_amount - cd.write_off_amount 
+            ELSE 0 
+        END), 0) AS denied_claims_amount,
+        MAX(CASE 
+            WHEN cd.claim_status = 'P' 
+            THEN cd.claim_date 
+        END) AS last_pending_claim_date,
+        MAX(CASE 
+            WHEN cd.claim_status = 'D' 
+            THEN cd.claim_date 
+        END) AS last_denied_claim_date,
+        -- New System B metrics
+        COUNT(DISTINCT CASE 
+            WHEN ct.entry_timestamp >= CURRENT_DATE - INTERVAL '30 days' 
+            THEN ct.claim_id 
+        END) AS recent_status_changes,
+        MAX(ct.entry_timestamp) AS last_status_change_date,
+        COALESCE(SUM(cp.paid_amount), 0) AS total_claim_payments,
+        COUNT(DISTINCT cp.claim_payment_id) AS claim_payment_count,
+        -- Additional claim validation
+        COUNT(DISTINCT CASE 
+            WHEN cd.claim_status = 'V' 
+            THEN cd.claim_id 
+        END) AS verified_claims_count,
+        MAX(cd.verification_date) AS last_claim_verification,
+        -- Benefit utilization
+        COALESCE(SUM(
+            CASE 
+                WHEN cd.benefit_details IS NOT NULL 
+                THEN (cd.benefit_details->>'monetary_amount')::numeric 
+                ELSE 0 
+            END
+        ), 0) AS total_benefits_used,
+        COALESCE(SUM(
+            CASE 
+                WHEN cd.benefit_details IS NOT NULL 
+                THEN (cd.benefit_details->>'remaining_amount')::numeric 
+                ELSE 0 
+            END
+        ), 0) AS total_benefits_remaining
+    FROM {{ ref('int_claim_details') }} cd
+    LEFT JOIN {{ ref('int_claim_tracking') }} ct
+        ON cd.claim_id = ct.claim_id
+    LEFT JOIN {{ ref('int_claim_payments') }} cp
+        ON cd.claim_id = cp.claim_id
+    GROUP BY 1
 ),
 
-PaymentSummary as (
-    select
+-- Base patient information
+BasePatientInfo AS (
+    SELECT
+        p.patient_id,
+        p.preferred_name,
+        p.middle_initial,
+        p.patient_status,
+        p.position_code,
+        p.birth_date,
+        p.first_visit_date,
+        p.has_insurance_flag,
+        GREATEST(
+            COALESCE(MAX(ha.appointment_datetime), 
+                '1900-01-01'::timestamp),
+            COALESCE(MAX(pl.procedure_date), 
+                '1900-01-01'::date)
+        ) as last_visit_date,
+        -- Procedure counts with insurance
+        COUNT(DISTINCT CASE 
+            WHEN pl.procedure_status = 2 
+                AND pl.billing_type_one_id IS NOT NULL 
+            THEN pl.procedure_id 
+        END) as procedures_with_primary_insurance,
+        COUNT(DISTINCT CASE 
+            WHEN pl.procedure_status = 2 
+                AND pl.billing_type_two_id IS NOT NULL 
+            THEN pl.procedure_id 
+        END) as procedures_with_secondary_insurance
+    FROM {{ ref('stg_opendental__patient') }} p
+    LEFT JOIN {{ ref('stg_opendental__histappointment') }} ha 
+        ON p.patient_id = ha.patient_id
+    LEFT JOIN {{ ref('stg_opendental__procedurelog') }} pl 
+        ON p.patient_id = pl.patient_id
+    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+),
+
+-- Insurance coverage information
+InsuranceCoverage AS (
+    SELECT
         patient_id,
-        max(payment_date) as last_payment_date,
-        sum(payment_amount) as total_payment_amount,
-        sum(merchant_fee) as total_merchant_fees,
-        count(distinct case 
-            when is_split_flag = true 
-            then payment_id 
-        end) as split_payment_count,
-        count(distinct case 
-            when is_recurring_cc_flag = true 
-            then payment_id 
-        end) as recurring_cc_payment_count,
-        count(distinct case 
-            when is_cc_completed_flag = true 
-            then payment_id 
-        end) as completed_cc_payment_count,
-        count(distinct case 
-            when payment_status = 1 
-            then payment_id 
-        end) as completed_payment_count,
-        count(distinct case 
-            when payment_status = 2 
-            then payment_id 
-        end) as voided_payment_count,
-        count(distinct case 
-            when payment_source = 1 
-            then payment_id 
-        end) as cash_payment_count,
-        count(distinct case 
-            when payment_source = 2 
-            then payment_id 
-        end) as check_payment_count,
-        count(distinct case 
-            when payment_source = 3 
-            then payment_id 
-        end) as credit_card_payment_count,
-        count(distinct case 
-            when payment_source = 4 
-            then payment_id 
-        end) as patient_insurance_payment_count
-    from {{ ref('stg_opendental__payment') }}
-    group by 1
+        MAX(CASE WHEN ordinal = 1 THEN insurance_plan_id END) as primary_insurance_id,
+        MAX(CASE WHEN ordinal = 2 THEN insurance_plan_id END) as secondary_insurance_id,
+        MAX(CASE WHEN ordinal = 1 THEN group_name END) as primary_insurance_group,
+        MAX(CASE WHEN ordinal = 2 THEN group_name END) as secondary_insurance_group,
+        MAX(CASE WHEN ordinal = 1 THEN plan_type END) as primary_insurance_type,
+        MAX(CASE WHEN ordinal = 2 THEN plan_type END) as secondary_insurance_type,
+        MAX(CASE WHEN ordinal = 1 THEN effective_date END) as coverage_start_date,
+        MAX(CASE WHEN ordinal = 1 THEN termination_date END) as coverage_end_date,
+        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'coverage_percent' END) as benefit_percentage,
+        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'deductible_met' END) as deductible_met,
+        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'deductible_remaining' END) as deductible_remaining,
+        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'annual_max_met' END) as annual_max_met,
+        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'annual_max_remaining' END) as annual_max_remaining
+    FROM {{ ref('int_insurance_coverage') }}
+    GROUP BY patient_id
 ),
 
-PaymentActivity as (
-    select
-        ps.patient_id,
-        ps.last_payment_date,
-        ps.total_payment_amount,
-        ps.total_merchant_fees,
-        ps.split_payment_count,
-        ps.recurring_cc_payment_count,
-        ps.completed_cc_payment_count,
-        ps.completed_payment_count,
-        ps.voided_payment_count,
-        ps.cash_payment_count,
-        ps.check_payment_count,
-        ps.credit_card_payment_count,
-        ps.patient_insurance_payment_count,
-        sum(case 
-            when ps2.is_discount_flag = false 
-            then ps2.split_amount 
-            else 0 
-        end) as total_payments,
-        sum(case 
-            when ps2.is_discount_flag = true 
-            then ps2.split_amount 
-            else 0 
-        end) as total_discounts,
-        count(distinct case 
-            when ps2.payplan_id is not null 
-            then ps2.payplan_id 
-        end) as active_payment_plans,
-        sum(case 
-            when ps2.payplan_id is not null 
-            then ps2.split_amount 
-            else 0 
-        end) as payment_plan_payments,
-        count(distinct case 
-            when ps2.unearned_type is not null 
-            then ps2.paysplit_id 
-        end) as unearned_income_count,
-        sum(case 
-            when ps2.unearned_type is not null 
-            then ps2.split_amount 
-            else 0 
-        end) as unearned_income_amount
-    from PaymentSummary ps
-    left join {{ ref('stg_opendental__paysplit') }} ps2
-        on ps.patient_id = ps2.patient_id
-    group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
-),
-
-InsurancePayments as (
-    select
-        c.patient_id,
-        max(cp.check_date) as last_insurance_payment_date,
-        sum(cp.check_amount) as total_insurance_payments,
-        count(distinct cp.claim_payment_id) as insurance_payment_count
-    from {{ ref('stg_opendental__claimpayment') }} cp
-    left join {{ ref('stg_opendental__claim') }} c
-        on cp.claim_payment_id = c.claim_id
-    group by 1
-),
-
-StatementActivity as (
-    select
-        patient_id,
-        max(date_sent) as last_statement_date,
-        count(*) as statement_count,
-        sum(balance_total) as total_statement_balance,
-        sum(insurance_estimate) as total_statement_insurance_estimate,
-        count(distinct case when is_receipt = 1 then statement_id end) as receipt_count,
-        count(distinct case when is_invoice = 1 then statement_id end) as invoice_count
-    from {{ ref('stg_opendental__statement') }}
-    where is_sent = true
-    group by 1
-),
-
-Adjustments as (
-    select
-        patient_id,
-        max(adjustment_category) as adjustment_category,
-        sum(case 
-            when adjustment_amount < 0 
-            then abs(adjustment_amount) 
-            else 0 
-        end) as write_off_amount,
-        sum(case 
-            when adjustment_amount > 0 
-            then adjustment_amount 
-            else 0 
-        end) as credit_amount,
-        count(distinct case 
-            when adjustment_category = 'insurance_writeoff' 
-            then adjustment_id 
-        end) as insurance_writeoff_count,
-        sum(case 
-            when adjustment_category = 'insurance_writeoff' 
-            then abs(adjustment_amount) 
-            else 0 
-        end) as insurance_writeoff_amount,
-        count(distinct case 
-            when is_procedure_adjustment = 1 
-            then adjustment_id 
-        end) as procedure_adjustment_count,
-        count(distinct case 
-            when is_retroactive_adjustment = 1 
-            then adjustment_id 
-        end) as retroactive_adjustment_count,
-        count(distinct case 
-            when adjustment_category = 'provider_discount' 
-            then adjustment_id 
-        end) as provider_discount_count,
-        sum(case 
-            when adjustment_category = 'provider_discount' 
-            then abs(adjustment_amount) 
-            else 0 
-        end) as provider_discount_amount
-    from {{ ref('stg_opendental__adjustment') }}
-    group by 1
-),
-
-ClaimTracking as (
-    select
-        c.patient_id,
-        count(distinct case 
-            when ct.tracking_type = 'S' 
-            then ct.claim_id 
-        end) as submitted_claims_count,
-        count(distinct case 
-            when ct.tracking_type = 'R' 
-            then ct.claim_id 
-        end) as received_claims_count,
-        count(distinct case 
-            when ct.tracking_type = 'D' 
-            then ct.claim_id 
-        end) as tracking_denied_claims_count,
-        min(case 
-            when ct.tracking_type = 'S' 
-            then ct.entry_timestamp 
-        end) as first_claim_submission_date,
-        max(case 
-            when ct.tracking_type = 'S' 
-            then ct.entry_timestamp 
-        end) as last_claim_submission_date,
-        min(case 
-            when ct.tracking_type = 'R' 
-            then ct.entry_timestamp 
-        end) as first_claim_received_date,
-        max(case 
-            when ct.tracking_type = 'R' 
-            then ct.entry_timestamp 
-        end) as last_claim_received_date,
-        min(case 
-            when ct.tracking_type = 'D' 
-            then ct.entry_timestamp 
-        end) as first_claim_denied_date,
-        max(case 
-            when ct.tracking_type = 'D' 
-            then ct.entry_timestamp 
-        end) as last_claim_denied_date
-    from {{ ref('stg_opendental__claimtracking') }} ct
-    left join {{ ref('stg_opendental__claim') }} c
-        on ct.claim_id = c.claim_id
-    group by 1
-),
-
--- Add definition lookups
-Definitions as (
-    select
-        definition_id,
-        category_id,
-        item_name,
-        item_value,
-        item_order,
-        item_color
-    from {{ ref('stg_opendental__definition') }}
-),
-
--- Join definitions for descriptive values
-EnrichedData as (
-    select
-        pb.patient_id,
-        pb.total_ar_balance,
-        pb.balance_0_30_days,
-        pb.balance_31_60_days,
-        pb.balance_61_90_days,
-        pb.balance_over_90_days,
-        pb.estimated_insurance_ar,
-        pb.payment_plan_balance,
-        pb.patient_status,
-        -- Procedure Financials
-        pf.total_procedure_fees,
-        pf.total_procedure_discounts,
-        pf.total_discount_plan_amount,
-        pf.total_procedure_tax,
-        pf.completed_procedures_count,
-        pf.treatment_planned_procedures_count,
-        pf.ordered_planned_procedures_count,
-        pf.in_progress_procedures_count,
-        pf.locked_procedures_count,
-        -- Insurance AR
-        ia.pending_claims_count,
-        ia.pending_claims_amount,
-        ia.denied_claims_count,
-        ia.denied_claims_amount,
-        ia.claim_status,
-        -- Payment Activity
-        pa.last_payment_date,
-        pa.total_payment_amount,
-        pa.total_merchant_fees,
-        pa.split_payment_count,
-        pa.recurring_cc_payment_count,
-        pa.completed_cc_payment_count,
-        pa.completed_payment_count,
-        pa.voided_payment_count,
-        pa.cash_payment_count,
-        pa.check_payment_count,
-        pa.credit_card_payment_count,
-        pa.patient_insurance_payment_count,
-        pa.total_payments,
-        pa.total_discounts,
-        pa.active_payment_plans,
-        pa.payment_plan_payments,
-        pa.unearned_income_count,
-        pa.unearned_income_amount,
-        -- Insurance Payments
-        ip.last_insurance_payment_date,
-        ip.total_insurance_payments,
-        ip.insurance_payment_count,
-        -- Statement Activity
-        sa.last_statement_date,
-        sa.statement_count,
-        sa.total_statement_balance,
-        sa.total_statement_insurance_estimate,
-        sa.receipt_count,
-        sa.invoice_count,
-        -- Adjustments
-        adj.adjustment_category,
-        adj.write_off_amount,
-        adj.credit_amount,
-        adj.insurance_writeoff_count,
-        adj.insurance_writeoff_amount,
-        adj.procedure_adjustment_count,
-        adj.retroactive_adjustment_count,
-        adj.provider_discount_count,
-        adj.provider_discount_amount,
-        -- Claim Tracking
-        ct.submitted_claims_count,
-        ct.received_claims_count,
-        ct.tracking_denied_claims_count,
-        ct.first_claim_submission_date,
-        ct.last_claim_submission_date,
-        ct.first_claim_received_date,
-        ct.last_claim_received_date,
-        ct.first_claim_denied_date,
-        ct.last_claim_denied_date,
-        -- Patient Status Description
-        def_patient.item_name as patient_status_description,
-        -- Claim Status Description
-        def_claim.item_name as claim_status_description,
-        -- Adjustment Type Descriptions
-        def_adj.item_name as adjustment_type_description,
-        current_timestamp as created_at,
-        current_timestamp as updated_at
-    from PatientBalances pb
-    left join ProcedureFinancials pf
-        on pb.patient_id = pf.patient_id
-    left join InsuranceAR ia
-        on pb.patient_id = ia.patient_id
-    left join PaymentActivity pa
-        on pb.patient_id = pa.patient_id
-    left join InsurancePayments ip
-        on pb.patient_id = ip.patient_id
-    left join StatementActivity sa
-        on pb.patient_id = sa.patient_id
-    left join Adjustments adj
-        on pb.patient_id = adj.patient_id
-    left join ClaimTracking ct
-        on pb.patient_id = ct.patient_id
-    -- Join with definitions for descriptions
-    left join Definitions def_patient
-        on def_patient.category_id = 1 
-        and def_patient.item_value = pb.patient_status::text
-    left join Definitions def_claim
-        on def_claim.category_id = 2 
-        and def_claim.item_value = ia.claim_status::text
-    left join Definitions def_adj
-        on def_adj.category_id = 3 
-        and def_adj.item_value = adj.adjustment_category::text
+-- Final Patient Info with all details
+PatientInfo AS (
+    SELECT
+        bpi.patient_id,
+        bpi.preferred_name,
+        bpi.middle_initial,
+        bpi.patient_status,
+        bpi.position_code,
+        bpi.birth_date,
+        bpi.first_visit_date,
+        bpi.has_insurance_flag,
+        bpi.last_visit_date,
+        bpi.procedures_with_primary_insurance,
+        bpi.procedures_with_secondary_insurance,
+        ic.primary_insurance_id,
+        ic.secondary_insurance_id,
+        ic.primary_insurance_group,
+        ic.secondary_insurance_group,
+        ic.primary_insurance_type,
+        ic.secondary_insurance_type,
+        ic.coverage_start_date,
+        ic.coverage_end_date,
+        ic.benefit_percentage,
+        ic.deductible_met,
+        ic.deductible_remaining,
+        ic.annual_max_met,
+        ic.annual_max_remaining,
+        CASE 
+            WHEN bpi.position_code = 0 THEN 'Regular Patient'
+            WHEN bpi.position_code = 1 THEN 'House Account'
+            WHEN bpi.position_code = 2 THEN 'Staff Member'
+            WHEN bpi.position_code = 3 THEN 'VIP Patient'
+            WHEN bpi.position_code = 4 THEN 'Other'
+            ELSE 'Unknown'
+        END AS patient_category
+    FROM BasePatientInfo bpi
+    LEFT JOIN InsuranceCoverage ic
+        ON bpi.patient_id = ic.patient_id
 )
 
-select * from EnrichedData
+SELECT
+    pb.patient_id,
+    pb.total_ar_balance,
+    pb.balance_0_30_days,
+    pb.balance_31_60_days,
+    pb.balance_61_90_days,
+    pb.balance_over_90_days,
+    pb.estimated_insurance_ar,
+    pb.patient_responsibility,
+    pb.insurance_responsibility,
+    pb.last_payment_date,
+    pb.open_procedures_count,
+    pb.active_claims_count,
+    pa.insurance_payment_count,
+    pa.patient_payment_count,
+    pa.total_insurance_payments,
+    pa.total_patient_payments,
+    pa.last_insurance_payment_date,
+    pa.last_patient_payment_date,
+    pa.split_payment_count,
+    pa.total_merchant_fees,
+    pa.payment_group_count,
+    pa.last_payment_type,
+    pa.last_check_number,
+    pa.last_bank_branch,
+    aa.writeoff_count,
+    aa.discount_count,
+    aa.total_writeoffs,
+    aa.total_discounts,
+    aa.last_adjustment_date,
+    ca.pending_claims_count,
+    ca.denied_claims_count,
+    ca.pending_claims_amount,
+    ca.denied_claims_amount,
+    ca.last_pending_claim_date,
+    ca.last_denied_claim_date,
+    ca.recent_status_changes,
+    ca.last_status_change_date,
+    ca.total_claim_payments,
+    ca.claim_payment_count,
+    ca.verified_claims_count,
+    ca.last_claim_verification,
+    ca.total_benefits_used,
+    ca.total_benefits_remaining,
+    pi.preferred_name,
+    pi.middle_initial,
+    pi.patient_status,
+    pi.patient_category,
+    pi.birth_date,
+    pi.first_visit_date,
+    pi.last_visit_date,
+    pi.has_insurance_flag,
+    pi.procedures_with_primary_insurance,
+    pi.procedures_with_secondary_insurance,
+    pi.primary_insurance_id,
+    pi.secondary_insurance_id,
+    pi.primary_insurance_group,
+    pi.secondary_insurance_group,
+    pi.primary_insurance_type,
+    pi.secondary_insurance_type,
+    pi.coverage_start_date,
+    pi.coverage_end_date,
+    pi.benefit_percentage,
+    pi.deductible_met,
+    pi.deductible_remaining,
+    pi.annual_max_met,
+    pi.annual_max_remaining
+FROM PatientBalances pb
+LEFT JOIN PaymentActivity pa
+    ON pb.patient_id = pa.patient_id
+LEFT JOIN AdjustmentActivity aa
+    ON pb.patient_id = aa.patient_id
+LEFT JOIN ClaimActivity ca
+    ON pb.patient_id = ca.patient_id
+LEFT JOIN PatientInfo pi
+    ON pb.patient_id = pi.patient_id
+WHERE pi.patient_id IS NOT NULL  -- Ensure we only include active patients
