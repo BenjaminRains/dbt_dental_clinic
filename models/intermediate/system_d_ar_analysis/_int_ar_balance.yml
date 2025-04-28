@@ -315,11 +315,22 @@ models:
       # Date validation
       - dbt_utils.expression_is_true:
           expression: >
-            procedure_date <= last_payment_date AND
-            claim_date <= received_date
+            (
+              -- Either both dates are NULL, or procedure_date is before/on last_payment_date
+              (procedure_date IS NULL AND last_payment_date IS NULL) OR
+              (procedure_date IS NOT NULL AND last_payment_date IS NOT NULL AND procedure_date <= last_payment_date)
+            ) AND (
+              -- Either both dates are NULL, or claim_date is before/on received_date
+              (claim_date IS NULL AND received_date IS NULL) OR
+              (claim_date IS NOT NULL AND received_date IS NOT NULL AND claim_date <= received_date)
+            )
           config:
             severity: error
-            description: "Dates must be in chronological order"
+            description: >
+              Dates must be in chronological order:
+              - Procedure date must be on or before last payment date
+              - Claim date must be on or before received date
+              Note: NULL dates are only valid if both dates in the pair are NULL
 
       # Responsible party validation
       - dbt_utils.expression_is_true:
@@ -347,8 +358,12 @@ models:
             (claim_id IS NOT NULL AND carrier_name IS NOT NULL) OR
             (claim_id IS NULL AND carrier_name IS NULL)
           config:
-            severity: error
-            description: "Carrier name must be present when claim exists"
+            severity: warn
+            description: >
+              Carrier name must be present when claim exists.
+              Note: This is a known data quality issue where some valid claims
+              have plan numbers that don't map to carrier records in the system.
+              See stakeholders/insurance_carrier_mapping_issue.md for details.
 
     meta:
       business_owners: ["dental_finance_team", "insurance_team"]
