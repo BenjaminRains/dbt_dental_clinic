@@ -1,0 +1,232 @@
+version: 2
+
+models:
+  - name: int_ar_shared_calculations
+    description: >
+      Central calculation hub for AR analysis that provides common calculations
+      used across the AR analysis system. This model standardizes aging buckets,
+      payment processing, and adjustment calculations to ensure consistency
+      across all AR-related models.
+      
+      Key features:
+      - Standardizes aging bucket calculations (0-30, 31-60, 61-90, 90+ days)
+      - Provides base payment calculations for both insurance and patient payments
+      - Handles adjustment calculations and categorization
+      - Creates a unified transaction history
+      - Serves as a reference for other AR models
+      
+      Data Sources:
+      - int_patient_payment_allocated: Patient payment details
+      - int_insurance_payment_allocated: Insurance payment details
+      - int_adjustments: Adjustment details
+      - int_procedure_complete: Procedure information
+      
+      Business rules:
+      - Only includes payments and adjustments marked for AR inclusion
+      - Calculates aging based on transaction date
+      - Standardizes aging buckets across all models
+      - Combines all transaction types (procedures, payments, adjustments)
+      - Maintains consistent payment and adjustment categorization
+      
+    config:
+      materialized: table
+      schema: intermediate
+    
+    columns:
+      - name: patient_id
+        description: Unique identifier for the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+
+      - name: procedure_id
+        description: Unique identifier for the dental procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+              config:
+                severity: error
+
+      - name: transaction_date
+        description: Date of the transaction (procedure, payment, or adjustment)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: amount
+        description: Transaction amount (positive for procedures, negative for payments)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: aging_bucket
+        description: Aging category (0-30, 31-60, 61-90, 90+ days)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0-30', '31-60', '61-90', '90+']
+
+      - name: days_outstanding
+        description: Number of days the transaction has been outstanding
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: payment_date
+        description: Date of payment (if applicable)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: payment_amount
+        description: Amount of payment (if applicable)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: payment_type
+        description: Type of payment (e.g., cash, check, credit card)
+        tests:
+          - accepted_values:
+              values: ['CHECK', 'CREDIT_CARD', 'ELECTRONIC', 'CASH', 'OTHER']
+
+      - name: payment_source
+        description: Source of payment (patient or insurance)
+        tests:
+          - accepted_values:
+              values: ['PATIENT', 'INSURANCE']
+
+      - name: payment_status
+        description: Status of the payment
+        tests:
+          - accepted_values:
+              values: ['COMPLETED', 'PENDING']
+
+      - name: is_insurance_payment
+        description: Flag indicating if payment is from insurance
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_patient_payment
+        description: Flag indicating if payment is from patient
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: adjustment_date
+        description: Date of adjustment (if applicable)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: adjustment_amount
+        description: Amount of adjustment (if applicable)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: adjustment_type
+        description: Type of adjustment (e.g., write-off, discount)
+        tests:
+          - accepted_values:
+              values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', 'OTHER']
+
+      - name: adjustment_category
+        description: Category of adjustment
+        tests:
+          - accepted_values:
+              values: ['INSURANCE', 'PROVIDER', 'PATIENT']
+
+      - name: is_procedure_adjustment
+        description: Flag indicating if adjustment is procedure-specific
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_retroactive_adjustment
+        description: Flag indicating if adjustment is retroactive
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+    tests:
+      # Transaction validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (payment_date IS NOT NULL AND adjustment_date IS NULL) OR
+            (payment_date IS NULL AND adjustment_date IS NOT NULL) OR
+            (payment_date IS NULL AND adjustment_date IS NULL)
+          config:
+            severity: error
+            description: "Transaction must be either a payment or an adjustment, not both"
+
+      # Payment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (payment_date IS NOT NULL AND payment_amount > 0) OR
+            (payment_date IS NULL AND payment_amount IS NULL)
+          config:
+            severity: error
+            description: "Payment amount must be positive when payment date exists"
+
+      # Adjustment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (adjustment_date IS NOT NULL AND adjustment_amount > 0) OR
+            (adjustment_date IS NULL AND adjustment_amount IS NULL)
+          config:
+            severity: error
+            description: "Adjustment amount must be positive when adjustment date exists"
+
+      # Aging validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (aging_bucket = '0-30' AND days_outstanding <= 30) OR
+            (aging_bucket = '31-60' AND days_outstanding > 30 AND days_outstanding <= 60) OR
+            (aging_bucket = '61-90' AND days_outstanding > 60 AND days_outstanding <= 90) OR
+            (aging_bucket = '90+' AND days_outstanding > 90)
+          config:
+            severity: error
+            description: "Aging bucket must match days outstanding"
+
+      # Payment source validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (is_insurance_payment = true AND is_patient_payment = false) OR
+            (is_insurance_payment = false AND is_patient_payment = true) OR
+            (is_insurance_payment = false AND is_patient_payment = false)
+          config:
+            severity: error
+            description: "Payment must be either from insurance or patient, not both"
+
+    meta:
+      business_owners: ["dental_finance_team", "insurance_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "Transactions must be properly categorized as payments or adjustments"
+        - "Payment amounts must be positive when payment date exists"
+        - "Adjustment amounts must be positive when adjustment date exists"
+        - "Aging buckets must correctly reflect days outstanding"
+        - "Payment source must be clearly identified (insurance or patient)"
+        - "All calculations must be consistent across AR models"
+        - "Transaction dates must be in chronological order"
+        - "Amounts must be properly signed (positive for procedures, negative for payments)" 
