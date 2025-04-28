@@ -83,7 +83,8 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "procedure_date >= CURRENT_DATE - INTERVAL '18 months'"
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: procedure_date
               config:
                 severity: error
                 description: >
