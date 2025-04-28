@@ -1,0 +1,365 @@
+version: 2
+
+models:
+  - name: int_ar_balance
+    description: >
+      Procedure-level Accounts Receivable balance model that tracks detailed financial
+      information for each dental procedure. This model serves as the foundation for
+      AR analysis, providing granular visibility into procedure balances, insurance
+      claims, and patient responsibility.
+      
+      Key features:
+      - Tracks procedure-level AR balances
+      - Uses shared calculations for aging and payments
+      - Monitors insurance vs patient responsibility
+      - Supports detailed AR reporting and analysis
+      - Maintains procedure-level aging information
+      - Includes insurance carrier information
+      
+      Data Sources:
+      - int_procedure_complete: Base procedure information
+      - stg_opendental__claimproc: Insurance claim procedure details
+      - stg_opendental__claim: Insurance claim information
+      - stg_opendental__carrier: Insurance carrier details
+      - int_ar_shared_calculations: Common payment and adjustment calculations
+      
+      Business rules:
+      - Only includes procedures with positive balances or include_in_ar = TRUE
+      - Calculates aging based on procedure date
+      - Determines responsible party (insurance vs patient)
+      - Tracks insurance estimates and pending amounts
+      - Maintains detailed payment and adjustment history
+      - Links insurance claims to their respective carriers
+      
+    config:
+      materialized: incremental
+      unique_key: ar_balance_id
+      schema: intermediate
+    
+    columns:
+      - name: ar_balance_id
+        description: >
+          Primary key - Unique identifier for the AR balance record. This is a
+          surrogate key generated using ROW_NUMBER().
+        tests:
+          - unique
+          - not_null
+
+      - name: procedure_id
+        description: Unique identifier for the dental procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+              config:
+                severity: error
+
+      - name: patient_id
+        description: Unique identifier for the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+
+      - name: provider_id
+        description: Unique identifier for the provider who performed the procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                severity: error
+
+      - name: procedure_date
+        description: Date when the procedure was performed
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: procedure_code
+        description: Code identifying the type of procedure performed
+        tests:
+          - not_null
+
+      - name: procedure_description
+        description: Human-readable description of the procedure
+        tests:
+          - not_null
+
+      - name: procedure_fee
+        description: Original fee for the procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: insurance_payment_amount
+        description: Total amount paid by insurance for this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: patient_payment_amount
+        description: Total amount paid by patient for this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: total_payment_amount
+        description: Total amount paid for this procedure (insurance + patient)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: total_adjustment_amount
+        description: Total amount of adjustments applied to this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: current_balance
+        description: Current outstanding balance for this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: insurance_estimate
+        description: Original insurance estimate for this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: insurance_pending_amount
+        description: Amount still pending from insurance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: patient_responsibility
+        description: Amount owed by patient
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: days_outstanding
+        description: Number of days the balance has been outstanding
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: aging_bucket
+        description: Aging category (0-30, 31-60, 61-90, 90+ days)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0-30', '31-60', '61-90', '90+']
+
+      - name: claim_id
+        description: Unique identifier for the insurance claim
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              config:
+                severity: error
+
+      - name: claim_status
+        description: Current status of the insurance claim
+        tests:
+          - accepted_values:
+              values: ['P', 'R', 'D', 'S', 'C']
+
+      - name: claim_status_description
+        description: Human-readable description of the claim's status
+        tests:
+          - not_null
+
+      - name: claim_date
+        description: Date when the claim was submitted
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: received_date
+        description: Date when the claim was received by insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: carrier_name
+        description: Name of the insurance carrier associated with the claim
+        tests:
+          - relationships:
+              to: ref('stg_opendental__carrier')
+              field: carrier_name
+              config:
+                severity: error
+
+      - name: last_insurance_payment_date
+        description: Date of most recent insurance payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: last_patient_payment_date
+        description: Date of most recent patient payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: last_payment_date
+        description: Date of most recent payment from any source
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: responsible_party
+        description: Party responsible for the balance (INSURANCE or PATIENT)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['INSURANCE', 'PATIENT']
+
+      - name: include_in_ar
+        description: Flag indicating whether to include this procedure in AR calculations
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: model_created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+      - name: model_updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "{{ var('max_valid_date', 'current_date') }}"
+
+    tests:
+      # Balance validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            current_balance = procedure_fee - insurance_payment_amount - 
+            patient_payment_amount - total_adjustment_amount
+          config:
+            severity: error
+            description: "Current balance must equal procedure fee minus payments and adjustments"
+
+      # Insurance validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            insurance_pending_amount >= 0 AND insurance_estimate >= 0
+          config:
+            severity: error
+            description: "Insurance amounts must be non-negative"
+
+      # Payment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            insurance_payment_amount >= 0 AND patient_payment_amount >= 0 AND
+            total_payment_amount = insurance_payment_amount + patient_payment_amount
+          config:
+            severity: error
+            description: "Payment amounts must be non-negative and sum correctly"
+
+      # Adjustment validation
+      - dbt_utils.expression_is_true:
+          expression: "total_adjustment_amount >= 0"
+          config:
+            severity: error
+            description: "Adjustment amount must be non-negative"
+
+      # Date validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            procedure_date <= last_payment_date AND
+            claim_date <= received_date
+          config:
+            severity: error
+            description: "Dates must be in chronological order"
+
+      # Responsible party validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (responsible_party = 'INSURANCE' AND claim_id IS NOT NULL AND claim_status IN ('P', 'R', 'S')) OR
+            (responsible_party = 'PATIENT' AND (claim_id IS NULL OR claim_status NOT IN ('P', 'R', 'S')))
+          config:
+            severity: error
+            description: "Responsible party must match claim presence and status"
+
+      # Aging validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (aging_bucket = '0-30' AND days_outstanding <= 30) OR
+            (aging_bucket = '31-60' AND days_outstanding > 30 AND days_outstanding <= 60) OR
+            (aging_bucket = '61-90' AND days_outstanding > 60 AND days_outstanding <= 90) OR
+            (aging_bucket = '90+' AND days_outstanding > 90)
+          config:
+            severity: error
+            description: "Aging bucket must match days outstanding"
+
+      # Carrier validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (claim_id IS NOT NULL AND carrier_name IS NOT NULL) OR
+            (claim_id IS NULL AND carrier_name IS NULL)
+          config:
+            severity: error
+            description: "Carrier name must be present when claim exists"
+
+    meta:
+      business_owners: ["dental_finance_team", "insurance_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "Current balance must equal procedure fee minus payments and adjustments"
+        - "Insurance amounts must be non-negative"
+        - "Payment amounts must be non-negative and sum correctly"
+        - "Adjustment amount must be non-negative"
+        - "Dates must be in chronological order"
+        - "Responsible party must match claim presence and status"
+        - "Aging buckets must be correctly calculated based on procedure date"
+        - "Include in AR flag must be set correctly based on business rules"
+        - "All financial metrics must be properly calculated at the procedure level"
+        - "Insurance carrier information must be correctly linked to claims" 
