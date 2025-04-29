@@ -50,7 +50,7 @@ models:
           transactions rather than actual procedures.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "procedure_id >= 0"
+              expression: ">= 0"  # Simplified expression since it's already applied to procedure_id
               config:
                 severity: error
                 description: "procedure_id must be non-negative"
