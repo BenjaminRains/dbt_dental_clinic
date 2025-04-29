@@ -53,9 +53,23 @@ validation_failures as (
         adjustment_id,
         'Invalid procedure flags or missing documentation' as failure_reason
     from staging_data
-    where (procedure_id is not null and is_procedure_adjustment = 0)
-        or (procedure_id is null and is_procedure_adjustment = 1)
-        or (procedure_id is null and (adjustment_note is null or trim(adjustment_note) = ''))
+    where 
+        -- Check for invalid procedure flag combinations
+        (procedure_id > 0 AND is_procedure_adjustment = false)
+        OR (procedure_id = 0 AND is_procedure_adjustment = true)
+        -- Only require documentation for specific cases
+        OR (
+            procedure_id = 0 
+            AND (adjustment_note IS NULL OR trim(adjustment_note) = '')
+            AND (
+                -- Require documentation for insurance writeoffs
+                adjustment_type_id = 188
+                -- Require documentation for large adjustments
+                OR adjustment_amount <= -1000
+                -- Require documentation for reallocations
+                OR adjustment_type_id = 235
+            )
+        )
 
     UNION ALL
 
@@ -64,8 +78,8 @@ validation_failures as (
         adjustment_id,
         'Invalid retroactive adjustment flag' as failure_reason
     from staging_data
-    where (procedure_date != adjustment_date and is_retroactive_adjustment = 0)
-        or (procedure_date = adjustment_date and is_retroactive_adjustment = 1)
+    where (procedure_date != adjustment_date and is_retroactive_adjustment = false)
+        or (procedure_date = adjustment_date and is_retroactive_adjustment = true)
 
     UNION ALL
 
@@ -74,10 +88,10 @@ validation_failures as (
         adjustment_id,
         'Invalid discount flags' as failure_reason
     from staging_data
-    where (adjustment_type_id in (472, 485, 655) and is_employee_discount = 0)
-        or (adjustment_type_id not in (472, 485, 655) and is_employee_discount = 1)
-        or (adjustment_type_id in (474, 475, 601) and is_provider_discount = 0)
-        or (adjustment_type_id not in (474, 475, 601) and is_provider_discount = 1)
+    where (adjustment_type_id in (472, 485, 655) and is_employee_discount = false)
+        or (adjustment_type_id not in (472, 485, 655) and is_employee_discount = true)
+        or (adjustment_type_id in (474, 475, 601) and is_provider_discount = false)
+        or (adjustment_type_id not in (474, 475, 601) and is_provider_discount = true)
 
     UNION ALL
 
@@ -89,54 +103,62 @@ validation_failures as (
     where adjustment_type_id = 188 and adjustment_category != 'insurance_writeoff'
         or adjustment_type_id = 474 and adjustment_category != 'provider_discount'
         or adjustment_type_id = 186 and adjustment_category != 'senior_discount'
-),
-large_adjustment_warnings as (
-    select 
-        adjustment_id,
-        'WARNING: Large adjustment' as message_type,
-        adjustment_date,
-        adjustment_amount,
-        provider_id,
-        procedure_id,
-        adjustment_type_id,
-        case 
-            when abs(adjustment_amount) >= 5000 then 'CRITICAL'
-            when abs(adjustment_amount) >= 2500 then 'HIGH'
-            else 'MEDIUM'
-        end as warning_level
-    from staging_data
-    where abs(adjustment_amount) >= 1000
-),
-combined_results as (
-    -- Validation Failures
-    select 
-        adjustment_id,
-        'FAIL' as message_type,
-        failure_reason as description,
-        null as warning_level,
-        adjustment_date,
-        adjustment_amount,
-        provider_id,
-        adjustment_type_id
-    from validation_failures v
-    join staging_data a using (adjustment_id)
-    
+
     UNION ALL
-    
-    -- Warnings
-    select 
+
+    -- Test 1: procedure_id and is_procedure_adjustment consistency
+    select
         adjustment_id,
-        message_type,
-        'Large adjustment detected' as description,
-        warning_level,
-        adjustment_date,
-        adjustment_amount,
-        provider_id,
-        adjustment_type_id
-    from large_adjustment_warnings
+        'Invalid procedure_id and is_procedure_adjustment relationship' as failure_reason
+    from staging_data
+    where not (
+        (procedure_id > 0 and is_procedure_adjustment = true) or
+        (procedure_id = 0 and is_procedure_adjustment = false)
+    )
+
+    UNION ALL
+
+    -- Test 2: adjustment_amount validation
+    select
+        adjustment_id,
+        'Invalid adjustment amount for procedure adjustment' as failure_reason
+    from staging_data
+    where adjustment_amount = 0
+        and is_procedure_adjustment = true
+        and procedure_id > 0
+
+    UNION ALL
+
+    -- Test 3: date validation
+    select
+        adjustment_id,
+        'Invalid adjustment date' as failure_reason
+    from staging_data
+    where adjustment_date < '2023-01-01'::date
+        or adjustment_date > current_date
+),
+detailed_failures as (
+    select 
+        v.adjustment_id,
+        v.failure_reason,
+        s.adjustment_date,
+        s.adjustment_amount,
+        s.procedure_id,
+        s.is_procedure_adjustment,
+        s.adjustment_type_id,
+        s.adjustment_category,
+        s.adjustment_note,
+        s.provider_id,
+        s.patient_id,
+        s.is_retroactive_adjustment,
+        s.is_employee_discount,
+        s.is_provider_discount,
+        s.adjustment_direction
+    from validation_failures v
+    join staging_data s using (adjustment_id)
 )
-select * from combined_results
+select * from detailed_failures
 order by 
-    case when message_type = 'FAIL' then 1 else 2 end,
-    abs(adjustment_amount) desc
+    failure_reason,
+    adjustment_date desc
 
