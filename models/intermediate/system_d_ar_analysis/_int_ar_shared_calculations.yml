@@ -143,13 +143,33 @@ models:
               max_value: 100000
 
       - name: adjustment_type
-        description: Type of adjustment (e.g., write-off, discount)
+        description: >
+          High-level categorization of adjustments for AR analysis.
+          This is a simplified view used specifically for AR reporting:
+          - WRITEOFF: Insurance or provider write-offs
+          - DISCOUNT: Any type of discount (provider, senior, employee, etc.)
+          - CREDIT: Credits applied to the account
+          - OTHER: All other adjustment types
         tests:
           - accepted_values:
               values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', 'OTHER']
 
       - name: adjustment_category
-        description: Category of adjustment
+        description: >
+          Detailed categorization of adjustments from the source system.
+          This preserves the original categorization from OpenDental with our standardized values:
+          - insurance_writeoff: Insurance-related write-offs
+          - provider_discount: Discounts authorized by providers
+          - senior_discount: Senior citizen discounts
+          - employee_discount: Employee-specific discounts
+          - cash_discount: Discounts for cash payments
+          - patient_refund: Refunds to patients
+          - referral_credit: Credits for referrals
+          - new_patient_discount: Discounts for new patients
+          - admin_correction: Administrative corrections
+          - admin_adjustment: Administrative adjustments
+          - unearned_income: Income not yet earned
+          - other: All other adjustment types
         tests:
           - accepted_values:
               values: ['insurance_writeoff', 'provider_discount', 'senior_discount', 'reallocation',
@@ -158,13 +178,17 @@ models:
                'unearned_income', 'other']
 
       - name: is_procedure_adjustment
-        description: Flag indicating if adjustment is procedure-specific
+        description: >
+          Flag indicating if the adjustment is tied to a specific procedure.
+          True when the adjustment is procedure-specific, false for general account adjustments.
         tests:
           - accepted_values:
               values: [true, false]
 
       - name: is_retroactive_adjustment
-        description: Flag indicating if adjustment is retroactive
+        description: >
+          Flag indicating if the adjustment was applied after the original procedure date.
+          True when adjustment_date > procedure_date, false otherwise.
         tests:
           - accepted_values:
               values: [true, false]
