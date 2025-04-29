@@ -115,10 +115,19 @@ models:
                 description: "Payment amount must be between -25,000 and 25,000"
 
       - name: payment_type
-        description: Type of payment (e.g., cash, check, credit card)
+        description: >
+          Type of payment:
+          - CHECK: Check payments (including insurance checks)
+          - CREDIT_CARD: Credit card payments (including insurance credit)
+          - ELECTRONIC: Electronic payments (including insurance electronic)
+          - CASH: Cash payments
+          - STANDARD: Standard/regular payments
+          - ADMINISTRATIVE: Administrative payments
+          - REFUND: Refund payments
+          - OTHER: Any other payment types
         tests:
           - accepted_values:
-              values: ['CHECK', 'CREDIT_CARD', 'ELECTRONIC', 'CASH', 'OTHER']
+              values: ['CHECK', 'CREDIT_CARD', 'ELECTRONIC', 'CASH', 'STANDARD', 'ADMINISTRATIVE', 'REFUND', 'OTHER']
 
       - name: payment_source
         description: >
