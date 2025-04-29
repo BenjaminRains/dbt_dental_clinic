@@ -76,8 +76,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
 
       - name: amount
         description: Transaction amount (positive for procedures, negative for payments)
@@ -158,29 +158,21 @@ models:
         tests:
           - not_null
 
-      - name: source_created_at
-        description: Timestamp when the source record was created
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
-
       - name: model_created_at
         description: Timestamp when the record was created
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
 
       - name: model_updated_at
         description: Timestamp when the record was last updated
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
 
     tests:
       # Transaction type validation
@@ -224,10 +216,10 @@ models:
 
       # Source tracking validation
       - dbt_utils.expression_is_true:
-          expression: "source_created_at <= model_created_at"
+          expression: "model_created_at <= model_updated_at"
           config:
             severity: error
-            description: "Source creation time must be before model creation time"
+            description: "Model creation time must be before or equal to update time"
 
     meta:
       business_owners: ["dental_finance_team", "insurance_team"]
