@@ -61,7 +61,8 @@ BaseAdjustments AS (
         adjustment_amount,
         adjustment_type_id AS adjustment_type_id_raw,
         adjustment_type_name,
-        adjustment_category_type AS adjustment_category,
+        adjustment_category,
+        adjustment_category_type,
         is_procedure_adjustment,
         is_retroactive_adjustment,
         CAST(adjustment_id AS TEXT) AS adjustment_id
@@ -183,6 +184,7 @@ SELECT
         ELSE 'OTHER'
     END AS adjustment_type,
     ba.adjustment_category,
+    ba.adjustment_category_type,
     ba.is_procedure_adjustment,
     ba.is_retroactive_adjustment
     
