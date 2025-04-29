@@ -16,7 +16,26 @@
     5. Uses shared calculations for payment activity
 */
 
-WITH CurrentSnapshot AS (
+WITH PreviousSnapshot AS (
+    SELECT
+        snapshot_date,
+        patient_id,
+        total_ar_balance,
+        balance_0_30_days,
+        balance_31_60_days,
+        balance_61_90_days,
+        balance_over_90_days,
+        estimated_insurance_ar,
+        patient_responsibility,
+        insurance_responsibility,
+        open_procedures_count,
+        active_claims_count,
+        model_created_at as source_created_at
+    FROM {{ this }}
+    WHERE snapshot_date = CURRENT_DATE - INTERVAL '1 day'
+),
+
+CurrentSnapshot AS (
     SELECT
         CURRENT_DATE AS snapshot_date,
         patient_id,
@@ -94,15 +113,37 @@ SELECT
     cs.open_procedures_count,
     cs.active_claims_count,
     
+    -- Previous snapshot values
+    ps.total_ar_balance AS previous_total_ar_balance,
+    ps.balance_0_30_days AS previous_balance_0_30_days,
+    ps.balance_31_60_days AS previous_balance_31_60_days,
+    ps.balance_61_90_days AS previous_balance_61_90_days,
+    ps.balance_over_90_days AS previous_balance_over_90_days,
+    ps.estimated_insurance_ar AS previous_estimated_insurance_ar,
+    ps.patient_responsibility AS previous_patient_responsibility,
+    ps.insurance_responsibility AS previous_insurance_responsibility,
+    ps.open_procedures_count AS previous_open_procedures_count,
+    ps.active_claims_count AS previous_active_claims_count,
+    
+    -- Change tracking
+    cs.total_ar_balance - COALESCE(ps.total_ar_balance, 0) AS ar_balance_change,
+    CASE 
+        WHEN COALESCE(ps.total_ar_balance, 0) = 0 THEN 0
+        ELSE (cs.total_ar_balance - COALESCE(ps.total_ar_balance, 0)) / NULLIF(ps.total_ar_balance, 0)
+    END AS ar_balance_change_percentage,
+    
     -- Collection efficiency
     ce.collection_efficiency_30_days,
     ce.collection_efficiency_60_days,
     ce.collection_efficiency_90_days,
     
     -- Metadata
+    ps.source_created_at,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
     
 FROM CurrentSnapshot cs
+LEFT JOIN PreviousSnapshot ps
+    ON cs.patient_id = ps.patient_id
 LEFT JOIN CollectionEfficiency ce
     ON cs.patient_id = ce.patient_id
