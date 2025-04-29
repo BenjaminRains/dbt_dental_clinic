@@ -59,12 +59,9 @@ BaseAdjustments AS (
         procedure_id,
         adjustment_date,
         adjustment_amount,
-        adjustment_type_id AS adjustment_type_id_raw,
-        adjustment_type_name,
         adjustment_category,
-        adjustment_category_type,
-        is_procedure_adjustment,
-        is_retroactive_adjustment,
+        CASE WHEN is_procedure_adjustment = 1 THEN true ELSE false END as is_procedure_adjustment,
+        CASE WHEN is_retroactive_adjustment = 1 THEN true ELSE false END as is_retroactive_adjustment,
         CAST(adjustment_id AS TEXT) AS adjustment_id
     FROM {{ ref('int_adjustments') }}
 ),
@@ -178,13 +175,12 @@ SELECT
     ba.adjustment_date,
     ba.adjustment_amount,
     CASE
-        WHEN ba.adjustment_type_name LIKE '%Write%' THEN 'WRITEOFF'
-        WHEN ba.adjustment_type_name LIKE '%Discount%' THEN 'DISCOUNT'
-        WHEN ba.adjustment_type_name LIKE '%Credit%' THEN 'CREDIT'
+        WHEN ba.adjustment_category = 'insurance_writeoff' THEN 'WRITEOFF'
+        WHEN ba.adjustment_category LIKE '%discount%' THEN 'DISCOUNT'
+        WHEN ba.adjustment_category LIKE '%credit%' THEN 'CREDIT'
         ELSE 'OTHER'
     END AS adjustment_type,
     ba.adjustment_category,
-    ba.adjustment_category_type,
     ba.is_procedure_adjustment,
     ba.is_retroactive_adjustment
     
