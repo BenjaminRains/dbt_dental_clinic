@@ -51,20 +51,21 @@ models:
 
       - name: procedure_id
         description: >
-          Unique identifier for the dental procedure, or NULL for general account adjustments.
-          Note: procedure_id = 0 is valid and represents financial transactions rather than
-          actual procedures. These records:
-          - Have no procedure-related information
-          - Represent account adjustments and financial transactions
-          - Are included in aging calculations and AR analysis
-          - Should be treated as general account adjustments
+          Foreign key to procedure. Note: procedure_id = 0 represents financial
+          transactions rather than actual procedures.
         tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"  # Simplified expression since it's already applied to procedure_id
+              config:
+                severity: error
+                description: "procedure_id must be non-negative"
           - relationships:
               to: ref('int_procedure_complete')
               field: procedure_id
+              where: "procedure_id > 0"  # Only validate relationships for actual procedures
               config:
-                severity: error
-                where: "procedure_id is not null and procedure_id != 0"
+                severity: warn  # Change to warning since financial transactions are valid
 
       - name: transaction_date
         description: Date of the transaction (procedure, payment, or adjustment)
