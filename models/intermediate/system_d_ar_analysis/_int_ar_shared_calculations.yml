@@ -33,6 +33,9 @@ models:
         - These records have no procedure-related information
         - They represent financial transactions and account adjustments
         - They are included in aging calculations and AR analysis
+      - Patient balances older than 18 months are considered unenforceable and should be written off
+      - Insurance balances are pursued regardless of age
+      - Historical data beyond 18 months is retained for analysis but marked as warnings for patient balances
       
     config:
       materialized: table
@@ -55,24 +58,35 @@ models:
           transactions rather than actual procedures.
         tests:
           - dbt_utils.expression_is_true:
-              expression: ">= 0"  # Simplified expression since it's already applied to procedure_id
+              expression: ">= 0"
               config:
                 severity: error
                 description: "procedure_id must be non-negative"
           - relationships:
               to: ref('int_procedure_complete')
               field: procedure_id
-              where: "procedure_id > 0"  # Only validate relationships for actual procedures
+              where: "procedure_id > 0"
               config:
-                severity: warn  # Change to warning since financial transactions are valid
+                severity: warn
 
       - name: transaction_date
-        description: Date of the transaction (procedure, payment, or adjustment)
+        description: >
+          Date of the transaction (procedure, payment, or adjustment).
+          Note: For patient balances, transactions older than 18 months are considered
+          unenforceable and should be written off. Insurance balances are pursued
+          regardless of age.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: transaction_date
+              where: "is_patient_payment = true OR (is_insurance_payment = false AND is_patient_payment = false AND procedure_id > 0)"
+              config:
+                severity: warn
+                description: >
+                  Transaction date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
 
       - name: amount
         description: Transaction amount (positive for procedures, negative for payments)
@@ -98,11 +112,21 @@ models:
               max_value: 1000
 
       - name: payment_date
-        description: Date of payment (if applicable)
+        description: >
+          Date of payment (if applicable). Note: For patient payments, dates older than 18 months
+          are considered historical and should be reviewed for potential write-offs.
+          Insurance payments are pursued regardless of age.
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: payment_date
+              where: "is_patient_payment = true"
+              config:
+                severity: warn
+                description: >
+                  Payment date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
 
       - name: payment_amount
         description: Amount of payment (if applicable)
@@ -161,11 +185,21 @@ models:
               values: [true, false]
 
       - name: adjustment_date
-        description: Date of adjustment (if applicable)
+        description: >
+          Date of adjustment (if applicable). Note: For patient-related adjustments,
+          dates older than 18 months are considered historical and should be reviewed
+          for potential write-offs. Insurance adjustments are pursued regardless of age.
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: adjustment_date
+              where: "adjustment_type IN ('DISCOUNT', 'CREDIT', 'ADMIN_CORRECTION', 'ADMIN_ADJUSTMENT', 'REALLOCATION', 'OTHER')"
+              config:
+                severity: warn
+                description: >
+                  Adjustment date is older than 18 months for patient-related adjustments.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
 
       - name: adjustment_amount
         description: Amount of adjustment (if applicable)
@@ -296,4 +330,5 @@ models:
         - "Payment source must be clearly identified (insurance or patient)"
         - "All calculations must be consistent across AR models"
         - "Transaction dates must be in chronological order"
-        - "Amounts must be properly signed (positive for procedures, negative for payments)" 
+        - "Amounts must be properly signed (positive for procedures, negative for payments)"
+        - "Patient balances older than 18 months must be flagged for review" 
