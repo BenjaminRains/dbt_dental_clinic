@@ -105,10 +105,17 @@ models:
               values: ['CHECK', 'CREDIT_CARD', 'ELECTRONIC', 'CASH', 'OTHER']
 
       - name: payment_source
-        description: Source of payment (patient or insurance)
+        description: >
+          Source of payment. Note: This field is currently not being used in the source system
+          (always 0). Test is monitoring for any future changes where this field might be used.
         tests:
-          - accepted_values:
-              values: ['PATIENT', 'INSURANCE']
+          - dbt_utils.expression_is_true:
+              expression: "payment_source = 0"
+              config:
+                severity: warn
+                description: > 
+                  Payment source should be 0. If this test fails, 
+                  it indicates the field is now being used in the source system.
 
       - name: payment_status
         description: Status of the payment
