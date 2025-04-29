@@ -159,10 +159,13 @@ SELECT
     bp.payment_date,
     bp.payment_amount,
     CASE
-        WHEN bp.payment_type_description LIKE '%Check%' THEN 'CHECK'
-        WHEN bp.payment_type_description LIKE '%Credit%' THEN 'CREDIT_CARD'
-        WHEN bp.payment_type_description LIKE '%Electronic%' THEN 'ELECTRONIC'
+        WHEN bp.payment_type_description LIKE '%Check%' OR bp.payment_type_description = 'Insurance Check' THEN 'CHECK'
+        WHEN bp.payment_type_description LIKE '%Credit%' OR bp.payment_type_description = 'Insurance Credit' THEN 'CREDIT_CARD'
+        WHEN bp.payment_type_description LIKE '%Electronic%' OR bp.payment_type_description = 'Insurance Electronic Payment' THEN 'ELECTRONIC'
         WHEN bp.payment_type_description LIKE '%Cash%' THEN 'CASH'
+        WHEN bp.payment_type_description IN ('Standard Payment', 'Regular Payment', 'High Value Payment', 'High Value', 'Very High Value', 'New Payment Type', 'New Type', 'Special Case') THEN 'STANDARD'
+        WHEN bp.payment_type_description = 'Administrative' THEN 'ADMINISTRATIVE'
+        WHEN bp.payment_type_description = 'Refund' THEN 'REFUND'
         ELSE 'OTHER'
     END AS payment_type,
     bp.payment_source,
