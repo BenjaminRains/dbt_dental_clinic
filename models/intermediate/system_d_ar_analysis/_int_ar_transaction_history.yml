@@ -138,13 +138,6 @@ models:
           - accepted_values:
               values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', null]
 
-      - name: aging_bucket
-        description: Aging category (0-30, 31-60, 61-90, 90+ days)
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['0-30', '31-60', '61-90', '90+']
-
       - name: days_outstanding
         description: Number of days the transaction has been outstanding
         tests:
@@ -153,10 +146,12 @@ models:
               min_value: 0
               max_value: 1000
 
-      - name: source_batch_id
-        description: Identifier for the source data batch
+      - name: aging_bucket
+        description: Aging category (0-30, 31-60, 61-90, 90+ days)
         tests:
           - not_null
+          - accepted_values:
+              values: ['0-30', '31-60', '61-90', '90+']
 
       - name: model_created_at
         description: Timestamp when the record was created
