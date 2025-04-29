@@ -116,7 +116,12 @@ models:
           - not_null
 
       - name: adjustment_category
-        description: Category of the adjustment
+        description: >
+          High-level categorization of the adjustment based on AdjType.
+          Values include: insurance_writeoff, provider_discount, senior_discount, reallocation,
+          employee_discount, cash_discount, patient_refund, referral_credit, new_patient_discount,
+          admin_correction, admin_adjustment, unearned_income, and other.
+          This is the primary categorization used for reporting and analysis.
         tests:
           - not_null
 
@@ -126,7 +131,11 @@ models:
           - not_null
 
       - name: adjustment_type_name
-        description: Human-readable name of the adjustment type from definitions table
+        description: >
+          Human-readable name of the adjustment type from the definitions table.
+          This is the raw name from OpenDental's definition table and may contain
+          provider-specific or system-specific terminology.
+          Example: 'Discount Per Dr. Kamp', '5% Senior Discount', 'Patient Refund Check'
         tests:
           - relationships:
               to: ref('stg_opendental__definition')
@@ -135,7 +144,10 @@ models:
                 severity: warn
 
       - name: adjustment_type_value
-        description: Value associated with the adjustment type from definitions table
+        description: >
+          Value associated with the adjustment type from the definitions table.
+          This is the raw value field from OpenDental's definition table and may contain
+          additional context or instructions for the adjustment type.
         tests:
           - relationships:
               to: ref('stg_opendental__definition')
@@ -144,7 +156,13 @@ models:
                 severity: warn
 
       - name: adjustment_category_type
-        description: Category ID from definitions table indicating the type of adjustment
+        description: >
+          Numeric category ID from the definitions table indicating the type of adjustment.
+          This maps to OpenDental's category system:
+          - Category 0: Core adjustment types (Adjustment, Discount, Insurance Payment)
+          - Category 1: Specific adjustment reasons
+          - Category 15: Discount types
+          - Category 29: Payment plan types
         tests:
           - relationships:
               to: ref('stg_opendental__definition')
