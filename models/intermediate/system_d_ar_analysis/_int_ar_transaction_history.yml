@@ -108,11 +108,35 @@ models:
               values: ['INCREASE', 'DECREASE']
 
       - name: transaction_category
-        description: Detailed category of the transaction
+        description: >
+          Detailed category of the transaction:
+          - PROCEDURE_FEE: For procedure charges
+          - CASH: Cash payments
+          - CHECK: Check payments
+          - CREDIT_CARD: Credit card payments
+          - ELECTRONIC: Electronic payments
+          - STANDARD: Standard/regular payments
+          - ADMINISTRATIVE: Administrative payments
+          - REFUND: Refund payments
+          - INSURANCE: Insurance payments
+          - WRITEOFF: Insurance or provider write-offs
+          - DISCOUNT: Any type of discount
+          - CREDIT: Credits applied to the account
+          - ADMIN_CORRECTION: Administrative corrections
+          - ADMIN_ADJUSTMENT: Administrative adjustments
+          - REALLOCATION: Reallocation adjustments
+          - UNEARNED_INCOME: Unearned income adjustments
+          - OTHER: Any other transaction types
         tests:
           - not_null
           - accepted_values:
-              values: ['PROCEDURE_FEE', 'CASH', 'CHECK', 'CREDIT_CARD', 'INSURANCE', 'WRITEOFF', 'DISCOUNT', 'CREDIT']
+              values: [
+                'PROCEDURE_FEE', 'CASH', 'CHECK', 'CREDIT_CARD',
+                'ELECTRONIC', 'STANDARD', 'ADMINISTRATIVE', 'REFUND',
+                'INSURANCE', 'WRITEOFF', 'DISCOUNT', 'CREDIT',
+                'ADMIN_CORRECTION', 'ADMIN_ADJUSTMENT', 'REALLOCATION',
+                'UNEARNED_INCOME', 'OTHER'
+              ]
 
       - name: insurance_transaction_flag
         description: Flag indicating if transaction is insurance-related
@@ -130,16 +154,35 @@ models:
               values: [0, null]
 
       - name: payment_method
-        description: Method of payment (CASH, CHECK, CREDIT_CARD, INSURANCE)
+        description: >
+          Method of payment:
+          - CHECK: Check payments (including insurance checks)
+          - CREDIT_CARD: Credit card payments (including insurance credit)
+          - ELECTRONIC: Electronic payments (including insurance electronic)
+          - CASH: Cash payments
+          - STANDARD: Standard/regular payments
+          - ADMINISTRATIVE: Administrative payments
+          - REFUND: Refund payments
+          - OTHER: Any other payment types
         tests:
           - accepted_values:
-              values: ['CASH', 'CHECK', 'CREDIT_CARD', 'INSURANCE', null]
+              values: [
+                'CHECK', 'CREDIT_CARD', 'ELECTRONIC', 'CASH',
+                'STANDARD', 'ADMINISTRATIVE', 'REFUND', 'OTHER',
+                null
+              ]
 
       - name: adjustment_type
-        description: Type of adjustment (WRITEOFF, DISCOUNT, CREDIT, OTHER)
+        description: >
+          Type of adjustment (WRITEOFF, DISCOUNT, CREDIT, ADMIN_CORRECTION, 
+          ADMIN_ADJUSTMENT, REALLOCATION, UNEARNED_INCOME, OTHER)
         tests:
           - accepted_values:
-              values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', 'OTHER', null]
+              values: [
+                'WRITEOFF', 'DISCOUNT', 'CREDIT', 'ADMIN_CORRECTION',
+                'ADMIN_ADJUSTMENT', 'REALLOCATION', 'UNEARNED_INCOME',
+                'OTHER', null
+              ]
 
       - name: days_outstanding
         description: Number of days the transaction has been outstanding
@@ -219,8 +262,10 @@ models:
           config:
             severity: warn
             description: >
-              Found adjustments categorized as 'OTHER'. These should be reviewed and recategorized based on their transaction_category.
-              Please update the adjustment_type mapping in int_ar_shared_calculations.sql to properly categorize these adjustments.
+              Found adjustments categorized as 'OTHER'. These should be reviewed and
+              recategorized based on their transaction_category. Please update the
+              adjustment_type mapping in int_ar_shared_calculations.sql to properly
+              categorize these adjustments.
 
     meta:
       business_owners: ["dental_finance_team", "insurance_team"]
