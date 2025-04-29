@@ -28,6 +28,8 @@ models:
       - Insurance-related fee schedules exist but have minimal usage
       - Fee validation should account for this out-of-network reality
       - Known fee entry error: D0180 in schedule 8290 shows $11,611.0 vs normal $116.11
+      - procedure_id = 0 records are excluded from this model as they represent financial transactions
+        rather than actual procedures. These records are handled in the AR analysis system.
     
     config:
       materialized: incremental
@@ -35,13 +37,21 @@ models:
     
     columns:
       - name: procedure_id
-        description: Primary key from procedurelog
+        description: >
+          Primary key from procedurelog. Note: This model excludes procedure_id = 0 records
+          as they represent financial transactions rather than actual procedures. Those records
+          are handled in the AR analysis system.
         tests:
           - unique
           - not_null
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+          - dbt_utils.expression_is_true:
+              expression: "procedure_id != 0"
+              config:
+                severity: error
+                description: "This model should not include procedure_id = 0 records"
 
       - name: patient_id
         description: Foreign key to patient
