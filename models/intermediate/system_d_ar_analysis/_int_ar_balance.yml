@@ -251,7 +251,18 @@ models:
         description: Current status of the insurance claim
         tests:
           - accepted_values:
-              values: ['P', 'R', 'D', 'S', 'C']
+              values: ['P', 'R', 'D', 'S', 'C', 'H', 'W']
+              config:
+                severity: error
+                description: >
+                  Claim status must be one of:
+                  - P (Pending)
+                  - R (Received)
+                  - D (Denied)
+                  - S (Sent - Verified)
+                  - C (Closed)
+                  - H (Hold until Pri received)
+                  - W (Waiting to Send)
 
       - name: claim_status_description
         description: Human-readable description of the claim's status
