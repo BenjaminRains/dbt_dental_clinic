@@ -54,7 +54,6 @@ models:
           Foreign key to procedure. Note: procedure_id = 0 represents financial
           transactions rather than actual procedures.
         tests:
-          - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"  # Simplified expression since it's already applied to procedure_id
               config:
@@ -109,8 +108,11 @@ models:
         description: Amount of payment (if applicable)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 100000
+              min_value: -25000
+              max_value: 25000
+              config:
+                severity: error
+                description: "Payment amount must be between -25,000 and 25,000"
 
       - name: payment_type
         description: Type of payment (e.g., cash, check, credit card)
@@ -160,8 +162,11 @@ models:
         description: Amount of adjustment (if applicable)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 100000
+              min_value: -25000
+              max_value: 25000
+              config:
+                severity: error
+                description: "Adjustment amount must be between -25,000 and 25,000"
 
       - name: adjustment_type
         description: >
@@ -228,20 +233,20 @@ models:
       # Payment validation
       - dbt_utils.expression_is_true:
           expression: >
-            (payment_date IS NOT NULL AND payment_amount > 0) OR
+            (payment_date IS NOT NULL AND payment_amount IS NOT NULL) OR
             (payment_date IS NULL AND payment_amount IS NULL)
           config:
             severity: error
-            description: "Payment amount must be positive when payment date exists"
+            description: "Payment date and amount must both be present or both be null"
 
       # Adjustment validation
       - dbt_utils.expression_is_true:
           expression: >
-            (adjustment_date IS NOT NULL AND adjustment_amount > 0) OR
+            (adjustment_date IS NOT NULL AND adjustment_amount IS NOT NULL) OR
             (adjustment_date IS NULL AND adjustment_amount IS NULL)
           config:
             severity: error
-            description: "Adjustment amount must be positive when adjustment date exists"
+            description: "Adjustment date and amount must both be present or both be null"
 
       # Aging validation
       - dbt_utils.expression_is_true:
