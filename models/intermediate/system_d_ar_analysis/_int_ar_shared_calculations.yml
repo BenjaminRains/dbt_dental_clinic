@@ -152,7 +152,10 @@ models:
         description: Category of adjustment
         tests:
           - accepted_values:
-              values: ['INSURANCE', 'PROVIDER', 'PATIENT']
+              values: ['insurance_writeoff', 'provider_discount', 'senior_discount', 'reallocation',
+               'employee_discount', 'cash_discount', 'patient_refund', 'referral_credit', 
+               'new_patient_discount', 'admin_correction', 'admin_adjustment', 
+               'unearned_income', 'other']
 
       - name: is_procedure_adjustment
         description: Flag indicating if adjustment is procedure-specific
