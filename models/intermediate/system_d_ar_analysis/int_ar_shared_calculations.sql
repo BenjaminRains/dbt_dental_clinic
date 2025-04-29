@@ -181,6 +181,10 @@ SELECT
         WHEN ba.adjustment_category = 'insurance_writeoff' THEN 'WRITEOFF'
         WHEN ba.adjustment_category LIKE '%discount%' THEN 'DISCOUNT'
         WHEN ba.adjustment_category LIKE '%credit%' THEN 'CREDIT'
+        WHEN ba.adjustment_category = 'admin_correction' THEN 'ADMIN_CORRECTION'
+        WHEN ba.adjustment_category = 'admin_adjustment' THEN 'ADMIN_ADJUSTMENT'
+        WHEN ba.adjustment_category = 'reallocation' THEN 'REALLOCATION'
+        WHEN ba.adjustment_category = 'unearned_income' THEN 'UNEARNED_INCOME'
         ELSE 'OTHER'
     END AS adjustment_type,
     ba.adjustment_category,
