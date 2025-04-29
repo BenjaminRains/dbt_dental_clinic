@@ -175,10 +175,15 @@ models:
           - WRITEOFF: Insurance or provider write-offs
           - DISCOUNT: Any type of discount (provider, senior, employee, etc.)
           - CREDIT: Credits applied to the account
+          - ADMIN_CORRECTION: Administrative corrections
+          - ADMIN_ADJUSTMENT: Administrative adjustments
+          - REALLOCATION: Reallocation adjustments
+          - UNEARNED_INCOME: Unearned income adjustments
           - OTHER: All other adjustment types
         tests:
           - accepted_values:
-              values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', 'OTHER']
+              values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', 'ADMIN_CORRECTION', 'ADMIN_ADJUSTMENT',
+               'REALLOCATION', 'UNEARNED_INCOME', 'OTHER']
 
       - name: adjustment_category
         description: >
