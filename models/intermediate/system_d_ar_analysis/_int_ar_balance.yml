@@ -30,6 +30,9 @@ models:
       - Tracks insurance estimates and pending amounts
       - Maintains detailed payment and adjustment history
       - Links insurance claims to their respective carriers
+      - Patient balances older than 18 months are considered unenforceable and should be written off
+      - Insurance balances are pursued regardless of age
+      - Historical data beyond 18 months is retained for analysis but marked as warnings for patient balances
       
     config:
       materialized: incremental
@@ -78,18 +81,21 @@ models:
       - name: procedure_date
         description: >
           Date when the procedure was performed.
-          Note: Balances older than 18 months are considered unenforceable
-          and should be written off per business policy.
+          Note: For patient balances, procedures older than 18 months are considered
+          unenforceable and should be written off. Insurance balances are pursued
+          regardless of age.
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= CURRENT_DATE - INTERVAL '18 months'"
               column_name: procedure_date
+              where: "responsible_party = 'PATIENT'"
               config:
-                severity: error
+                severity: warn
                 description: >
-                  Procedure date must be within the last 18 months.
-                  Older balances are considered unenforceable and should be written off.
+                  Procedure date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
 
       - name: procedure_code
         description: Code identifying the type of procedure performed
@@ -253,14 +259,16 @@ models:
           - not_null
 
       - name: claim_date
-        description: Date when the claim was submitted
+        description: >
+          Date when the claim was submitted. Insurance claims are pursued regardless of age.
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: received_date
-        description: Date when the claim was received by insurance
+        description: >
+          Date when the claim was received by insurance. Insurance claims are pursued regardless of age.
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
@@ -276,32 +284,46 @@ models:
                 severity: error
 
       - name: last_insurance_payment_date
-        description: Date of most recent insurance payment
+        description: >
+          Date of most recent insurance payment. Insurance claims are pursued regardless of age.
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: last_patient_payment_date
-        description: Date of most recent patient payment
+        description: >
+          Date of most recent patient payment. Note: Patient payments older than 18 months
+          are considered historical and should be reviewed for potential write-offs.
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: last_patient_payment_date
+              config:
+                severity: warn
+                description: >
+                  Last patient payment date is older than 18 months. These balances are considered
+                  unenforceable and should be written off. Please review these accounts
+                  for potential write-off actions.
 
       - name: last_payment_date
         description: >
           Date of most recent payment from any source. NULL indicates no payments exist.
           For procedures with no payments, aging is calculated from the procedure date.
+          Note: For patient responsibility, payments older than 18 months are considered
+          historical and should be reviewed for potential write-offs. Insurance claims
+          are pursued regardless of age.
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: last_payment_date
+              where: "responsible_party = 'PATIENT'"
               config:
                 severity: warn
                 description: >
-                  Last payment date should be between 2023-01-01 and current date.
-                  NULL values are valid for procedures with no payments.
+                  Last payment date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
 
       - name: responsible_party
         description: Party responsible for the balance (INSURANCE or PATIENT)
@@ -434,4 +456,5 @@ models:
         - "Aging buckets must be correctly calculated based on procedure date"
         - "Include in AR flag must be set correctly based on business rules"
         - "All financial metrics must be properly calculated at the procedure level"
-        - "Insurance carrier information must be correctly linked to claims" 
+        - "Insurance carrier information must be correctly linked to claims"
+        - "Patient balances older than 18 months must be flagged for review" 
