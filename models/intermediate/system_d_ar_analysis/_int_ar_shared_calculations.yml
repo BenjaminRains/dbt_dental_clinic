@@ -132,8 +132,8 @@ models:
         description: Date of adjustment (if applicable)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "{{ var('max_valid_date', 'current_date') }}::date"
 
       - name: adjustment_amount
         description: Amount of adjustment (if applicable)
