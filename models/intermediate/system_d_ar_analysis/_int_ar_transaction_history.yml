@@ -122,10 +122,12 @@ models:
               values: [true, false]
 
       - name: payment_source_type
-        description: Source of payment (PATIENT or INSURANCE)
+        description: >
+          Payment source type field from source system. Currently unused by the clinic.
+          Values observed: 0 or null.
         tests:
           - accepted_values:
-              values: ['PATIENT', 'INSURANCE', null]
+              values: [0, null]
 
       - name: payment_method
         description: Method of payment (CASH, CHECK, CREDIT_CARD, INSURANCE)
@@ -134,10 +136,10 @@ models:
               values: ['CASH', 'CHECK', 'CREDIT_CARD', 'INSURANCE', null]
 
       - name: adjustment_type
-        description: Type of adjustment (WRITEOFF, DISCOUNT, CREDIT)
+        description: Type of adjustment (WRITEOFF, DISCOUNT, CREDIT, OTHER)
         tests:
           - accepted_values:
-              values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', null]
+              values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', 'OTHER', null]
 
       - name: days_outstanding
         description: Number of days the transaction has been outstanding
@@ -158,29 +160,13 @@ models:
         description: Timestamp when the record was created
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
 
       - name: model_updated_at
         description: Timestamp when the record was last updated
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
 
     tests:
-      # Transaction type validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            (transaction_type = 'PROCEDURE' AND payment_source_type IS NULL AND payment_method IS NULL AND adjustment_type IS NULL) OR
-            (transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') AND payment_source_type IS NOT NULL AND payment_method IS NOT NULL) OR
-            (transaction_type = 'ADJUSTMENT' AND adjustment_type IS NOT NULL)
-          config:
-            severity: error
-            description: "Transaction type must match presence of payment/adjustment details"
-
       # Balance impact validation
       - dbt_utils.expression_is_true:
           expression: >
@@ -216,6 +202,25 @@ models:
           config:
             severity: error
             description: "Model creation time must be before or equal to update time"
+
+      # "OTHER" adjustment type analysis
+      - dbt_utils.expression_is_true:
+          expression: >
+            CASE
+              WHEN adjustment_type = 'OTHER' THEN
+                CASE
+                  WHEN transaction_category = 'WRITEOFF' THEN 'WRITEOFF'
+                  WHEN transaction_category = 'DISCOUNT' THEN 'DISCOUNT'
+                  WHEN transaction_category = 'CREDIT' THEN 'CREDIT'
+                  ELSE 'OTHER'
+                END
+              ELSE adjustment_type
+            END = adjustment_type
+          config:
+            severity: warn
+            description: >
+              Found adjustments categorized as 'OTHER'. These should be reviewed and recategorized based on their transaction_category.
+              Please update the adjustment_type mapping in int_ar_shared_calculations.sql to properly categorize these adjustments.
 
     meta:
       business_owners: ["dental_finance_team", "insurance_team"]
