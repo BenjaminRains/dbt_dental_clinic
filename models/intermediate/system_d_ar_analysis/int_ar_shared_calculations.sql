@@ -56,7 +56,7 @@ WITH BasePayments AS (
 BaseAdjustments AS (
     SELECT
         patient_id,
-        procedure_id,
+        procedure_id,  -- This will be NULL for general account adjustments
         adjustment_date,
         adjustment_amount,
         adjustment_category,
@@ -116,7 +116,10 @@ TransactionsUnion AS (
         procedure_id,
         adjustment_date AS transaction_date,
         adjustment_amount AS amount,
-        'ADJUSTMENT' AS transaction_type,
+        CASE
+            WHEN procedure_id = 0 OR procedure_id IS NULL THEN 'GENERAL_ADJUSTMENT'
+            ELSE 'PROCEDURE_ADJUSTMENT'
+        END AS transaction_type,
         NULL AS payment_id,
         adjustment_id
     FROM BaseAdjustments
@@ -141,7 +144,7 @@ AgingCalculations AS (
     FROM TransactionsUnion t
     LEFT JOIN BaseProcedures p
         ON t.patient_id = p.patient_id
-        AND t.procedure_id = p.procedure_id
+        AND (t.procedure_id = p.procedure_id OR t.procedure_id IS NULL)
 )
 
 SELECT
@@ -187,9 +190,9 @@ SELECT
 FROM AgingCalculations ac
 LEFT JOIN BasePayments bp
     ON ac.patient_id = bp.patient_id
-    AND ac.procedure_id = bp.procedure_id
-    AND ac.payment_id = bp.payment_id -- Connect the specific payment
+    AND (ac.procedure_id = bp.procedure_id OR (ac.procedure_id IS NULL AND bp.procedure_id IS NULL))
+    AND ac.payment_id = bp.payment_id
 LEFT JOIN BaseAdjustments ba
     ON ac.patient_id = ba.patient_id
-    AND ac.procedure_id = ba.procedure_id
-    AND ac.adjustment_id = ba.adjustment_id -- Connect the specific adjustment 
+    AND (ac.procedure_id = ba.procedure_id OR (ac.procedure_id IS NULL AND ba.procedure_id IS NULL))
+    AND ac.adjustment_id = ba.adjustment_id 
