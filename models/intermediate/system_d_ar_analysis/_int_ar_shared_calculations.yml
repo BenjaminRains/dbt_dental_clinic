@@ -58,8 +58,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
 
       - name: amount
         description: Transaction amount (positive for procedures, negative for payments)
@@ -88,8 +88,8 @@ models:
         description: Date of payment (if applicable)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
 
       - name: payment_amount
         description: Amount of payment (if applicable)
