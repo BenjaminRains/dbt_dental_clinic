@@ -6,6 +6,12 @@ models:
       Staged adjustment data from OpenDental system.
       Contains financial adjustments including insurance write-offs, discounts, refunds, and other account modifications.
       Filtered to include data from 2022-01-01 onwards with basic data quality checks.
+      
+      Key characteristics:
+      - procedure_id = 0 represents general account adjustments not tied to specific procedures
+      - These general adjustments affect the overall patient balance
+      - Both procedure-specific and general adjustments are included
+      - General adjustments (procedure_id = 0) are valid and important for AR analysis
 
     columns:
       - name: adjustment_id
@@ -20,7 +26,18 @@ models:
           - not_null
 
       - name: procedure_id
-        description: Foreign key to the procedure table, NULL if not associated with a specific procedure
+        description: >
+          Foreign key to the procedure table.
+          - Non-zero values link to specific procedures
+          - Zero (0) indicates a general account adjustment not tied to any procedure
+          - These general adjustments affect the overall patient balance
+          - Both types are valid and important for AR analysis
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                severity: error
+                description: "procedure_id must be non-negative"
 
       - name: provider_id
         description: Foreign key to the provider table who authorized the adjustment
@@ -69,22 +86,48 @@ models:
               values: ['large', 'medium', 'small', 'minimal']
 
       - name: is_procedure_adjustment
-        description: Boolean flag indicating if adjustment is linked to a specific procedure
+        description: >
+          Boolean flag indicating if adjustment is linked to a specific procedure.
+          - true = linked to a specific procedure (procedure_id > 0)
+          - false = general account adjustment (procedure_id = 0)
+        tests:
+          - accepted_values:
+              values: [true, false]
+          - dbt_utils.expression_is_true:
+              expression: "= (CASE WHEN procedure_id > 0 THEN true ELSE false END)"
+              config:
+                severity: error
+                description: "is_procedure_adjustment must match procedure_id value"
 
       - name: is_retroactive_adjustment
         description: Boolean flag indicating if adjustment date differs from procedure date
+        tests:
+          - accepted_values:
+              values: [true, false]
 
       - name: is_provider_discretion
         description: Boolean flag indicating if adjustment was made at provider's discretion
+        tests:
+          - accepted_values:
+              values: [true, false]
 
       - name: is_employee_discount
         description: Boolean flag for employee-specific discounts
+        tests:
+          - accepted_values:
+              values: [true, false]
 
       - name: is_military_discount
         description: Boolean flag for military-specific discounts
+        tests:
+          - accepted_values:
+              values: [true, false]
 
       - name: is_courtesy_adjustment
         description: Boolean flag for courtesy or warranty-related adjustments
+        tests:
+          - accepted_values:
+              values: [true, false]
 
       - name: last_modified_at
         description: Timestamp of last modification to the adjustment record
@@ -96,3 +139,11 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1
           max_value: 1000000  # Adjust based on expected volume
+      
+      - dbt_utils.expression_is_true:
+          expression: >
+            (procedure_id = 0 AND is_procedure_adjustment = false) OR
+            (procedure_id > 0 AND is_procedure_adjustment = true)
+          config:
+            severity: error
+            description: "procedure_id and is_procedure_adjustment must be consistent"
