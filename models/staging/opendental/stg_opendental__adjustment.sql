@@ -19,7 +19,8 @@ renamed as (
         -- Keys (matching PostgreSQL data types)
         "AdjNum"::integer as adjustment_id,  
         "PatNum"::bigint as patient_id,      
-        NULLIF("ProcNum", 0)::bigint as procedure_id,  
+        -- Preserve 0 values for procedure_id as they represent general account adjustments
+        "ProcNum"::bigint as procedure_id,  
         NULLIF("ProvNum", 0)::bigint as provider_id,   
         NULLIF("ClinicNum", 0)::bigint as clinic_id,   
         NULLIF("StatementNum", 0)::bigint as statement_id,  
@@ -42,15 +43,16 @@ renamed as (
             ELSE 'zero'
         END as adjustment_direction,
         
+        -- Modified to handle both 0 and NULL cases
         CASE 
-            WHEN "ProcNum" > 0 THEN 1
-            ELSE 0
-        END as is_procedure_adjustment,
+            WHEN "ProcNum" > 0 THEN true
+            ELSE false
+        END::boolean as is_procedure_adjustment,
         
         CASE
-            WHEN "ProcDate" != "AdjDate" THEN 1
-            ELSE 0
-        END as is_retroactive_adjustment,
+            WHEN "ProcDate" != "AdjDate" THEN true
+            ELSE false
+        END::boolean as is_retroactive_adjustment,
         
         -- Enhanced calculated fields
         CASE
@@ -80,27 +82,27 @@ renamed as (
         CASE 
             WHEN LOWER("AdjNote") LIKE '%n/c%' 
               OR LOWER("AdjNote") LIKE '%nc %'
-              OR LOWER("AdjNote") LIKE '%no charge%' THEN 1
-            ELSE 0
-        END as is_no_charge,
+              OR LOWER("AdjNote") LIKE '%no charge%' THEN true
+            ELSE false
+        END::boolean as is_no_charge,
 
         CASE
-            WHEN LOWER("AdjNote") LIKE '%military%' THEN 1
-            ELSE 0
-        END as is_military_discount,
+            WHEN LOWER("AdjNote") LIKE '%military%' THEN true
+            ELSE false
+        END::boolean as is_military_discount,
 
         CASE
             WHEN LOWER("AdjNote") LIKE '%warranty%' 
-              OR LOWER("AdjNote") LIKE '%courtesy%' THEN 1
-            ELSE 0
-        END as is_courtesy_adjustment,
+              OR LOWER("AdjNote") LIKE '%courtesy%' THEN true
+            ELSE false
+        END::boolean as is_courtesy_adjustment,
 
         CASE
             WHEN "AdjType" IN (474, 475) 
               OR LOWER("AdjNote") LIKE '%per dr%'
-              OR LOWER("AdjNote") LIKE '%dr.%' THEN 1
-            ELSE 0
-        END as is_provider_discretion,
+              OR LOWER("AdjNote") LIKE '%dr.%' THEN true
+            ELSE false
+        END::boolean as is_provider_discretion,
 
         CASE
             WHEN ABS("AdjAmt") >= 1000 THEN 'large'
@@ -128,35 +130,35 @@ renamed as (
         
         -- Additional flags
         CASE 
-            WHEN "AdjType" IN (472, 485, 655) THEN 1
-            ELSE 0
-        END as is_employee_discount,
+            WHEN "AdjType" IN (472, 485, 655) THEN true
+            ELSE false
+        END::boolean as is_employee_discount,
         
         CASE
-            WHEN "AdjType" IN (482, 486) THEN 1
-            ELSE 0
-        END as is_family_discount,
+            WHEN "AdjType" IN (482, 486) THEN true
+            ELSE false
+        END::boolean as is_family_discount,
         
         CASE
-            WHEN "AdjType" IN (474, 475, 601) THEN 1
-            ELSE 0
-        END as is_provider_discount,
+            WHEN "AdjType" IN (474, 475, 601) THEN true
+            ELSE false
+        END::boolean as is_provider_discount,
         
         -- Additional flags for financial analysis
         CASE 
-            WHEN "AdjType" IN (486, 474) AND "AdjAmt" < -1000 THEN 1
-            ELSE 0
-        END as is_large_adjustment,
+            WHEN "AdjType" IN (486, 474) AND "AdjAmt" < -1000 THEN true
+            ELSE false
+        END::boolean as is_large_adjustment,
         
         CASE
-            WHEN "AdjType" IN (186, 9) AND "AdjAmt" > -50 THEN 1
-            ELSE 0
-        END as is_minor_adjustment,
+            WHEN "AdjType" IN (186, 9) AND "AdjAmt" > -50 THEN true
+            ELSE false
+        END::boolean as is_minor_adjustment,
         
         CASE 
-            WHEN "AdjType" IN (288, 439) THEN 1
-            ELSE 0
-        END as is_unearned_income,
+            WHEN "AdjType" IN (288, 439) THEN true
+            ELSE false
+        END::boolean as is_unearned_income,
         
         -- Metadata fields
         NULLIF("SecUserNumEntry", 0)::bigint as created_by_user_id,
