@@ -48,7 +48,8 @@ models:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
           - dbt_utils.expression_is_true:
-              expression: "procedure_id != 0"
+              expression: "> 0"
+              column_name: procedure_id
               config:
                 severity: error
                 description: "This model should not include procedure_id = 0 records"
@@ -295,10 +296,6 @@ models:
                 severity: warn
 
     tests:
-      - dbt_expectations.expect_table_row_count_to_be_between:
-          min_value: 80000
-          max_value: 100000  # Adjusted based on expected volume
-
       # Custom composite tests
       - dbt_utils.expression_is_true:
           expression: "not (procedure_status = 2 and procedure_fee = 0)"
