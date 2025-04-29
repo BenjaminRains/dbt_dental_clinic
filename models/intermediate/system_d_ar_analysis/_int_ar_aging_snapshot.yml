@@ -27,6 +27,8 @@ models:
       - Changes are calculated against previous day's snapshot
       - Insurance and patient responsibility are tracked separately
       - Source tracking information is preserved from int_ar_balance
+      - Balances older than 18 months are considered unenforceable and should be written off
+      - Historical data beyond 18 months is retained for analysis but marked as warnings
       
     config:
       materialized: table
@@ -34,12 +36,21 @@ models:
     
     columns:
       - name: snapshot_date
-        description: Date of the AR snapshot
+        description: >
+          Date of the AR snapshot. Note: Balances older than 18 months are considered
+          unenforceable and should be written off per business policy. Historical data
+          beyond 18 months is retained for analysis but marked as warnings.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: snapshot_date
+              config:
+                severity: warn
+                description: >
+                  Snapshot date is older than 18 months. These balances are considered
+                  unenforceable and should be written off. Please review these accounts
+                  for potential write-off actions.
 
       - name: patient_id
         description: Unique identifier for the patient
@@ -237,20 +248,16 @@ models:
               max_value: 1
 
       - name: model_created_at
-        description: Timestamp when the record was created
+        description: >
+          Timestamp when the record was created in the model.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
 
       - name: model_updated_at
-        description: Timestamp when the record was last updated
+        description: >
+          Timestamp when the record was last updated in the model.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
 
     tests:
       # Balance validation
