@@ -25,6 +25,11 @@ models:
       - Fee comparison with standard fees shows ~29% exact matches, with ~37% higher and ~34% lower than standard
       - Median fee difference is $0, while average difference is -$39.20
       - Future-dated procedures are valid and represent planned treatments
+      - procedure_id = 0 records are valid and represent financial transactions/adjustments rather than actual procedures
+        - These records have no procedure-related information (no procedure_code, description, etc.)
+        - They have varying amounts, both positive and negative
+        - They have transaction dates but no procedure dates
+        - They are used for account adjustments, payment transactions, and financial corrections
     
     # Add some general model-level tests
     tests:
@@ -36,7 +41,13 @@ models:
     
     columns:
       - name: procedure_id
-        description: Unique identifier for the procedure (from ProcNum)
+        description: >
+          Unique identifier for the procedure (from ProcNum).
+          Note: procedure_id = 0 is valid and represents financial transactions/adjustments rather than actual procedures.
+          These records should be:
+          - Included in financial calculations
+          - Excluded from procedure-based analyses
+          - Treated as account adjustments or payment transactions
         tests:
           - unique
           - not_null
