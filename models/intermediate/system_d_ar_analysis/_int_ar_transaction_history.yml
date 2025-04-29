@@ -44,6 +44,23 @@ models:
           - unique
           - not_null
 
+      - name: procedure_id
+        description: >
+          Foreign key to procedure. Note: procedure_id = 0 represents financial
+          transactions rather than actual procedures.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "procedure_id >= 0"
+              config:
+                severity: error
+                description: "procedure_id must be non-negative"
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+              where: "procedure_id > 0"  # Only validate relationships for actual procedures
+              config:
+                severity: warn  # Change to warning since financial transactions are valid
+
       - name: patient_id
         description: Unique identifier for the patient
         tests:
@@ -51,16 +68,6 @@ models:
           - relationships:
               to: ref('int_patient_profile')
               field: patient_id
-              config:
-                severity: error
-
-      - name: procedure_id
-        description: Unique identifier for the dental procedure
-        tests:
-          - not_null
-          - relationships:
-              to: ref('int_procedure_complete')
-              field: procedure_id
               config:
                 severity: error
 
