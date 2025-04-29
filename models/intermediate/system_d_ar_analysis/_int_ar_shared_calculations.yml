@@ -14,6 +14,8 @@ models:
       - Handles adjustment calculations and categorization
       - Creates a unified transaction history
       - Serves as a reference for other AR models
+      - Includes procedure_id = 0 records which represent financial transactions
+        rather than actual procedures
       
       Data Sources:
       - int_patient_payment_allocated: Patient payment details
@@ -27,6 +29,10 @@ models:
       - Standardizes aging buckets across all models
       - Combines all transaction types (procedures, payments, adjustments)
       - Maintains consistent payment and adjustment categorization
+      - procedure_id = 0 records are treated as general account adjustments
+        - These records have no procedure-related information
+        - They represent financial transactions and account adjustments
+        - They are included in aging calculations and AR analysis
       
     config:
       materialized: table
@@ -44,14 +50,21 @@ models:
                 severity: error
 
       - name: procedure_id
-        description: Unique identifier for the dental procedure
+        description: >
+          Unique identifier for the dental procedure, or NULL for general account adjustments.
+          Note: procedure_id = 0 is valid and represents financial transactions rather than
+          actual procedures. These records:
+          - Have no procedure-related information
+          - Represent account adjustments and financial transactions
+          - Are included in aging calculations and AR analysis
+          - Should be treated as general account adjustments
         tests:
-          - not_null
           - relationships:
               to: ref('int_procedure_complete')
               field: procedure_id
               config:
                 severity: error
+                where: "procedure_id is not null and procedure_id != 0"
 
       - name: transaction_date
         description: Date of the transaction (procedure, payment, or adjustment)
