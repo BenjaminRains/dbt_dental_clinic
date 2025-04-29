@@ -110,7 +110,7 @@ models:
           (always 0). Test is monitoring for any future changes where this field might be used.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "payment_source = 0"
+              expression: "::smallint = 0"
               config:
                 severity: warn
                 description: > 
