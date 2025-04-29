@@ -22,7 +22,7 @@ WITH BasePayments AS (
         split_amount AS payment_amount,
         CAST(payment_type_id AS TEXT) AS payment_type_id,
         CAST(payment_type_description AS TEXT) AS payment_type_description,
-        CAST(payment_source AS TEXT) AS payment_source,
+        payment_source,  -- Keeping as smallint since it's always 0
         CAST(payment_status AS TEXT) AS payment_status,
         FALSE AS is_insurance_payment,
         TRUE AS is_patient_payment,
@@ -40,7 +40,7 @@ WITH BasePayments AS (
         split_amount AS payment_amount,
         CAST(payment_type_id AS TEXT) AS payment_type_id,
         CAST(payment_type_description AS TEXT) AS payment_type_description,
-        'INSURANCE' AS payment_source,
+        payment_source,  -- Keeping as smallint since it's always 0
         CASE 
             WHEN status = 1 THEN 'COMPLETED'
             WHEN status = 3 THEN 'SUPPLEMENTAL'
