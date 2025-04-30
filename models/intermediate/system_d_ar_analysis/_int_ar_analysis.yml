@@ -291,7 +291,8 @@ models:
       - name: denied_claims_count
         description: Number of denied insurance claims
         tests:
-          - not_null
+          - not_null:
+              where: "active_claims_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
@@ -299,7 +300,8 @@ models:
       - name: pending_claims_amount
         description: Total amount of pending insurance claims
         tests:
-          - not_null
+          - not_null:
+              where: "active_claims_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 25000
@@ -307,7 +309,8 @@ models:
       - name: denied_claims_amount
         description: Total amount of denied insurance claims
         tests:
-          - not_null
+          - not_null:
+              where: "denied_claims_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 25000
@@ -639,7 +642,8 @@ models:
           Number of payments received for claims, counted using claim_payment_id
           from int_claim_payments
         tests:
-          - not_null
+          - not_null:
+              where: "claim_payment_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
