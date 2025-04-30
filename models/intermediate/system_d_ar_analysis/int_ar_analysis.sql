@@ -194,6 +194,7 @@ BasePatientInfo AS (
         ON p.patient_id = ha.patient_id
     LEFT JOIN {{ ref('stg_opendental__procedurelog') }} pl 
         ON p.patient_id = pl.patient_id
+    WHERE p.patient_status != 5  -- Exclude deleted patients
     GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
 ),
 
@@ -336,4 +337,5 @@ LEFT JOIN ClaimActivity ca
     ON pb.patient_id = ca.patient_id
 LEFT JOIN PatientInfo pi
     ON pb.patient_id = pi.patient_id
-WHERE pi.patient_id IS NOT NULL  -- Ensure we only include active patients
+WHERE pi.patient_id IS NOT NULL 
+  AND pi.patient_status != 5  -- Exclude deleted patients
