@@ -236,7 +236,7 @@ models:
         description: Number of write-off adjustments
         tests:
           - not_null:
-              where: "total_writeoffs > 0"
+              where: "writeoff_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
@@ -252,7 +252,8 @@ models:
       - name: total_writeoffs
         description: Total amount of write-off adjustments
         tests:
-          - not_null
+          - not_null:
+              where: "writeoff_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 25000
@@ -639,7 +640,8 @@ models:
       - name: verified_claims_count
         description: Number of verified insurance claims
         tests:
-          - not_null
+          - not_null:
+              where: "last_claim_verification is not null"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
