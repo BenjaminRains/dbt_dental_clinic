@@ -598,19 +598,19 @@ models:
         description: Type of the most recent payment
         tests:
           - not_null:
-              where: "last_payment_date IS NOT NULL"
+              where: "insurance_payment_count > 0 AND payment_group_count > 0"
 
       - name: last_check_number
         description: Check number of the most recent payment
         tests:
           - not_null:
-              where: "last_payment_date IS NOT NULL"
+              where: "insurance_payment_count > 0 AND payment_group_count > 0"
 
       - name: last_bank_branch
         description: Bank branch of the most recent payment
         tests:
           - not_null:
-              where: "last_payment_date IS NOT NULL"
+              where: "insurance_payment_count > 0 AND payment_group_count > 0"
 
       - name: recent_status_changes
         description: >
