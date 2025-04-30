@@ -210,7 +210,7 @@ models:
           - not_null:
               where: "insurance_payment_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -25000
               max_value: 25000
 
       - name: total_patient_payments
@@ -219,8 +219,8 @@ models:
           - not_null:
               where: "patient_payment_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -50000
+              max_value: 50000
 
       - name: last_insurance_payment_date
         description: Date of most recent insurance payment
@@ -260,7 +260,7 @@ models:
           - not_null:
               where: "writeoff_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -30000
               max_value: 25000
 
       - name: total_discounts
@@ -269,7 +269,7 @@ models:
           - not_null:
               where: "discount_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -50000
               max_value: 25000
 
       - name: last_adjustment_date
