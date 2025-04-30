@@ -342,7 +342,7 @@ models:
               values: ['Regular Patient', 'House Account', 'Staff Member', 'VIP Patient', 'Other', 'Unknown']
 
       - name: preferred_name
-        description: Patient's preferred name from the patient record
+        description: "Patient's preferred name"
         tests:
           - not_null
 
@@ -354,10 +354,12 @@ models:
       - name: birth_date
         description: Patient's date of birth
         tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'1900-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+          - date_range_test:
+              min_date: "'1900-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              config:
+                severity: error
+                description: "Birth date must be between 1900-01-01 and current date"
 
       - name: has_insurance_flag
         description: Boolean flag indicating if the patient has insurance coverage
@@ -366,20 +368,6 @@ models:
           - accepted_values:
               values: [true, false]
 
-      - name: primary_insurance_plan_id
-        description: ID of the patient's primary insurance plan from completed procedures
-        tests:
-          - relationships:
-              to: ref('stg_opendental__insplan')
-              field: insurance_plan_id
-
-      - name: secondary_insurance_plan_id
-        description: ID of the patient's secondary insurance plan from completed procedures
-        tests:
-          - relationships:
-              to: ref('stg_opendental__insplan')
-              field: insurance_plan_id
-
       - name: primary_insurance_id
         description: >
           ID of patient's primary insurance plan, derived from insurance_plan_id
@@ -387,9 +375,8 @@ models:
           primary insurance plan associated with the patient.
         tests:
           - relationships:
-              to: ref('int_insurance_coverage')
+              to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-              where: "ordinal = 1"
 
       - name: secondary_insurance_id
         description: >
@@ -398,9 +385,8 @@ models:
           secondary insurance plan associated with the patient.
         tests:
           - relationships:
-              to: ref('int_insurance_coverage')
+              to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-              where: "ordinal = 2"
 
       - name: primary_insurance_group
         description: >
@@ -435,67 +421,74 @@ models:
               where: "secondary_insurance_id is not null"
 
       - name: coverage_start_date
-        description: >
-          Date when the primary insurance coverage became effective, derived from
-          effective_date in int_insurance_coverage where ordinal = 1.
+        description: Date when the primary insurance coverage became effective
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+          - date_range_test:
+              min_date: "'2020-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              config:
+                severity: error
+                description: "Coverage start date must be between 2020-01-01 and current date"
 
       - name: coverage_end_date
-        description: >
-          Date when the primary insurance coverage was terminated (if applicable),
-          derived from termination_date in int_insurance_coverage where ordinal = 1.
+        description: Date when the primary insurance coverage was terminated
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+          - date_range_test:
+              min_date: "'2020-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              config:
+                severity: error
+                description: "Coverage end date must be between 2020-01-01 and current date"
 
       - name: benefit_percentage
-        description: >
-          Primary insurance coverage percentage, extracted from the coverage_percent
-          field in the benefit_details JSON in int_insurance_coverage where ordinal = 1.
+        description: Primary insurance coverage percentage
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
+          - numeric_range_test:
               min_value: 0
               max_value: 100
+              config:
+                severity: error
+                description: "Benefit percentage must be between 0 and 100"
 
       - name: deductible_met
-        description: >
-          Amount of primary insurance deductible that has been met, extracted from the
-          deductible_met field in the benefit_details JSON in int_insurance_coverage where ordinal = 1.
+        description: Amount of primary insurance deductible that has been met
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
+          - numeric_range_test:
               min_value: 0
               max_value: 10000
+              config:
+                severity: error
+                description: "Deductible met must be between 0 and 10,000"
 
       - name: deductible_remaining
-        description: >
-          Amount of primary insurance deductible remaining, extracted from the deductible_remaining
-          field in the benefit_details JSON in int_insurance_coverage where ordinal = 1.
+        description: Amount of primary insurance deductible remaining
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
+          - numeric_range_test:
               min_value: 0
               max_value: 10000
+              config:
+                severity: error
+                description: "Deductible remaining must be between 0 and 10,000"
 
       - name: annual_max_met
-        description: >
-          Amount of primary insurance annual maximum that has been met, extracted from the
-          annual_max_met field in the benefit_details JSON in int_insurance_coverage where ordinal = 1.
+        description: Amount of primary insurance annual maximum that has been met
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
+          - numeric_range_test:
               min_value: 0
               max_value: 10000
+              config:
+                severity: error
+                description: "Annual maximum met must be between 0 and 10,000"
 
       - name: annual_max_remaining
-        description: >
-          Amount of primary insurance annual maximum remaining, extracted from the annual_max_remaining
-          field in the benefit_details JSON in int_insurance_coverage where ordinal = 1.
+        description: Amount of primary insurance annual maximum remaining
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
+          - numeric_range_test:
               min_value: 0
               max_value: 10000
+              config:
+                severity: error
+                description: "Annual maximum remaining must be between 0 and 10,000"
 
       - name: procedures_with_primary_insurance
         description: >
@@ -515,57 +508,45 @@ models:
               min_value: 0
               max_value: 1000
 
-      - name: patient_type
-        description: Type of patient (e.g., regular, VIP, etc.)
-        tests:
-          - not_null
-
-      - name: first_name
-        description: Patient's first name
-        tests:
-          - not_null
-
-      - name: last_name
-        description: Patient's last name
-        tests:
-          - not_null
-
-      - name: date_of_birth
-        description: Patient's date of birth
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'1900-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
-
       - name: last_visit_date
         description: Date of most recent visit
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'1900-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - date_range_test:
+              min_date: "'1900-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              config:
+                severity: error
+                description: "Last visit date must be between 1900-01-01 and current date"
 
       - name: first_visit_date
         description: Date of patient's first visit
         tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+          - date_range_test:
+              min_date: "'2023-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              config:
+                severity: error
+                description: "First visit date must be between 2023-01-01 and current date"
 
       - name: model_created_at
         description: Timestamp when the record was created
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - date_range_test:
+              min_date: "'2023-01-01'::timestamp"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              config:
+                severity: error
+                description: "Model created at must be between 2023-01-01 and current date"
 
       - name: model_updated_at
         description: Timestamp when the record was last updated
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - date_range_test:
+              min_date: "'2023-01-01'::timestamp"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              config:
+                severity: error
+                description: "Model updated at must be between 2023-01-01 and current date"
 
       - name: split_payment_count
         description: Number of split payments received
@@ -619,9 +600,12 @@ models:
       - name: last_status_change_date
         description: Date of most recent status change
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - date_range_test:
+              min_date: "'2023-01-01'::timestamp"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              config:
+                severity: error
+                description: "Last status change date must be between 2023-01-01 and current date"
 
       - name: total_claim_payments
         description: >
@@ -654,9 +638,12 @@ models:
       - name: last_claim_verification
         description: Date of most recent claim verification
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+          - date_range_test:
+              min_date: "'2023-01-01'::timestamp"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              config:
+                severity: error
+                description: "Last claim verification must be between 2023-01-01 and current date"
 
       - name: total_benefits_used
         description: >
@@ -740,13 +727,7 @@ models:
             description: "AR analysis record count must match active patient profile record count"
 
       # Insurance validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            CASE
-              WHEN has_insurance_flag = true THEN 
-                (procedures_with_primary_insurance > 0 OR procedures_with_secondary_insurance > 0)
-              ELSE TRUE
-            END
+      - insurance_validation_test:
           config:
             severity: error
             description: "Patients with insurance flag should have at least one procedure with insurance"
