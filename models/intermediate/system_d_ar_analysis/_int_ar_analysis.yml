@@ -707,11 +707,13 @@ models:
       # AR balance validation
       - dbt_utils.expression_is_true:
           expression: >
-            total_ar_balance = balance_0_30_days + balance_31_60_days + 
-            balance_61_90_days + balance_over_90_days
+            ABS(total_ar_balance - (balance_0_30_days + balance_31_60_days + 
+            balance_61_90_days + balance_over_90_days)) <= 0.01
           config:
             severity: error
-            description: "Total AR balance must equal sum of aging buckets"
+            description: >
+              Total AR balance should equal sum of aging buckets within 1 cent.
+              Using ABS() to handle any small rounding differences.
 
       # Insurance AR validation
       - dbt_utils.expression_is_true:
