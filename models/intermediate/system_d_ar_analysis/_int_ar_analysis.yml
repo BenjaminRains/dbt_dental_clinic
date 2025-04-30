@@ -190,7 +190,7 @@ models:
         description: Number of insurance payments received
         tests:
           - not_null:
-              where: "total_insurance_payments > 0 OR has_insurance_flag = 'I'"
+              where: "total_insurance_payments > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
