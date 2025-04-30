@@ -12,6 +12,15 @@ Incomplete records are preserved with:
 - carrier_id = -1 and empty carrier_name when carrier info is missing
 - subscriber_id = -1 when carrier info is missing or subscriber doesn't exist
 - is_incomplete_record = true in both cases
+
+Historical Plan Handling:
+- All insurance plans are included, regardless of age
+- Plan status is determined by multiple factors:
+  * is_active: Based on verification status and pending flags
+  * is_incomplete_record: Based on missing carrier or subscriber info
+  * hide_from_verify_list: Inherited from the insurance plan
+- Effective and termination dates are tracked to support historical analysis
+- Template benefits (patient_plan_id = 0) are preserved for reference
 */
 
 with Source as (
