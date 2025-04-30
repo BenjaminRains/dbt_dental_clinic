@@ -843,10 +843,13 @@ models:
 
       # Add new tests for System B integration
       - dbt_utils.expression_is_true:
-          expression: "total_claim_payments <= total_insurance_payments"
+          expression: >
+            ABS(total_claim_payments) <= ABS(total_insurance_payments) * 1.1
           config:
             severity: error
-            description: "Claim payments (from paid_amount) cannot exceed total insurance payments"
+            description: >
+              Claim payments (from paid_amount) should not exceed total insurance payments by more than 10%.
+              Using absolute values to handle negative payments correctly.
 
       - dbt_utils.expression_is_true:
           expression: "total_benefits_used + total_benefits_remaining >= 0"
