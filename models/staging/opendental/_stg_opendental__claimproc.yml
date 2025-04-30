@@ -70,9 +70,29 @@ models:
       
       - name: fee_billed
         description: Amount billed for the procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
       
       - name: insurance_payment_estimate
         description: Estimated payment from insurance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+          - test_insurance_payment_estimate:
+              config:
+                severity: warn
+                description: >
+                  Insurance payment estimate validation rules:
+                  - Zero estimates are allowed for pre-authorizations and denied claims
+                  - For received claims with payments, estimate should be within $1000 of actual payment
+                  - For received claims without payments, estimate should not exceed billed fee
+                  - For pending claims, any non-negative estimate is allowed
+                  This helps identify potential data entry errors or incorrect estimates.
       
       - name: insurance_payment_amount
         description: Actual payment received from insurance
