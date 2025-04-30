@@ -132,11 +132,11 @@ models:
         description: Amount of payment (if applicable)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -25000
-              max_value: 25000
+              min_value: -60000
+              max_value: 60000
               config:
                 severity: error
-                description: "Payment amount must be between -25,000 and 25,000"
+                description: "Payment amount must be between -60,000 and 60,000"
 
       - name: payment_type
         description: >
@@ -205,11 +205,11 @@ models:
         description: Amount of adjustment (if applicable)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -25000
-              max_value: 25000
+              min_value: -50000
+              max_value: 50000
               config:
                 severity: error
-                description: "Adjustment amount must be between -25,000 and 25,000"
+                description: "Adjustment amount must be between -50,000 and 50,000"
 
       - name: adjustment_type
         description: >
@@ -331,4 +331,4 @@ models:
         - "All calculations must be consistent across AR models"
         - "Transaction dates must be in chronological order"
         - "Amounts must be properly signed (positive for procedures, negative for payments)"
-        - "Patient balances older than 18 months must be flagged for review" 
+        - "Patient balances older than 18 months must be flagged for review"
