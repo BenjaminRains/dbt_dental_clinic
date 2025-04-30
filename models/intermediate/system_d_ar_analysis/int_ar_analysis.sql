@@ -210,7 +210,7 @@ InsuranceCoverage AS (
         ic.patient_id,
         MAX(CASE 
             WHEN ic.ordinal = 1 
-                AND (ip.hide_from_verify_list = false OR ip.hide_from_verify_list IS NULL)
+                AND ip.hide_from_verify_list = false
                 AND ic.is_active = true
             THEN ic.insurance_plan_id 
             ELSE NULL
