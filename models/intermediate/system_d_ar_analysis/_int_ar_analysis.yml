@@ -402,7 +402,11 @@ models:
               column_name: secondary_insurance_id
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-              to_condition: "hide_from_verify_list = false"
+              to_condition: "hide_from_verify_list = false OR hide_from_verify_list IS NULL"
+              from_condition: "secondary_insurance_id IS NOT NULL"
+              config:
+                severity: error
+                description: "Secondary insurance plans must either be active (hide_from_verify_list = false) or historical (hide_from_verify_list IS NULL)"
 
       - name: primary_insurance_group
         description: >
