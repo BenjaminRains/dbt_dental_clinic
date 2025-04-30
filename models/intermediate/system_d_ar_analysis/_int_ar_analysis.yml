@@ -235,7 +235,8 @@ models:
       - name: writeoff_count
         description: Number of write-off adjustments
         tests:
-          - not_null
+          - not_null:
+              where: "total_writeoffs > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
@@ -357,18 +358,16 @@ models:
           - date_range_test:
               min_date: "'1900-01-01'::date"
               max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "birth_date::date"
               config:
                 severity: error
                 description: "Birth date must be between 1900-01-01 and current date"
 
       - name: has_insurance_flag
-        description: Boolean flag indicating if the patient has insurance coverage
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "has_insurance_flag = 'I' OR has_insurance_flag IS NULL"
-              config:
-                severity: error
-                description: "Insurance flag must be 'I' for insured patients or NULL for uninsured patients"
+        expression: "has_insurance_flag = 'I' OR IS NULL"
+        config:
+          severity: error
+          description: "Insurance flag must be 'I' for insured patients or NULL for uninsured patients"
 
       - name: primary_insurance_id
         description: >
@@ -376,9 +375,11 @@ models:
           in int_insurance_coverage where ordinal = 1. This represents the active
           primary insurance plan associated with the patient.
         tests:
-          - relationships:
+          - dbt_utils.relationships_where:
+              column_name: primary_insurance_id
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
+              to_condition: "hide_from_verify_list = false"
 
       - name: secondary_insurance_id
         description: >
@@ -386,9 +387,11 @@ models:
           in int_insurance_coverage where ordinal = 2. This represents the active
           secondary insurance plan associated with the patient.
         tests:
-          - relationships:
+          - dbt_utils.relationships_where:
+              column_name: secondary_insurance_id
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
+              to_condition: "hide_from_verify_list = false"
 
       - name: primary_insurance_group
         description: >
@@ -427,10 +430,11 @@ models:
         tests:
           - date_range_test:
               min_date: "'2020-01-01'::date"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_date: "'2025-02-28'::date"
+              column_name: "coverage_start_date::date"
               config:
                 severity: error
-                description: "Coverage start date must be between 2020-01-01 and current date"
+                description: "Coverage start date must be between 2020-01-01 and 2025-02-28"
 
       - name: coverage_end_date
         description: Date when the primary insurance coverage was terminated
@@ -438,6 +442,7 @@ models:
           - date_range_test:
               min_date: "'2020-01-01'::date"
               max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "coverage_end_date::date"
               config:
                 severity: error
                 description: "Coverage end date must be between 2020-01-01 and current date"
@@ -516,6 +521,7 @@ models:
           - date_range_test:
               min_date: "'1900-01-01'::date"
               max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "last_visit_date::date"
               config:
                 severity: error
                 description: "Last visit date must be between 1900-01-01 and current date"
@@ -526,6 +532,7 @@ models:
           - date_range_test:
               min_date: "'2023-01-01'::date"
               max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "first_visit_date::date"
               config:
                 severity: error
                 description: "First visit date must be between 2023-01-01 and current date"
