@@ -229,23 +229,17 @@ models:
       - name: collection_efficiency_30_days
         description: Collection efficiency over 30 days (payments / total balance)
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1
+          - valid_collection_efficiency
 
       - name: collection_efficiency_60_days
         description: Collection efficiency over 60 days (payments / total balance)
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1
+          - valid_collection_efficiency
 
       - name: collection_efficiency_90_days
         description: Collection efficiency over 90 days (payments / total balance)
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1
+          - valid_collection_efficiency
 
       - name: model_created_at
         description: >
@@ -289,9 +283,9 @@ models:
       - dbt_utils.expression_is_true:
           expression: >
             (total_ar_balance >= 0.01 AND 
-             collection_efficiency_30_days >= -2 AND collection_efficiency_30_days <= 10 AND
-             collection_efficiency_60_days >= -2 AND collection_efficiency_60_days <= 10 AND
-             collection_efficiency_90_days >= -2 AND collection_efficiency_90_days <= 10)
+             collection_efficiency_30_days BETWEEN -2 AND 10 AND
+             collection_efficiency_60_days BETWEEN -2 AND 10 AND
+             collection_efficiency_90_days BETWEEN -2 AND 10)
             OR
             (total_ar_balance < 0.01)
           config:
