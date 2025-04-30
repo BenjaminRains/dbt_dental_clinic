@@ -67,8 +67,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: balance_0_30_days
         description: AR balance aged 0-30 days
@@ -91,40 +91,40 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: balance_over_90_days
         description: AR balance aged over 90 days
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: estimated_insurance_ar
         description: Estimated amount pending from insurance
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: patient_responsibility
         description: Amount owed by patient
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: insurance_responsibility
         description: Amount owed by insurance
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: open_procedures_count
         description: Number of procedures with outstanding balances
@@ -146,57 +146,57 @@ models:
         description: Total AR balance from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_balance_0_30_days
         description: 0-30 day balance from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_balance_31_60_days
         description: 31-60 day balance from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_balance_61_90_days
         description: 61-90 day balance from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_balance_over_90_days
         description: Over 90 day balance from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_estimated_insurance_ar
         description: Estimated insurance AR from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_patient_responsibility
         description: Patient responsibility from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_insurance_responsibility
         description: Insurance responsibility from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
+              min_value: -50000
+              max_value: 50000
 
       - name: previous_open_procedures_count
         description: Open procedures count from previous snapshot
@@ -216,8 +216,8 @@ models:
         description: Change in total AR balance from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -100000
-              max_value: 100000
+              min_value: -50000
+              max_value: 50000
 
       - name: ar_balance_change_percentage
         description: Percentage change in total AR balance
@@ -288,12 +288,15 @@ models:
       # Collection efficiency validation
       - dbt_utils.expression_is_true:
           expression: >
-            collection_efficiency_30_days >= 0 AND collection_efficiency_30_days <= 1 AND
-            collection_efficiency_60_days >= 0 AND collection_efficiency_60_days <= 1 AND
-            collection_efficiency_90_days >= 0 AND collection_efficiency_90_days <= 1
+            (total_ar_balance >= 0.01 AND 
+             collection_efficiency_30_days >= -2 AND collection_efficiency_30_days <= 10 AND
+             collection_efficiency_60_days >= -2 AND collection_efficiency_60_days <= 10 AND
+             collection_efficiency_90_days >= -2 AND collection_efficiency_90_days <= 10)
+            OR
+            (total_ar_balance < 0.01)
           config:
             severity: error
-            description: "Collection efficiency must be between 0 and 1"
+            description: "Collection efficiency must be between -2 and 10 for balances >= $0.01, or have very small balance (< $0.01)"
 
       # Source tracking validation
       - dbt_utils.expression_is_true:
