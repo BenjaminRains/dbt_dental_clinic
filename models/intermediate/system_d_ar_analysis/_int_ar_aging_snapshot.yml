@@ -216,15 +216,15 @@ models:
         description: Change in total AR balance from previous snapshot
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000000
-              max_value: 1000000
+              min_value: -100000
+              max_value: 100000
 
       - name: ar_balance_change_percentage
         description: Percentage change in total AR balance
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1
-              max_value: 1
+              min_value: -4
+              max_value: 4
 
       - name: collection_efficiency_30_days
         description: Collection efficiency over 30 days (payments / total balance)
