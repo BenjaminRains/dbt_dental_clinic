@@ -36,63 +36,74 @@ WITH PatientBalances AS (
 ),
 
 PaymentActivity AS (
+    -- First get the payments at their source, before joins can multiply them
+    WITH PatientPaymentTotals AS (
+        SELECT
+            patient_id,
+            COUNT(DISTINCT procedure_id) AS payment_count,
+            COALESCE(SUM(split_amount), 0) AS total_payments,
+            MAX(payment_date) AS last_payment_date
+        FROM {{ ref('int_patient_payment_allocated') }}
+        WHERE include_in_ar = TRUE
+        GROUP BY patient_id
+    ),
+    InsurancePaymentTotals AS (
+        SELECT
+            patient_id,
+            COUNT(DISTINCT procedure_id) AS payment_count,
+            COALESCE(SUM(split_amount), 0) AS total_payments,
+            MAX(payment_date) AS last_payment_date
+        FROM {{ ref('int_insurance_payment_allocated') }}
+        WHERE include_in_ar = TRUE
+        GROUP BY patient_id
+    ),
+    SystemCMetrics AS (
+        SELECT
+            ps.patient_id,
+            COUNT(DISTINCT CASE WHEN ps.split_type = 'NORMAL_PAYMENT' THEN ps.paysplit_id END) AS split_payment_count,
+            COUNT(DISTINCT ipa.payment_group_id) AS payment_group_count,
+            COALESCE(SUM(DISTINCT ipa.merchant_fee), 0) AS total_merchant_fees,
+            MAX(ipa.payment_type_description) AS last_payment_type,
+            MAX(ipa.check_number) AS last_check_number,
+            MAX(ipa.bank_branch) AS last_bank_branch
+        FROM {{ ref('int_payment_split') }} ps
+        LEFT JOIN {{ ref('int_insurance_payment_allocated') }} ipa
+            ON ps.payment_id = ipa.payment_id
+        GROUP BY ps.patient_id
+    )
+    
     SELECT
-        p.patient_id,
-        -- Existing metrics
-        COUNT(DISTINCT 
-            CASE WHEN p.is_insurance_payment 
-            THEN p.procedure_id END
-        ) AS insurance_payment_count,
-        COUNT(DISTINCT 
-            CASE WHEN p.is_patient_payment 
-            THEN p.procedure_id END
-        ) AS patient_payment_count,
-        COALESCE(SUM(
-            CASE WHEN p.is_insurance_payment 
-            THEN p.payment_amount ELSE 0 END
-        ), 0) AS total_insurance_payments,
-        COALESCE(SUM(
-            CASE WHEN p.is_patient_payment 
-            THEN p.payment_amount ELSE 0 END
-        ), 0) AS total_patient_payments,
-        MAX(
-            CASE WHEN p.is_insurance_payment 
-            THEN p.payment_date END
-        ) AS last_insurance_payment_date,
-        MAX(
-            CASE WHEN p.is_patient_payment 
-            THEN p.payment_date END
-        ) AS last_patient_payment_date,
-        -- New System C metrics
-        COUNT(DISTINCT 
-            CASE WHEN ps.split_type = 'NORMAL_PAYMENT' 
-            THEN ps.paysplit_id END
-        ) AS split_payment_count,
-        COALESCE(SUM(ipa.merchant_fee), 0) AS total_merchant_fees,
-        COUNT(DISTINCT ipa.payment_group_id) AS payment_group_count,
-        MAX(ipa.payment_type_description) AS last_payment_type,
-        MAX(ipa.check_number) AS last_check_number,
-        MAX(ipa.bank_branch) AS last_bank_branch
-    FROM {{ ref('int_ar_shared_calculations') }} p
-    LEFT JOIN {{ ref('int_payment_split') }} ps
-        ON p.procedure_id = ps.procedure_id
-    LEFT JOIN {{ ref('int_insurance_payment_allocated') }} ipa
-        ON p.procedure_id = ipa.procedure_id
-    WHERE p.payment_date IS NOT NULL
-    GROUP BY 1
+        COALESCE(ppt.patient_id, ipt.patient_id) AS patient_id,
+        COALESCE(ipt.payment_count, 0) AS insurance_payment_count,
+        COALESCE(ppt.payment_count, 0) AS patient_payment_count,
+        COALESCE(ipt.total_payments, 0) AS total_insurance_payments,
+        COALESCE(ppt.total_payments, 0) AS total_patient_payments,
+        ipt.last_payment_date AS last_insurance_payment_date,
+        ppt.last_payment_date AS last_patient_payment_date,
+        COALESCE(scm.split_payment_count, 0) AS split_payment_count,
+        COALESCE(scm.total_merchant_fees, 0) AS total_merchant_fees,
+        COALESCE(scm.payment_group_count, 0) AS payment_group_count,
+        scm.last_payment_type,
+        scm.last_check_number,
+        scm.last_bank_branch
+    FROM PatientPaymentTotals ppt
+    FULL OUTER JOIN InsurancePaymentTotals ipt
+        ON ppt.patient_id = ipt.patient_id
+    LEFT JOIN SystemCMetrics scm
+        ON COALESCE(ppt.patient_id, ipt.patient_id) = scm.patient_id
 ),
 
 AdjustmentActivity AS (
+    -- Calculate adjustments directly from source
     SELECT
         patient_id,
-        COUNT(DISTINCT CASE WHEN adjustment_type = 'WRITEOFF' THEN procedure_id END) AS writeoff_count,
-        COUNT(DISTINCT CASE WHEN adjustment_type = 'DISCOUNT' THEN procedure_id END) AS discount_count,
-        COALESCE(SUM(CASE WHEN adjustment_type = 'WRITEOFF' THEN adjustment_amount ELSE 0 END), 0) AS total_writeoffs,
-        COALESCE(SUM(CASE WHEN adjustment_type = 'DISCOUNT' THEN adjustment_amount ELSE 0 END), 0) AS total_discounts,
+        COUNT(DISTINCT CASE WHEN adjustment_category = 'insurance_writeoff' THEN adjustment_id END) AS writeoff_count,
+        COUNT(DISTINCT CASE WHEN adjustment_category LIKE '%discount%' THEN adjustment_id END) AS discount_count,
+        COALESCE(SUM(CASE WHEN adjustment_category = 'insurance_writeoff' THEN adjustment_amount ELSE 0 END), 0) AS total_writeoffs,
+        COALESCE(SUM(CASE WHEN adjustment_category LIKE '%discount%' THEN adjustment_amount ELSE 0 END), 0) AS total_discounts,
         MAX(adjustment_date) AS last_adjustment_date
-    FROM {{ ref('int_ar_shared_calculations') }}
-    WHERE adjustment_date IS NOT NULL
-    GROUP BY 1
+    FROM {{ ref('int_adjustments') }}
+    GROUP BY patient_id
 ),
 
 -- Enhanced ClaimActivity CTE with System B details
