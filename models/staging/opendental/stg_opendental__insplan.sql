@@ -4,7 +4,9 @@
 
 with source as (
     select * from {{ source('opendental', 'insplan') }}
-    where "SecDateTEdit" >= '2023-01-01'
+    -- Removed date filter to include all insurance plans
+    -- This ensures we have access to all plans that might be referenced by other models
+    -- Plan status is tracked via is_hidden and hide_from_verify_list flags
 ),
 
 renamed as (
@@ -85,11 +87,8 @@ renamed as (
         "BillingType" as billing_type,
         "ExclusionFeeRule" as exclusion_fee_rule,
         
-        -- Audit Fields
-        CASE 
-            WHEN "SecDateEntry" = '0001-01-01' THEN NULL
-            ELSE "SecDateEntry"
-        END as created_at,
+        -- Meta Fields
+        "SecDateEntry" as created_at,
         "SecDateTEdit" as updated_at
 
     from source

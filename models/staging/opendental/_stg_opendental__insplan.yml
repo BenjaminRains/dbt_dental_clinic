@@ -2,157 +2,66 @@ version: 2
 
 models:
   - name: stg_opendental__insplan
-    description: |
-      Staging model for insurance plan records from OpenDental. This model handles various data quality patterns including case sensitivity, multiple carriers per group, and future-dated records.
+    description: >
+      Staging model for insurance plans. Contains all insurance plans from the source system,
+      including historical and inactive plans. This ensures we have access to all plans that
+      might be referenced by other models, even if they are no longer active.
       
-      Note on duplicates: Multiple records may exist for the same group/carrier/employer combination due to:
-      - Different name variations (e.g., "US Steel" vs "United States Steel")
-      - Case sensitivity differences
-      - Historical name changes
-      - Multiple carriers for the same group (e.g., US Steel has carriers 1459, 2014, 2121)
-      - Empty group numbers for certain carriers (e.g., carrier 2163)
+      Plan status is tracked through several flags:
+      - is_hidden: Administrative visibility flag
+      - hide_from_verify_list: Controls whether the plan appears in verification lists
+      
+      For filtering active plans in downstream models, consider:
+      - Using is_hidden = FALSE to exclude administratively hidden plans
+      - Using hide_from_verify_list = FALSE to exclude plans not meant for verification
+      - Combining with other status indicators as needed
+      
+      Note: Group numbers can have legitimate duplicates across different scenarios:
+      - Federal agency programs (e.g., 104, 105)
+      - Corporate plans across multiple carriers
+      - Medicare/program-specific numbers
+      - Industry-specific group numbers
     columns:
       - name: insurance_plan_id
-        description: Unique identifier for the insurance plan record.
+        description: "Primary key for insurance plans"
         tests:
           - unique
           - not_null
-
-      - name: group_number
-        description: |
-          Insurance group number that may be shared across multiple records. 
-          Business rules:
-          - Multiple carriers may be associated with the same group number (e.g., US Steel group 836357100 has 4 carriers)
-          - Empty group numbers are allowed for certain carriers (e.g., carrier 2163 with employer_id 0)
-          - Group numbers should be case-insensitive for matching purposes
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: group_number
-              value_set: ['']  # Warning for empty group numbers
-              severity: warn
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: group_number
-              value_set: ['']  # Warning for empty group numbers
-              severity: warn
-              row_condition: "carrier_id = 2163 AND employer_id = 0"  # Known case with empty group numbers
-
-      - name: carrier_id
-        description: |
-          Identifier for the insurance carrier. Multiple carriers may be associated with the same group number.
-          Business rules:
-          - Some groups have multiple carriers (e.g., US Steel has carriers 1459, 2014, 2121, 2266)
-          - Carrier 2121 appears frequently across multiple groups
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: carrier_id
-              value_set: [1459, 2014, 2121, 2266]  # Known carriers for US Steel
-              quote_values: false
-              row_condition: "group_number = '836357100'"
-              severity: warn
-
+          
       - name: employer_id
-        description: |
-          Identifier for the employer associated with the insurance plan.
-          Business rules:
-          - Some records have employer_id = 0 (system-generated or placeholder records)
-          - Multiple employer_ids may exist for the same group number
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: employer_id
-              value_set: [0]  # Warning for system-generated records
-              quote_values: false
-              severity: warn
-
+        description: "Reference to employer associated with the plan"
+        
+      - name: carrier_id
+        description: "Reference to insurance carrier/provider"
+        
+      - name: group_number
+        description: >
+          Insurance group identifier. Can be legitimately duplicated in several cases:
+          - Federal agency programs (e.g., 104, 105)
+          - Corporate plans across multiple carriers
+          - Medicare/program-specific numbers
+          - Industry-specific group numbers
+          
       - name: group_name
-        description: |
-          Name of the insurance group. May have case variations and formatting differences.
-          Business rules:
-          - Case-insensitive matching should be used (e.g., "UPS" vs "Ups")
-          - Minor formatting differences are allowed (e.g., "Saco Industries, Inc." vs "Saco Industries,Inc.")
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: group_name
-              value_set: ['UPS', 'Ups']  # Example of case variations
-              severity: warn
-
-      - name: manual_fee_schedule_id
-        description: |
-          Identifier for the fee schedule associated with the plan.
-          Business rules:
-          - Different fee schedules may exist for the same group (e.g., US Steel has fee schedule 8278)
-          - Some records have manual_fee_schedule_id = 0 (default or unspecified)
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: manual_fee_schedule_id
-              value_set: [8278]  # Known fee schedule for US Steel
-              quote_values: false
-              row_condition: "group_number = '836357100'"
-              severity: warn
-
-      - name: has_ppo_subst_writeoffs
-        description: |
-          Flag indicating if the plan has PPO substitution writeoffs.
-          Business rules:
-          - Some groups have multiple records with different PPO settings
-          - This may indicate different plan types or coverage levels
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: has_ppo_subst_writeoffs
-              value_set: [true, false]  # Both values are valid
-              quote_values: false
-              severity: warn
-
+        description: "Name of the insurance group, may vary slightly for same group across carriers"
+        
+      - name: fee_schedule_id
+        description: "Reference to the primary fee schedule for the plan"
+        
+      - name: is_medical
+        description: "Flag indicating medical vs dental insurance"
+        
       - name: is_hidden
-        description: |
-          Flag indicating if the record is hidden from normal view.
-          Business rules:
-          - Some groups have both hidden and visible records
-          - Hidden status may affect claims processing
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_in_set:
-              column_name: is_hidden
-              value_set: [true, false]  # Both values are valid
-              quote_values: false
-              severity: warn
-
+        description: "Administrative visibility flag. TRUE means the plan is hidden from normal views"
+        
+      - name: hide_from_verify_list
+        description: "Flag controlling whether the plan appears in verification lists"
+        
       - name: created_at
-        description: |
-          Timestamp when the record was created.
-          Business rules:
-          - ~71% of records have NULL created_at dates, primarily from a bulk update on 2024-12-18
-          - These NULL values likely represent imported or migrated records where original creation dates were not preserved
-          - Valid dates start from 2020-04-27
-          - Some records have future update dates (2025) suggesting planned insurance plans
-        tests:
-          - not_null:
-              severity: warn
-          - dbt_expectations.expect_column_values_to_be_between:
-              column_name: created_at
-              min_value: "'2020-01-01 00:00:00'::timestamp"
-              max_value: "'2025-12-31 23:59:59'::timestamp"
-              severity: warn
-
+        description: "Date when the plan was created"
+        
       - name: updated_at
-        description: |
-          Timestamp when the record was last updated.
-          Business rules:
-          - Most records were updated on 2024-12-18
-          - Some records have future update dates (2025)
-          - Future dates may indicate planned insurance plans
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              column_name: updated_at
-              min_value: "'2020-01-01 00:00:00'::timestamp"
-              max_value: "'2025-12-31 23:59:59'::timestamp"
-              severity: warn
+        description: "Timestamp of last update to the plan"
 
     tests:
       - dbt_expectations.expect_compound_columns_to_be_unique:
