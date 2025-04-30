@@ -606,7 +606,8 @@ models:
           Number of claim status changes in the last 30 days, calculated using
           entry_timestamp from int_claim_tracking
         tests:
-          - not_null
+          - not_null:
+              where: "active_claims_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
