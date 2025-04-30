@@ -597,17 +597,20 @@ models:
       - name: last_payment_type
         description: Type of the most recent payment
         tests:
-          - not_null
+          - not_null:
+              where: "insurance_payment_count > 0 OR patient_payment_count > 0"
 
       - name: last_check_number
         description: Check number of the most recent payment
         tests:
-          - not_null
+          - not_null:
+              where: "insurance_payment_count > 0 OR patient_payment_count > 0"
 
       - name: last_bank_branch
         description: Bank branch of the most recent payment
         tests:
-          - not_null
+          - not_null:
+              where: "insurance_payment_count > 0 OR patient_payment_count > 0"
 
       - name: recent_status_changes
         description: >
