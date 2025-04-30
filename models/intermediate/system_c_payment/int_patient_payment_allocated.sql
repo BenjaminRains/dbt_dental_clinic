@@ -144,7 +144,10 @@ PatientPayments AS MATERIALIZED (
         p.payment_id,
         p.patient_id,
         p.payment_date,
-        ps.split_amount as payment_amount,
+        CASE 
+            WHEN ps.unearned_type = 288 THEN -ps.split_amount  -- Unearned income type 288 needs to be negated
+            ELSE ps.split_amount  -- Regular splits keep their sign
+        END as payment_amount,
         p.payment_type_id,
         p.check_number,
         p.bank_branch,
