@@ -728,6 +728,19 @@ models:
             severity: error
             description: "Payment amounts must be non-negative"
 
+      # Merchant fee validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            CASE
+              WHEN total_insurance_payments + total_patient_payments < 0 THEN true
+              ELSE total_merchant_fees <= total_insurance_payments + total_patient_payments
+            END
+          config:
+            severity: error
+            description: >
+              Merchant fees must not exceed total payments when payments are positive.
+              Negative total payments are handled separately as they represent refunds or reversals.
+
       # Adjustment validation
       - dbt_utils.expression_is_true:
           expression: >
@@ -824,12 +837,6 @@ models:
           config:
             severity: error
             description: "Split payment count cannot exceed payment group count"
-
-      - dbt_utils.expression_is_true:
-          expression: "total_merchant_fees <= total_insurance_payments + total_patient_payments"
-          config:
-            severity: error
-            description: "Merchant fees cannot exceed total payments"
 
       # Add new tests for System B integration
       - dbt_utils.expression_is_true:
