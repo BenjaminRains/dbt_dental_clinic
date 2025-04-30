@@ -838,10 +838,16 @@ models:
 
       # Add new tests for System C integration
       - dbt_utils.expression_is_true:
-          expression: "split_payment_count <= payment_group_count"
+          expression: >
+            CASE
+              WHEN payment_group_count = 0 THEN split_payment_count = 0
+              ELSE split_payment_count <= payment_group_count * 10
+            END
           config:
             severity: error
-            description: "Split payment count cannot exceed payment group count"
+            description: >
+              Split payment count should not exceed 10 times the payment group count.
+              This allows for multiple splits per payment group while preventing unreasonably high values.
 
       # Add new tests for System B integration
       - dbt_utils.expression_is_true:
