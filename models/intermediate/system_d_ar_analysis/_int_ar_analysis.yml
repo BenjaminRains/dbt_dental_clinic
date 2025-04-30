@@ -364,8 +364,8 @@ models:
       - name: has_insurance_flag
         description: Boolean flag indicating if the patient has insurance coverage
         tests:
-          - accepted_values:
-              values: ['I', NULL]
+          - dbt_utils.expression_is_true:
+              expression: "has_insurance_flag = 'I' OR has_insurance_flag IS NULL"
               config:
                 severity: error
                 description: "Insurance flag must be 'I' for insured patients or NULL for uninsured patients"
