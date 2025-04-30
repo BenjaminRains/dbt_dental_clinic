@@ -173,10 +173,16 @@ BasePatientInfo AS (
         p.first_visit_date,
         p.has_insurance_flag,
         GREATEST(
-            COALESCE(MAX(ha.appointment_datetime), 
-                '1900-01-01'::timestamp),
-            COALESCE(MAX(pl.procedure_date), 
-                '1900-01-01'::date)
+            COALESCE(MAX(CASE 
+                WHEN ha.appointment_datetime <= CURRENT_TIMESTAMP 
+                THEN ha.appointment_datetime 
+                ELSE NULL 
+            END), '1900-01-01'::timestamp),
+            COALESCE(MAX(CASE 
+                WHEN pl.procedure_date <= CURRENT_DATE 
+                THEN pl.procedure_date 
+                ELSE NULL 
+            END), '1900-01-01'::date)
         ) as last_visit_date,
         -- Procedure counts with insurance
         COUNT(DISTINCT CASE 
@@ -201,22 +207,36 @@ BasePatientInfo AS (
 -- Insurance coverage information
 InsuranceCoverage AS (
     SELECT
-        patient_id,
-        MAX(CASE WHEN ordinal = 1 THEN insurance_plan_id END) as primary_insurance_id,
-        MAX(CASE WHEN ordinal = 2 THEN insurance_plan_id END) as secondary_insurance_id,
-        MAX(CASE WHEN ordinal = 1 THEN group_name END) as primary_insurance_group,
-        MAX(CASE WHEN ordinal = 2 THEN group_name END) as secondary_insurance_group,
-        MAX(CASE WHEN ordinal = 1 THEN plan_type END) as primary_insurance_type,
-        MAX(CASE WHEN ordinal = 2 THEN plan_type END) as secondary_insurance_type,
-        MAX(CASE WHEN ordinal = 1 THEN effective_date END) as coverage_start_date,
-        MAX(CASE WHEN ordinal = 1 THEN termination_date END) as coverage_end_date,
-        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'coverage_percent' END) as benefit_percentage,
-        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'deductible_met' END) as deductible_met,
-        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'deductible_remaining' END) as deductible_remaining,
-        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'annual_max_met' END) as annual_max_met,
-        MAX(CASE WHEN ordinal = 1 THEN benefit_details->>'annual_max_remaining' END) as annual_max_remaining
-    FROM {{ ref('int_insurance_coverage') }}
-    GROUP BY patient_id
+        ic.patient_id,
+        MAX(CASE 
+            WHEN ic.ordinal = 1 
+                AND (ip.hide_from_verify_list = false OR ip.hide_from_verify_list IS NULL)
+                AND ic.is_active = true
+            THEN ic.insurance_plan_id 
+            ELSE NULL
+        END) as primary_insurance_id,
+        MAX(CASE 
+            WHEN ic.ordinal = 2 
+                AND (ip.hide_from_verify_list = false OR ip.hide_from_verify_list IS NULL)
+                AND ic.is_active = true
+            THEN ic.insurance_plan_id 
+            ELSE NULL
+        END) as secondary_insurance_id,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.group_name END) as primary_insurance_group,
+        MAX(CASE WHEN ic.ordinal = 2 THEN ic.group_name END) as secondary_insurance_group,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.plan_type END) as primary_insurance_type,
+        MAX(CASE WHEN ic.ordinal = 2 THEN ic.plan_type END) as secondary_insurance_type,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.effective_date END) as coverage_start_date,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.termination_date END) as coverage_end_date,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.benefit_details->>'coverage_percent' END) as benefit_percentage,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.benefit_details->>'deductible_met' END) as deductible_met,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.benefit_details->>'deductible_remaining' END) as deductible_remaining,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.benefit_details->>'annual_max_met' END) as annual_max_met,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.benefit_details->>'annual_max_remaining' END) as annual_max_remaining
+    FROM {{ ref('int_insurance_coverage') }} ic
+    LEFT JOIN {{ ref('stg_opendental__insplan') }} ip
+        ON ic.insurance_plan_id = ip.insurance_plan_id
+    GROUP BY ic.patient_id
 ),
 
 -- Final Patient Info with all details
