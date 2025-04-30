@@ -13,34 +13,35 @@
     3. Serves as a reference for other AR models
 */
 
-WITH BasePayments AS (
-    -- Patient payments
-    SELECT
+WITH 
+-- Deduplicate patient payments at the source
+DedupedPatientPayments AS (
+    SELECT DISTINCT
         patient_id,
         procedure_id,
         payment_date,
         split_amount AS payment_amount,
         CAST(payment_type_id AS TEXT) AS payment_type_id,
         CAST(payment_type_description AS TEXT) AS payment_type_description,
-        payment_source,  -- Keeping as smallint since it's always 0
+        payment_source,
         CAST(payment_status AS TEXT) AS payment_status,
         FALSE AS is_insurance_payment,
         TRUE AS is_patient_payment,
         CAST(payment_id AS TEXT) AS payment_id
     FROM {{ ref('int_patient_payment_allocated') }}
     WHERE include_in_ar = TRUE
-    
-    UNION ALL
-    
-    -- Insurance payments
-    SELECT
+),
+
+-- Deduplicate insurance payments at the source
+DedupedInsurancePayments AS (
+    SELECT DISTINCT
         patient_id,
         procedure_id,
         payment_date,
         split_amount AS payment_amount,
         CAST(payment_type_id AS TEXT) AS payment_type_id,
         CAST(payment_type_description AS TEXT) AS payment_type_description,
-        payment_source,  -- Keeping as smallint since it's always 0
+        payment_source,
         CASE 
             WHEN status = 1 THEN 'COMPLETED'
             WHEN status = 3 THEN 'SUPPLEMENTAL'
@@ -53,8 +54,18 @@ WITH BasePayments AS (
     WHERE include_in_ar = TRUE
 ),
 
+BasePayments AS (
+    -- Patient payments
+    SELECT * FROM DedupedPatientPayments
+    
+    UNION ALL
+    
+    -- Insurance payments
+    SELECT * FROM DedupedInsurancePayments
+),
+
 BaseAdjustments AS (
-    SELECT
+    SELECT DISTINCT
         patient_id,
         procedure_id,  -- This will be NULL for general account adjustments
         adjustment_date,
@@ -67,7 +78,7 @@ BaseAdjustments AS (
 ),
 
 BaseProcedures AS (
-    SELECT
+    SELECT DISTINCT
         procedure_id,
         patient_id,
         provider_id,
@@ -80,9 +91,10 @@ BaseProcedures AS (
     WHERE procedure_status_desc IN ('Complete', 'Existing Current')
 ),
 
+-- Make sure transactions are unique before union
 TransactionsUnion AS (
     -- Procedures
-    SELECT
+    SELECT DISTINCT
         patient_id,
         procedure_id,
         procedure_date AS transaction_date,
@@ -95,11 +107,11 @@ TransactionsUnion AS (
     UNION ALL
     
     -- Payments
-    SELECT
+    SELECT DISTINCT
         patient_id,
         procedure_id,
         payment_date AS transaction_date,
-        payment_amount AS amount, -- Removed negation
+        payment_amount AS amount,
         CASE
             WHEN is_insurance_payment THEN 'INSURANCE_PAYMENT'
             ELSE 'PATIENT_PAYMENT'
@@ -111,7 +123,7 @@ TransactionsUnion AS (
     UNION ALL
     
     -- Adjustments
-    SELECT
+    SELECT DISTINCT
         patient_id,
         procedure_id,
         adjustment_date AS transaction_date,
@@ -147,7 +159,8 @@ AgingCalculations AS (
         AND (t.procedure_id = p.procedure_id OR t.procedure_id IS NULL)
 )
 
-SELECT
+-- Final selection with proper join conditions to avoid cartesian products
+SELECT DISTINCT
     ac.patient_id,
     ac.procedure_id,
     ac.transaction_date,
@@ -155,51 +168,66 @@ SELECT
     ac.aging_bucket,
     ac.days_outstanding,
     
-    -- Payment fields
-    bp.payment_date,
-    bp.payment_amount,
-    CASE
-        WHEN bp.payment_type_description LIKE '%Check%' OR bp.payment_type_description = 'Insurance Check' THEN 'CHECK'
-        WHEN bp.payment_type_description LIKE '%Credit%' OR bp.payment_type_description = 'Insurance Credit' THEN 'CREDIT_CARD'
-        WHEN bp.payment_type_description LIKE '%Electronic%' OR bp.payment_type_description = 'Insurance Electronic Payment' THEN 'ELECTRONIC'
-        WHEN bp.payment_type_description LIKE '%Cash%' THEN 'CASH'
-        WHEN bp.payment_type_description IN ('Standard Payment', 'Regular Payment', 'High Value Payment', 'High Value', 'Very High Value', 'New Payment Type', 'New Type', 'Special Case') THEN 'STANDARD'
-        WHEN bp.payment_type_description = 'Administrative' THEN 'ADMINISTRATIVE'
-        WHEN bp.payment_type_description = 'Refund' THEN 'REFUND'
-        ELSE 'OTHER'
+    -- Payment fields - only include when the transaction is a payment
+    CASE WHEN ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') THEN bp.payment_date ELSE NULL END AS payment_date,
+    CASE WHEN ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') THEN bp.payment_amount ELSE NULL END AS payment_amount,
+    CASE 
+        WHEN ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') THEN
+            CASE
+                WHEN bp.payment_type_description LIKE '%Check%' OR bp.payment_type_description = 'Insurance Check' THEN 'CHECK'
+                WHEN bp.payment_type_description LIKE '%Credit%' OR bp.payment_type_description = 'Insurance Credit' THEN 'CREDIT_CARD'
+                WHEN bp.payment_type_description LIKE '%Electronic%' OR bp.payment_type_description = 'Insurance Electronic Payment' THEN 'ELECTRONIC'
+                WHEN bp.payment_type_description LIKE '%Cash%' THEN 'CASH'
+                WHEN bp.payment_type_description IN ('Standard Payment', 'Regular Payment', 'High Value Payment', 'High Value', 'Very High Value', 'New Payment Type', 'New Type', 'Special Case') THEN 'STANDARD'
+                WHEN bp.payment_type_description = 'Administrative' THEN 'ADMINISTRATIVE'
+                WHEN bp.payment_type_description = 'Refund' THEN 'REFUND'
+                ELSE 'OTHER'
+            END
+        ELSE NULL
     END AS payment_type,
-    bp.payment_source,
-    CASE
-        WHEN bp.payment_status = 'COMPLETED' THEN 'COMPLETED'
-        WHEN bp.payment_status = 'SUPPLEMENTAL' THEN 'COMPLETED'
-        ELSE 'PENDING'
+    CASE WHEN ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') THEN bp.payment_source ELSE NULL END AS payment_source,
+    CASE 
+        WHEN ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') THEN
+            CASE
+                WHEN bp.payment_status = 'COMPLETED' THEN 'COMPLETED'
+                WHEN bp.payment_status = 'SUPPLEMENTAL' THEN 'COMPLETED'
+                ELSE 'PENDING'
+            END
+        ELSE NULL
     END AS payment_status,
-    bp.is_insurance_payment,
-    bp.is_patient_payment,
+    CASE WHEN ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') THEN bp.is_insurance_payment ELSE NULL END AS is_insurance_payment,
+    CASE WHEN ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT') THEN bp.is_patient_payment ELSE NULL END AS is_patient_payment,
     
-    -- Adjustment fields
-    ba.adjustment_date,
-    ba.adjustment_amount,
-    CASE
-        WHEN ba.adjustment_category = 'insurance_writeoff' THEN 'WRITEOFF'
-        WHEN ba.adjustment_category LIKE '%discount%' THEN 'DISCOUNT'
-        WHEN ba.adjustment_category LIKE '%credit%' THEN 'CREDIT'
-        WHEN ba.adjustment_category = 'admin_correction' THEN 'ADMIN_CORRECTION'
-        WHEN ba.adjustment_category = 'admin_adjustment' THEN 'ADMIN_ADJUSTMENT'
-        WHEN ba.adjustment_category = 'reallocation' THEN 'REALLOCATION'
-        WHEN ba.adjustment_category = 'unearned_income' THEN 'UNEARNED_INCOME'
-        ELSE 'OTHER'
+    -- Adjustment fields - only include when the transaction is an adjustment
+    CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.adjustment_date ELSE NULL END AS adjustment_date,
+    CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.adjustment_amount ELSE NULL END AS adjustment_amount,
+    CASE 
+        WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN
+            CASE
+                WHEN ba.adjustment_category = 'insurance_writeoff' THEN 'WRITEOFF'
+                WHEN ba.adjustment_category LIKE '%discount%' THEN 'DISCOUNT'
+                WHEN ba.adjustment_category LIKE '%credit%' THEN 'CREDIT'
+                WHEN ba.adjustment_category = 'admin_correction' THEN 'ADMIN_CORRECTION'
+                WHEN ba.adjustment_category = 'admin_adjustment' THEN 'ADMIN_ADJUSTMENT'
+                WHEN ba.adjustment_category = 'reallocation' THEN 'REALLOCATION'
+                WHEN ba.adjustment_category = 'unearned_income' THEN 'UNEARNED_INCOME'
+                ELSE 'OTHER'
+            END
+        ELSE NULL
     END AS adjustment_type,
-    ba.adjustment_category,
-    ba.is_procedure_adjustment,
-    ba.is_retroactive_adjustment
+    CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.adjustment_category ELSE NULL END AS adjustment_category,
+    CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.is_procedure_adjustment ELSE NULL END AS is_procedure_adjustment,
+    CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.is_retroactive_adjustment ELSE NULL END AS is_retroactive_adjustment
     
 FROM AgingCalculations ac
+-- Use proper join keys and transaction type filters to avoid cartesian products
 LEFT JOIN BasePayments bp
     ON ac.patient_id = bp.patient_id
-    AND (ac.procedure_id = bp.procedure_id OR (ac.procedure_id IS NULL AND bp.procedure_id IS NULL))
+    AND ac.procedure_id = bp.procedure_id
     AND ac.payment_id = bp.payment_id
+    AND ac.transaction_type IN ('INSURANCE_PAYMENT', 'PATIENT_PAYMENT')
 LEFT JOIN BaseAdjustments ba
     ON ac.patient_id = ba.patient_id
-    AND (ac.procedure_id = ba.procedure_id OR (ac.procedure_id IS NULL AND ba.procedure_id IS NULL))
-    AND ac.adjustment_id = ba.adjustment_id 
+    AND ac.procedure_id = ba.procedure_id
+    AND ac.adjustment_id = ba.adjustment_id
+    AND ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT')
