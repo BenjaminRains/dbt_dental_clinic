@@ -4,7 +4,9 @@
 
 with source as (
     select * from {{ source('opendental', 'benefit') }}
-    where "SecDateTEdit" >= '2023-01-01'  -- Following pattern from inssub
+    -- Removed date filter to include all benefits
+    -- This ensures we have access to all benefits that might be referenced by other models
+    -- Benefit status is tracked via patient_plan_id (0 for template benefits)
 ),
 
 renamed as (
