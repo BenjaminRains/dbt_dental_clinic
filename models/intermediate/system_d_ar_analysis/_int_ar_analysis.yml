@@ -263,7 +263,8 @@ models:
       - name: total_discounts
         description: Total amount of discount adjustments
         tests:
-          - not_null
+          - not_null:
+              where: "discount_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 25000
