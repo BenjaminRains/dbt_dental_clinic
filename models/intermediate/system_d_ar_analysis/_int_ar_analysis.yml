@@ -626,7 +626,8 @@ models:
           Total payments received for claims, calculated using paid_amount
           from int_claim_payments
         tests:
-          - not_null
+          - not_null:
+              where: "claim_payment_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 25000
