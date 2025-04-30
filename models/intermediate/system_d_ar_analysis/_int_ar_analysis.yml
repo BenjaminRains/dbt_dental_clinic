@@ -731,10 +731,25 @@ models:
       # Adjustment validation
       - dbt_utils.expression_is_true:
           expression: >
-            total_writeoffs >= 0 AND total_discounts >= 0
+            CASE
+              WHEN adjustment_category = 'insurance_writeoff' THEN total_writeoffs <= 0
+              WHEN adjustment_category LIKE '%discount%' THEN total_discounts <= 0
+              WHEN adjustment_category = 'admin_correction' THEN total_writeoffs <= 0
+              WHEN adjustment_category = 'admin_adjustment' THEN total_writeoffs <= 0
+              WHEN adjustment_category = 'reallocation' THEN total_writeoffs >= -1000 AND total_writeoffs <= 1000
+              WHEN adjustment_category = 'unearned_income' THEN total_writeoffs <= 0
+              ELSE total_writeoffs >= 0 AND total_discounts >= 0
+            END
           config:
             severity: error
-            description: "Adjustment amounts must be non-negative"
+            description: >
+              Adjustment amounts must follow these rules:
+              - Insurance write-offs must be negative or zero
+              - Discounts must be negative or zero
+              - Admin corrections/adjustments must be negative or zero
+              - Reallocations must be between -1000 and 1000
+              - Unearned income must be negative or zero
+              - All other adjustments must be non-negative
 
       # Claim validation
       - dbt_utils.expression_is_true:
