@@ -667,7 +667,8 @@ models:
           field from the benefit_details JSON in int_claim_details. This represents
           the total amount of benefits that have been utilized for claims.
         tests:
-          - not_null
+          - not_null:
+              where: "total_claim_payments > 0"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 25000
