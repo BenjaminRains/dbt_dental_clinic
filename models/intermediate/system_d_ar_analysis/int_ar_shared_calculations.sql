@@ -99,7 +99,7 @@ TransactionsUnion AS (
         patient_id,
         procedure_id,
         payment_date AS transaction_date,
-        -payment_amount AS amount, -- Negative for payments
+        payment_amount AS amount, -- Removed negation
         CASE
             WHEN is_insurance_payment THEN 'INSURANCE_PAYMENT'
             ELSE 'PATIENT_PAYMENT'
