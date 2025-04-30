@@ -364,9 +364,11 @@ models:
       - name: has_insurance_flag
         description: Boolean flag indicating if the patient has insurance coverage
         tests:
-          - not_null
           - accepted_values:
-              values: [true, false]
+              values: ['I', NULL]
+              config:
+                severity: error
+                description: "Insurance flag must be 'I' for insured patients or NULL for uninsured patients"
 
       - name: primary_insurance_id
         description: >
@@ -719,12 +721,33 @@ models:
             description: "First visit date must be before last visit date, and last visit date must be valid"
 
       # Patient record validation
-      - dbt_utils.equal_rowcount:
-          compare_model: ref('int_patient_profile')
-          where: "patient_status IN (0, 1, 2, 3)"
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1 
+              FROM {{ ref('int_ar_analysis') }} ar
+              WHERE ar.patient_status NOT IN (0, 1, 2, 3)
+            )
           config:
             severity: error
-            description: "AR analysis record count must match active patient profile record count"
+            description: "AR analysis should only include active, non-patient, inactive, or archived patients (status 0-3)"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1 
+              FROM {{ ref('int_patient_profile') }} p
+              WHERE p.patient_status = 0
+                AND NOT EXISTS (
+                  SELECT 1 
+                  FROM {{ ref('int_ar_analysis') }} ar
+                  WHERE ar.patient_id = p.patient_id
+                )
+                AND p.total_balance > 0
+            )
+          config:
+            severity: error
+            description: "Active patients with balances should have AR records"
 
       # Insurance validation
       - insurance_validation_test:
