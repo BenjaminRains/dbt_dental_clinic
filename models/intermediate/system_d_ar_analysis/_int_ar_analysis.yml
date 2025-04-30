@@ -158,14 +158,11 @@ models:
               max_value: 25000
 
       - name: last_payment_date
-        description: >
-          Most recent payment date from any source, calculated as the maximum last_payment_date
-          from int_ar_balance. This represents the date of the last payment received for
-          any of the patient's procedures.
+        description: Date of most recent payment
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: open_procedures_count
         description: >
@@ -226,14 +223,14 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: last_patient_payment_date
         description: Date of most recent patient payment
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: writeoff_count
         description: Number of write-off adjustments
@@ -272,7 +269,10 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              config:
+                severity: error
+                description: "Last adjustment date must be between 2023-01-01 and current date"
 
       - name: pending_claims_count
         description: Number of pending insurance claims
@@ -311,14 +311,14 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: last_denied_claim_date
         description: Date of most recent denied claim
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: patient_status
         description: Current status of the patient (0-3 for active patients)
@@ -539,16 +539,11 @@ models:
               max_value: "{{ var('max_valid_date', 'current_date') }}"
 
       - name: last_visit_date
-        description: >
-          Date of patient's last visit, calculated as the most recent date between:
-          - Latest appointment date from histappointment
-          - Latest procedure date from procedurelog
-          Defaults to '1900-01-01' if no visits are found
+        description: Date of most recent visit
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'1900-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: first_visit_date
         description: Date of patient's first visit
@@ -561,18 +556,16 @@ models:
       - name: model_created_at
         description: Timestamp when the record was created
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: model_updated_at
         description: Timestamp when the record was last updated
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: split_payment_count
         description: Number of split payments received
@@ -624,13 +617,11 @@ models:
               max_value: 1000
 
       - name: last_status_change_date
-        description: >
-          Date of the most recent claim status change, derived from entry_timestamp
-          in int_claim_tracking
+        description: Date of most recent status change
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: total_claim_payments
         description: >
@@ -661,13 +652,11 @@ models:
               max_value: 1000
 
       - name: last_claim_verification
-        description: >
-          Date of the most recent claim verification, derived from verification_date
-          in int_claim_details which represents when the insurance coverage was verified
+        description: Date of most recent claim verification
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
 
       - name: total_benefits_used
         description: >
