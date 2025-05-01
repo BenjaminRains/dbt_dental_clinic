@@ -255,3 +255,27 @@ models:
           expression: "not (is_radiology_flag = 1 and no_bill_insurance_flag = 1)"
           severity: warn
           name: warn_radiology_no_bill_conflict 
+
+      # Add this test to the tests section at the bottom of _int_claim_details.yml
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1
+              FROM (
+                SELECT 
+                  claim_id,
+                  procedure_id,
+                  COUNT(*) as duplicate_count
+                FROM {{ ref('int_claim_details') }}
+                GROUP BY 
+                  claim_id,
+                  procedure_id
+                HAVING COUNT(*) > 1
+              ) as duplicates
+            )
+          config:
+            severity: error
+            name: check_no_duplicate_claim_procedures
+            description: >
+              This test verifies that there are no duplicate (claim_id, procedure_id) combinations
+              in the int_claim_details model. Each procedure within a claim should appear exactly once.  
