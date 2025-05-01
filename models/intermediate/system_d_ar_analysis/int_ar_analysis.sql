@@ -193,10 +193,9 @@ ClaimActivity AS (
             ON cd.claim_id = ct.claim_id
         GROUP BY cd.patient_id
     ),
-    -- Process payments with special handling for duplicates, zeros, and reversals
+    -- First, identify unique payment records to address duplication issues
     UnifiedPayments AS (
-        -- Step 1: Get all payment records with their associated patient
-        SELECT
+        SELECT DISTINCT
             icd.patient_id,
             cp.claim_id,
             cp.procedure_id,
@@ -208,41 +207,29 @@ ClaimActivity AS (
                 WHEN cp.paid_amount = 0 OR cp.claim_payment_id = 0 THEN 'ZERO'
                 WHEN cp.paid_amount < 0 THEN 'REVERSAL'
                 ELSE 'PAYMENT'
-            END as payment_type,
-            -- Create a composite key for deduplication
-            icd.patient_id || '-' || cp.claim_id || '-' || cp.procedure_id || '-' || 
-            cp.claim_payment_id || '-' || cp.paid_amount as unique_key
+            END as payment_type
         FROM {{ ref('int_claim_payments') }} cp
         JOIN {{ ref('int_claim_details') }} icd
             ON cp.claim_id = icd.claim_id
             AND cp.procedure_id = icd.procedure_id
+        WHERE cp.claim_payment_id IS NOT NULL
     ),
-    -- Step 2: Deduplicate completely using the unique key
-    DeduplicatedPayments AS (
-        SELECT DISTINCT
-            patient_id,
-            claim_payment_id,
-            paid_amount,
-            payment_type,
-            -- For calculating which payments to count
-            CASE WHEN payment_type = 'PAYMENT' THEN 1 ELSE 0 END as count_payment,
-            -- For calculating amounts (count zeroes as zero)
-            CASE WHEN payment_type = 'ZERO' THEN 0 ELSE paid_amount END as counted_amount
-        FROM UnifiedPayments
-    ),
-    -- Step 3: Calculate payment metrics per patient
+    -- Aggregate to patient level
     PatientPayments AS (
         SELECT
             patient_id,
-            -- Count only non-zero, non-reversed payments
-            SUM(count_payment) AS claim_payment_count,
-            -- Sum all amounts (including reversals)
-            SUM(counted_amount) AS total_claim_payments
-        FROM DeduplicatedPayments
+            COUNT(DISTINCT claim_payment_id) AS claim_payment_count,
+            SUM(paid_amount) AS total_claim_payments,
+            SUM(CASE WHEN payment_type = 'PAYMENT' THEN 1 ELSE 0 END) as normal_payment_count,
+            SUM(CASE WHEN payment_type = 'ZERO' THEN 1 ELSE 0 END) as zero_payment_count,
+            SUM(CASE WHEN payment_type = 'REVERSAL' THEN 1 ELSE 0 END) as reversal_count,
+            SUM(CASE WHEN payment_type = 'PAYMENT' THEN paid_amount ELSE 0 END) as normal_payment_amount,
+            SUM(CASE WHEN payment_type = 'REVERSAL' THEN paid_amount ELSE 0 END) as reversal_amount
+        FROM UnifiedPayments
         GROUP BY patient_id
     )
     
-    -- Join all the pieces together (unchanged)
+    -- Modified to include additional payment metrics
     SELECT
         pcs.patient_id,
         pcs.pending_claims_count,
@@ -255,6 +242,11 @@ ClaimActivity AS (
         pct.last_status_change_date,
         COALESCE(pp.total_claim_payments, 0) AS total_claim_payments,
         COALESCE(pp.claim_payment_count, 0) AS claim_payment_count,
+        COALESCE(pp.normal_payment_count, 0) AS normal_payment_count,
+        COALESCE(pp.zero_payment_count, 0) AS zero_payment_count,
+        COALESCE(pp.reversal_count, 0) AS reversal_count,
+        COALESCE(pp.normal_payment_amount, 0) AS normal_payment_amount,
+        COALESCE(pp.reversal_amount, 0) AS reversal_amount,
         pcs.verified_claims_count,
         pcs.last_claim_verification,
         pcs.total_benefits_used,
@@ -391,7 +383,7 @@ PatientInfo AS (
         ON bpi.patient_id = ic.patient_id
 )
 
--- Final SELECT statement with correct references to the ClaimActivity fields
+-- Final SELECT statement with the new payment metrics
 SELECT 
     ap.patient_id,
     COALESCE(pb.total_ar_balance, 0) AS total_ar_balance,
@@ -432,6 +424,11 @@ SELECT
     ca.last_status_change_date,
     COALESCE(ca.total_claim_payments, 0) AS total_claim_payments,
     COALESCE(ca.claim_payment_count, 0) AS claim_payment_count,
+    COALESCE(ca.normal_payment_count, 0) AS normal_payment_count,
+    COALESCE(ca.zero_payment_count, 0) AS zero_payment_count,
+    COALESCE(ca.reversal_count, 0) AS reversal_count,
+    COALESCE(ca.normal_payment_amount, 0) AS normal_payment_amount,
+    COALESCE(ca.reversal_amount, 0) AS reversal_amount,
     COALESCE(ca.verified_claims_count, 0) AS verified_claims_count,
     ca.last_claim_verification,
     COALESCE(ca.total_benefits_used, 0) AS total_benefits_used,
