@@ -160,10 +160,7 @@ ClaimActivity AS (
         END) AS recent_status_changes,
         MAX(ct.entry_timestamp) AS last_status_change_date,
         -- Improved payment calculation to handle duplicates and inconsistencies
-        COALESCE(SUM(DISTINCT CASE 
-            WHEN cp.paid_amount > 0 
-            THEN cp.paid_amount 
-        END), 0) AS total_claim_payments,
+        COALESCE(SUM(dedupe_cp.paid_amount), 0) AS total_claim_payments,
         COUNT(DISTINCT cp.claim_payment_id) AS claim_payment_count,
         -- Additional claim validation
         COUNT(DISTINCT CASE 
@@ -189,6 +186,26 @@ ClaimActivity AS (
     FROM {{ ref('int_claim_details') }} cd
     LEFT JOIN {{ ref('int_claim_tracking') }} ct
         ON cd.claim_id = ct.claim_id
+    LEFT JOIN (
+        -- Subquery to deduplicate payments at procedure level first
+        SELECT 
+            claim_id, 
+            procedure_id, 
+            paid_amount
+        FROM (
+            SELECT
+                claim_id,
+                procedure_id,
+                paid_amount,
+                ROW_NUMBER() OVER (
+                    PARTITION BY claim_id, procedure_id, paid_amount
+                    ORDER BY check_date DESC NULLS LAST
+                ) as rn
+            FROM {{ ref('int_claim_payments') }}
+            WHERE paid_amount > 0
+        ) sub
+        WHERE rn = 1
+    ) dedupe_cp ON cd.claim_id = dedupe_cp.claim_id AND cd.procedure_id = dedupe_cp.procedure_id
     LEFT JOIN {{ ref('int_claim_payments') }} cp
         ON cd.claim_id = cp.claim_id
         AND cd.procedure_id = cp.procedure_id
