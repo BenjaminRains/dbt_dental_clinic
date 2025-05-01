@@ -124,13 +124,13 @@ AdjustmentActivity AS (
     GROUP BY patient_id
 ),
 
--- Enhanced ClaimActivity CTE with better deduplication for PostgreSQL
+-- Enhanced ClaimActivity CTE with specialized deduplication
 ClaimActivity AS (
     -- First get all distinct patient IDs with their claim statuses
     WITH PatientClaimStatus AS (
         SELECT
             cd.patient_id,
-            -- Claim status metrics
+            -- Claim status metrics (unchanged)
             COUNT(DISTINCT CASE 
                 WHEN cd.claim_status = 'P' THEN cd.claim_id 
             END) AS pending_claims_count,
@@ -156,7 +156,7 @@ ClaimActivity AS (
                 THEN cd.claim_date 
             END) AS last_denied_claim_date,
             
-            -- Additional claim metrics
+            -- Additional claim metrics (unchanged)
             COUNT(DISTINCT CASE 
                 WHEN cd.claim_status = 'V' 
                 THEN cd.claim_id 
@@ -179,7 +179,7 @@ ClaimActivity AS (
         FROM {{ ref('int_claim_details') }} cd
         GROUP BY cd.patient_id
     ),
-    -- Get claim tracking info separately
+    -- Get claim tracking info separately (unchanged)
     PatientClaimTracking AS (
         SELECT
             cd.patient_id,
@@ -193,28 +193,56 @@ ClaimActivity AS (
             ON cd.claim_id = ct.claim_id
         GROUP BY cd.patient_id
     ),
-    -- Get deduplicated payment data separately
+    -- Process payments with special handling for duplicates, zeros, and reversals
+    UnifiedPayments AS (
+        -- Step 1: Get all payment records with their associated patient
+        SELECT
+            icd.patient_id,
+            cp.claim_id,
+            cp.procedure_id,
+            cp.claim_payment_id,
+            cp.paid_amount,
+            cp.check_date,
+            -- Mark zero payments as a separate category
+            CASE 
+                WHEN cp.paid_amount = 0 OR cp.claim_payment_id = 0 THEN 'ZERO'
+                WHEN cp.paid_amount < 0 THEN 'REVERSAL'
+                ELSE 'PAYMENT'
+            END as payment_type,
+            -- Create a composite key for deduplication
+            icd.patient_id || '-' || cp.claim_id || '-' || cp.procedure_id || '-' || 
+            cp.claim_payment_id || '-' || cp.paid_amount as unique_key
+        FROM {{ ref('int_claim_payments') }} cp
+        JOIN {{ ref('int_claim_details') }} icd
+            ON cp.claim_id = icd.claim_id
+            AND cp.procedure_id = icd.procedure_id
+    ),
+    -- Step 2: Deduplicate completely using the unique key
+    DeduplicatedPayments AS (
+        SELECT DISTINCT
+            patient_id,
+            claim_payment_id,
+            paid_amount,
+            payment_type,
+            -- For calculating which payments to count
+            CASE WHEN payment_type = 'PAYMENT' THEN 1 ELSE 0 END as count_payment,
+            -- For calculating amounts (count zeroes as zero)
+            CASE WHEN payment_type = 'ZERO' THEN 0 ELSE paid_amount END as counted_amount
+        FROM UnifiedPayments
+    ),
+    -- Step 3: Calculate payment metrics per patient
     PatientPayments AS (
         SELECT
             patient_id,
-            SUM(paid_amount) AS total_claim_payments,
-            COUNT(DISTINCT claim_payment_id) AS claim_payment_count
-        FROM (
-            -- This subquery deduplicates at the claim_payment_id level
-            SELECT DISTINCT
-                icd.patient_id,
-                cp.claim_payment_id,
-                cp.paid_amount
-            FROM {{ ref('int_claim_payments') }} cp
-            JOIN {{ ref('int_claim_details') }} icd
-                ON cp.claim_id = icd.claim_id
-                AND cp.procedure_id = icd.procedure_id
-            WHERE cp.claim_payment_id IS NOT NULL
-        ) AS dedupe_payments
+            -- Count only non-zero, non-reversed payments
+            SUM(count_payment) AS claim_payment_count,
+            -- Sum all amounts (including reversals)
+            SUM(counted_amount) AS total_claim_payments
+        FROM DeduplicatedPayments
         GROUP BY patient_id
     )
     
-    -- Join all the pieces together
+    -- Join all the pieces together (unchanged)
     SELECT
         pcs.patient_id,
         pcs.pending_claims_count,
