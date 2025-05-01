@@ -163,3 +163,55 @@ models:
           severity: warn
           name: warn_decimal_point_error
 
+      # test to check for duplicate claim payment records
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1
+              FROM (
+                SELECT 
+                  claim_id,
+                  procedure_id,
+                  claim_payment_id,
+                  COUNT(*) as duplicate_count
+                FROM {{ ref('int_claim_payments') }}
+                GROUP BY 
+                  claim_id,
+                  procedure_id,
+                  claim_payment_id
+                HAVING COUNT(*) > 1
+              ) as duplicates
+            )
+          severity: error
+          name: check_no_duplicate_claim_payment_records
+          description: >
+            This test verifies that there are no duplicate (claim_id, procedure_id, claim_payment_id) combinations
+            in the int_claim_payments model. Each payment for a procedure within a claim should appear exactly once.
+            
+      # test to check for duplicate patient payments
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1
+              FROM (
+                SELECT 
+                  cd.patient_id,
+                  cp.claim_payment_id,
+                  COUNT(*) as duplicate_count
+                FROM {{ ref('int_claim_payments') }} cp
+                JOIN {{ ref('int_claim_details') }} cd
+                  ON cp.claim_id = cd.claim_id
+                  AND cp.procedure_id = cd.procedure_id
+                WHERE cp.claim_payment_id IS NOT NULL
+                GROUP BY 
+                  cd.patient_id,
+                  cp.claim_payment_id
+                HAVING COUNT(*) > 1
+              ) as duplicates
+            )
+          severity: error
+          name: check_no_duplicate_patient_payments
+          description: >
+            This test verifies that there are no duplicate (patient_id, claim_payment_id) combinations
+            when joining int_claim_payments with int_claim_details. This test matches the same condition
+            that's being checked in the int_ar_analysis tests.
