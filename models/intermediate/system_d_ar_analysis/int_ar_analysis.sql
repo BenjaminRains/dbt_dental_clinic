@@ -124,11 +124,11 @@ AdjustmentActivity AS (
     GROUP BY patient_id
 ),
 
--- Enhanced ClaimActivity CTE with better deduplication
+-- Further enhanced ClaimActivity CTE with more comprehensive deduplication
 ClaimActivity AS (
     SELECT
         cd.patient_id,
-        -- Claim status metrics
+        -- Claim status metrics remain the same
         COUNT(DISTINCT CASE 
             WHEN cd.claim_status = 'P' THEN cd.claim_id 
         END) AS pending_claims_count,
@@ -154,31 +154,33 @@ ClaimActivity AS (
             THEN cd.claim_date 
         END) AS last_denied_claim_date,
         
-        -- Claim tracking metrics
+        -- Claim tracking metrics remain the same
         COUNT(DISTINCT CASE 
             WHEN ct.entry_timestamp >= CURRENT_DATE - INTERVAL '30 days' 
             THEN ct.claim_id 
         END) AS recent_status_changes,
         MAX(ct.entry_timestamp) AS last_status_change_date,
         
-        -- Better payment calculation with improved deduplication
-        COALESCE(SUM(CASE
-            WHEN deduped_payments.rank = 1 THEN deduped_payments.paid_amount
-            ELSE 0
-        END), 0) AS total_claim_payments,
+        -- More aggressive deduplication for payments
+        -- Focus on the actual net payment amount after considering reversals
+        COALESCE(
+            SUM(deduped_claim_proc.net_amount),
+            0
+        ) AS total_claim_payments,
+        
+        -- Count of unique payments after deduplication
         COUNT(DISTINCT CASE 
-            WHEN deduped_payments.rank = 1 THEN deduped_payments.claim_payment_id
+            WHEN deduped_claim_proc.has_payment = TRUE 
+            THEN deduped_claim_proc.claim_proc_key 
             ELSE NULL
         END) AS claim_payment_count,
         
-        -- Additional claim validation
+        -- Remaining fields unchanged
         COUNT(DISTINCT CASE 
             WHEN cd.claim_status = 'V' 
             THEN cd.claim_id 
         END) AS verified_claims_count,
         MAX(cd.verification_date) AS last_claim_verification,
-        
-        -- Benefit utilization
         COALESCE(SUM(
             CASE 
                 WHEN cd.benefit_details IS NOT NULL 
@@ -197,34 +199,36 @@ ClaimActivity AS (
     LEFT JOIN {{ ref('int_claim_tracking') }} ct
         ON cd.claim_id = ct.claim_id
     LEFT JOIN (
-        -- Improved deduplication subquery that handles reversals and multiple payment scenarios
+        -- Two-step deduplication approach to handle various duplication patterns
         SELECT 
-            cp.claim_id,
-            cp.procedure_id,
-            cp.paid_amount,
-            cp.check_date,
-            cp.claim_payment_id,
-            -- Rank within each claim_id, procedure_id, paid_amount group
-            -- This handles duplicate exact same payments
-            ROW_NUMBER() OVER (
-                PARTITION BY cp.claim_id, cp.procedure_id, cp.paid_amount
-                ORDER BY 
-                    cp.check_date DESC NULLS LAST,
-                    cp.claim_payment_id DESC NULLS LAST
-            ) AS rank,
-            -- Flag for the latest payment per procedure regardless of amount
-            -- This helps identify the most recent payment status
-            ROW_NUMBER() OVER (
-                PARTITION BY cp.claim_id, cp.procedure_id
-                ORDER BY 
-                    cp.check_date DESC NULLS LAST,
-                    cp.claim_payment_id DESC NULLS LAST
-            ) AS overall_rank
-        FROM {{ ref('int_claim_payments') }} cp
-        WHERE cp.claim_payment_id IS NOT NULL  -- Skip null payment IDs
-    ) deduped_payments 
-        ON cd.claim_id = deduped_payments.claim_id 
-        AND cd.procedure_id = deduped_payments.procedure_id
+            patient_id,
+            claim_proc_key,
+            -- Calculate the net payment amount by summing all payments for each claim+procedure
+            SUM(distinct_payment_amount) AS net_amount,
+            -- Track whether this claim+procedure has any payments
+            MAX(CASE WHEN distinct_payment_amount != 0 THEN TRUE ELSE FALSE END) AS has_payment
+        FROM (
+            -- First step: Deduplicate at the claim+procedure+payment amount level
+            SELECT 
+                icd.patient_id,
+                cp.claim_id || '-' || cp.procedure_id AS claim_proc_key,
+                cp.paid_amount AS distinct_payment_amount,
+                ROW_NUMBER() OVER (
+                    PARTITION BY cp.claim_id, cp.procedure_id, cp.paid_amount
+                    ORDER BY 
+                        cp.check_date DESC NULLS LAST,
+                        cp.claim_payment_id DESC NULLS LAST
+                ) AS payment_rank
+            FROM {{ ref('int_claim_payments') }} cp
+            JOIN {{ ref('int_claim_details') }} icd
+                ON cp.claim_id = icd.claim_id
+                AND cp.procedure_id = icd.procedure_id
+            WHERE 
+                cp.claim_payment_id IS NOT NULL  -- Skip null payment IDs
+        ) AS dedupe_step1
+        WHERE payment_rank = 1  -- Only take one record per unique payment amount
+        GROUP BY patient_id, claim_proc_key
+    ) AS deduped_claim_proc ON cd.patient_id = deduped_claim_proc.patient_id
     GROUP BY cd.patient_id
 ),
 
