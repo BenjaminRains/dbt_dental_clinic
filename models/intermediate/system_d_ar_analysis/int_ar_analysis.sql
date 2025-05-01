@@ -193,52 +193,43 @@ ClaimActivity AS (
             ON cd.claim_id = ct.claim_id
         GROUP BY cd.patient_id
     ),
-    -- Modify DeduplicatedPaymentsBase in int_ar_analysis.sql
-    DeduplicatedPaymentsBase AS (
-    -- Use window function to deduplicate at patient+claim_payment_id level
-    SELECT
-        icd.patient_id,
-        cp.claim_id,
-        cp.procedure_id,
-        cp.claim_payment_id,
-        cp.paid_amount,
-        ROW_NUMBER() OVER(PARTITION BY icd.patient_id, cp.claim_payment_id ORDER BY cp.paid_amount DESC) as rn
-    FROM {{ ref('int_claim_payments') }} cp
-    JOIN {{ ref('int_claim_details') }} icd
-        ON cp.claim_id = icd.claim_id
-        AND cp.procedure_id = icd.procedure_id
-    WHERE cp.claim_payment_id IS NOT NULL
+    
+    -- First get all unique claim_payment_id per patient directly from source
+    -- This completely bypasses the need to join to int_claim_details at this stage
+    UniquePatientPayments AS (
+        SELECT DISTINCT
+            c.patient_id,
+            cp.claim_payment_id,
+            MAX(cp.insurance_payment_amount) AS paid_amount -- Use highest payment
+        FROM {{ ref('stg_opendental__claimproc') }} cp
+        JOIN {{ ref('stg_opendental__claim') }} c
+            ON cp.claim_id = c.claim_id
+        WHERE cp.claim_payment_id IS NOT NULL
+        GROUP BY
+            c.patient_id,
+            cp.claim_payment_id
     ),
-    -- Then filter to only keep one record per patient+claim_payment_id
-    DeduplicatedClaimPayments AS (
-    SELECT
-        patient_id,
-        claim_id,
-        procedure_id,
-        claim_payment_id,
-        paid_amount
-    FROM DeduplicatedPaymentsBase
-    WHERE rn = 1
-    ),
-    -- Aggregate to patient level EXACTLY as the test expects
+    
+    -- Aggregate to patient level
     PatientPayments AS (
         SELECT
             patient_id,
             COUNT(DISTINCT claim_payment_id) AS claim_payment_count,
             SUM(paid_amount) AS total_claim_payments
-        FROM DeduplicatedClaimPayments
+        FROM UniquePatientPayments
         GROUP BY patient_id
     ),
-    -- Separately calculate payment type metrics to maintain business logic
+    
+    -- Calculate payment type metrics
     PaymentTypeMetrics AS (
         SELECT
             patient_id,
-            SUM(CASE WHEN paid_amount > 0 THEN 1 ELSE 0 END) as normal_payment_count,
-            SUM(CASE WHEN paid_amount = 0 THEN 1 ELSE 0 END) as zero_payment_count,
-            SUM(CASE WHEN paid_amount < 0 THEN 1 ELSE 0 END) as reversal_count,
-            SUM(CASE WHEN paid_amount > 0 THEN paid_amount ELSE 0 END) as normal_payment_amount,
-            SUM(CASE WHEN paid_amount < 0 THEN paid_amount ELSE 0 END) as reversal_amount
-        FROM DeduplicatedClaimPayments
+            SUM(CASE WHEN paid_amount > 0 THEN 1 ELSE 0 END) AS normal_payment_count,
+            SUM(CASE WHEN paid_amount = 0 THEN 1 ELSE 0 END) AS zero_payment_count,
+            SUM(CASE WHEN paid_amount < 0 THEN 1 ELSE 0 END) AS reversal_count,
+            SUM(CASE WHEN paid_amount > 0 THEN paid_amount ELSE 0 END) AS normal_payment_amount,
+            SUM(CASE WHEN paid_amount < 0 THEN paid_amount ELSE 0 END) AS reversal_amount
+        FROM UniquePatientPayments
         GROUP BY patient_id
     )
     
