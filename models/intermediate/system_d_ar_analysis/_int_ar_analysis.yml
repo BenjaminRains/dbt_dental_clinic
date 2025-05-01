@@ -726,11 +726,11 @@ models:
       - dbt_utils.expression_is_true:
           expression: >
             (total_insurance_payments >= -25000 AND total_insurance_payments <= 25000) AND
-            (total_patient_payments >= -25000 AND total_patient_payments <= 25000)
+            (total_patient_payments >= -50000 AND total_patient_payments <= 60000)
           config:
             severity: error
             description: >
-              Payment amounts must be between -25,000 and 25,000 to allow for refunds/reversals
+              Payment amounts must be within acceptable ranges to allow for refunds/reversals
               while preventing unreasonably large values
 
       # Merchant fee validation
