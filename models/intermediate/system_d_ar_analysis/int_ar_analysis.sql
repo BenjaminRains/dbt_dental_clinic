@@ -196,19 +196,8 @@ BasePatientInfo AS (
         p.patient_status,
         p.position_code,
         p.birth_date,
-        -- Calculate first_visit_date as the earliest of appointment or procedure dates
-        LEAST(
-            COALESCE(MIN(CASE 
-                WHEN ha.appointment_datetime <= CURRENT_TIMESTAMP 
-                THEN ha.appointment_datetime::date
-                ELSE NULL 
-            END), '2023-01-01'::date),  -- Use 2023-01-01 as default per column test
-            COALESCE(MIN(CASE 
-                WHEN pl.procedure_date <= CURRENT_DATE 
-                THEN pl.procedure_date 
-                ELSE NULL 
-            END), '2023-01-01'::date)
-        ) as first_visit_date,
+        -- Use the source system first_visit_date
+        p.first_visit_date,
         -- Calculate last_visit_date as the latest of appointment or procedure dates
         GREATEST(
             COALESCE(MAX(CASE 
@@ -240,7 +229,8 @@ BasePatientInfo AS (
     LEFT JOIN {{ ref('stg_opendental__procedurelog') }} pl 
         ON p.patient_id = pl.patient_id
     WHERE p.patient_status IN (0, 1, 2, 3)  -- Only include active patients
-    GROUP BY p.patient_id, p.preferred_name, p.middle_initial, p.patient_status, p.position_code, p.birth_date, p.has_insurance_flag
+    GROUP BY p.patient_id, p.preferred_name, p.middle_initial, p.patient_status, p.position_code,
+     p.birth_date, p.has_insurance_flag, p.first_visit_date
 ),
 
 -- Insurance coverage information
