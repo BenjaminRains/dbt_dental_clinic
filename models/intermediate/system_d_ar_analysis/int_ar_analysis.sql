@@ -124,11 +124,11 @@ AdjustmentActivity AS (
     GROUP BY patient_id
 ),
 
--- Enhanced ClaimActivity CTE with System B details
+-- Enhanced ClaimActivity CTE with better deduplication
 ClaimActivity AS (
     SELECT
         cd.patient_id,
-        -- Existing metrics
+        -- Claim status metrics
         COUNT(DISTINCT CASE 
             WHEN cd.claim_status = 'P' THEN cd.claim_id 
         END) AS pending_claims_count,
@@ -153,21 +153,31 @@ ClaimActivity AS (
             WHEN cd.claim_status = 'D' 
             THEN cd.claim_date 
         END) AS last_denied_claim_date,
-        -- New System B metrics
+        
+        -- Claim tracking metrics
         COUNT(DISTINCT CASE 
             WHEN ct.entry_timestamp >= CURRENT_DATE - INTERVAL '30 days' 
             THEN ct.claim_id 
         END) AS recent_status_changes,
         MAX(ct.entry_timestamp) AS last_status_change_date,
-        -- Improved payment calculation to handle duplicates and inconsistencies
-        COALESCE(SUM(dedupe_cp.paid_amount), 0) AS total_claim_payments,
-        COUNT(DISTINCT cp.claim_payment_id) AS claim_payment_count,
+        
+        -- Better payment calculation with improved deduplication
+        COALESCE(SUM(CASE
+            WHEN deduped_payments.rank = 1 THEN deduped_payments.paid_amount
+            ELSE 0
+        END), 0) AS total_claim_payments,
+        COUNT(DISTINCT CASE 
+            WHEN deduped_payments.rank = 1 THEN deduped_payments.claim_payment_id
+            ELSE NULL
+        END) AS claim_payment_count,
+        
         -- Additional claim validation
         COUNT(DISTINCT CASE 
             WHEN cd.claim_status = 'V' 
             THEN cd.claim_id 
         END) AS verified_claims_count,
         MAX(cd.verification_date) AS last_claim_verification,
+        
         -- Benefit utilization
         COALESCE(SUM(
             CASE 
@@ -187,29 +197,35 @@ ClaimActivity AS (
     LEFT JOIN {{ ref('int_claim_tracking') }} ct
         ON cd.claim_id = ct.claim_id
     LEFT JOIN (
-        -- Subquery to deduplicate payments at procedure level first
+        -- Improved deduplication subquery that handles reversals and multiple payment scenarios
         SELECT 
-            claim_id, 
-            procedure_id, 
-            paid_amount
-        FROM (
-            SELECT
-                claim_id,
-                procedure_id,
-                paid_amount,
-                ROW_NUMBER() OVER (
-                    PARTITION BY claim_id, procedure_id, paid_amount
-                    ORDER BY check_date DESC NULLS LAST
-                ) as rn
-            FROM {{ ref('int_claim_payments') }}
-            WHERE paid_amount > 0
-        ) sub
-        WHERE rn = 1
-    ) dedupe_cp ON cd.claim_id = dedupe_cp.claim_id AND cd.procedure_id = dedupe_cp.procedure_id
-    LEFT JOIN {{ ref('int_claim_payments') }} cp
-        ON cd.claim_id = cp.claim_id
-        AND cd.procedure_id = cp.procedure_id
-    GROUP BY 1
+            cp.claim_id,
+            cp.procedure_id,
+            cp.paid_amount,
+            cp.check_date,
+            cp.claim_payment_id,
+            -- Rank within each claim_id, procedure_id, paid_amount group
+            -- This handles duplicate exact same payments
+            ROW_NUMBER() OVER (
+                PARTITION BY cp.claim_id, cp.procedure_id, cp.paid_amount
+                ORDER BY 
+                    cp.check_date DESC NULLS LAST,
+                    cp.claim_payment_id DESC NULLS LAST
+            ) AS rank,
+            -- Flag for the latest payment per procedure regardless of amount
+            -- This helps identify the most recent payment status
+            ROW_NUMBER() OVER (
+                PARTITION BY cp.claim_id, cp.procedure_id
+                ORDER BY 
+                    cp.check_date DESC NULLS LAST,
+                    cp.claim_payment_id DESC NULLS LAST
+            ) AS overall_rank
+        FROM {{ ref('int_claim_payments') }} cp
+        WHERE cp.claim_payment_id IS NOT NULL  -- Skip null payment IDs
+    ) deduped_payments 
+        ON cd.claim_id = deduped_payments.claim_id 
+        AND cd.procedure_id = deduped_payments.procedure_id
+    GROUP BY cd.patient_id
 ),
 
 -- Base patient information
@@ -337,8 +353,8 @@ PatientInfo AS (
         ON bpi.patient_id = ic.patient_id
 )
 
--- Start with all active patients as the base
-SELECT
+-- Final SELECT statement with correct references to the ClaimActivity fields
+SELECT 
     ap.patient_id,
     COALESCE(pb.total_ar_balance, 0) AS total_ar_balance,
     COALESCE(pb.balance_0_30_days, 0) AS balance_0_30_days,
