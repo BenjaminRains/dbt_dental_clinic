@@ -159,7 +159,11 @@ ClaimActivity AS (
             THEN ct.claim_id 
         END) AS recent_status_changes,
         MAX(ct.entry_timestamp) AS last_status_change_date,
-        COALESCE(SUM(DISTINCT cp.paid_amount), 0) AS total_claim_payments,
+        -- Improved payment calculation to handle duplicates and inconsistencies
+        COALESCE(SUM(DISTINCT CASE 
+            WHEN cp.paid_amount > 0 
+            THEN cp.paid_amount 
+        END), 0) AS total_claim_payments,
         COUNT(DISTINCT cp.claim_payment_id) AS claim_payment_count,
         -- Additional claim validation
         COUNT(DISTINCT CASE 
