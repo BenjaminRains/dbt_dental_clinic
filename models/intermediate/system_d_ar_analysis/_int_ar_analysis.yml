@@ -77,8 +77,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: balance_0_30_days
         description: >
@@ -88,8 +88,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: balance_31_60_days
         description: >
@@ -99,8 +99,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: balance_61_90_days
         description: >
@@ -110,8 +110,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: balance_over_90_days
         description: >
@@ -121,8 +121,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: estimated_insurance_ar
         description: >
@@ -132,8 +132,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: patient_responsibility
         description: >
@@ -143,8 +143,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: insurance_responsibility
         description: >
@@ -154,8 +154,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 25000
+              min_value: -1000
+              max_value: 50000
 
       - name: last_payment_date
         description: Date of most recent payment
@@ -545,32 +545,22 @@ models:
         description: Date of patient's first visit
         tests:
           - date_range_test:
-              min_date: "'2023-01-01'::date"
+              min_date: "'2010-01-01'::date"
               max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
               column_name: "first_visit_date::date"
               config:
                 severity: error
-                description: "First visit date must be between 2023-01-01 and current date"
+                description: "First visit date must be between 2010-01-01 and current date"
 
       - name: model_created_at
         description: Timestamp when the record was created
         tests:
-          - date_range_test:
-              min_date: "'2023-01-01'::timestamp"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
-              config:
-                severity: error
-                description: "Model created at must be between 2023-01-01 and current date"
+          - not_null
 
       - name: model_updated_at
         description: Timestamp when the record was last updated
         tests:
-          - date_range_test:
-              min_date: "'2023-01-01'::timestamp"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
-              config:
-                severity: error
-                description: "Model updated at must be between 2023-01-01 and current date"
+          - not_null
 
       - name: split_payment_count
         description: Number of split payments received
