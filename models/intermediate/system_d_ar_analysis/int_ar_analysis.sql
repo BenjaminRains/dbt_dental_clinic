@@ -124,7 +124,7 @@ AdjustmentActivity AS (
     GROUP BY patient_id
 ),
 
--- Further enhanced ClaimActivity CTE with more comprehensive deduplication
+-- Enhanced ClaimActivity CTE with better deduplication for PostgreSQL
 ClaimActivity AS (
     SELECT
         cd.patient_id,
@@ -162,7 +162,6 @@ ClaimActivity AS (
         MAX(ct.entry_timestamp) AS last_status_change_date,
         
         -- More aggressive deduplication for payments
-        -- Focus on the actual net payment amount after considering reversals
         COALESCE(
             SUM(deduped_claim_proc.net_amount),
             0
@@ -170,8 +169,7 @@ ClaimActivity AS (
         
         -- Count of unique payments after deduplication
         COUNT(DISTINCT CASE 
-            WHEN deduped_claim_proc.has_payment = TRUE 
-            THEN deduped_claim_proc.claim_proc_key 
+            WHEN deduped_claim_proc.has_payment THEN deduped_claim_proc.claim_proc_key 
             ELSE NULL
         END) AS claim_payment_count,
         
@@ -199,14 +197,14 @@ ClaimActivity AS (
     LEFT JOIN {{ ref('int_claim_tracking') }} ct
         ON cd.claim_id = ct.claim_id
     LEFT JOIN (
-        -- Two-step deduplication approach to handle various duplication patterns
+        -- Two-step deduplication approach
         SELECT 
             patient_id,
             claim_proc_key,
             -- Calculate the net payment amount by summing all payments for each claim+procedure
             SUM(distinct_payment_amount) AS net_amount,
             -- Track whether this claim+procedure has any payments
-            MAX(CASE WHEN distinct_payment_amount != 0 THEN TRUE ELSE FALSE END) AS has_payment
+            BOOL_OR(distinct_payment_amount != 0) AS has_payment
         FROM (
             -- First step: Deduplicate at the claim+procedure+payment amount level
             SELECT 
