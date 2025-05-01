@@ -7,7 +7,8 @@
 }}
 
 with ClaimProc as (
-    select
+    -- First, deduplicate ClaimProc records by selecting distinct combinations
+    select distinct
         claim_id,
         procedure_id,
         claim_payment_id,
@@ -63,4 +64,4 @@ Final as (
         and cp.procedure_id = cd.procedure_id
 )
 
-select * from Final 
+select * from Final
