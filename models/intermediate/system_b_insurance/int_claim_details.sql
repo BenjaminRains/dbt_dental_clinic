@@ -2,7 +2,7 @@
     config(
         materialized='table',
         schema='intermediate',
-        unique_key='claim_id'
+        unique_key='claim_id || "-" || procedure_id'
     )
 }}
 
