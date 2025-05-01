@@ -159,7 +159,7 @@ ClaimActivity AS (
             THEN ct.claim_id 
         END) AS recent_status_changes,
         MAX(ct.entry_timestamp) AS last_status_change_date,
-        COALESCE(SUM(cp.paid_amount), 0) AS total_claim_payments,
+        COALESCE(SUM(DISTINCT cp.paid_amount), 0) AS total_claim_payments,
         COUNT(DISTINCT cp.claim_payment_id) AS claim_payment_count,
         -- Additional claim validation
         COUNT(DISTINCT CASE 
@@ -187,6 +187,7 @@ ClaimActivity AS (
         ON cd.claim_id = ct.claim_id
     LEFT JOIN {{ ref('int_claim_payments') }} cp
         ON cd.claim_id = cp.claim_id
+        AND cd.procedure_id = cp.procedure_id
     GROUP BY 1
 ),
 
