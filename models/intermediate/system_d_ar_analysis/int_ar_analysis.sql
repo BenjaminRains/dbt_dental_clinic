@@ -79,7 +79,11 @@ PaymentActivity AS (
                 END)
             END AS split_payment_count,
             COUNT(DISTINCT ipa.payment_group_id) AS payment_group_count,
-            ...
+            SUM(COALESCE(ps.merchant_fee, 0)) AS total_merchant_fees,
+            MAX(ps.payment_type) AS last_payment_type,
+            MAX(ps.check_number) AS last_check_number,
+            MAX(ps.bank_branch) AS last_bank_branch
+            -- Additional metrics can be added here
         FROM {{ ref('int_payment_split') }} ps
         LEFT JOIN {{ ref('int_insurance_payment_allocated') }} ipa
             ON ps.payment_id = ipa.payment_id
