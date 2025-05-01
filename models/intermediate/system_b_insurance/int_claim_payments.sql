@@ -7,7 +7,7 @@
 }}
 
 with ClaimProc as (
-    select
+    select distinct
         claim_id,
         procedure_id,
         claim_payment_id,
@@ -30,46 +30,19 @@ ClaimPayment as (
     from {{ ref('stg_opendental__claimpayment') }}
 ),
 
--- Add a CTE to get patient_id from claim_details
-ClaimPatient as (
-    select distinct
-        claim_id,
-        procedure_id,
-        patient_id
-    from {{ ref('int_claim_details') }}
-),
-
--- Deduplicate at patient + claim_payment_id level
-DeduplicatedClaims as (
-    select
-        cp.claim_id,
-        cp.procedure_id,
-        cp.claim_payment_id,
-        cp.billed_amount,
-        cp.allowed_amount,
-        cp.paid_amount,
-        cp.write_off,
-        cp.patient_responsibility,
-        row_number() over(partition by cpat.patient_id, cp.claim_payment_id order by cp.paid_amount desc) as rn
-    from ClaimProc cp
-    inner join ClaimPatient cpat
-        on cp.claim_id = cpat.claim_id
-        and cp.procedure_id = cpat.procedure_id
-),
-
 Final as (
     select
         -- Primary Key
-        dc.claim_id,
-        dc.procedure_id,
-        dc.claim_payment_id,
+        cp.claim_id,
+        cp.procedure_id,
+        cp.claim_payment_id,
 
         -- Financial Information
-        dc.billed_amount,
-        dc.allowed_amount,
-        dc.paid_amount,
-        dc.write_off as write_off_amount,
-        dc.patient_responsibility,
+        cp.billed_amount,
+        cp.allowed_amount,
+        cp.paid_amount,
+        cp.write_off as write_off_amount,
+        cp.patient_responsibility,
 
         -- Payment Details
         cpy.check_amount,
@@ -81,11 +54,9 @@ Final as (
         cpy.check_date as created_at,
         cpy.check_date as updated_at
 
-    from DeduplicatedClaims dc
+    from ClaimProc cp
     left join ClaimPayment cpy
-        on dc.claim_payment_id = cpy.claim_payment_id
-    -- Only keep one record per patient + claim_payment_id combination
-    where dc.rn = 1
+        on cp.claim_payment_id = cpy.claim_payment_id
 )
 
 select * from Final

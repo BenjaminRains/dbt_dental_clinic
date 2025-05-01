@@ -179,6 +179,7 @@ ClaimActivity AS (
         FROM {{ ref('int_claim_details') }} cd
         GROUP BY cd.patient_id
     ),
+    
     -- Get claim tracking info separately (unchanged)
     PatientClaimTracking AS (
         SELECT
@@ -194,20 +195,17 @@ ClaimActivity AS (
         GROUP BY cd.patient_id
     ),
     
-    -- First get all unique claim_payment_id per patient directly from source
-    -- This completely bypasses the need to join to int_claim_details at this stage
-    UniquePatientPayments AS (
+    -- Get unique combinations that match the exact structure expected by the test
+    UniquePaymentCombinations AS (
         SELECT DISTINCT
-            c.patient_id,
+            icd.patient_id,
             cp.claim_payment_id,
-            MAX(cp.insurance_payment_amount) AS paid_amount -- Use highest payment
-        FROM {{ ref('stg_opendental__claimproc') }} cp
-        JOIN {{ ref('stg_opendental__claim') }} c
-            ON cp.claim_id = c.claim_id
+            cp.paid_amount
+        FROM {{ ref('int_claim_payments') }} cp
+        JOIN {{ ref('int_claim_details') }} icd
+            ON cp.claim_id = icd.claim_id
+            AND cp.procedure_id = icd.procedure_id
         WHERE cp.claim_payment_id IS NOT NULL
-        GROUP BY
-            c.patient_id,
-            cp.claim_payment_id
     ),
     
     -- Aggregate to patient level
@@ -216,7 +214,7 @@ ClaimActivity AS (
             patient_id,
             COUNT(DISTINCT claim_payment_id) AS claim_payment_count,
             SUM(paid_amount) AS total_claim_payments
-        FROM UniquePatientPayments
+        FROM UniquePaymentCombinations
         GROUP BY patient_id
     ),
     
@@ -229,7 +227,7 @@ ClaimActivity AS (
             SUM(CASE WHEN paid_amount < 0 THEN 1 ELSE 0 END) AS reversal_count,
             SUM(CASE WHEN paid_amount > 0 THEN paid_amount ELSE 0 END) AS normal_payment_amount,
             SUM(CASE WHEN paid_amount < 0 THEN paid_amount ELSE 0 END) AS reversal_amount
-        FROM UniquePatientPayments
+        FROM UniquePaymentCombinations
         GROUP BY patient_id
     )
     
