@@ -126,108 +126,116 @@ AdjustmentActivity AS (
 
 -- Enhanced ClaimActivity CTE with better deduplication for PostgreSQL
 ClaimActivity AS (
-    SELECT
-        cd.patient_id,
-        -- Claim status metrics remain the same
-        COUNT(DISTINCT CASE 
-            WHEN cd.claim_status = 'P' THEN cd.claim_id 
-        END) AS pending_claims_count,
-        COUNT(DISTINCT CASE 
-            WHEN cd.claim_status = 'D' THEN cd.claim_id 
-        END) AS denied_claims_count,
-        COALESCE(SUM(CASE 
-            WHEN cd.claim_status = 'P' 
-            THEN cd.billed_amount - cd.paid_amount - cd.write_off_amount 
-            ELSE 0 
-        END), 0) AS pending_claims_amount,
-        COALESCE(SUM(CASE 
-            WHEN cd.claim_status = 'D' 
-            THEN cd.billed_amount - cd.paid_amount - cd.write_off_amount 
-            ELSE 0 
-        END), 0) AS denied_claims_amount,
-        MAX(CASE 
-            WHEN cd.claim_status = 'P' 
-            THEN cd.claim_date 
-        END) AS last_pending_claim_date,
-        MAX(CASE 
-            WHEN cd.claim_status = 'D' 
-            THEN cd.claim_date 
-        END) AS last_denied_claim_date,
-        
-        -- Claim tracking metrics remain the same
-        COUNT(DISTINCT CASE 
-            WHEN ct.entry_timestamp >= CURRENT_DATE - INTERVAL '30 days' 
-            THEN ct.claim_id 
-        END) AS recent_status_changes,
-        MAX(ct.entry_timestamp) AS last_status_change_date,
-        
-        -- More aggressive deduplication for payments
-        COALESCE(
-            SUM(deduped_claim_proc.net_amount),
-            0
-        ) AS total_claim_payments,
-        
-        -- Count of unique payments after deduplication
-        COUNT(DISTINCT CASE 
-            WHEN deduped_claim_proc.has_payment THEN deduped_claim_proc.claim_proc_key 
-            ELSE NULL
-        END) AS claim_payment_count,
-        
-        -- Remaining fields unchanged
-        COUNT(DISTINCT CASE 
-            WHEN cd.claim_status = 'V' 
-            THEN cd.claim_id 
-        END) AS verified_claims_count,
-        MAX(cd.verification_date) AS last_claim_verification,
-        COALESCE(SUM(
-            CASE 
-                WHEN cd.benefit_details IS NOT NULL 
-                THEN (cd.benefit_details->>'monetary_amount')::numeric 
+    -- First get all distinct patient IDs with their claim statuses
+    WITH PatientClaimStatus AS (
+        SELECT
+            cd.patient_id,
+            -- Claim status metrics
+            COUNT(DISTINCT CASE 
+                WHEN cd.claim_status = 'P' THEN cd.claim_id 
+            END) AS pending_claims_count,
+            COUNT(DISTINCT CASE 
+                WHEN cd.claim_status = 'D' THEN cd.claim_id 
+            END) AS denied_claims_count,
+            COALESCE(SUM(CASE 
+                WHEN cd.claim_status = 'P' 
+                THEN cd.billed_amount - cd.paid_amount - cd.write_off_amount 
                 ELSE 0 
-            END
-        ), 0) AS total_benefits_used,
-        COALESCE(SUM(
-            CASE 
-                WHEN cd.benefit_details IS NOT NULL 
-                THEN (cd.benefit_details->>'remaining_amount')::numeric 
+            END), 0) AS pending_claims_amount,
+            COALESCE(SUM(CASE 
+                WHEN cd.claim_status = 'D' 
+                THEN cd.billed_amount - cd.paid_amount - cd.write_off_amount 
                 ELSE 0 
-            END
-        ), 0) AS total_benefits_remaining
-    FROM {{ ref('int_claim_details') }} cd
-    LEFT JOIN {{ ref('int_claim_tracking') }} ct
-        ON cd.claim_id = ct.claim_id
-    LEFT JOIN (
-        -- Two-step deduplication approach
-        SELECT 
+            END), 0) AS denied_claims_amount,
+            MAX(CASE 
+                WHEN cd.claim_status = 'P' 
+                THEN cd.claim_date 
+            END) AS last_pending_claim_date,
+            MAX(CASE 
+                WHEN cd.claim_status = 'D' 
+                THEN cd.claim_date 
+            END) AS last_denied_claim_date,
+            
+            -- Additional claim metrics
+            COUNT(DISTINCT CASE 
+                WHEN cd.claim_status = 'V' 
+                THEN cd.claim_id 
+            END) AS verified_claims_count,
+            MAX(cd.verification_date) AS last_claim_verification,
+            COALESCE(SUM(
+                CASE 
+                    WHEN cd.benefit_details IS NOT NULL 
+                    THEN (cd.benefit_details->>'monetary_amount')::numeric 
+                    ELSE 0 
+                END
+            ), 0) AS total_benefits_used,
+            COALESCE(SUM(
+                CASE 
+                    WHEN cd.benefit_details IS NOT NULL 
+                    THEN (cd.benefit_details->>'remaining_amount')::numeric 
+                    ELSE 0 
+                END
+            ), 0) AS total_benefits_remaining
+        FROM {{ ref('int_claim_details') }} cd
+        GROUP BY cd.patient_id
+    ),
+    -- Get claim tracking info separately
+    PatientClaimTracking AS (
+        SELECT
+            cd.patient_id,
+            COUNT(DISTINCT CASE 
+                WHEN ct.entry_timestamp >= CURRENT_DATE - INTERVAL '30 days' 
+                THEN ct.claim_id 
+            END) AS recent_status_changes,
+            MAX(ct.entry_timestamp) AS last_status_change_date
+        FROM {{ ref('int_claim_details') }} cd
+        LEFT JOIN {{ ref('int_claim_tracking') }} ct
+            ON cd.claim_id = ct.claim_id
+        GROUP BY cd.patient_id
+    ),
+    -- Get deduplicated payment data separately
+    PatientPayments AS (
+        SELECT
             patient_id,
-            claim_proc_key,
-            -- Calculate the net payment amount by summing all payments for each claim+procedure
-            SUM(distinct_payment_amount) AS net_amount,
-            -- Track whether this claim+procedure has any payments
-            BOOL_OR(distinct_payment_amount != 0) AS has_payment
+            SUM(paid_amount) AS total_claim_payments,
+            COUNT(DISTINCT claim_payment_id) AS claim_payment_count
         FROM (
-            -- First step: Deduplicate at the claim+procedure+payment amount level
-            SELECT 
+            -- This subquery deduplicates at the claim_payment_id level
+            SELECT DISTINCT
                 icd.patient_id,
-                cp.claim_id || '-' || cp.procedure_id AS claim_proc_key,
-                cp.paid_amount AS distinct_payment_amount,
-                ROW_NUMBER() OVER (
-                    PARTITION BY cp.claim_id, cp.procedure_id, cp.paid_amount
-                    ORDER BY 
-                        cp.check_date DESC NULLS LAST,
-                        cp.claim_payment_id DESC NULLS LAST
-                ) AS payment_rank
+                cp.claim_payment_id,
+                cp.paid_amount
             FROM {{ ref('int_claim_payments') }} cp
             JOIN {{ ref('int_claim_details') }} icd
                 ON cp.claim_id = icd.claim_id
                 AND cp.procedure_id = icd.procedure_id
-            WHERE 
-                cp.claim_payment_id IS NOT NULL  -- Skip null payment IDs
-        ) AS dedupe_step1
-        WHERE payment_rank = 1  -- Only take one record per unique payment amount
-        GROUP BY patient_id, claim_proc_key
-    ) AS deduped_claim_proc ON cd.patient_id = deduped_claim_proc.patient_id
-    GROUP BY cd.patient_id
+            WHERE cp.claim_payment_id IS NOT NULL
+        ) AS dedupe_payments
+        GROUP BY patient_id
+    )
+    
+    -- Join all the pieces together
+    SELECT
+        pcs.patient_id,
+        pcs.pending_claims_count,
+        pcs.denied_claims_count,
+        pcs.pending_claims_amount,
+        pcs.denied_claims_amount,
+        pcs.last_pending_claim_date,
+        pcs.last_denied_claim_date,
+        pct.recent_status_changes,
+        pct.last_status_change_date,
+        COALESCE(pp.total_claim_payments, 0) AS total_claim_payments,
+        COALESCE(pp.claim_payment_count, 0) AS claim_payment_count,
+        pcs.verified_claims_count,
+        pcs.last_claim_verification,
+        pcs.total_benefits_used,
+        pcs.total_benefits_remaining
+    FROM PatientClaimStatus pcs
+    LEFT JOIN PatientClaimTracking pct
+        ON pcs.patient_id = pct.patient_id
+    LEFT JOIN PatientPayments pp
+        ON pcs.patient_id = pp.patient_id
 ),
 
 -- Base patient information
