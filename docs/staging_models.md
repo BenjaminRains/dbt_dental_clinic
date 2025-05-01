@@ -2,7 +2,9 @@
 
 ## Overview
 
-Staging models represent the first transformation layer in dbt projects. They serve as the foundation for all downstream transformations by providing clean, standardized data from source systems.
+Staging models represent the first transformation layer in dbt projects. They serve as the 
+foundation for all downstream transformations by providing clean, standardized data from 
+source systems.
 
 ## Purpose of Staging Models
 
