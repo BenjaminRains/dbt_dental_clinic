@@ -363,6 +363,7 @@ SELECT
     pi.preferred_name,
     pi.middle_initial,
     pi.patient_status,
+    pi.position_code,
     pi.patient_category,
     pi.birth_date,
     pi.first_visit_date,
