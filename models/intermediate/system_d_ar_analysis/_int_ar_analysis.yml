@@ -703,6 +703,54 @@ models:
               min_value: 0
               max_value: 25000
 
+      - name: normal_payment_count
+        description: >
+          Number of normal payments received (excluding zero payments and reversals)
+        tests:
+          - not_null:
+              where: "total_claim_payments > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: zero_payment_count
+        description: >
+          Number of zero-amount payments received
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: reversal_count
+        description: >
+          Number of payment reversals received (negative amounts)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: normal_payment_amount
+        description: >
+          Total amount of normal payments received (excluding zero payments and reversals)
+        tests:
+          - not_null:
+              where: "normal_payment_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: reversal_amount
+        description: >
+          Total amount of payment reversals (should be negative)
+        tests:
+          - not_null:
+              where: "reversal_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -25000
+              max_value: 0
+
     tests:
       # AR balance validation
       - dbt_utils.expression_is_true:
