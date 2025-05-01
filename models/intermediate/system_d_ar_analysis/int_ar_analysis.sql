@@ -181,7 +181,17 @@ ClaimActivity AS (
     ),
     -- Get claim tracking info separately (unchanged)
     PatientClaimTracking AS (
-        -- [No changes to this CTE]
+        SELECT
+            cd.patient_id,
+            COUNT(DISTINCT CASE 
+                WHEN ct.entry_timestamp >= CURRENT_DATE - INTERVAL '30 days' 
+                THEN ct.claim_id 
+            END) AS recent_status_changes,
+            MAX(ct.entry_timestamp) AS last_status_change_date
+        FROM {{ ref('int_claim_details') }} cd
+        LEFT JOIN {{ ref('int_claim_tracking') }} ct
+            ON cd.claim_id = ct.claim_id
+        GROUP BY cd.patient_id
     ),
     -- Modify to use the exact same structure as the test
     -- First deduplicate claim payments in the exact way the test does
