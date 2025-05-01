@@ -193,29 +193,32 @@ ClaimActivity AS (
             ON cd.claim_id = ct.claim_id
         GROUP BY cd.patient_id
     ),
-    -- Modify to use the exact same structure as the test
-    -- First deduplicate claim payments in the exact way the test does
+    -- Modify DeduplicatedPaymentsBase in int_ar_analysis.sql
     DeduplicatedPaymentsBase AS (
-        SELECT DISTINCT
-            claim_id,
-            procedure_id,
-            claim_payment_id,
-            paid_amount
-        FROM {{ ref('int_claim_payments') }}
-        WHERE claim_payment_id IS NOT NULL
+    -- Use window function to deduplicate at patient+claim_payment_id level
+    SELECT
+        icd.patient_id,
+        cp.claim_id,
+        cp.procedure_id,
+        cp.claim_payment_id,
+        cp.paid_amount,
+        ROW_NUMBER() OVER(PARTITION BY icd.patient_id, cp.claim_payment_id ORDER BY cp.paid_amount DESC) as rn
+    FROM {{ ref('int_claim_payments') }} cp
+    JOIN {{ ref('int_claim_details') }} icd
+        ON cp.claim_id = icd.claim_id
+        AND cp.procedure_id = icd.procedure_id
+    WHERE cp.claim_payment_id IS NOT NULL
     ),
-    -- Then join to claim_details exactly as the test does
+    -- Then filter to only keep one record per patient+claim_payment_id
     DeduplicatedClaimPayments AS (
-        SELECT
-            icd.patient_id,
-            dp.claim_id,
-            dp.procedure_id,
-            dp.claim_payment_id,
-            dp.paid_amount
-        FROM DeduplicatedPaymentsBase dp
-        JOIN {{ ref('int_claim_details') }} icd
-            ON dp.claim_id = icd.claim_id
-            AND dp.procedure_id = icd.procedure_id
+    SELECT
+        patient_id,
+        claim_id,
+        procedure_id,
+        claim_payment_id,
+        paid_amount
+    FROM DeduplicatedPaymentsBase
+    WHERE rn = 1
     ),
     -- Aggregate to patient level EXACTLY as the test expects
     PatientPayments AS (
