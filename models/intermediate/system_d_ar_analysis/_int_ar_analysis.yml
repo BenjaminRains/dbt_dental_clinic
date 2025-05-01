@@ -813,15 +813,16 @@ models:
       - dbt_utils.expression_is_true:
           expression: >
             CASE
-              WHEN patient_status = 0 THEN patient_category = 'Regular Patient'
-              WHEN patient_status = 1 THEN patient_category = 'House Account'
-              WHEN patient_status = 2 THEN patient_category = 'Staff Member'
-              WHEN patient_status = 3 THEN patient_category = 'VIP Patient'
-              ELSE TRUE
+              WHEN position_code = 0 THEN patient_category = 'Regular Patient'
+              WHEN position_code = 1 THEN patient_category = 'House Account'
+              WHEN position_code = 2 THEN patient_category = 'Staff Member'
+              WHEN position_code = 3 THEN patient_category = 'VIP Patient'
+              WHEN position_code = 4 THEN patient_category = 'Other'
+              ELSE patient_category = 'Unknown'
             END
           config:
             severity: error
-            description: "Patient category should match status code"
+            description: "Patient category should match position code"
 
       # Add new tests for System C integration
       - dbt_utils.expression_is_true:
