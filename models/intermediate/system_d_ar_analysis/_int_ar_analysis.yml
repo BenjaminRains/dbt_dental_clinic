@@ -955,23 +955,32 @@ models:
               claim_payment_ids for each patient in the source data.
 
       - dbt_utils.expression_is_true:
-          expression: >
-            NOT EXISTS (
-              SELECT 1
-              FROM {{ ref('int_ar_analysis') }} ar
-              JOIN (
-                -- Get the expected sum of payments per patient from source
-                SELECT
-                  c.patient_id,
-                  SUM(DISTINCT cp.insurance_payment_amount) as expected_payment_amount
-                FROM {{ ref('stg_opendental__claimproc') }} cp
-                JOIN {{ ref('stg_opendental__claim') }} c
-                  ON cp.claim_id = c.claim_id
-                WHERE cp.claim_payment_id IS NOT NULL
-                GROUP BY c.patient_id
-              ) expected ON ar.patient_id = expected.patient_id
-              WHERE ABS(ar.total_claim_payments - expected.expected_payment_amount) > 0.01
-            )
+          - dbt_utils.expression_is_true:
+            expression: >
+              NOT EXISTS (
+                SELECT 1
+                FROM {{ ref('int_ar_analysis') }} ar
+                JOIN (
+                  -- Get distinct payment amounts first, then sum them
+                  SELECT
+                    patient_id,
+                    SUM(payment_amount) as expected_payment_amount
+                  FROM (
+                    -- Get distinct payment amounts per patient and claim_payment_id
+                    SELECT
+                      c.patient_id,
+                      cp.claim_payment_id,
+                      MAX(cp.insurance_payment_amount) as payment_amount
+                    FROM {{ ref('stg_opendental__claimproc') }} cp
+                    JOIN {{ ref('stg_opendental__claim') }} c
+                      ON cp.claim_id = c.claim_id
+                    WHERE cp.claim_payment_id IS NOT NULL
+                    GROUP BY c.patient_id, cp.claim_payment_id
+                  ) distinct_payments
+                  GROUP BY patient_id
+                ) expected ON ar.patient_id = expected.patient_id
+                WHERE ABS(ar.total_claim_payments - expected.expected_payment_amount) > 0.01
+              )
           config:
             severity: error
             description: >
