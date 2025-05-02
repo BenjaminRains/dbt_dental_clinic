@@ -330,7 +330,7 @@ InsuranceCoverage AS (
         MAX(CASE WHEN ic.ordinal = 2 THEN ic.group_name END) as secondary_insurance_group,
         MAX(CASE WHEN ic.ordinal = 1 THEN ic.plan_type END) as primary_insurance_type,
         MAX(CASE WHEN ic.ordinal = 2 THEN ic.plan_type END) as secondary_insurance_type,
-        MAX(CASE WHEN ic.ordinal = 1 THEN ic.effective_date END) as coverage_start_date,
+        MAX(CASE WHEN ic.ordinal = 1 THEN ic.effective_date::date END) as coverage_start_date,
         MAX(CASE WHEN ic.ordinal = 1 THEN ic.termination_date END) as coverage_end_date,
         MAX(CASE WHEN ic.ordinal = 1 THEN ic.benefit_details->>'coverage_percent' END) as benefit_percentage,
         MAX(CASE WHEN ic.ordinal = 1 THEN ic.benefit_details->>'deductible_met' END) as deductible_met,
