@@ -13,12 +13,27 @@ models:
       - Numeric codes represent valid dental procedures but don't follow the CDT standard format.
       - The code_prefix field extracts only D-prefixes and will be NULL for numeric procedure codes.
       - Primary categorization is through procedure_category_id field.
-      - Common procedure_category_id values:
-        - 622: Standard dental procedures (most common, ~83% of all codes)
-        - 250: Administrative and supply codes (e.g., "Watch", "Bleaching Tray")
-        - 73-85: Various clinical note types and procedure categories
-        - 540: Specialized procedures (e.g., root tip procedures)
-        - 251: Prosthetic and special fabrication procedures
+      - Procedure category breakdown:
+        - 622: Standard dental procedures (most common, 677 codes, all numeric format)
+        - 82: Oral surgery and maxillofacial procedures (145 codes, all D-prefixed)
+        - 250: Administrative, supply codes, patient items (126 codes, mix of formats)
+        - 73: Diagnostic services and exams (124 codes, mostly D-prefixed)
+        - 81: Restorative procedures and crowns (102 codes, all D-prefixed)
+        - 80: Implant services (77 codes, all D-prefixed)
+        - 78: Denture and removable prosthodontics (73 codes, all D-prefixed)
+        - 260: Imaging and diagnostic radiology (55 codes, all D-prefixed)
+        - 76: Endodontic procedures (54 codes, all D-prefixed)
+        - 251: Interim prosthetics and specialized appliances (49 codes, mostly D-prefixed)
+        - 77: Periodontal procedures (44 codes, mostly D-prefixed)
+        - 83: Orthodontic services (42 codes, all D-prefixed)
+        - 75: Basic restorative procedures (41 codes, all D-prefixed)
+        - 300: Risk assessments and preventive services (41 codes, all D-prefixed)
+        - 85: Clinical notes and procedural notes (31 codes, all numeric format)
+        - 79: Cosmetic and whitening procedures (20 codes, mostly D-prefixed)
+        - 74: Preventive services and cleanings (16 codes, all D-prefixed)
+        - 301: Anesthesia services (4 codes, all D-prefixed)
+        - 540: Root procedures (1 code, numeric format)
+        - 548: COVID and pathogen testing (1 code, D-prefixed)
       - D0-D9 prefixes indicate procedure groups (diagnostic, preventive, etc.)
       - Flags like is_hygiene_flag and is_radiology_flag indicate special handling requirements.
       
