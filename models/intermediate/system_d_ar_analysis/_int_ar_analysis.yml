@@ -545,12 +545,12 @@ models:
         description: Date of patient's first visit
         tests:
           - date_range_test:
-              min_date: "'2010-01-01'::date"
+              min_date: "'1900-01-01'::date"
               max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
               column_name: "first_visit_date::date"
               config:
                 severity: error
-                description: "First visit date must be between 2010-01-01 and current date"
+                description: "First visit date must be between 1900-01-01 and current date"
 
       - name: model_created_at
         description: Timestamp when the record was created
