@@ -12,6 +12,11 @@ models:
       - The system also contains numeric procedure codes (e.g., "01354", "02920") without D-prefixes.
       - Numeric codes represent valid dental procedures but don't follow the CDT standard format.
       - The code_prefix field extracts only D-prefixes and will be NULL for numeric procedure codes.
+      - The system also contains special custom codes for product tracking and specific services:
+        - Single letter codes (e.g., "D") - Used as simplified procedure identifiers
+        - Short word codes (e.g., "Watch", "Clo") - Custom tracking or product codes
+        - Product names with spaces (e.g., "Smart 1500", "iO Brush") - Retail products for patients
+        - Custom product codes (e.g., "3Dtemp", "Roottip") - Specialized services or products
       - Primary categorization is through procedure_category_id field.
       - Procedure category breakdown:
         - 622: Standard dental procedures (most common, 677 codes, all numeric format)
@@ -32,7 +37,7 @@ models:
         - 79: Cosmetic and whitening procedures (20 codes, mostly D-prefixed)
         - 74: Preventive services and cleanings (16 codes, all D-prefixed)
         - 301: Anesthesia services (4 codes, all D-prefixed)
-        - 540: Root procedures (1 code, numeric format)
+        - 540: Root procedures (1 code, custom "Roottip" format)
         - 548: COVID and pathogen testing (1 code, D-prefixed)
       - D0-D9 prefixes indicate procedure groups (diagnostic, preventive, etc.)
       - Flags like is_hygiene_flag and is_radiology_flag indicate special handling requirements.

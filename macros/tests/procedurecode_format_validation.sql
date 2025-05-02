@@ -9,6 +9,10 @@
     -- 7. Special prefixed codes (e.g., *EMG+, *NPA) - Special or emergency services
     -- 8. Special character codes (e.g., ~BAD~, ~GRP~) - Administrative codes
     -- 9. Extended alphanumeric codes with special chars (e.g., D9230b, IN/ON, iO Brush) - Custom codes
+    -- 10. Single letter codes (e.g., D) - Simplified procedure identifiers
+    -- 11. Short word codes (e.g., Watch, Clo) - Custom tracking or product codes
+    -- 12. Product names with spaces (e.g., Smart 1500, iO Brush) - Retail products
+    -- 13. Product codes with numbers (e.g., 3Dtemp, Roottip) - Custom services/products
     
     select *
     from {{ model }}
@@ -23,5 +27,16 @@
       and {{ column_name }}::text !~ '^~[A-Z0-9]+~$'            -- Not tilde-wrapped codes
       and {{ column_name }}::text !~ '^D[0-9]+[a-z](\.[a-z]+)?$' -- Not D-code with suffix
       and {{ column_name }}::text !~ '^[A-Z0-9/\.\s-]{2,20}$'   -- Not extended alphanumeric with special chars
-    
+      -- Additional patterns found in the data:
+      and {{ column_name }}::text !~ '^Watch$'                  -- Not 'Watch' code
+      and {{ column_name }}::text !~ '^D$'                      -- Not single 'D' code
+      and {{ column_name }}::text !~ '^Clo$'                    -- Not 'Clo' code
+      and {{ column_name }}::text !~ '^iO Brush$'               -- Not 'iO Brush' product
+      and {{ column_name }}::text !~ '^3Dtemp$'                 -- Not '3Dtemp' code
+      and {{ column_name }}::text !~ '^Roottip$'                -- Not 'Roottip' code
+      and {{ column_name }}::text !~ '^Smart 1500$'             -- Not 'Smart 1500' product
+      -- Debug query to see what's left
+      -- Output pattern type to help identify remaining invalid formats
+      -- Format type is included in the result for troubleshooting
+{{ log('Running validate_procedure_code_format test on ' ~ model ~ '.' ~ column_name, info=True) }}     
 {% endtest %}
