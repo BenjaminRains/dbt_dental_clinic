@@ -2,12 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Database Architecture
+- PostgreSQL database containing dental clinic data migrated from MariaDB
+- ELT/ETL pipeline in `etl_job/mariadb_postgre_pipe.py` handles type conversions
+- Data transformation flow: MariaDB source → PostgreSQL source → staging models → intermediate models → marts
+- Example: patient data evolution
+  - Raw MariaDB DDL: `analysis/patient/patient_ddl.sql`
+  - PostgreSQL schema: `analysis/patient/patient_pg_ddl.sql`
+  - dbt staging: `models/staging/opendental/stg_opendental__patient.sql`
+  - dbt intermediate: `models/intermediate/foundation/int_patient_profile.sql`
+
 ## Commands
 
 ### Build & Run
 - Run DBT models: `./scripts/run_dbt.sh run` (Linux/Mac) or `.\scripts\run_dbt.bat run` (Windows)
 - Run specific models: `./scripts/run_dbt.sh run --select model_name`
-- Test models: `./scripts/run_dbt.sh test` or `./scripts/run_dbt.sh test --select model_name`
+- Test all models: `./scripts/run_dbt.sh test`
+- Test specific model: `./scripts/run_dbt.sh test --select model_name`
 - Python formatting: `pipenv run format` (Black)
 - Python linting: `pipenv run lint` (Pylint)
 - Sort imports: `pipenv run sort-imports` (isort)
@@ -15,17 +26,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Code Style Guidelines
 
-### SQL
-- Source columns: Use **CamelCase** for raw database columns (e.g., "PatNum")
-- Derived fields: Use **snake_case** for transformed fields
-- CTEs: Use **CamelCase** for ALL CTEs (project-specific convention)
-- File names: Use **snake_case** for all SQL files
-- Boolean conversions: Use CASE statements for smallint to boolean conversions
+### SQL 
+- **Source System Columns**: Use **CamelCase** (with quotes) for raw database columns (e.g., "PatNum")
+- **ID Fields**: Convert suffixes from `_num` in source to `_id` in output (e.g., "PatNum" → patient_id)
+- **Derived Fields**: Use **snake_case** for transformed and calculated fields
+- **CTEs**: Use **CamelCase** for ALL CTEs (project-specific convention)
+- **SQL Files**: Use **snake_case** for all SQL file names
+- **Boolean Conversions**: Use CASE statements for smallint(0/1) to boolean conversions:
+  ```sql
+  CASE WHEN "IsHidden" = 1 THEN true WHEN "IsHidden" = 0 THEN false ELSE null END as is_hidden
+  ```
+- **Model Names**: Follow patterns:
+  - Staging: `stg_[source]__[entity]`
+  - Intermediate: `int_[entity]_[verb]`
+  - Marts: `[mart]_[entity]`
 
 ### Python
 - Follow standard Python style (Black formatter)
 - Python version: 3.11
 - Use proper type annotations
+- Sort imports with isort
 
 ### Directory Structure
 - models/staging/: Raw data transformations
