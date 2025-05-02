@@ -19,6 +19,7 @@ renamed as (
         
         -- Attributes
         "ProcCode"::varchar as procedure_code,
+        -- Extracts D-prefix only for CDT codes, will be NULL for numeric procedure codes
         REGEXP_SUBSTR("ProcCode", '^D[0-9]') as code_prefix,
         "Descript"::varchar as description,
         "AbbrDesc"::varchar as abbreviated_description,
