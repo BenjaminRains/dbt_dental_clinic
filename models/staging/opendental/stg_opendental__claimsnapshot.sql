@@ -1,33 +1,33 @@
-with Source as (
+{{ config(
+    materialized='incremental',
+    unique_key='claim_snapshot_id'
+) }}
+
+with source as (
     select * from {{ source('opendental', 'claimsnapshot') }}
+    where "DateTEntry" >= '2023-01-01'
+    {% if is_incremental() %}
+        and "DateTEntry" > (select max(entry_timestamp) from {{ this }})
+    {% endif %}
 ),
 
-Renamed as (
+renamed as (
     select
+        -- Primary key
         "ClaimSnapshotNum" as claim_snapshot_id,
+        
+        -- Foreign keys
         "ProcNum" as procedure_id,
+        "ClaimProcNum" as claim_procedure_id,
+        
+        -- Claim details
         "ClaimType" as claim_type,
         "Writeoff" as write_off_amount,
         "InsPayEst" as insurance_payment_estimate,
         "Fee" as fee_amount,
         "DateTEntry" as entry_timestamp,
-        "ClaimProcNum" as claim_procedure_id,
         "SnapshotTrigger" as snapshot_trigger
-    from Source
-),
-
-Final as (
-    select
-        claim_snapshot_id,
-        case when procedure_id = 0 then null else procedure_id end as procedure_id,
-        claim_type,
-        write_off_amount,
-        insurance_payment_estimate,
-        fee_amount,
-        entry_timestamp,
-        case when claim_procedure_id = 0 then null else claim_procedure_id end as claim_procedure_id,
-        snapshot_trigger
-    from Renamed
+    from source
 )
 
-select * from Final
+select * from renamed
