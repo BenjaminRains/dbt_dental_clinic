@@ -628,8 +628,9 @@ models:
         description: Date of most recent status change
         tests:
           - date_range_test:
-              min_date: "'2023-01-01'::timestamp"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              min_date: "'2023-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "last_status_change_date::date"
               config:
                 severity: error
                 description: "Last status change date must be between 2023-01-01 and current date"
