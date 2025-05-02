@@ -12,6 +12,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - dbt staging: `models/staging/opendental/stg_opendental__patient.sql`
   - dbt intermediate: `models/intermediate/foundation/int_patient_profile.sql`
 
+## Schema Structure (for DBeaver Queries)
+- Raw source data: `public.<table_name>` (e.g., `public.patient`)
+- Staging models: `public_staging.<model_name>` (e.g., `public_staging.stg_opendental__patient`) 
+- Intermediate models: `public_intermediate.<model_name>` (e.g., `public_intermediate.int_patient_profile`)
+- Mart models: `public_marts.<model_name>` (e.g., `public_marts.dim_patients`)
+
 ## Commands
 
 ### Build & Run
@@ -40,6 +46,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Staging: `stg_[source]__[entity]`
   - Intermediate: `int_[entity]_[verb]`
   - Marts: `[mart]_[entity]`
+
+### Query Example for DBeaver
+```sql
+-- Query that joins raw source to staging model
+SELECT 
+    p."PatNum", 
+    s.patient_id, 
+    p."LName", 
+    p."FName",
+    s.total_balance
+FROM public.patient p
+JOIN public_staging.stg_opendental__patient s
+    ON p."PatNum" = s.patient_id
+WHERE s.patient_status = 0
+LIMIT 10;
+```
 
 ### Python
 - Follow standard Python style (Black formatter)
