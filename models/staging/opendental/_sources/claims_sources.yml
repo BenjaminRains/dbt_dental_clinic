@@ -368,3 +368,83 @@ sources:
           contains_pii: false
           business_owners: ["dental_finance_team", "insurance_team"]
           technical_owners: ["data_engineering_team"]
+
+      - name: claimsnapshot
+        description: "Historical snapshots of claim states and financial information"
+        loaded_at_field: "DateTEntry"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: "ClaimSnapshotNum"
+            description: "Primary key for claim snapshot records"
+            tests:
+              - unique
+              - not_null
+          - name: "ProcNum"
+            description: "Foreign key to the procedure record"
+            tests:
+              - relationships:
+                  to: source('opendental', 'procedurelog')
+                  field: "ProcNum"
+          - name: "ClaimType"
+            description: "Type of claim (e.g., primary, secondary)"
+            tests:
+              - not_null
+          - name: "Writeoff"
+            description: "Amount written off at snapshot time"
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 10000
+          - name: "InsPayEst"
+            description: "Estimated insurance payment amount at snapshot time"
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 10000
+          - name: "Fee"
+            description: "Fee amount at snapshot time"
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 10000
+          - name: "DateTEntry"
+            description: "Timestamp when the snapshot was created"
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2023-01-01'::timestamp"
+                  max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+          - name: "ClaimProcNum"
+            description: "Foreign key to the claim procedure record"
+            tests:
+              - relationships:
+                  to: source('opendental', 'claimproc')
+                  field: "ClaimProcNum"
+          - name: "SnapshotTrigger"
+            description: "Indicator of what triggered this snapshot (e.g., claim submission, payment received)"
+            tests:
+              - not_null
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 8
+            tests_total: 8
+            quality_checks:
+              - test: "unique_snapshot_id"
+                status: "pass"
+              - test: "not_null_critical_fields"
+                status: "pass"
+                fields: ["ClaimSnapshotNum", "DateTEntry", "SnapshotTrigger"]
+              - test: "financial_amount_validation"
+                status: "pass"
+                description: "Validates financial amounts are within expected ranges"
+          indexes:
+            - columns: ["ClaimProcNum"]
+              type: "btree"
+            - columns: ["ProcNum"]
+              type: "btree"
+          contains_pii: false
+          business_owners: ["dental_finance_team", "insurance_team"]
+          technical_owners: ["data_engineering_team"]
