@@ -30,7 +30,7 @@ renamed as (
         "IsProsth"::smallint as is_prosthetic_flag,
         "DefaultNote"::text as default_note,
         "IsHygiene"::smallint as is_hygiene_flag,
-        "GTypeNum"::smallint as graphic_type_num,
+        "GTypeNum"::smallint as graphic_type_id,
         "AlternateCode1"::varchar as alternate_code1,
         "MedicalCode"::varchar as medical_code,
         "IsTaxed"::smallint as is_taxed_flag,
