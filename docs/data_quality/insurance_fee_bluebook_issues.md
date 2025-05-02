@@ -2,7 +2,7 @@
 
 ## Overview
 
-We have identified a data quality issue where many insurance payment records (`int_insurance_payment_allocated` model) lack associated allowed fee history data from the `insbluebooklog` table. This document outlines the issue, its impact, and recommended actions.
+We have identified several data quality issues with insurance payment records (`int_insurance_payment_allocated` model) related to allowed fees, bluebook data, and override amounts. This document outlines these issues, their impact, and recommended actions.
 
 ## Issue Description
 
@@ -82,7 +82,44 @@ Potential root causes include:
 3. Has there been a recent change in procedures or systems that might explain this pattern?
 4. What specific information is most critical to capture in the bluebook logs?
 
+## Extreme Allowed Override Amount Values
+
+### Issue Description
+
+In addition to missing bluebook data, we have identified several records with extremely high `allowed_override_amount` values in the bluebook table. This appears to be a data entry issue.
+
+### Examples
+
+| Insurance Carrier | allowed_override_amount | Expected Range | Likely Issue |
+|-------------------|-------------------------|----------------|--------------|
+| Delta Dental Of Washington | 252,252.0 | ~2,500 | Decimal or duplicate entry (252 entered twice) |
+| Aflac | 10,934.0 | ~1,093 | Decimal place error |
+| Delta Dental IL | 10,380.0 | ~1,038 | Decimal place error |
+
+### Impact
+
+1. **Data Validation Failures**: These extreme values cause the range validation test to fail
+2. **Reporting Distortion**: Skews aggregate calculations for allowed fee metrics
+3. **Consistency Issues**: Creates inconsistency between allowed amounts and payment amounts
+
+### Patterns Observed
+
+1. Most extreme values appear to be either:
+   - Decimal place errors (missing decimal point)
+   - Duplicate digit entries
+   - Multiple entries combined into one field
+2. Several affected carriers are Delta Dental affiliated plans
+3. Pattern is similar to fee entry errors documented in the fee model quality report
+
+### Recommended Actions
+
+1. Implement data entry validation to prevent extreme values
+2. Audit existing extreme values and correct where appropriate
+3. Consider creating alerts for values significantly higher than procedure averages
+4. Review carrier-specific data entry protocols, especially for Delta Dental
+
 ---
 
 *Document prepared: March 2025*  
+*Updated: May 2025 with allowed override amount issues*  
 *Contact: Data Quality Team*
