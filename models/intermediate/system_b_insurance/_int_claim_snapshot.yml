@@ -11,16 +11,28 @@ models:
       - Maintains both estimated and actual payment amounts
       - Preserves write-off and allowed amount history
       - Supports claim history analysis
+      - Links to claim tracking events for audit trail
+      - Enables variance analysis between estimated and actual payments
       
       Data Sources:
       - stg_opendental__claimsnapshot: Base snapshot information
       - stg_opendental__claimproc: Actual claim procedure details
+      - int_claim_tracking: Claim tracking events
+      - int_claim_details: Comprehensive claim information
+      - int_claim_payments: Payment history
       
       Business rules:
       - Snapshots are preserved for historical analysis
       - Both estimated and actual amounts are tracked
       - Timestamps are used for chronological ordering
       - Snapshot triggers indicate the reason for the snapshot
+      - Variance analysis compares estimated vs actual payments
+      - Days to payment calculation tracks claim processing time
+      
+      Data Quality Notes:
+      - actual_allowed_amount may be -1.0 as a placeholder for undetermined values
+      - Some records show decimal point errors in allowed_amount (e.g., 252.00 recorded as 252252.00)
+      - See stakeholders/claims_data_quality_issues.md for documented cases and solutions
     
     columns:
       - name: claim_snapshot_id
@@ -61,12 +73,34 @@ models:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
       
+      - name: claim_tracking_id
+        description: Foreign key to the claim tracking event
+        tests:
+          - relationships:
+              to: ref('int_claim_tracking')
+              field: claim_tracking_id
+      
+      - name: tracking_type
+        description: Type of claim tracking event
+      
+      - name: tracking_note
+        description: Notes associated with the tracking event
+      
+      - name: procedure_code
+        description: Code for the procedure from claim details
+      
       - name: claim_type
         description: Type of claim (e.g., primary, secondary)
         tests:
           - not_null
       
-      - name: write_off_amount
+      - name: claim_status
+        description: Current status of the claim
+      
+      - name: snapshot_claim_type
+        description: Type of claim at the time of the snapshot
+      
+      - name: estimated_write_off
         description: Estimated write-off amount at snapshot time
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
@@ -110,16 +144,59 @@ models:
               max_value: 10000
       
       - name: actual_allowed_amount
-        description: Actual allowed amount from claim procedure
+        description: |
+          Actual allowed amount from claim procedure.
+          Business rules:
+          - May be -1.0 as a placeholder for undetermined values
+          - Should be between 0 and 10000 for determined values
+          - Decimal point errors may occur (e.g., 252.00 recorded as 252252.00)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
+              max_value: 10000
+              row_condition: "actual_allowed_amount != -1.0"
+      
+      - name: claim_procedure_status
+        description: Status of the claim procedure
+      
+      - name: claim_adjustment_reason_codes
+        description: Codes explaining claim adjustments
+      
+      - name: most_recent_payment
+        description: Most recent payment amount received
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+      
+      - name: most_recent_payment_date
+        description: Date of the most recent payment
+      
+      - name: payment_variance
+        description: Difference between estimated and actual payment amounts
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+      
+      - name: write_off_variance
+        description: Difference between estimated and actual write-off amounts
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
               max_value: 10000
       
       - name: snapshot_trigger
         description: Indicator of what triggered this snapshot (e.g., claim submission, payment received)
         tests:
           - not_null
+      
+      - name: days_to_payment
+        description: Number of days between snapshot creation and payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
       
       - name: created_at
         description: Timestamp when the snapshot was created
