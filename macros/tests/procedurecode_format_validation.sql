@@ -34,9 +34,5 @@
       and {{ column_name }}::text !~ '^iO Brush$'               -- Not 'iO Brush' product
       and {{ column_name }}::text !~ '^3Dtemp$'                 -- Not '3Dtemp' code
       and {{ column_name }}::text !~ '^Roottip$'                -- Not 'Roottip' code
-      and {{ column_name }}::text !~ '^Smart 1500$'             -- Not 'Smart 1500' product
-      -- Debug query to see what's left
-      -- Output pattern type to help identify remaining invalid formats
-      -- Format type is included in the result for troubleshooting
-{{ log('Running validate_procedure_code_format test on ' ~ model ~ '.' ~ column_name, info=True) }}     
+      and {{ column_name }}::text !~ '^Smart 1500$'             -- Not 'Smart 1500' product 
 {% endtest %}
