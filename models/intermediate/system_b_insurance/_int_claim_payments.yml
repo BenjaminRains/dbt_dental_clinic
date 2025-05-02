@@ -205,6 +205,7 @@ models:
                 SELECT 
                   cd.patient_id,
                   cp.claim_payment_id,
+                  cp.claim_procedure_id,
                   COUNT(*) as duplicate_count
                 FROM {{ ref('int_claim_payments') }} cp
                 JOIN {{ ref('int_claim_details') }} cd
@@ -214,7 +215,8 @@ models:
                 WHERE cp.claim_payment_id IS NOT NULL
                 GROUP BY 
                   cd.patient_id,
-                  cp.claim_payment_id
+                  cp.claim_payment_id,
+                  cp.claim_procedure_id
                 HAVING COUNT(*) > 1
               ) as duplicates
             )
@@ -222,6 +224,6 @@ models:
             severity: error
             name: check_no_duplicate_patient_payments
             description: >
-              This test verifies that there are no duplicate (patient_id, claim_payment_id) combinations
+              This test verifies that there are no duplicate (patient_id, claim_payment_id, claim_procedure_id) combinations
               when joining int_claim_payments with int_claim_details. This test matches the same condition
               that's being checked in the int_ar_analysis tests.

@@ -86,7 +86,7 @@ Final as (
     from DeduplicatedClaims dc
     left join ClaimPayment cpy
         on dc.claim_payment_id = cpy.claim_payment_id
-    where dc.rn = 1 -- Only keep one record per patient + claim_payment_id combination
+    where dc.rn = 1 -- Only keep one record per patient + claim_payment_id + claim_procedure_id combination
 )
 
 select * from Final
