@@ -2,7 +2,7 @@
     config(
         materialized='table',
         schema='intermediate',
-        unique_key=['claim_id', 'procedure_id', 'claim_payment_id']
+        unique_key=['claim_id', 'procedure_id', 'claim_procedure_id', 'claim_payment_id']
     )
 }}
 
@@ -17,6 +17,7 @@ ClaimProc as (
     select
         claim_id,
         procedure_id,
+        claim_procedure_id,
         claim_payment_id,
         fee_billed as billed_amount,
         allowed_override as allowed_amount,
@@ -37,38 +38,26 @@ ClaimPayment as (
     from {{ ref('stg_opendental__claimpayment') }}
 ),
 
--- First get distinct combinations of claim_id, procedure_id, claim_payment_id to ensure uniqueness
-DistinctClaimPayments as (
-    select distinct
-        cp.claim_id,
-        cp.procedure_id,
-        cp.claim_payment_id
-    from ClaimProc cp
-),
-
--- Join with other data and deduplicate at the source using patient_id + claim_payment_id
+-- Deduplicate at the source using patient_id + claim_payment_id + claim_procedure_id
 DeduplicatedClaims as (
     select
         c.patient_id,
-        dcp.claim_id,
-        dcp.procedure_id,
-        dcp.claim_payment_id,
+        cp.claim_id,
+        cp.procedure_id,
+        cp.claim_procedure_id,
+        cp.claim_payment_id,
         cp.billed_amount,
         cp.allowed_amount,
         cp.paid_amount,
         cp.write_off,
         cp.patient_responsibility,
         row_number() over(
-            partition by dcp.claim_id, dcp.procedure_id, dcp.claim_payment_id 
+            partition by c.patient_id, cp.claim_payment_id, cp.claim_procedure_id 
             order by cp.paid_amount desc
         ) as rn
-    from DistinctClaimPayments dcp
-    inner join ClaimProc cp
-        on dcp.claim_id = cp.claim_id
-        and dcp.procedure_id = cp.procedure_id
-        and dcp.claim_payment_id = cp.claim_payment_id
+    from ClaimProc cp
     inner join Claim c
-        on dcp.claim_id = c.claim_id
+        on cp.claim_id = c.claim_id
 ),
 
 Final as (
@@ -76,6 +65,7 @@ Final as (
         -- Primary Key
         dc.claim_id,
         dc.procedure_id,
+        dc.claim_procedure_id,
         dc.claim_payment_id,
         dc.patient_id, -- Include patient_id in the output
 
@@ -99,7 +89,7 @@ Final as (
     from DeduplicatedClaims dc
     left join ClaimPayment cpy
         on dc.claim_payment_id = cpy.claim_payment_id
-    where dc.rn = 1 -- Only keep one record per unique combination
+    where dc.rn = 1 -- Only keep one record per patient + claim_payment_id + claim_procedure_id combination
 )
 
 select * from Final
