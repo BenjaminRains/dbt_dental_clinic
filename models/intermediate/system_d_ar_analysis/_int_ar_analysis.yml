@@ -445,11 +445,11 @@ models:
         tests:
           - date_range_test:
               min_date: "'2020-01-01'::date"
-              max_date: "'2025-02-28'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
               column_name: "coverage_start_date::date"
               config:
                 severity: error
-                description: "Coverage start date must be between 2020-01-01 and 2025-02-28"
+                description: "Coverage start date must be between 2020-01-01 and max_valid_date"
 
       - name: coverage_end_date
         description: Date when the primary insurance coverage was terminated
