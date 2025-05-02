@@ -113,16 +113,20 @@ BluebookInfo AS MATERIALIZED (
         ib.claim_id,
         ib.plan_id,
         ib.carrier_id,
-        ib.insurance_payment_amount,
+        ib.insurance_payment_amount AS bluebook_payment_amount,
         ib.allowed_override_amount,
         ib.group_id,
         ib.claim_type,
         ibl.allowed_fee,
-        ibl.description as allowed_fee_description,
-        ibl.created_at as allowed_fee_updated_at
+        ibl.description AS allowed_fee_description,
+        ibl.created_at AS allowed_fee_updated_at
     FROM {{ ref('stg_opendental__insbluebook') }} ib
+    LEFT JOIN {{ ref('stg_opendental__claimproc') }} cp
+        ON ib.proc_id = cp.procedure_id
+        AND ib.claim_id = cp.claim_id
+        AND ib.plan_id = cp.plan_id
     LEFT JOIN {{ ref('stg_opendental__insbluebooklog') }} ibl
-        ON ib.insbluebook_id = ibl.insbluebooklog_id
+        ON cp.claim_procedure_id = ibl.claimprocedure_id
     WHERE ib.created_at >= '2023-01-01'
 )
 
@@ -182,7 +186,7 @@ SELECT DISTINCT
     cp.estimate_note,
     pd.item_name AS payment_type_description,
     -- Bluebook information
-    bb.insurance_payment_amount AS bluebook_payment_amount,
+    bb.bluebook_payment_amount,
     bb.allowed_override_amount,
     bb.group_id,
     bb.claim_type,
