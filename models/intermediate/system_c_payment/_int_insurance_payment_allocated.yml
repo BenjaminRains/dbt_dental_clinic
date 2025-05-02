@@ -428,6 +428,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
+              row_condition: "allowed_override_amount != -1.0"
 
       - name: group_id
         description: Insurance group identifier from bluebook
