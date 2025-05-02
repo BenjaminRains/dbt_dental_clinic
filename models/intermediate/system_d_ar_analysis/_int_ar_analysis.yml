@@ -531,7 +531,11 @@ models:
               max_value: 1000
 
       - name: last_visit_date
-        description: Date of most recent visit
+        description: >
+          Date of most recent completed visit, calculated as the latest date between:
+          - Completed appointments (appointment_status = 'Completed')
+          - Completed procedures (procedure_status = 2)
+          Only considers actual completed visits, not planned/future appointments.
         tests:
           - date_range_test:
               min_date: "'1900-01-01'::date"
