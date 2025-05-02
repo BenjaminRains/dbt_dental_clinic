@@ -188,7 +188,7 @@ ClaimActivity AS (
                 WHEN ct.entry_timestamp >= CURRENT_DATE - INTERVAL '30 days' 
                 THEN ct.claim_id 
             END) AS recent_status_changes,
-            MAX(ct.entry_timestamp) AS last_status_change_date
+            MAX(ct.entry_timestamp::date) AS last_status_change_date
         FROM {{ ref('int_claim_details') }} cd
         LEFT JOIN {{ ref('int_claim_tracking') }} ct
             ON cd.claim_id = ct.claim_id
