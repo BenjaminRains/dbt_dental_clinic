@@ -96,7 +96,14 @@ MostRecentPayment as (
 -- Only include snapshots that have a valid claim procedure ID with complete data
 ValidSnapshots as (
     select
-        cs.*,
+        cs.claim_snapshot_id,
+        cs.claim_procedure_id,
+        cs.claim_type,
+        cs.write_off_amount,
+        cs.insurance_payment_estimate,
+        cs.fee_amount,
+        cs.entry_timestamp,
+        cs.snapshot_trigger,
         cp.claim_id,
         cp.procedure_id,
         cp.patient_id,
