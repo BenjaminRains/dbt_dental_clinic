@@ -53,7 +53,11 @@ ClaimTracking as (
         claim_tracking_id,
         tracking_type,
         entry_timestamp,
-        tracking_note
+        tracking_note,
+        row_number() over(
+            partition by claim_id, date_trunc('day', entry_timestamp)
+            order by entry_timestamp desc
+        ) as tracking_rank
     from {{ ref('int_claim_tracking') }}
 ),
 
@@ -136,10 +140,6 @@ Final as (
         cs.snapshot_trigger,
         
         -- Temporal Fields for Time-Series Analysis
-        -- Modified calculation to handle payment date issues:
-        -- 1. Return NULL when no payment exists yet (rather than calculating days to current date)
-        -- 2. Handle cases where payment date is before snapshot date (likely data errors)
-        -- 3. Only calculate positive days to payment for valid chronological data
         CASE 
             WHEN mrp.check_date IS NULL THEN NULL  -- No payment yet, so days_to_payment is undefined
             WHEN mrp.check_date < cs.entry_timestamp THEN 0  -- Payment date before snapshot (data issue)
@@ -155,6 +155,7 @@ Final as (
     left join ClaimTracking ct
         on cp.claim_id = ct.claim_id
         and date_trunc('day', cs.entry_timestamp) = date_trunc('day', ct.entry_timestamp)
+        and ct.tracking_rank = 1
     left join ClaimDetails cd
         on cp.claim_id = cd.claim_id
         and cp.procedure_id = cd.procedure_id
