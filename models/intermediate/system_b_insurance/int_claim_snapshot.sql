@@ -154,6 +154,7 @@ Final as (
         on cs.claim_procedure_id = cp.claim_procedure_id
     left join ClaimTracking ct
         on cp.claim_id = ct.claim_id
+        and cp.procedure_id = ct.procedure_id
         and date_trunc('day', cs.entry_timestamp) = date_trunc('day', ct.entry_timestamp)
         and ct.tracking_rank = 1
     left join ClaimDetails cd
