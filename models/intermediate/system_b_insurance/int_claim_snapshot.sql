@@ -112,6 +112,13 @@ ValidSnapshots as (
     inner join ClaimProc cp on cs.claim_procedure_id = cp.claim_procedure_id
 ),
 
+-- Deduplicate snapshots to ensure unique claim_snapshot_id values
+DedupedSnapshots as (
+    select *
+    from ValidSnapshots
+    qualify row_number() over(partition by claim_snapshot_id order by claim_id) = 1
+),
+
 Final as (
     select
         -- Primary Key
@@ -168,7 +175,7 @@ Final as (
         -- Meta Fields
         vs.entry_timestamp as created_at,
         vs.entry_timestamp as updated_at
-    from ValidSnapshots vs
+    from DedupedSnapshots vs
     left join ClaimProc cp
         on vs.claim_procedure_id = cp.claim_procedure_id
     left join ClaimTracking ct
