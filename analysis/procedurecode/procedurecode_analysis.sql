@@ -27,7 +27,7 @@ renamed as (
         ProcTime as procedure_time,
         ProcCat as procedure_category_id,
         TreatArea as treatment_area,
-        GTypeNum as graphic_type,
+        GTypeNum as graphic_type_id,
         BaseUnits as base_units,
         CanadaTimeUnits as canada_time_units,
 

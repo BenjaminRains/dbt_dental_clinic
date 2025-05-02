@@ -91,8 +91,8 @@ models:
           - accepted_values:
               values: [0, 1]
       
-      - name: graphic_type_num
-        description: Type of graphic representation used for this procedure
+      - name: graphic_type_id
+        description: The type of graphic associated with the procedure
       
       - name: alternate_code1
         description: Alternative procedure code
