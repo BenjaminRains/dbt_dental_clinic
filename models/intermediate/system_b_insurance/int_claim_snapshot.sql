@@ -114,9 +114,15 @@ ValidSnapshots as (
 
 -- Deduplicate snapshots to ensure unique claim_snapshot_id values
 DedupedSnapshots as (
-    select *
-    from ValidSnapshots
-    qualify row_number() over(partition by claim_snapshot_id order by claim_id) = 1
+    select vs.*
+    from ValidSnapshots vs
+    inner join (
+        select 
+            claim_snapshot_id,
+            min(claim_id) as min_claim_id
+        from ValidSnapshots
+        group by claim_snapshot_id
+    ) dedup on vs.claim_snapshot_id = dedup.claim_snapshot_id and vs.claim_id = dedup.min_claim_id
 ),
 
 Final as (
