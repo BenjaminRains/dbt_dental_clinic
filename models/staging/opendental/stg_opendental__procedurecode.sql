@@ -20,8 +20,6 @@ renamed as (
         -- Attributes
         "ProcCode"::varchar as procedure_code,
         -- Extracts D-prefix only for CDT codes, will be NULL for numeric procedure codes
-        -- System contains many numeric codes (e.g., "01354", "02920") in various procedure_category_id values
-        -- Categories: 622 (standard), 250 (administrative), 73-85 (clinical notes), 251 (prosthetics), etc.
         REGEXP_SUBSTR("ProcCode", '^D[0-9]') as code_prefix,
         "Descript"::varchar as description,
         "AbbrDesc"::varchar as abbreviated_description,
