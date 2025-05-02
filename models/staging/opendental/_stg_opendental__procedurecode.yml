@@ -40,6 +40,7 @@ models:
       Tests:
       - Custom test "validate_procedure_code_flag" checks that D6 codes have prosthodontic flags
       - Custom test "validate_procedure_code_prefixes" validates proper code prefixes
+      - Custom test "warn_new_procedure_codes" alerts when new procedure codes are added to the system
     config:
       materialized: incremental
       unique_key: procedure_code_id
@@ -71,6 +72,20 @@ models:
           - unique
           - validate_procedure_code_prefixes
           - validate_procedure_code_format
+          - warn_new_procedure_codes:
+              severity: warn
+              config:
+                description: >
+                  This test checks for any new procedure codes that have been added to the system.
+                  It's important to monitor for new codes as they may require special handling in downstream
+                  models or trigger business processes (fee schedule updates, etc.).
+      
+      - name: code_prefix
+        description: >
+          Prefix extracted from CDT dental procedure codes (e.g., "D0", "D1").
+          Only populated for codes that follow the CDT format (starting with D).
+          Will be NULL for numeric codes (e.g., "01354") and special format codes.
+          Used for procedure categorization in CDT-standard codes only.
       
       - name: description
         description: Full description of the dental procedure
