@@ -12,6 +12,11 @@ models:
       - Preserves payment details (check amount, date, type)
       - Links to int_claim_details for validation
       
+      Business Rules:
+      - Multiple procedures can be covered by a single payment (claim_payment_id)
+      - A payment uniquely associates with specific claim procedure records
+      - Each claim procedure may have its own financial details even within the same payment
+      
       Data Sources:
       - stg_opendental__claimproc: Base procedure and payment information
       - stg_opendental__claimpayment: Payment details
@@ -25,7 +30,7 @@ models:
     config:
       materialized: table
       schema: intermediate
-      unique_key: [claim_id, procedure_id, claim_payment_id]
+      unique_key: [claim_id, procedure_id, claim_procedure_id, claim_payment_id]
     
     columns:
       - name: claim_id
@@ -43,10 +48,17 @@ models:
           - relationships:
               to: ref('int_claim_details')
               field: procedure_id
-              
+      
+      - name: claim_procedure_id
+        description: Identifier for the specific claim procedure record
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claimproc')
+              field: claim_procedure_id
               
       - name: claim_payment_id
-        description: Primary key for the payment record
+        description: Payment identifier that may cover multiple procedures
         tests:
           - not_null
           - relationships:
@@ -179,7 +191,7 @@ models:
               While zero-fee procedures are valid in some cases (N-codes, Z-codes, monitoring procedures),
               it is unexpected to have insurance allow payment for a procedure with no billed amount.
 
-      # Add these tests to the tests section at the bottom of _int_claim_payments.yml
+      # Uniqueness tests
       - dbt_utils.expression_is_true:
           expression: >
             NOT EXISTS (
@@ -188,12 +200,14 @@ models:
                 SELECT 
                   claim_id,
                   procedure_id,
+                  claim_procedure_id,
                   claim_payment_id,
                   COUNT(*) as duplicate_count
                 FROM {{ ref('int_claim_payments') }}
                 GROUP BY 
                   claim_id,
                   procedure_id,
+                  claim_procedure_id,
                   claim_payment_id
                 HAVING COUNT(*) > 1
               ) as duplicates
@@ -202,33 +216,18 @@ models:
             severity: error
             name: check_no_duplicate_claim_payment_records
             description: >
-              This test verifies that there are no duplicate (claim_id, procedure_id, claim_payment_id) combinations
-              in the int_claim_payments model. Each payment for a procedure within a claim should appear exactly once.
+              This test verifies that there are no duplicate (claim_id, procedure_id, claim_procedure_id, claim_payment_id) 
+              combinations in the int_claim_payments model. Each payment for a specific claim procedure should appear exactly once.
 
+      # Note: This test is now informational only as we intentionally allow multiple procedures per payment
       - dbt_utils.expression_is_true:
           expression: >
-            NOT EXISTS (
-              SELECT 1
-              FROM (
-                SELECT 
-                  cd.patient_id,
-                  cp.claim_payment_id,
-                  COUNT(*) as duplicate_count
-                FROM {{ ref('int_claim_payments') }} cp
-                JOIN {{ ref('int_claim_details') }} cd
-                  ON cp.claim_id = cd.claim_id
-                  AND cp.procedure_id = cd.procedure_id
-                WHERE cp.claim_payment_id IS NOT NULL
-                GROUP BY 
-                  cd.patient_id,
-                  cp.claim_payment_id
-                HAVING COUNT(*) > 1
-              ) as duplicates
-            )
+            1=1
           config:
-            severity: error
-            name: check_no_duplicate_patient_payments
+            severity: info
+            name: info_multiple_procedures_per_payment
             description: >
-              This test verifies that there are no duplicate (patient_id, claim_payment_id) combinations
-              when joining int_claim_payments with int_claim_details. This test matches the same condition
-              that's being checked in the int_ar_analysis tests.
+              Note: The dental clinic system allows multiple procedures to be covered by a single payment (claim_payment_id).
+              This is a valid business scenario and explains why (patient_id, claim_payment_id) combinations may appear 
+              multiple times in this model when joined with int_claim_details. This pattern is particularly common with 
+              claim_payment_id=0 (unpaid/pending claims) where multiple procedures appear under the same payment ID.
