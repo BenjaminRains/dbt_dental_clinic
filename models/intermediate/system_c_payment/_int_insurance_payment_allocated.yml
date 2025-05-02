@@ -450,7 +450,10 @@ models:
       - name: allowed_fee_description
         description: Description of allowed fee changes or adjustments
         tests:
-          - not_null
+          - not_null:
+              where: "allowed_fee IS NOT NULL"
+              config:
+                description: "allowed_fee_description should be non-null when allowed_fee exists"
 
       - name: allowed_fee_updated_at
         description: Timestamp when the allowed fee was last updated
