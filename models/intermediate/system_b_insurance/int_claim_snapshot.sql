@@ -50,7 +50,7 @@ ClaimProc as (
 ClaimTracking as (
     select
         claim_id,
-        claim_tracking_id,
+        claim_tracking_id, 
         tracking_type,
         entry_timestamp,
         tracking_note,
@@ -173,7 +173,6 @@ Final as (
         on vs.claim_procedure_id = cp.claim_procedure_id
     left join ClaimTracking ct
         on vs.claim_id = ct.claim_id
-        and vs.procedure_id = ct.procedure_id
         and date_trunc('day', vs.entry_timestamp) = date_trunc('day', ct.entry_timestamp)
         and ct.tracking_rank = 1
     left join ClaimDetails cd
