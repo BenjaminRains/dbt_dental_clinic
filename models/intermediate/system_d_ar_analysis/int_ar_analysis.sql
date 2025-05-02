@@ -277,11 +277,15 @@ BasePatientInfo AS (
         GREATEST(
             COALESCE(MAX(CASE 
                 WHEN ha.appointment_datetime <= CURRENT_TIMESTAMP 
+                AND ha.appointment_datetime::date <= '{{ var('max_valid_date', 'current_date') }}'::date
+                AND ha.appointment_status = 2  -- Completed appointments (status 2)
                 THEN ha.appointment_datetime::date
                 ELSE NULL 
             END), '1900-01-01'::date),
             COALESCE(MAX(CASE 
                 WHEN pl.procedure_date <= CURRENT_DATE 
+                AND pl.procedure_date <= '{{ var('max_valid_date', 'current_date') }}'::date
+                AND pl.procedure_status = 2  -- Completed procedures (status 2)
                 THEN pl.procedure_date 
                 ELSE NULL 
             END), '1900-01-01'::date)
