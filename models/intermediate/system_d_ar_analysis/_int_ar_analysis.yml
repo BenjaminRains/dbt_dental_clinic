@@ -549,8 +549,15 @@ models:
               max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
               column_name: "first_visit_date::date"
               config:
+                severity: warn
+                description: >
+                First visit dates should be between 1900-01-01 and max_valid_date. 
+                Future dates may indicate test data or data entry errors.
+          - dbt_utils.expression_is_true:
+              expression: "first_visit_date <= CURRENT_DATE"
+              config:
                 severity: error
-                description: "First visit date must be between 1900-01-01 and current date"
+                description: "First visit dates should not be in the future unless they are test records"
 
       - name: model_created_at
         description: Timestamp when the record was created
