@@ -557,7 +557,9 @@ models:
               expression: "first_visit_date <= CURRENT_DATE"
               config:
                 severity: error
-                description: "First visit dates should not be in the future unless they are test records"
+                description: >
+                First visit dates should not be in the future unless
+                they are test records
 
       - name: model_created_at
         description: Timestamp when the record was created
