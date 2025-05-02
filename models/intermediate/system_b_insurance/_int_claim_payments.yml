@@ -219,15 +219,5 @@ models:
               This test verifies that there are no duplicate (claim_id, procedure_id, claim_procedure_id, claim_payment_id) 
               combinations in the int_claim_payments model. Each payment for a specific claim procedure should appear exactly once.
 
-      # Note: This test is now informational only as we intentionally allow multiple procedures per payment
-      - dbt_utils.expression_is_true:
-          expression: >
-            1=1
-          config:
-            severity: info
-            name: info_multiple_procedures_per_payment
-            description: >
-              Note: The dental clinic system allows multiple procedures to be covered by a single payment (claim_payment_id).
-              This is a valid business scenario and explains why (patient_id, claim_payment_id) combinations may appear 
-              multiple times in this model when joined with int_claim_details. This pattern is particularly common with 
-              claim_payment_id=0 (unpaid/pending claims) where multiple procedures appear under the same payment ID.
+      # Remove the patient_id + claim_payment_id test since it conflicts with valid business scenarios
+      # If you need to enforce that relationship, add the claim_procedure_id to the JOIN clause in downstream models
