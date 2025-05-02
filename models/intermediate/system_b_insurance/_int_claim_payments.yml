@@ -180,12 +180,14 @@ models:
                 SELECT 
                   claim_id,
                   procedure_id,
+                  claim_procedure_id,
                   claim_payment_id,
                   COUNT(*) as duplicate_count
                 FROM {{ ref('int_claim_payments') }}
                 GROUP BY 
                   claim_id,
                   procedure_id,
+                  claim_procedure_id,
                   claim_payment_id
                 HAVING COUNT(*) > 1
               ) as duplicates
@@ -194,7 +196,7 @@ models:
             severity: error
             name: check_no_duplicate_claim_payment_records
             description: >
-              This test verifies that there are no duplicate (claim_id, procedure_id, claim_payment_id) combinations
+              This test verifies that there are no duplicate (claim_id, procedure_id, claim_procedure_id, claim_payment_id) combinations
               in the int_claim_payments model. Each payment for a procedure within a claim should appear exactly once.
 
       - dbt_utils.expression_is_true:
