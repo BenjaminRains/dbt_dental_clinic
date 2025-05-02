@@ -8,7 +8,10 @@ models:
       for dental services and treatments. Only includes records from 2023-01-01 onwards.
       
       Key business context:
-      - Procedure codes follow CDT (Code on Dental Procedures) format with D-prefixes.
+      - Most procedure codes follow CDT (Code on Dental Procedures) format with D-prefixes.
+      - The system also contains numeric procedure codes (e.g., "01354", "02920") without D-prefixes.
+      - Numeric codes represent valid dental procedures but don't follow the CDT standard format.
+      - The code_prefix field extracts only D-prefixes and will be NULL for numeric procedure codes.
       - Primary categorization is through procedure_category_id field.
       - Category 622 contains most common procedures (~83% of all codes).
       - D0-D9 prefixes indicate procedure groups (diagnostic, preventive, etc.)
