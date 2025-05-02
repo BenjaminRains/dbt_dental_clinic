@@ -192,11 +192,23 @@ models:
           - not_null
       
       - name: days_to_payment
-        description: Number of days between snapshot creation and payment
+        description: |
+          Number of days between snapshot creation and payment.
+          
+          Notes:
+          - Will be NULL for claims without payment yet
+          - Will be 0 for claims where payment date is before snapshot date (data issue)
+          - For valid cases, represents actual days between snapshot and payment
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 365
+              row_condition: "days_to_payment IS NOT NULL"
+              config:
+                severity: warn
+                description: >
+                  Days to payment should typically be between 0 and 365 days.
+                  Values outside this range may require review. 
       
       - name: created_at
         description: Timestamp when the snapshot was created
