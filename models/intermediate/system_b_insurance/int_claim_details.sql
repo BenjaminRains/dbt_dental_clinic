@@ -2,7 +2,7 @@
     config(
         materialized='table',
         schema='intermediate',
-        unique_key='claim_id || "-" || procedure_id'
+        unique_key='claim_id || "-" || procedure_id || "-" || claim_procedure_id'
     )
 }}
 
@@ -19,9 +19,11 @@ with Claim as (
 ),
 
 ClaimProc as (
-    select distinct
+    select
         claim_id,
         procedure_id,
+        claim_procedure_id,
+        status as claim_procedure_status,
         fee_billed as billed_amount,
         allowed_override as allowed_amount,
         insurance_payment_amount as paid_amount,
@@ -81,6 +83,7 @@ Final as (
     select
         -- Primary Key
         c.claim_id,
+        cp.claim_procedure_id,
 
         -- Foreign Keys
         c.patient_id,
@@ -93,6 +96,7 @@ Final as (
         c.claim_status,
         c.claim_type,
         c.claim_date,
+        cp.claim_procedure_status,
 
         -- Procedure Details
         pc.procedure_code,
