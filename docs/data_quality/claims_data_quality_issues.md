@@ -87,6 +87,46 @@ A large number of claims use -1.0 as a placeholder value for allowed amounts, ca
 - [ ] Test modified
 - [ ] Preventive measures implemented
 
+## Issue #3: Zero Billed Amount with Non-Zero Allowed Amount
+
+### Description
+A large number of claim records (1,592) have zero billed amounts but non-zero allowed amounts, creating unexpected insurance calculations.
+
+### Example
+- **Total Records**: 1,592
+- **Billed Amount**: $0.00
+- **Allowed Amount**: Various positive values (e.g., $78.00, $27.00, $157.00)
+- **Claim IDs**: Multiple affected
+
+### Impact
+- Creates misleading insurance calculations
+- Triggers decimal point error tests
+- Affects financial reporting accuracy
+- Represents 99.75% of decimal point error test failures
+
+### Root Cause
+- Potential data entry issues
+- Possible incorrect mapping of zero-fee procedures to insurance coverage
+- May represent special cases where procedures should not have been billed but were incorrectly submitted to insurance
+
+### Recommended Solutions
+1. **Immediate Fix**:
+   - Create a separate test to identify and monitor these cases
+   - Investigate highest-value allowed amounts on zero-billed procedures
+
+2. **Preventive Measures**:
+   - Add validation in the source system to prevent allowed amounts on zero-billed procedures
+   - Create business rules for special case handling
+
+3. **Test Enhancement**:
+   - Updated the `warn_decimal_point_error` test to exclude zero billed amounts
+   - Added a new test `warn_zero_billed_with_nonzero_allowed` to specifically track this issue
+
+### Status
+- [x] Issue identified
+- [x] Test modified
+- [ ] Preventive measures implemented
+
 ## Issue Template
 
 ### Description

@@ -167,9 +167,22 @@ models:
           name: warn_missing_payment_type
 
       - dbt_utils.expression_is_true:
-          expression: "not (allowed_amount > billed_amount * 10 and allowed_amount != -1.0)"
+          expression: "not (allowed_amount > billed_amount * 10 and allowed_amount != -1.0 and billed_amount > 0)"
           severity: warn
           name: warn_decimal_point_error
+          description: >
+            Identifies records where the allowed amount is more than 10 times the billed amount,
+            likely indicating a decimal point error during data entry. This refined test excludes
+            records with zero billed amounts to focus on true decimal point placement errors.
+            
+      - dbt_utils.expression_is_true:
+          expression: "not (billed_amount = 0 and allowed_amount > 0 and allowed_amount != -1.0)"
+          severity: warn
+          name: warn_zero_billed_with_nonzero_allowed
+          description: >
+            Identifies records where billed_amount is zero but allowed_amount is greater than zero.
+            While zero-fee procedures are valid in some cases (N-codes, Z-codes, monitoring procedures),
+            it is unexpected to have insurance allow payment for a procedure with no billed amount.
 
       # Add these tests to the tests section at the bottom of _int_claim_payments.yml
       - dbt_utils.expression_is_true:
