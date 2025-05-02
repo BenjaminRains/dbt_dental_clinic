@@ -431,9 +431,12 @@ models:
               row_condition: "allowed_override_amount != -1.0"
 
       - name: group_id
-        description: Insurance group identifier from bluebook
+        description: Insurance group identifier from bluebook. May be null when no matching bluebook record exists.
         tests:
-          - not_null
+          - not_null:
+              where: "bluebook_payment_amount IS NOT NULL"
+              config:
+                description: "group_id should be non-null when bluebook data exists"
 
       - name: claim_type
         description: Type of insurance claim from bluebook. May be null when no matching bluebook record exists.
