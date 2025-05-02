@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: stg_opendental__claimsnapshot
+    description: Staging model for claim snapshots from OpenDental. Contains snapshots of claim states at various points in time.
+    columns:
+      - name: claim_snapshot_id
+        description: Primary key for the claim snapshot record
+        tests:
+          - unique
+          - not_null
+      
+      - name: procedure_id
+        description: Foreign key to the procedure this snapshot is associated with
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedure')
+              field: procedure_id
+      
+      - name: claim_type
+        description: Type of claim (e.g., primary, secondary)
+      
+      - name: write_off_amount
+        description: Amount written off for this claim
+        tests:
+          - not_null
+      
+      - name: insurance_payment_estimate
+        description: Estimated insurance payment amount
+        tests:
+          - not_null
+      
+      - name: fee_amount
+        description: Fee amount for the procedure
+        tests:
+          - not_null
+      
+      - name: entry_timestamp
+        description: Timestamp when this snapshot was created
+        tests:
+          - not_null
+      
+      - name: claim_procedure_id
+        description: Foreign key to the claim procedure record
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claimprocedure')
+              field: claim_procedure_id
+      
+      - name: snapshot_trigger
+        description: Indicator of what triggered this snapshot (e.g., claim submission, payment received) 
