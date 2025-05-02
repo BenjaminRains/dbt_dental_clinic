@@ -19,6 +19,13 @@ models:
       - Numeric procedure codes will have NULL values for code_prefix
       - Common numeric codes include "02920" (Recement Crown), "01354" (SDF treatment), and "09940" (Occlusal Guard)
       
+      Numeric procedure codes appear in various categories:
+      - Many numeric codes in category 622 are dental procedures similar to CDT codes
+      - Category 250 contains mostly administrative codes, supply items, and patient instructions
+      - Categories 73-85 are often used for clinical notes and specialized procedure types
+      - Special categories like 251 (prosthetics) and 540 (root procedures) exist for specific treatments
+      - Some codes start with special characters (e.g., ~GRP~, *NPA) for internal categorization
+      
       Data Sources:
       - stg_opendental__claim: Base claim information
       - stg_opendental__claimproc: Claim procedure details
