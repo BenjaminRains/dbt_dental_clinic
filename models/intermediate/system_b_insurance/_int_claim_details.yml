@@ -23,7 +23,7 @@ models:
     config:
       materialized: table
       schema: intermediate
-      unique_key: [claim_id, procedure_id]  # Composite key to handle multiple procedures per claim
+      unique_key: [claim_id, procedure_id, claim_procedure_id]  # Composite key to handle multiple procedures per claim
     
     columns:
       - name: claim_id
@@ -41,6 +41,14 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+
+      - name: claim_procedure_id
+        description: Primary key part 3 - the claim procedure identifier
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claimproc')
+              field: claim_procedure_id
 
       - name: patient_id
         description: Foreign key to the patient
@@ -256,7 +264,6 @@ models:
           severity: warn
           name: warn_radiology_no_bill_conflict 
 
-      # Add this test to the tests section at the bottom of _int_claim_details.yml
       - dbt_utils.expression_is_true:
           expression: >
             NOT EXISTS (
@@ -265,11 +272,13 @@ models:
                 SELECT 
                   claim_id,
                   procedure_id,
+                  claim_procedure_id,
                   COUNT(*) as duplicate_count
                 FROM {{ ref('int_claim_details') }}
                 GROUP BY 
                   claim_id,
-                  procedure_id
+                  procedure_id,
+                  claim_procedure_id
                 HAVING COUNT(*) > 1
               ) as duplicates
             )
@@ -277,5 +286,5 @@ models:
             severity: error
             name: check_no_duplicate_claim_procedures
             description: >
-              This test verifies that there are no duplicate (claim_id, procedure_id) combinations
-              in the int_claim_details model. Each procedure within a claim should appear exactly once.  
+              This test verifies that there are no duplicate (claim_id, procedure_id, claim_procedure_id) combinations
+              in the int_claim_details model. Each claim procedure should appear exactly once.  
