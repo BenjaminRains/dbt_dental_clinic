@@ -38,7 +38,7 @@ ClaimPayment as (
     from {{ ref('stg_opendental__claimpayment') }}
 ),
 
--- Deduplicate at the source using patient_id + claim_payment_id + claim_procedure_id
+-- Deduplicate at the source using the full composite key
 DeduplicatedClaims as (
     select
         c.patient_id,
@@ -52,7 +52,7 @@ DeduplicatedClaims as (
         cp.write_off,
         cp.patient_responsibility,
         row_number() over(
-            partition by c.patient_id, cp.claim_payment_id, cp.claim_procedure_id 
+            partition by cp.claim_id, cp.procedure_id, cp.claim_procedure_id, cp.claim_payment_id
             order by cp.paid_amount desc
         ) as rn
     from ClaimProc cp
@@ -89,7 +89,7 @@ Final as (
     from DeduplicatedClaims dc
     left join ClaimPayment cpy
         on dc.claim_payment_id = cpy.claim_payment_id
-    where dc.rn = 1 -- Only keep one record per patient + claim_payment_id + claim_procedure_id combination
+    where dc.rn = 1 -- Only keep one record per unique composite key combination
 )
 
 select * from Final
