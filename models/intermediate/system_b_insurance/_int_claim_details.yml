@@ -13,6 +13,12 @@ models:
       - Maintains insurance plan and coverage details
       - Preserves procedure-specific flags and metadata
       
+      Data format notes:
+      - Procedure codes can be either CDT format (D-prefixed) or numeric format (e.g., "01354", "02920")
+      - The code_prefix field will extract the prefix for D-prefixed codes only (e.g., "D1", "D2")
+      - Numeric procedure codes will have NULL values for code_prefix
+      - Common numeric codes include "02920" (Recement Crown), "01354" (SDF treatment), and "09940" (Occlusal Guard)
+      
       Data Sources:
       - stg_opendental__claim: Base claim information
       - stg_opendental__claimproc: Claim procedure details
@@ -106,9 +112,13 @@ models:
           - not_null
 
       - name: code_prefix
-        description: Prefix of the procedure code
+        description: >
+          Prefix of the procedure code (e.g., "D1", "D2") extracted from D-prefixed CDT codes.
+          Will be NULL for numeric procedure codes (e.g., "01354", "02920") which are valid
+          but don't follow the CDT format.
         tests:
-          - not_null
+          - not_null:
+              where: "procedure_code LIKE 'D%'"
 
       - name: procedure_description
         description: Full description of the procedure
