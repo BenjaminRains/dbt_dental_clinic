@@ -2,7 +2,7 @@
     config(
         materialized='table',
         schema='intermediate',
-        unique_key='claim_id || "-" || procedure_id || "-" || claim_payment_id'
+        unique_key='claim_id || "-" || procedure_id || "-" || claim_procedure_id || "-" || claim_payment_id'
     )
 }}
 
@@ -17,6 +17,7 @@ ClaimProc as (
     select
         claim_id,
         procedure_id,
+        claim_procedure_id,
         claim_payment_id,
         fee_billed as billed_amount,
         allowed_override as allowed_amount,
@@ -43,13 +44,14 @@ DeduplicatedClaims as (
         c.patient_id,
         cp.claim_id,
         cp.procedure_id,
+        cp.claim_procedure_id,
         cp.claim_payment_id,
         cp.billed_amount,
         cp.allowed_amount,
         cp.paid_amount,
         cp.write_off,
         cp.patient_responsibility,
-        row_number() over(partition by c.patient_id, cp.claim_payment_id order by cp.paid_amount desc) as rn
+        row_number() over(partition by c.patient_id, cp.claim_payment_id, cp.claim_procedure_id order by cp.paid_amount desc) as rn
     from ClaimProc cp
     inner join Claim c
         on cp.claim_id = c.claim_id
@@ -60,6 +62,7 @@ Final as (
         -- Primary Key
         dc.claim_id,
         dc.procedure_id,
+        dc.claim_procedure_id,
         dc.claim_payment_id,
         dc.patient_id, -- Include patient_id in the output
 

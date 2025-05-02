@@ -25,7 +25,7 @@ models:
     config:
       materialized: table
       schema: intermediate
-      unique_key: claim_payment_id
+      unique_key: [claim_id, procedure_id, claim_procedure_id, claim_payment_id]
     
     columns:
       - name: claim_id
@@ -43,7 +43,15 @@ models:
           - relationships:
               to: ref('int_claim_details')
               field: procedure_id
-
+              
+      - name: claim_procedure_id
+        description: Foreign key to the specific claim procedure record
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claimproc')
+              field: claim_procedure_id
+              
       - name: claim_payment_id
         description: Primary key for the payment record
         tests:
@@ -202,6 +210,7 @@ models:
                 JOIN {{ ref('int_claim_details') }} cd
                   ON cp.claim_id = cd.claim_id
                   AND cp.procedure_id = cd.procedure_id
+                  AND cp.claim_procedure_id = cd.claim_procedure_id
                 WHERE cp.claim_payment_id IS NOT NULL
                 GROUP BY 
                   cd.patient_id,
