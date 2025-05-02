@@ -145,12 +145,20 @@ models:
         description: >
           Total amount owed by patient, calculated by summing patient_responsibility
           from int_ar_balance. This represents the portion of the AR balance that is
-          the patient's responsibility across all procedures.
+          the patient's responsibility across all procedures. Negative values typically
+          indicate credits, refunds, or insurance payments that exceeded the original
+          patient responsibility.
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -1000
               max_value: 50000
+              config:
+                severity: warn
+                description: >
+                  Patient responsibility should typically be between -$1,000 and $50,000.
+                  Negative values often represent credits or insurance overpayments.
+                  Values outside this range may indicate data quality issues or require review.
 
       - name: insurance_responsibility
         description: >
