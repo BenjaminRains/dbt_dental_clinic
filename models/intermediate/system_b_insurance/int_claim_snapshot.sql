@@ -42,9 +42,8 @@ ClaimProc as (
         insurance_payment_amount,
         write_off,
         allowed_override,
-        status_code,
-        rejection_code,
-        adjustment_type_id
+        status,
+        claim_adjustment_reason_codes
     from {{ ref('stg_opendental__claimproc') }}
 ),
 
@@ -122,9 +121,8 @@ Final as (
         cp.insurance_payment_amount as actual_payment_amount,
         cp.write_off as actual_write_off,
         cp.allowed_override as actual_allowed_amount,
-        cp.status_code,
-        cp.rejection_code,
-        cp.adjustment_type_id,
+        cp.status as claim_procedure_status,
+        cp.claim_adjustment_reason_codes,
         
         -- Most Recent Payment
         mrp.paid_amount as most_recent_payment,
@@ -138,7 +136,15 @@ Final as (
         cs.snapshot_trigger,
         
         -- Temporal Fields for Time-Series Analysis
-        datediff('day', cs.entry_timestamp, coalesce(mrp.check_date, current_timestamp())) as days_to_payment,
+        -- Modified calculation to handle payment date issues:
+        -- 1. Return NULL when no payment exists yet (rather than calculating days to current date)
+        -- 2. Handle cases where payment date is before snapshot date (likely data errors)
+        -- 3. Only calculate positive days to payment for valid chronological data
+        CASE 
+            WHEN mrp.check_date IS NULL THEN NULL  -- No payment yet, so days_to_payment is undefined
+            WHEN mrp.check_date < cs.entry_timestamp THEN 0  -- Payment date before snapshot (data issue)
+            ELSE EXTRACT(EPOCH FROM (mrp.check_date - cs.entry_timestamp))/86400 
+        END as days_to_payment,
         
         -- Meta Fields
         cs.entry_timestamp as created_at,
