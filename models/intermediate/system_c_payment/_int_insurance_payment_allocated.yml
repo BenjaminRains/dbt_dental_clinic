@@ -219,7 +219,9 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              max_value: "DATE_TRUNC('day', CAST('{{ var('max_valid_date', 'current_date') }}' AS timestamp)) + INTERVAL '1 day' - INTERVAL '1 second'"
+              config:
+                description: "updated_at should be between 2023-01-01 and the end of the current max valid date (inclusive of time component)"
 
       - name: deposit_id
         description: Foreign key to the deposit record
