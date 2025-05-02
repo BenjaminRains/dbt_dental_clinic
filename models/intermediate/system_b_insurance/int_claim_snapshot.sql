@@ -107,22 +107,30 @@ ValidSnapshots as (
         cp.claim_id,
         cp.procedure_id,
         cp.patient_id,
-        cp.plan_id
+        cp.plan_id,
+        -- Add row number to identify the first occurrence of each claim_snapshot_id
+        row_number() over(partition by cs.claim_snapshot_id order by cp.claim_id) as rn
     from Source cs
     inner join ClaimProc cp on cs.claim_procedure_id = cp.claim_procedure_id
 ),
 
 -- Deduplicate snapshots to ensure unique claim_snapshot_id values
 DedupedSnapshots as (
-    select vs.*
-    from ValidSnapshots vs
-    inner join (
-        select 
-            claim_snapshot_id,
-            min(claim_id) as min_claim_id
-        from ValidSnapshots
-        group by claim_snapshot_id
-    ) dedup on vs.claim_snapshot_id = dedup.claim_snapshot_id and vs.claim_id = dedup.min_claim_id
+    select
+        claim_snapshot_id,
+        claim_procedure_id,
+        claim_type,
+        write_off_amount,
+        insurance_payment_estimate,
+        fee_amount,
+        entry_timestamp,
+        snapshot_trigger,
+        claim_id,
+        procedure_id,
+        patient_id,
+        plan_id
+    from ValidSnapshots
+    where rn = 1
 ),
 
 Final as (
