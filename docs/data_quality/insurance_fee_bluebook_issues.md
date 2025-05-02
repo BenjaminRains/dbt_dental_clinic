@@ -109,7 +109,8 @@ In addition to missing bluebook data, we have identified several records with ex
    - Duplicate digit entries
    - Multiple entries combined into one field
 2. Several affected carriers are Delta Dental affiliated plans
-3. Pattern is similar to fee entry errors documented in the fee model quality report
+3. **The same extreme values appear in both `allowed_override` (from claimproc) and `allowed_override_amount` (from bluebook)**, indicating a systematic data entry issue
+4. Pattern is similar to fee entry errors documented in the fee model quality report
 
 ### Recommended Actions
 

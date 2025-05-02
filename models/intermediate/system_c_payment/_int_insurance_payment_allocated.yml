@@ -288,12 +288,15 @@ models:
               max_value: 10000
 
       - name: allowed_override
-        description: Manual override for allowed amount
+        description: Manual override for allowed amount. May contain data entry errors (decimal places, duplicate entries).
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
               row_condition: "allowed_override != -1.0 and claim_id not in (21561) and payment_date <= current_date"
+              config:
+                severity: warn
+                description: "Found allowed_override values outside expected range (0-10000). Values like 10,934.0 (Aflac) and 10,380.0 (Delta Dental) indicate decimal place errors, matching issues in allowed_override_amount."
 
       - name: copay_amount
         description: Copay amount for this payment
