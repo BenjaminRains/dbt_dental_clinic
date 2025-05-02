@@ -93,16 +93,28 @@ MostRecentPayment as (
     where payment_rank = 1
 ),
 
-Final as (
+-- Only include snapshots that have a valid claim procedure ID with complete data
+ValidSnapshots as (
     select
-        -- Primary Key
-        cs.claim_snapshot_id,
-        
-        -- Foreign Keys
+        cs.*,
         cp.claim_id,
         cp.procedure_id,
         cp.patient_id,
-        cp.plan_id,
+        cp.plan_id
+    from Source cs
+    inner join ClaimProc cp on cs.claim_procedure_id = cp.claim_procedure_id
+),
+
+Final as (
+    select
+        -- Primary Key
+        vs.claim_snapshot_id,
+        
+        -- Foreign Keys
+        vs.claim_id,
+        vs.procedure_id,
+        vs.patient_id,
+        vs.plan_id,
         
         -- Link to Tracking
         ct.claim_tracking_id,
@@ -111,15 +123,15 @@ Final as (
         
         -- Procedure Info from Claim Details
         cd.procedure_code,
-        cd.claim_type,
+        coalesce(cd.claim_type, vs.claim_type) as claim_type, -- Use snapshot claim_type if cd claim_type is null
         cd.claim_status,
         
         -- Claim Details at Snapshot Time
-        cs.claim_type as snapshot_claim_type,
-        cs.write_off_amount as estimated_write_off,
-        cs.insurance_payment_estimate,
-        cs.fee_amount,
-        cs.entry_timestamp,
+        vs.claim_type as snapshot_claim_type,
+        vs.write_off_amount as estimated_write_off,
+        vs.insurance_payment_estimate,
+        vs.fee_amount,
+        vs.entry_timestamp,
         
         -- Actual Payment Details
         cp.insurance_payment_amount as actual_payment_amount,
@@ -133,36 +145,36 @@ Final as (
         mrp.check_date as most_recent_payment_date,
         
         -- Variance Analysis
-        (cp.insurance_payment_amount - cs.insurance_payment_estimate) as payment_variance,
-        (cp.write_off - cs.write_off_amount) as write_off_variance,
+        (cp.insurance_payment_amount - vs.insurance_payment_estimate) as payment_variance,
+        (cp.write_off - vs.write_off_amount) as write_off_variance,
         
         -- Snapshot Metadata
-        cs.snapshot_trigger,
+        vs.snapshot_trigger,
         
         -- Temporal Fields for Time-Series Analysis
         CASE 
             WHEN mrp.check_date IS NULL THEN NULL  -- No payment yet, so days_to_payment is undefined
-            WHEN mrp.check_date < cs.entry_timestamp THEN 0  -- Payment date before snapshot (data issue)
-            ELSE EXTRACT(EPOCH FROM (mrp.check_date - cs.entry_timestamp))/86400 
+            WHEN mrp.check_date < vs.entry_timestamp THEN 0  -- Payment date before snapshot (data issue)
+            ELSE EXTRACT(EPOCH FROM (mrp.check_date - vs.entry_timestamp))/86400 
         END as days_to_payment,
         
         -- Meta Fields
-        cs.entry_timestamp as created_at,
-        cs.entry_timestamp as updated_at
-    from Source cs
+        vs.entry_timestamp as created_at,
+        vs.entry_timestamp as updated_at
+    from ValidSnapshots vs
     left join ClaimProc cp
-        on cs.claim_procedure_id = cp.claim_procedure_id
+        on vs.claim_procedure_id = cp.claim_procedure_id
     left join ClaimTracking ct
-        on cp.claim_id = ct.claim_id
-        and cp.procedure_id = ct.procedure_id
-        and date_trunc('day', cs.entry_timestamp) = date_trunc('day', ct.entry_timestamp)
+        on vs.claim_id = ct.claim_id
+        and vs.procedure_id = ct.procedure_id
+        and date_trunc('day', vs.entry_timestamp) = date_trunc('day', ct.entry_timestamp)
         and ct.tracking_rank = 1
     left join ClaimDetails cd
-        on cp.claim_id = cd.claim_id
-        and cp.procedure_id = cd.procedure_id
+        on vs.claim_id = cd.claim_id
+        and vs.procedure_id = cd.procedure_id
     left join MostRecentPayment mrp
-        on cp.claim_id = mrp.claim_id
-        and cp.procedure_id = mrp.procedure_id
+        on vs.claim_id = mrp.claim_id
+        and vs.procedure_id = mrp.procedure_id
 )
 
 select * from Final
