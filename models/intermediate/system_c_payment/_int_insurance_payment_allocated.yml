@@ -244,12 +244,15 @@ models:
               where: "is_partial = true"
 
       - name: insurance_subscriber_id
-        description: Foreign key to the insurance subscriber
+        description: Foreign key to the insurance subscriber. May reference subscribers that are no longer in the current inssub table.
         tests:
           - relationships:
               to: ref('stg_opendental__inssub')
               field: inssub_id
               where: "payment_date >= '2023-01-01'::date"
+              config:
+                severity: warn
+                description: "Some insurance payments reference subscribers that no longer exist in the inssub table"
           - not_null
 
       - name: claim_id
