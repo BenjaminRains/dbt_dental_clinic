@@ -204,4 +204,7 @@ Final as (
         and vs.procedure_id = mrp.procedure_id
 )
 
-select * from Final
+-- Apply final deduplication to ensure unique claim_snapshot_id values
+select distinct on (claim_snapshot_id) *
+from Final
+order by claim_snapshot_id, claim_id
