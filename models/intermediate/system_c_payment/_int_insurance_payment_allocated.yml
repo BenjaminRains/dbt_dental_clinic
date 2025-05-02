@@ -428,12 +428,15 @@ models:
               max_value: 100000
 
       - name: allowed_override_amount
-        description: Manual override amount for the allowed fee
+        description: Manual override amount for the allowed fee. May contain data entry errors (decimal places, duplicate entries).
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
               row_condition: "allowed_override_amount != -1.0"
+              config:
+                severity: warn
+                description: "Found allowed_override_amount values outside expected range (0-10000). Extreme values like 252,252.0 indicate data entry errors similar to those documented in fee_model_quality_report.md."
 
       - name: group_id
         description: Insurance group identifier from bluebook. May be null when no matching bluebook record exists.
