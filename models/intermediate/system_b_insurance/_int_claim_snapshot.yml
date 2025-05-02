@@ -32,6 +32,7 @@ models:
       Data Quality Notes:
       - actual_allowed_amount may be -1.0 as a placeholder for undetermined values
       - Some records show decimal point errors in allowed_amount (e.g., 252.00 recorded as 252252.00)
+      - Duplicates may occur when joining claim_procedure_id; these are deduplicated in the model
       - See stakeholders/claims_data_quality_issues.md for documented cases and solutions
     
     columns:
