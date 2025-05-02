@@ -42,12 +42,16 @@ models:
           - not_null
       
       - name: claim_id
-        description: Foreign key to the insurance claim
+        description: >
+          Foreign key to the insurance claim.
+          Note: claim_id = 0 is a special case in OpenDental that represents pre-authorization requests, draft claims not yet submitted, 
+          or procedures with insurance estimates that don't have an actual claim assigned yet. These records are excluded from relationship tests.
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__claim')
               field: claim_id
+              where: "claim_id != 0"  # Exclude system placeholder records with claim_id = 0
       
       - name: procedure_id
         description: Foreign key to the procedure
