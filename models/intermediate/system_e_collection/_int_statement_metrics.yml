@@ -1,0 +1,78 @@
+version: 2
+
+model:
+  - name: int_statement_metrics
+    description: >
+      Intermediate model for statement metrics.
+      Provides aggregated metrics on statement effectiveness for collections.
+      Part of System E: Collections
+    columns:
+      - name: statement_metric_id
+        description: Unique identifier for the statement metric
+        tests:
+          - unique
+          - not_null
+      - name: snapshot_date
+        description: Date of the metrics snapshot
+      - name: metric_type
+        description: Type of metric grouping (overall, by_delivery_method, by_campaign)
+      - name: delivery_method
+        description: Statement delivery method (for by_delivery_method metrics)
+      - name: campaign_id
+        description: Campaign ID (for by_campaign metrics)
+      - name: total_statements
+        description: Total number of statements analyzed
+      - name: collection_statements
+        description: Number of collection-related statements
+      - name: collection_statement_ratio
+        description: Ratio of collection statements to total statements
+        tests:
+          - test_name: valid_collection_efficiency
+            column_name: collection_statement_ratio
+      - name: total_balance
+        description: Total balance amount on statements
+      - name: collection_balance
+        description: Total balance amount on collection statements
+      - name: payment_amount_7days
+        description: Total payments received within 7 days of statements
+      - name: payment_amount_14days
+        description: Total payments received within 14 days of statements
+      - name: payment_amount_30days
+        description: Total payments received within 30 days of statements
+      - name: statements_with_payment
+        description: Number of statements that resulted in payments
+      - name: statements_with_full_payment
+        description: Number of statements that resulted in full payment
+      - name: statements_with_partial_payment
+        description: Number of statements that resulted in partial payment
+      - name: statement_payment_rate
+        description: Percentage of statements that resulted in any payment
+        tests:
+          - test_name: valid_collection_efficiency
+            column_name: statement_payment_rate
+      - name: collection_payment_rate
+        description: Percentage of collection statements that resulted in payment
+        tests:
+          - test_name: valid_collection_efficiency
+            column_name: collection_payment_rate
+      - name: balance_collection_rate_30days
+        description: Percentage of total balance collected within 30 days
+        tests:
+          - test_name: valid_collection_efficiency
+            column_name: balance_collection_rate_30days
+      - name: collection_balance_rate_30days
+        description: Percentage of collection balance collected within 30 days
+        tests:
+          - test_name: valid_collection_efficiency
+            column_name: collection_balance_rate_30days
+      - name: full_payment_rate
+        description: Percentage of payments that were full payments
+        tests:
+          - test_name: valid_collection_efficiency
+            column_name: full_payment_rate
+      - name: day7_response_ratio
+        description: Ratio of 7-day payments to 30-day payments
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model
