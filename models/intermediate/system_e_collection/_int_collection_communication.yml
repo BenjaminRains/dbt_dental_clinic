@@ -1,0 +1,62 @@
+version: 2
+
+model:
+  - name: int_collection_communication
+    description: >
+      Intermediate model for collection communications.
+      Tracks all communications related to collection efforts.
+      Part of System E: Collections
+    columns:
+      - name: collection_communication_id
+        description: Unique identifier for the collection communication
+        tests:
+          - unique
+          - not_null
+      - name: campaign_id
+        description: Foreign key to int_collection_campaigns
+      - name: collection_task_id
+        description: Foreign key to int_collection_tasks
+      - name: commlog_id
+        description: Foreign key to stg_opendental__commlog
+      - name: patient_id
+        description: Foreign key to stg_opendental__patient
+      - name: user_id
+        description: ID of the user who initiated the communication
+      - name: communication_date
+        description: Date when the communication occurred
+      - name: communication_type
+        description: Type of communication (call, email, letter, text, etc.)
+      - name: direction
+        description: Direction of communication (outbound, inbound)
+      - name: status
+        description: Status of the communication (sent, received, failed, etc.)
+      - name: template_id
+        description: ID of the template used (if any)
+      - name: subject
+        description: Subject of the communication
+      - name: message_content
+        description: Content of the communication
+      - name: patient_response
+        description: Response from the patient
+      - name: outcome
+        description: Outcome of the communication (successful, unsuccessful, partial)
+      - name: promised_payment_amount
+        description: Amount that the patient promised to pay
+      - name: promised_payment_date
+        description: Date when the patient promised to make the payment
+      - name: actual_payment_amount
+        description: Actual payment amount received (if any)
+      - name: actual_payment_date
+        description: Date when the actual payment was received
+      - name: follow_up_required
+        description: Flag indicating if follow-up is required
+      - name: follow_up_date
+        description: Date when follow-up is scheduled
+      - name: follow_up_task_id
+        description: ID of the follow-up task (if any)
+      - name: notes
+        description: Additional notes about the communication
+      - name: model_created_at
+        description: Timestamp when this record was last created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model
