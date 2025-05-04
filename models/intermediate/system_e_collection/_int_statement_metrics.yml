@@ -6,6 +6,32 @@ model:
       Intermediate model for statement metrics.
       Provides aggregated metrics on statement effectiveness for collections.
       Part of System E: Collections
+      
+      Key features:
+      - Tracks statement effectiveness metrics at multiple levels (overall, delivery method, campaign)
+      - Calculates collection statement ratios and payment response rates
+      - Measures payment response timing (7, 14, 30 day windows)
+      - Tracks full vs partial payment outcomes
+      - Monitors collection balance recovery rates
+      - Provides snapshot-based historical performance tracking
+      - Integrates with collection campaigns and delivery methods
+      - Calculates early payment response ratios
+      
+      Data Sources:
+      - int_billing_statements: Base statement data and payment tracking
+      - int_collection_campaigns: Campaign performance context
+      - int_ar_analysis: Patient AR balances and aging information
+      - stg_opendental__payment: Payment tracking and fulfillment
+      
+      Business rules:
+      - Metrics are calculated at overall, delivery method, and campaign levels
+      - Collection statement ratio = collection_statements / total_statements
+      - Statement payment rate = statements_with_payment / total_statements
+      - Collection payment rate = statements_with_payment / collection_statements
+      - Balance collection rate = payment_amount_30days / total_balance
+      - Full payment is defined as 90% or more of statement balance
+      - Early response ratio = payment_amount_7days / payment_amount_30days
+      - Collection statements are identified by aging and campaign association
     columns:
       - name: statement_metric_id
         description: Unique identifier for the statement metric
