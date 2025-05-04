@@ -89,10 +89,10 @@ CollectionCampaignMatch AS (
             ELSE FALSE
         END AS sent_during_campaign
     FROM StatementBase sb
-    INNER JOIN {{ ref('int_collection_campaigns') }} cc
     INNER JOIN {{ ref('int_collection_tasks') }} ct
+        ON sb.patient_id = ct.patient_id
+    INNER JOIN {{ ref('int_collection_campaigns') }} cc
         ON cc.campaign_id = ct.campaign_id
-    WHERE sb.patient_id = ct.patient_id
 ),
 
 -- Identify if payments were made after statement was sent
