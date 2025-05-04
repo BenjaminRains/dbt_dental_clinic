@@ -6,6 +6,32 @@ model:
       Intermediate model for collection communications.
       Tracks all communications related to collection efforts.
       Part of System E: Collections
+      
+      Key features:
+      - Tracks all collection-related communications (calls, emails, letters, texts)
+      - Links communications to specific collection campaigns and tasks
+      - Records both outbound and inbound communication flows
+      - Tracks patient responses and promised payments
+      - Monitors communication outcomes and effectiveness
+      - Manages follow-up requirements and scheduling
+      - Integrates with payment tracking and collection tasks
+      - Provides communication history for patient accounts
+      
+      Data Sources:
+      - stg_opendental__commlog: Base communication log data
+      - stg_opendental__patient: Patient information
+      - stg_opendental__payment: Payment tracking
+      - int_collection_campaigns: Collection campaign details
+      - int_collection_tasks: Collection task information
+      
+      Business rules:
+      - Communications are linked to campaigns and tasks when applicable
+      - Tracks both successful and unsuccessful communication attempts
+      - Records promised payments and compares with actual payments
+      - Follow-up requirements are determined by communication outcome
+      - Communication effectiveness is measured by payment results
+      - Templates are used for standardized communication
+      - Patient responses are categorized and tracked
     columns:
       - name: collection_communication_id
         description: Unique identifier for the collection communication
