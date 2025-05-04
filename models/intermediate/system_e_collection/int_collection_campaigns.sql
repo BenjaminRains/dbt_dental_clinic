@@ -93,8 +93,7 @@ CampaignAccounts AS (
             OR (cd.campaign_id = 3 AND ar.denied_claims_count > 0)
         )
     )
-    -- Only include active campaigns
-    WHERE cd.campaign_status IN ('active', 'planned')
+    AND cd.campaign_status IN ('active', 'planned')
 ),
 
 CampaignMetrics AS (
