@@ -13,7 +13,7 @@ model:
       - Supports aging-based and balance-based targeting criteria
       - Monitors campaign progress through status tracking
       - Calculates collection effectiveness metrics
-      - Integrates with billing statements and collection tasks
+      - Designed to work with AR analysis data
       - Provides aging bucket context for targeted accounts
       
       Data Sources:
@@ -25,7 +25,7 @@ model:
       - Campaign status transitions through planned, active, completed, or canceled
       - Priority levels help manage multiple concurrent campaigns
       - Campaign effectiveness is tracked through collection metrics
-      - Integration with billing statements tracks statement effectiveness
+      - Campaign metrics are calculated based on AR analysis data
     columns:
       - name: campaign_id
         description: Unique identifier for the collection campaign
