@@ -17,11 +17,7 @@ model:
       - Provides aging bucket context for targeted accounts
       
       Data Sources:
-      - stg_opendental__patient: Patient demographic information
-      - stg_opendental__payment: Payment tracking
       - int_ar_analysis: Patient AR balances and aging
-      - int_billing_statements: Statement history and effectiveness
-      - int_collection_tasks: Related collection activities
       
       Business rules:
       - Campaigns target accounts based on aging and balance thresholds
