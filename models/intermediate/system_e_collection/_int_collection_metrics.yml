@@ -6,6 +6,33 @@ model:
       Intermediate model for collection metrics.
       Tracks performance metrics for collection efforts.
       Part of System E: Collections
+      
+      Key features:
+      - Provides comprehensive collection performance metrics at multiple levels
+      - Tracks metrics at overall, campaign, and individual user levels
+      - Calculates collection rates and contact effectiveness
+      - Monitors payment promise fulfillment and punctuality
+      - Measures communication efficiency and task completion
+      - Tracks average days to payment and contacts per payment
+      - Provides snapshot-based historical performance tracking
+      - Integrates with campaigns, tasks, and communications
+      
+      Data Sources:
+      - int_collection_campaigns: Campaign performance data
+      - int_collection_tasks: Task completion metrics
+      - int_collection_communication: Communication effectiveness
+      - stg_opendental__payment: Payment tracking and fulfillment
+      - stg_opendental__patient: Account and AR information
+      
+      Business rules:
+      - Metrics are calculated at overall, campaign, and user levels
+      - Collection rate = collected_amount / total_ar_amount
+      - Contact rate = accounts_contacted / total_accounts
+      - Payment fulfillment rate = actual_payments / promised_payments
+      - Payment punctuality is measured against promised dates
+      - Communication efficiency is tracked through contacts per payment
+      - Task completion rates are monitored for process effectiveness
+      - Historical snapshots are maintained for trend analysis
     columns:
       - name: metric_id
         description: Unique identifier for the collection metric
