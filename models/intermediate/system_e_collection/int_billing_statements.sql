@@ -57,7 +57,7 @@ PatientInfo AS (
     SELECT
         patient_id,
         preferred_name,
-        total_balance,
+        total_ar_balance AS total_balance,
         balance_0_30_days,
         balance_31_60_days,
         balance_61_90_days,
