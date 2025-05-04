@@ -6,6 +6,32 @@ models:
       Intermediate model for collection tasks.
       Tracks individual collection actions/tasks related to campaigns.
       Part of System E: Collections
+      
+      Key features:
+      - Tracks individual collection tasks and their outcomes
+      - Links tasks to specific collection campaigns
+      - Monitors task status and completion rates
+      - Tracks payment promises and actual payments
+      - Enables follow-up task management
+      - Provides aging context for each task
+      - Categorizes tasks by type (call, email, letter, etc.)
+      - Tracks task priority and assignment
+      - Integrates with AR analysis for financial context
+      - Supports collection workflow management
+      
+      Data Sources:
+      - stg_opendental__task: Primary task data
+      - int_collection_campaigns: Collection campaign details
+      - int_ar_analysis: Patient AR balances and aging information
+      
+      Business rules:
+      - Tasks are linked to campaigns based on description matching
+      - Task types are determined by description keywords
+      - Collection tasks are identified by keywords (collection, overdue, payment)
+      - Task status is mapped from numeric codes to descriptive values
+      - Priority levels are mapped from numeric codes to descriptive values
+      - Aging buckets are determined from AR analysis data
+      - Follow-up tasks are tracked and linked to original tasks
     columns:
       - name: collection_task_id
         description: Unique identifier for the collection task
