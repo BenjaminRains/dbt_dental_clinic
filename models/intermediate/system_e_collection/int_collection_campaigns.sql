@@ -81,9 +81,9 @@ CampaignAccounts AS (
     FROM {{ ref('int_ar_analysis') }} ar
     CROSS JOIN CampaignDefinitions cd
     WHERE (
-        -- Match balance criteria with explicit casting
-        (ar.total_ar_balance >= CAST(cd.target_ar_balance_min AS DECIMAL(10,2)) OR cd.target_ar_balance_min IS NULL)
-        AND (ar.total_ar_balance <= CAST(COALESCE(cd.target_ar_balance_max, '999999999.99') AS DECIMAL(10,2)))
+        -- Match balance criteria with explicit casting using larger precision
+        (ar.total_ar_balance >= CAST(cd.target_ar_balance_min AS NUMERIC) OR cd.target_ar_balance_min IS NULL)
+        AND (ar.total_ar_balance <= CAST(COALESCE(cd.target_ar_balance_max, '99999.99') AS NUMERIC))
         
         -- Match aging criteria based on campaign
         AND (
@@ -100,9 +100,9 @@ CampaignMetrics AS (
     SELECT
         campaign_id,
         COUNT(DISTINCT patient_id) AS total_accounts,
-        SUM(total_ar_balance) AS total_ar_amount,
-        0.00 AS collected_amount, -- This would be updated with actual data
-        0.00 AS collection_rate  -- This would be calculated from actual data
+        COALESCE(SUM(total_ar_balance), 0)::NUMERIC AS total_ar_amount,
+        0.00::NUMERIC AS collected_amount, -- This would be updated with actual data
+        0.00::NUMERIC AS collection_rate  -- This would be calculated from actual data
     FROM CampaignAccounts
     GROUP BY campaign_id
 )
@@ -124,12 +124,12 @@ SELECT
     
     -- Campaign metrics
     COALESCE(cm.total_accounts, 0) AS total_accounts,
-    COALESCE(cm.total_ar_amount, 0.00) AS total_ar_amount,
-    COALESCE(cm.collected_amount, 0.00) AS collected_amount,
+    COALESCE(cm.total_ar_amount, 0.00)::NUMERIC AS total_ar_amount,
+    COALESCE(cm.collected_amount, 0.00)::NUMERIC AS collected_amount,
     CASE 
         WHEN COALESCE(cm.total_ar_amount, 0.00) > 0 
-        THEN COALESCE(cm.collected_amount, 0.00) / cm.total_ar_amount 
-        ELSE 0.00 
+        THEN COALESCE(cm.collected_amount, 0.00)::NUMERIC / NULLIF(cm.total_ar_amount, 0)::NUMERIC
+        ELSE 0.00::NUMERIC
     END AS collection_rate,
     
     -- Metadata fields
