@@ -81,9 +81,9 @@ CampaignAccounts AS (
     FROM {{ ref('int_ar_analysis') }} ar
     CROSS JOIN CampaignDefinitions cd
     WHERE (
-        -- Match balance criteria
-        (ar.total_ar_balance >= cd.target_ar_balance_min OR cd.target_ar_balance_min IS NULL)
-        AND (ar.total_ar_balance <= cd.target_ar_balance_max OR cd.target_ar_balance_max IS NULL)
+        -- Match balance criteria with explicit casting
+        (ar.total_ar_balance >= CAST(cd.target_ar_balance_min AS DECIMAL(10,2)) OR cd.target_ar_balance_min IS NULL)
+        AND (ar.total_ar_balance <= CAST(COALESCE(cd.target_ar_balance_max, '999999999.99') AS DECIMAL(10,2)))
         
         -- Match aging criteria based on campaign
         AND (
