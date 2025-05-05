@@ -102,12 +102,19 @@ WITH CollectionCommunications AS (
     LEFT JOIN {{ ref('int_collection_campaigns') }} cc
         ON ct.campaign_id = cc.campaign_id
     WHERE 
-        -- Filter for collection-related communications
-        (cl.note LIKE '%collection%'
+        -- Filter for collection-related communications with expanded keywords
+        (cl.note LIKE '%collect%'
         OR cl.note LIKE '%payment%'
         OR cl.note LIKE '%overdue%'
-        OR cl.note LIKE '%balance%')
-        AND cl.communication_datetime >= '2025-01-01' -- Match campaign start dates
+        OR cl.note LIKE '%balance%'
+        OR cl.note LIKE '%owe%'
+        OR cl.note LIKE '%pay%'
+        OR cl.note LIKE '%bill%'
+        OR cl.note LIKE '%account%'
+        OR cl.note LIKE '%insurance%'
+        OR cl.note LIKE '%claim%'
+        OR cl.note LIKE '%$%')
+        AND cl.communication_datetime >= '2023-01-01' -- Match historical data timeframe
         
     {% if is_incremental() %}
         -- If this is an incremental run, only process new communications

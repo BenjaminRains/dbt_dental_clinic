@@ -16,53 +16,52 @@
 */
 
 WITH CampaignDefinitions AS (
-    -- This would typically come from a seed file or external source
-    -- For demonstration, defining sample campaigns here
+    -- Campaigns with dates aligned to historical task data
     SELECT
         1 AS campaign_id,
-        'Overdue 90+ High Balance' AS campaign_name,
-        'Collection campaign targeting accounts with balances over $1000 that are 90+ days overdue' AS campaign_description,
-        '2025-01-01'::date AS start_date,
-        '2025-03-31'::date AS end_date,
-        1000.00 AS target_ar_balance_min,
+        'Patient Collections' AS campaign_name,
+        'Standard collection campaign targeting overdue patient balances' AS campaign_description,
+        '2023-01-01'::date AS start_date,
+        '2024-12-31'::date AS end_date,
+        100.00 AS target_ar_balance_min,
         NULL AS target_ar_balance_max,
-        90 AS target_aging_min,
+        30 AS target_aging_min,
         NULL AS target_aging_max,
         'high' AS priority,
         'active' AS campaign_status,
-        15 AS assigned_user_id  -- Example user ID
+        57 AS assigned_user_id  -- Based on common user_id in tasks (adjust if needed)
     
     UNION ALL
     
     SELECT
         2 AS campaign_id,
-        'Overdue 60-90 Medium Balance' AS campaign_name,
-        'Collection campaign targeting accounts with balances between $500-$1000 that are 60-90 days overdue' AS campaign_description,
-        '2025-01-15'::date AS start_date,
-        '2025-03-15'::date AS end_date,
-        500.00 AS target_ar_balance_min,
-        1000.00 AS target_ar_balance_max,
-        60 AS target_aging_min,
-        90 AS target_aging_max,
+        'Insurance Follow-up' AS campaign_name,
+        'Campaign focused on following up with insurance claims and verifications' AS campaign_description,
+        '2023-01-01'::date AS start_date,
+        '2024-12-31'::date AS end_date,
+        0.00 AS target_ar_balance_min,
+        NULL AS target_ar_balance_max,
+        0 AS target_aging_min,
+        NULL AS target_aging_max,
         'medium' AS priority,
-        'planned' AS campaign_status,
-        18 AS assigned_user_id  -- Example user ID
+        'active' AS campaign_status,
+        46 AS assigned_user_id  -- Based on common user_id in tasks
     
     UNION ALL
     
     SELECT
         3 AS campaign_id,
-        'Insurance Rejected Claims' AS campaign_name,
-        'Collection campaign targeting accounts with rejected insurance claims' AS campaign_description,
-        '2025-02-01'::date AS start_date,
-        '2025-04-30'::date AS end_date,
+        'Treatment Plan Payment Collection' AS campaign_name,
+        'Campaign for collecting payments related to treatment plans' AS campaign_description,
+        '2023-01-01'::date AS start_date,
+        '2024-12-31'::date AS end_date,
         200.00 AS target_ar_balance_min,
         NULL AS target_ar_balance_max,
-        30 AS target_aging_min,
+        0 AS target_aging_min,
         NULL AS target_aging_max,
-        'high' AS priority,
-        'planned' AS campaign_status,
-        22 AS assigned_user_id  -- Example user ID
+        'medium' AS priority,
+        'active' AS campaign_status,
+        49 AS assigned_user_id  -- Based on common user_id in tasks
 ),
 
 CampaignAccounts AS (

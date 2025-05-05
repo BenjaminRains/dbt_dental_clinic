@@ -210,15 +210,17 @@ WITH CollectionTasks AS (
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
     FROM {{ ref('stg_opendental__task') }} t
-    INNER JOIN {{ ref('int_collection_campaigns') }} cc
-        ON t.description LIKE '%' || cc.campaign_name || '%'
-        OR t.description LIKE '%collection%'
+    -- Changed to LEFT JOIN so we don't filter out tasks without campaign association
+    LEFT JOIN {{ ref('int_collection_campaigns') }} cc 
+        ON (cc.campaign_status = 'active' 
+            AND (t.description LIKE '%' || cc.campaign_name || '%' 
+                OR t.description LIKE '%collection%'))
     LEFT JOIN {{ ref('int_ar_analysis') }} ar
         ON t.key_id = ar.patient_id
     WHERE 
-        -- Enhanced collection task filtering
+        -- Enhanced collection task filtering with expanded keywords
         (
-            -- Direct collection keywords
+            -- Direct collection keywords (expanded to match actual task descriptions)
             LOWER(t.description) LIKE '%collect%' 
             OR LOWER(t.description) LIKE '%payment%'
             OR LOWER(t.description) LIKE '%balance%'
@@ -229,21 +231,23 @@ WITH CollectionTasks AS (
             OR LOWER(t.description) LIKE '%account%'
             OR LOWER(t.description) LIKE '%write off%'
             OR LOWER(t.description) LIKE '%write-off%'
+            OR LOWER(t.description) LIKE '%$%'  -- Match dollar amount mentions
+            OR LOWER(t.description) LIKE '%insurance%'
+            OR LOWER(t.description) LIKE '%claim%'
             
             -- Collection-related task lists
             OR t.task_list_id IN (
                 -- Direct collection task lists
                 42,  -- "call patient to collect remaining $16 balance after claims close"
                 0,   -- "Call pt to collect full acct balance"
-                
-                -- Insurance-related collection task lists
                 29,  -- "add ins for Angelica Dix and submitt claim"
                 30,  -- "Add metlife ins"
                 44,  -- "please add her insurance, see appt notes"
-                
-                -- Treatment plan collection task lists
                 47,  -- "Chelsea email treatment plan of 29 and 30 implants to patient"
-                50   -- "Discuss Full Mouth Treatment Plan and f/u with pt after"
+                50,  -- "Discuss Full Mouth Treatment Plan and f/u with pt after"
+                8,   -- Treatment plan related
+                36,  -- Insurance verification related
+                51   -- Scheduling related to collections
             )
         )
         
