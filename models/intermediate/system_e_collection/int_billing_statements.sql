@@ -209,7 +209,7 @@ SELECT
     -- Payment metrics
     CASE
         WHEN sb.balance_total > 0 
-        THEN ROUND(COALESCE(pa.payment_amount_30days, 0) / sb.balance_total, 2)
+        THEN ROUND(COALESCE(pa.payment_amount_30days, 0)::numeric / sb.balance_total::numeric, 2)
         ELSE 0
     END AS payment_ratio_30days,
     
