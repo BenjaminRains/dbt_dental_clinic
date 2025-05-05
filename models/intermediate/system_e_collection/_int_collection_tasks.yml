@@ -18,6 +18,8 @@ models:
       - Tracks task priority and assignment
       - Integrates with AR analysis for financial context
       - Supports collection workflow management
+      - Identifies collection tasks through multiple criteria (keywords, task lists)
+      - Tracks historical collection activities
       
       Data Sources:
       - stg_opendental__task: Primary task data
@@ -25,13 +27,18 @@ models:
       - int_ar_analysis: Patient AR balances and aging information
       
       Business rules:
-      - Tasks are linked to campaigns based on description matching
-      - Task types are determined by description keywords
-      - Collection tasks are identified by keywords (collection, overdue, payment)
-      - Task status is mapped from numeric codes to descriptive values
-      - Priority levels are mapped from numeric codes to descriptive values
-      - Aging buckets are determined from AR analysis data
+      - Tasks are linked to campaigns based on description matching or campaign name
+      - Task types are determined by description keywords (call, email, letter, text)
+      - Collection tasks are identified through:
+        - Direct keywords (collect, payment, balance, due, owe, pay, bill, account, write off)
+        - Task list membership (collection-related task lists)
+        - Campaign association
+      - Task status is mapped from numeric codes to descriptive values (pending, in_progress, completed)
+      - Priority levels are mapped from numeric codes to descriptive values (high, medium, low)
+      - Aging buckets are determined from AR analysis data (0-30, 31-60, 61-90, 90+ days)
       - Follow-up tasks are tracked and linked to original tasks
+      - All historical collection tasks are included (no date restrictions)
+      - Tasks are categorized by communication method for tracking effectiveness
     columns:
       - name: collection_task_id
         description: Unique identifier for the collection task
@@ -83,4 +90,4 @@ models:
       - name: model_created_at
         description: Timestamp when this record was last created in the dbt model
       - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+        description: Timestamp when this record was last updated in the dbt models
