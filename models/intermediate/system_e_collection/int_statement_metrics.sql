@@ -104,39 +104,39 @@ DerivedMetrics AS (
         
         -- Calculated metrics
         CASE 
-            WHEN total_statements > 0 THEN ROUND(collection_statements::float / total_statements, 4) 
+            WHEN total_statements > 0 THEN ROUND((collection_statements::numeric / total_statements::numeric), 4) 
             ELSE 0 
         END AS collection_statement_ratio,
         
         CASE 
-            WHEN total_statements > 0 THEN ROUND(statements_with_payment::float / total_statements, 4) 
+            WHEN total_statements > 0 THEN ROUND((statements_with_payment::numeric / total_statements::numeric), 4) 
             ELSE 0 
         END AS statement_payment_rate,
         
         CASE 
-            WHEN collection_statements > 0 THEN ROUND(statements_with_payment::float / collection_statements, 4) 
+            WHEN collection_statements > 0 THEN ROUND((statements_with_payment::numeric / collection_statements::numeric), 4) 
             ELSE 0 
         END AS collection_payment_rate,
         
         CASE 
-            WHEN total_balance > 0 THEN ROUND(payment_amount_30days / total_balance, 4) 
+            WHEN total_balance > 0 THEN ROUND((payment_amount_30days::numeric / total_balance::numeric), 4) 
             ELSE 0 
         END AS balance_collection_rate_30days,
         
         CASE 
-            WHEN collection_balance > 0 THEN ROUND(payment_amount_30days / collection_balance, 4) 
+            WHEN collection_balance > 0 THEN ROUND((payment_amount_30days::numeric / collection_balance::numeric), 4) 
             ELSE 0 
         END AS collection_balance_rate_30days,
         
         CASE 
             WHEN statements_with_payment > 0 
-            THEN ROUND(statements_with_full_payment::float / statements_with_payment, 4)
+            THEN ROUND((statements_with_full_payment::numeric / statements_with_payment::numeric), 4)
             ELSE 0 
         END AS full_payment_rate,
         
         CASE 
             WHEN payment_amount_7days > 0 AND payment_amount_30days > 0
-            THEN ROUND(payment_amount_7days / payment_amount_30days, 4)
+            THEN ROUND((payment_amount_7days::numeric / payment_amount_30days::numeric), 4)
             ELSE 0 
         END AS day7_response_ratio
     FROM StatementMetrics
