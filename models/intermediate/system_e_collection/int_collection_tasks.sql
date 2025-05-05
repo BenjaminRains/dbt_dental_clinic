@@ -33,14 +33,22 @@ WITH CollectionTasks AS (
             WHEN LOWER(t.description) LIKE '%letter%' THEN 'letter'
             WHEN LOWER(t.description) LIKE '%mail%' THEN 'letter'
             ELSE 'other'
-        END AS communication_method,
+        END AS task_type,
         
         -- Enhanced collection type categorization
         CASE
-            WHEN LOWER(t.description) LIKE '%collect%' OR LOWER(t.description) LIKE '%payment%' THEN 'direct_collection'
-            WHEN LOWER(t.description) LIKE '%insurance%' OR LOWER(t.description) LIKE '%claim%' THEN 'insurance_follow_up'
-            WHEN LOWER(t.description) LIKE '%write off%' OR LOWER(t.description) LIKE '%write-off%' THEN 'write_off'
-            WHEN LOWER(t.description) LIKE '%balance%' OR LOWER(t.description) LIKE '%owe%' THEN 'balance_inquiry'
+            WHEN LOWER(t.description) LIKE '%collect%' 
+                OR LOWER(t.description) LIKE '%payment%' 
+                THEN 'direct_collection'
+            WHEN LOWER(t.description) LIKE '%insurance%' 
+                OR LOWER(t.description) LIKE '%claim%' 
+                THEN 'insurance_follow_up'
+            WHEN LOWER(t.description) LIKE '%write off%' 
+                OR LOWER(t.description) LIKE '%write-off%' 
+                THEN 'write_off'
+            WHEN LOWER(t.description) LIKE '%balance%' 
+                OR LOWER(t.description) LIKE '%owe%' 
+                THEN 'balance_inquiry'
             ELSE 'other_collection'
         END AS collection_type,
         
@@ -65,8 +73,15 @@ WITH CollectionTasks AS (
         
         -- Extract amount from description if present
         CASE
-            WHEN t.description ~ '\$[0-9]+(\.[0-9]{2})?' THEN 
-                CAST(REGEXP_REPLACE(t.description, '.*\$([0-9]+(\.[0-9]{2})?).*', '\1', 'g') AS DECIMAL(10,2))
+            WHEN t.description ~ '\$[0-9]+(\.[0-9]{2})?' 
+            THEN CAST(
+                REGEXP_REPLACE(
+                    t.description, 
+                    '.*\$([0-9]+(\.[0-9]{2})?).*', 
+                    '\1', 
+                    'g'
+                ) AS DECIMAL(10,2)
+            )
             ELSE NULL
         END AS collection_amount,
         
@@ -83,10 +98,18 @@ WITH CollectionTasks AS (
         
         -- Enhanced outcome tracking
         CASE
-            WHEN LOWER(t.description) LIKE '%paid%' OR LOWER(t.description) LIKE '%received%' THEN 'payment_received'
-            WHEN LOWER(t.description) LIKE '%promised%' OR LOWER(t.description) LIKE '%will pay%' THEN 'payment_promised'
-            WHEN LOWER(t.description) LIKE '%write off%' OR LOWER(t.description) LIKE '%write-off%' THEN 'written_off'
-            WHEN LOWER(t.description) LIKE '%denied%' OR LOWER(t.description) LIKE '%rejected%' THEN 'denied'
+            WHEN LOWER(t.description) LIKE '%paid%' 
+                OR LOWER(t.description) LIKE '%received%' 
+            THEN 'payment_received'
+            WHEN LOWER(t.description) LIKE '%promised%' 
+                OR LOWER(t.description) LIKE '%will pay%' 
+            THEN 'payment_promised'
+            WHEN LOWER(t.description) LIKE '%write off%' 
+                OR LOWER(t.description) LIKE '%write-off%' 
+            THEN 'written_off'
+            WHEN LOWER(t.description) LIKE '%denied%' 
+                OR LOWER(t.description) LIKE '%rejected%' 
+            THEN 'denied'
             ELSE 'pending'
         END AS outcome,
         
@@ -102,12 +125,28 @@ WITH CollectionTasks AS (
         
         -- Extract follow-up date if present
         CASE
-            WHEN t.description ~ 'f/u|follow up|follow-up' THEN
+            WHEN t.description ~ '(f/u|follow up|follow-up)' THEN
                 CASE
-                    WHEN t.description ~ 'f/u|follow up|follow-up.*[0-9]{1,2}/[0-9]{1,2}' THEN
-                        TO_DATE(REGEXP_REPLACE(t.description, '.*f/u|follow up|follow-up.*([0-9]{1,2}/[0-9]{1,2}).*', '\1', 'g'), 'MM/DD')
-                    WHEN t.description ~ 'f/u|follow up|follow-up.*[0-9]{1,2} [A-Za-z]{3}' THEN
-                        TO_DATE(REGEXP_REPLACE(t.description, '.*f/u|follow up|follow-up.*([0-9]{1,2} [A-Za-z]{3}).*', '\1', 'g'), 'DD Mon')
+                    WHEN t.description ~ '(f/u|follow up|follow-up).*?([0-9]{1,2}/[0-9]{1,2})' 
+                    THEN TO_DATE(
+                        REGEXP_REPLACE(
+                            t.description, 
+                            '.*(f/u|follow up|follow-up).*?([0-9]{1,2}/[0-9]{1,2}).*', 
+                            '\2', 
+                            'g'
+                        ), 
+                        'MM/DD'
+                    )
+                    WHEN t.description ~ '(f/u|follow up|follow-up).*?([0-9]{1,2} [A-Za-z]{3})' 
+                    THEN TO_DATE(
+                        REGEXP_REPLACE(
+                            t.description, 
+                            '.*(f/u|follow up|follow-up).*?([0-9]{1,2} [A-Za-z]{3}).*', 
+                            '\2', 
+                            'g'
+                        ), 
+                        'DD Mon'
+                    )
                     ELSE NULL
                 END
             ELSE NULL
@@ -122,7 +161,7 @@ WITH CollectionTasks AS (
         
         -- Data quality flags
         CASE WHEN t.description ~ '\$[0-9]+(\.[0-9]{2})?' THEN true ELSE false END AS has_amount,
-        CASE WHEN t.description ~ 'f/u|follow up|follow-up' THEN true ELSE false END AS has_follow_up,
+        CASE WHEN t.description ~ '(f/u|follow up|follow-up)' THEN true ELSE false END AS has_follow_up,
         CASE WHEN t.description ~ 'paid|received|promised|will pay' THEN true ELSE false END AS has_outcome,
         
         -- Metadata
