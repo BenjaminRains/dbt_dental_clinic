@@ -1,0 +1,55 @@
+# dbt Profile Template - Copy this file to ~/.dbt/profiles.yml
+# Uses environment variables from dbt_dental_practice/.dbt-env
+
+dbt_dental_clinic:
+  # Default target environment. Can be set with DBT_TARGET env var
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+    # Development environment configuration
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_PG_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_PG_PORT', 5432) }}"
+      database: "{{ env_var('DBT_PG_DATABASE', 'opendental_analytics') }}"
+      schema: "{{ env_var('DBT_PG_SCHEMA', 'public') }}"
+      user: "{{ env_var('DBT_PG_USER') }}"
+      password: "{{ env_var('DBT_PG_PASSWORD') }}"
+      # PostgreSQL specific settings
+      search_path: "$user, public"
+      keepalives_idle: 0
+      connect_timeout: 10
+      retries: 3
+      # Locale settings
+      client_encoding: UTF8
+      lc_collate: "en-US"
+      lc_ctype: "en-US"
+
+    # Production configuration (when needed)
+    prod:
+      type: postgres
+      host: "{{ env_var('DBT_PROD_PG_HOST') }}"
+      port: "{{ env_var('DBT_PROD_PG_PORT', 5432) }}"
+      database: "{{ env_var('DBT_PROD_PG_DATABASE') }}"
+      schema: "{{ env_var('DBT_PROD_PG_SCHEMA', 'public') }}"
+      user: "{{ env_var('DBT_PROD_PG_USER') }}"
+      password: "{{ env_var('DBT_PROD_PG_PASSWORD') }}"
+      # PostgreSQL specific settings
+      search_path: "$user, public"
+      keepalives_idle: 0
+      connect_timeout: 10
+      retries: 3
+      # Locale settings
+      client_encoding: UTF8
+      lc_collate: "en-US"
+      lc_ctype: "en-US"
+
+# Example environment variables to set in .dbt-env:
+# Development:
+# DBT_TARGET=dev
+# DBT_PG_HOST=localhost
+# DBT_PG_PORT=5432
+# DBT_PG_DATABASE=opendental_analytics
+# DBT_PG_SCHEMA=public
+# DBT_PG_USER=your_username
+# DBT_PG_PASSWORD=your_password
+    
