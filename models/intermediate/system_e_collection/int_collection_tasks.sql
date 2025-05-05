@@ -113,6 +113,40 @@ WITH CollectionTasks AS (
             ELSE 'pending'
         END AS outcome,
         
+        -- Payment promises and actuals
+        CASE
+            WHEN LOWER(t.description) LIKE '%promised%' OR LOWER(t.description) LIKE '%will pay%' THEN
+                CASE
+                    WHEN t.description ~ '\$[0-9]+(\.[0-9]{2})?' THEN 
+                        CAST(REGEXP_REPLACE(t.description, '.*\$([0-9]+(\.[0-9]{2})?).*', '\1', 'g') AS DECIMAL(10,2))
+                    ELSE NULL
+                END
+            ELSE NULL
+        END AS promised_payment_amount,
+        
+        CASE
+            WHEN (LOWER(t.description) LIKE '%promised%' OR LOWER(t.description) LIKE '%will pay%') 
+                 AND t.description ~ 'on [0-9]{1,2}/[0-9]{1,2}' THEN
+                TO_DATE(REGEXP_REPLACE(t.description, '.*on ([0-9]{1,2}/[0-9]{1,2}).*', '\1', 'g'), 'MM/DD')
+            ELSE NULL
+        END AS promised_payment_date,
+        
+        CASE
+            WHEN LOWER(t.description) LIKE '%paid%' OR LOWER(t.description) LIKE '%received%' THEN
+                CASE
+                    WHEN t.description ~ '\$[0-9]+(\.[0-9]{2})?' THEN 
+                        CAST(REGEXP_REPLACE(t.description, '.*\$([0-9]+(\.[0-9]{2})?).*', '\1', 'g') AS DECIMAL(10,2))
+                    ELSE NULL
+                END
+            ELSE NULL
+        END AS actual_payment_amount,
+        
+        CASE
+            WHEN LOWER(t.description) LIKE '%paid%' OR LOWER(t.description) LIKE '%received%' THEN
+                t.finished_timestamp::date
+            ELSE NULL
+        END AS actual_payment_date,
+        
         -- Enhanced follow-up tracking
         CASE
             WHEN LOWER(t.description) LIKE '%follow%' 
@@ -151,6 +185,14 @@ WITH CollectionTasks AS (
                 END
             ELSE NULL
         END AS follow_up_date,
+        
+        -- Link to any follow-up task
+        (SELECT MIN(related_task.task_id)
+         FROM {{ ref('stg_opendental__task') }} related_task
+         WHERE related_task.key_id = t.key_id
+           AND related_task.task_id > t.task_id
+           AND LOWER(related_task.description) LIKE '%follow%up%' 
+         LIMIT 1) AS follow_up_task_id,
         
         -- Enhanced notes field
         CASE
