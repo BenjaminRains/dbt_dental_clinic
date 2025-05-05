@@ -2,11 +2,15 @@
 
 ## Overview
 
-The `int_collection_tasks` model processes free-text task descriptions from the dental practice management system to extract structured information. This document explains the challenges with the current data entry practices and demonstrates how the model attempts to standardize and extract meaningful data.
+The `int_collection_tasks` model processes free-text task descriptions from the dental practice 
+management system to extract structured information. This document explains the challenges with 
+the current data entry practices and demonstrates how the model attempts to standardize and 
+extract meaningful data.
 
 ## Current Challenge
 
-Staff members create collection tasks with important information embedded in the free-text description field rather than in structured data fields. This creates several challenges:
+Staff members create collection tasks with important information embedded in the free-text 
+description field rather than in structured data fields. This creates several challenges:
 
 1. **Inconsistent formatting** of key information (dates, amounts, action types)
 2. **Varied terminology** for the same concepts
