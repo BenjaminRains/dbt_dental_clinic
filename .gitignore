@@ -24,6 +24,7 @@ venv/
 env/
 ENV/
 .env
+!.env.template
 
 # IDE settings
 .vscode/*
