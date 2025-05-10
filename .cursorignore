@@ -9,3 +9,5 @@ __pycache__/
 # Allow .env template files
 .env
 !.env.template
+!**/.env.template
+!./.env.template
