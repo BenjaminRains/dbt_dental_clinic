@@ -37,7 +37,7 @@ WITH TemplateBase AS (
             WHEN pp.property_desc LIKE '%text%' OR pp.property_desc LIKE '%sms%' THEN 'SMS'
             WHEN pp.property_desc LIKE '%letter%' THEN 'letter'
             ELSE 'email'
-        END AS template_type,
+        END::text AS template_type,
         CASE
             WHEN pp.property_desc LIKE '%appointment%' OR pp.property_desc LIKE '%confirm%' THEN 'appointment'
             WHEN pp.property_desc LIKE '%balance%' OR pp.property_desc LIKE '%statement%' THEN 'billing'
@@ -94,8 +94,8 @@ CommunicationTemplates AS (
             WHEN communication_category = 'follow_up' THEN 'Follow-up'
             ELSE 'General'
         END || ' Template' AS template_name,
-        communication_mode AS template_type,
-        communication_category AS category,
+        communication_mode::text AS template_type,
+        communication_category::text AS category,
         'Auto-detected ' || communication_category || ' communication' AS subject,
         -- Use a representative content example
         MIN(content) AS content,
@@ -139,17 +139,17 @@ CommunicationTemplates AS (
 
 -- Combine all template sources
 SELECT
-    template_id,
-    template_name,
-    template_type,
-    category,
-    subject,
-    content,
-    variables,
-    is_active,
-    created_by,
-    created_at,
-    updated_at,
+    template_id::text,
+    template_name::text,
+    template_type::text,
+    category::text,
+    subject::text,
+    content::text,
+    variables::text[],
+    is_active::boolean,
+    created_by::integer,
+    created_at::timestamp,
+    updated_at::timestamp,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
 FROM TemplateBase
@@ -157,17 +157,17 @@ FROM TemplateBase
 UNION ALL
 
 SELECT
-    template_id,
-    template_name,
-    template_type,
-    category,
-    subject,
-    content,
-    variables,
-    is_active,
-    created_by,
-    created_at,
-    updated_at,
+    template_id::text,
+    template_name::text,
+    template_type::text,
+    category::text,
+    subject::text,
+    content::text,
+    variables::text[],
+    is_active::boolean,
+    created_by::integer,
+    created_at::timestamp,
+    updated_at::timestamp,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
 FROM CommunicationTemplates
