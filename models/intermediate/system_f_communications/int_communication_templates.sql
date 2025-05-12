@@ -66,9 +66,9 @@ WITH TemplateBase AS (
         ) AS variables,
         
         TRUE AS is_active,
-        pp.user_num AS created_by,
-        pp.date_created AS created_at,
-        pp.date_modified AS updated_at
+        NULL AS created_by,
+        CURRENT_TIMESTAMP AS created_at,
+        CURRENT_TIMESTAMP AS updated_at
     FROM {{ ref('stg_opendental__programproperty') }} pp
     WHERE 
         pp.property_value IS NOT NULL
