@@ -36,7 +36,7 @@ mariadb_engine = create_engine(
 pg_engine = create_engine(
     f"postgresql+psycopg2://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@"
     f"{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/"
-    f"{os.getenv('POSTGRES_DATABASE')}"  # Changed from POSTGRES_DB to match .env.template
+    f"{os.getenv('POSTGRES_DATABASE')}"
 )
 
 # Add connection validation
