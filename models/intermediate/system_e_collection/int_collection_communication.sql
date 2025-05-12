@@ -5,9 +5,20 @@
 ) }}
 
 /*
+    ======================================================
+    Note on key strategy:
+    - Using a deterministic numeric ID based on the source commlog_id
+    - This ensures stable IDs during incremental processing
+    - Avoids problems that can occur with ROW_NUMBER() in incrementals
+    - Maintains consistent surrogate keys for downstream models
+    - Keeps the numeric type for compatibility with existing data
+    ======================================================
+*/
+
+/*
     Intermediate model for collection communications
     Part of System E: Collections
-    
+
     This model:
     1. Tracks communications related to collection efforts
     2. Links communications to campaigns and tasks
@@ -18,7 +29,8 @@
 WITH CollectionCommunications AS (
     -- Get communications that are related to collections
     SELECT
-        ROW_NUMBER() OVER (ORDER BY cl.commlog_id) AS collection_communication_id,
+        -- Create a stable numeric ID based on the source commlog_id
+        ABS(MOD(CAST(cl.commlog_id AS BIGINT), 9223372036854775807)) AS collection_communication_id,
         cc.campaign_id,
         ct.collection_task_id,
         cl.commlog_id,

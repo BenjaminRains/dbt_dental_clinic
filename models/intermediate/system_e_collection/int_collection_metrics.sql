@@ -5,9 +5,31 @@
 ) }}
 
 /*
+    ======================================================
+    Note on grain and key strategy:
+
+    GRAIN:
+    - The grain of this model is (snapshot_date, metric_level, campaign_id, user_id)
+    - Each combination of these fields represents a unique metrics record
+    - campaign_id is relevant for 'campaign' metric_level
+    - user_id is relevant for 'user' metric_level
+    - Both are NULL for 'overall' metric_level
+    - All fields are included in the unique_key for proper incremental processing
+
+    KEY STRATEGY:
+    - Using a deterministic numeric ID based on hashing all grain fields
+    - The hash is converted to a stable numeric value using ABS(MOD())
+    - This ensures consistent IDs during incremental processing
+    - Maintains numeric type for compatibility with existing data
+    - Creates reliable surrogate keys for downstream models
+    - Avoids problems that can occur with ROW_NUMBER() in incremental models
+    ======================================================
+*/
+
+/*
     Intermediate model for collection metrics
     Part of System E: Collections
-    
+
     This model:
     1. Aggregates metrics across collection campaigns
     2. Provides performance indicators at campaign and user levels
@@ -269,7 +291,16 @@ FinalMetrics AS (
 )
 
 SELECT
-    ROW_NUMBER() OVER (ORDER BY snapshot_date, metric_level, COALESCE(campaign_id, 0), COALESCE(user_id, 0)) AS metric_id,
+    -- Create a stable numeric ID based on the combined grain fields
+    ABS(MOD(
+        ('x' || SUBSTR(MD5(
+            CAST(snapshot_date AS VARCHAR) || '|' ||
+            CAST(metric_level AS VARCHAR) || '|' ||
+            COALESCE(CAST(campaign_id AS VARCHAR), 'NULL') || '|' ||
+            COALESCE(CAST(user_id AS VARCHAR), 'NULL')
+        ), 1, 16))::bit(64)::bigint,
+        9223372036854775807  -- Max bigint value to avoid overflow
+    )) AS metric_id,
     snapshot_date,
     campaign_id,
     user_id,
