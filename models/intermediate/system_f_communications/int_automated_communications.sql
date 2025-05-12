@@ -26,12 +26,12 @@ WITH AutomatedComms AS (
         {{ dbt_utils.generate_surrogate_key(['comm.communication_id', 'tmpl.template_id']) }} AS automated_communication_id,
         comm.communication_id,
         tmpl.template_id,
-        CASE 
-            WHEN comm.note LIKE '%appointment reminder%' THEN 'appointment_reminder'
-            WHEN comm.note LIKE '%recall%' THEN 'recall_notice'
-            WHEN comm.note LIKE '%birthday%' THEN 'birthday_greeting'
-            WHEN comm.note LIKE '%balance%' THEN 'balance_reminder'
-            WHEN comm.note LIKE '%welcome%' THEN 'new_patient_welcome'
+        CASE
+            WHEN comm.content LIKE '%appointment reminder%' THEN 'appointment_reminder'
+            WHEN comm.content LIKE '%recall%' THEN 'recall_notice'
+            WHEN comm.content LIKE '%birthday%' THEN 'birthday_greeting'
+            WHEN comm.content LIKE '%balance%' THEN 'balance_reminder'
+            WHEN comm.content LIKE '%welcome%' THEN 'new_patient_welcome'
             ELSE 'general_notification'
         END AS trigger_type,
         
