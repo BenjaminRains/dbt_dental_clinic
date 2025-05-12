@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: int_appointment_details
+    description: >
+      Intermediate model for appointment details.
+      Provides comprehensive information about appointments including type, status, and patient context.
+      Part of System G: Scheduling
+    columns:
+      - name: appointment_id
+        description: Unique identifier for the appointment
+        tests:
+          - unique
+          - not_null
+      - name: patient_id
+        description: Foreign key to stg_opendental__patient
+      - name: provider_id
+        description: ID of the provider assigned to this appointment
+      - name: appointment_datetime
+        description: Date and time of the appointment
+      - name: appointment_end_datetime
+        description: Expected end date and time of the appointment
+      - name: appointment_type_id
+        description: Foreign key to appointment type
+      - name: appointment_type_name
+        description: Name of the appointment type
+      - name: appointment_length
+        description: Duration of the appointment in minutes
+      - name: appointment_status
+        description: Status code of the appointment
+      - name: appointment_status_desc
+        description: Description of the appointment status
+      - name: is_confirmed
+        description: Flag indicating if the appointment is confirmed
+      - name: is_complete
+        description: Flag indicating if the appointment is complete
+      - name: is_hygiene
+        description: Flag indicating if the appointment is for hygiene
+      - name: is_new_patient
+        description: Flag indicating if this is a new patient appointment
+      - name: note
+        description: Appointment notes
+      - name: operatory
+        description: Operatory assigned to this appointment
+      - name: check_in_time
+        description: Time when patient checked in
+      - name: check_out_time
+        description: Time when patient checked out
+      - name: actual_length
+        description: Actual duration of the appointment in minutes
+      - name: waiting_time
+        description: Time patient spent waiting (in minutes)
+      - name: cancellation_reason
+        description: Reason for cancellation (if applicable)
+      - name: rescheduled_appointment_id
+        description: ID of the rescheduled appointment (if applicable)
+      - name: created_by
+        description: ID of the user who created the appointment
+      - name: created_at
+        description: Timestamp when this appointment was created
+      - name: updated_at
+        description: Timestamp when this appointment was last updated
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model

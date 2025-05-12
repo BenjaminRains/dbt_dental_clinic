@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: int_provider_availability
+    description: >
+      Intermediate model for provider availability.
+      Tracks when providers are available for appointments.
+      Part of System G: Scheduling
+    columns:
+      - name: availability_id
+        description: Unique identifier for the availability record
+        tests:
+          - unique
+          - not_null
+      - name: provider_id
+        description: ID of the provider
+      - name: date
+        description: Date of availability
+      - name: start_time
+        description: Start time of availability
+      - name: end_time
+        description: End time of availability
+      - name: is_available
+        description: Flag indicating if the provider is available
+      - name: reason
+        description: Reason for unavailability (if applicable)
+      - name: schedule_id
+        description: Foreign key to int_appointment_schedule
+      - name: day_of_week
+        description: Day of the week (0-6, where 0 is Sunday)
+      - name: is_recurring
+        description: Flag indicating if this is a recurring availability
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model

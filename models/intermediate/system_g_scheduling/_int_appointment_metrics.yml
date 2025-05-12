@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: int_appointment_metrics
+    description: >
+      Intermediate model for appointment metrics.
+      Tracks metrics related to appointments and scheduling.
+      Part of System G: Scheduling
+    columns:
+      - name: metric_id
+        description: Unique identifier for the metrics record
+        tests:
+          - unique
+          - not_null
+      - name: date
+        description: Date of the metrics
+      - name: provider_id
+        description: ID of the provider (for provider-level metrics)
+      - name: metric_level
+        description: Level of the metric (provider, clinic, overall)
+      - name: total_appointments
+        description: Total number of appointments
+      - name: completed_appointments
+        description: Number of completed appointments
+      - name: cancelled_appointments
+        description: Number of cancelled appointments
+      - name: no_show_rate
+        description: Rate of no-show appointments
+      - name: cancellation_rate
+        description: Rate of cancelled appointments
+      - name: completion_rate
+        description: Rate of completed appointments
+      - name: schedule_utilization
+        description: Percentage of available time scheduled
+      - name: chair_time_utilization
+        description: Percentage of chair time utilized
+      - name: average_appointment_length
+        description: Average length of appointments in minutes
+      - name: average_wait_time
+        description: Average patient wait time in minutes
+      - name: new_patient_rate
+        description: Percentage of appointments that are new patients
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model

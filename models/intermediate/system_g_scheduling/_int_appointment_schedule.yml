@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: int_appointment_schedule
+    description: >
+      Intermediate model for appointment scheduling.
+      Provides a view of the appointment schedule per provider and day.
+      Part of System G: Scheduling
+    columns:
+      - name: schedule_id
+        description: Unique identifier for the schedule record
+        tests:
+          - unique
+          - not_null
+      - name: schedule_date
+        description: Date of the schedule
+      - name: provider_id
+        description: ID of the provider
+      - name: provider_name
+        description: Name of the provider
+      - name: total_appointments
+        description: Total number of appointments scheduled
+      - name: completed_appointments
+        description: Number of completed appointments
+      - name: cancelled_appointments
+        description: Number of cancelled appointments
+      - name: no_show_appointments
+        description: Number of no-show appointments
+      - name: unconfirmed_appointments
+        description: Number of unconfirmed appointments
+      - name: total_appointment_minutes
+        description: Total scheduled appointment minutes
+      - name: available_minutes
+        description: Total available minutes in the schedule
+      - name: utilization_rate
+        description: Percentage of available time utilized for appointments
+      - name: start_time
+        description: Start time of the schedule
+      - name: end_time
+        description: End time of the schedule
+      - name: is_day_off
+        description: Flag indicating if this is a day off
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model
