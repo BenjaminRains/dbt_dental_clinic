@@ -37,7 +37,7 @@
     Example seed file structure (campaigns.csv):
     campaign_id,campaign_name,description,start_date,end_date,...
 
-    Then reference it in models using {{ ref('campaigns') }}
+    Then reference it in models using {% raw %}{{ ref('campaigns') }}{% endraw %}
     ======================================================
 */
 
