@@ -88,8 +88,8 @@ WITH AutomatedComms AS (
         ON (
             -- Match based on content similarity
             comm.content LIKE '%' || LEFT(tmpl.content, 20) || '%'
-            -- Or match based on category and type
-            OR (comm.communication_category = tmpl.category AND comm.communication_mode = tmpl.template_type)
+            -- Or match based on category and type (with explicit type cast for mode)
+            OR (comm.communication_category = tmpl.category AND comm.communication_mode::text = tmpl.template_type)
         )
     WHERE 
         -- Filter for likely automated communications
