@@ -50,36 +50,36 @@ WITH DailyCommunications AS (
 -- Calculate response rates for outbound communications
 ResponseMetrics AS (
     SELECT
-        date,
+        communication_datetime::date AS date,
         user_id,
         communication_type,
-        communication_direction,
+        direction AS communication_direction,
         communication_category,
-        CASE 
-            WHEN total_count > 0 THEN (successful_count::float / total_count) 
-            ELSE 0 
+        COUNT(*) AS total_count,
+        COUNT(CASE WHEN outcome IN ('confirmed', 'completed', 'rescheduled') THEN 1 ELSE NULL END) AS successful_count,
+        CASE
+            WHEN COUNT(*) > 0 THEN (COUNT(CASE WHEN outcome IN ('confirmed', 'completed', 'rescheduled') THEN 1 ELSE NULL END)::float / COUNT(*))
+            ELSE 0
         END AS response_rate,
         -- For conversion rate, we'll count only those that have a specific positive outcome
         -- This is just an example implementation - would need refinement based on business definitions
-        CASE 
-            WHEN total_count > 0 THEN 
-                (SUM(CASE WHEN communication_category = 'appointment' AND outcome = 'confirmed' THEN 1 ELSE 0 END)::float / total_count)
+        CASE
+            WHEN COUNT(*) > 0 THEN
+                (COUNT(CASE WHEN communication_category = 'appointment' AND outcome = 'confirmed' THEN 1 ELSE NULL END)::float / COUNT(*))
             ELSE 0
         END AS conversion_rate
     FROM {{ ref('int_patient_communications') }}
-    
+
     {% if is_incremental() %}
     WHERE communication_datetime >= (SELECT MAX(date) FROM {{ this }})
     {% endif %}
-    
-    GROUP BY 
-        date,
+
+    GROUP BY
+        communication_datetime::date,
         user_id,
         communication_type,
-        communication_direction,
-        communication_category,
-        total_count,
-        successful_count
+        direction,
+        communication_category
 )
 
 SELECT
