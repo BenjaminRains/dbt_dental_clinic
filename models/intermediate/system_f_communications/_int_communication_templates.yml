@@ -59,7 +59,7 @@ models:
         description: Array of variables used in the template
         tests:
           - dbt_utils.not_empty_array:
-              where: "content LIKE '%{%}%'"
+              where: "content LIKE '%' || '{' || '%' || '}' || '%'"
       
       - name: is_active
         description: Flag indicating if the template is active
