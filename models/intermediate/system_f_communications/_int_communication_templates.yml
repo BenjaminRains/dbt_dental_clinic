@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: int_communication_templates
+    description: >
+      Intermediate model for communication templates.
+      Stores templates used for automated patient communications.
+      Part of System F: Communications
+    columns:
+      - name: template_id
+        description: Unique identifier for the template
+        tests:
+          - unique
+          - not_null
+      - name: template_name
+        description: Name of the template
+      - name: template_type
+        description: Type of template (email, SMS, letter, etc.)
+      - name: category
+        description: Category of the template (appointment, billing, clinical, etc.)
+      - name: subject
+        description: Subject line for the template
+      - name: content
+        description: Content of the template
+      - name: variables
+        description: Variables used in the template
+      - name: is_active
+        description: Flag indicating if the template is active
+      - name: created_by
+        description: ID of the user who created the template
+      - name: created_at
+        description: Timestamp when this template was first created
+      - name: updated_at
+        description: Timestamp when this template was last updated
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model

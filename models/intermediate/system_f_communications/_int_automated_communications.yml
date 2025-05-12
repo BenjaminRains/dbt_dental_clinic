@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: int_automated_communications
+    description: >
+      Intermediate model for automated communications.
+      Tracks communications sent through automated systems.
+      Part of System F: Communications
+    columns:
+      - name: automated_communication_id
+        description: Unique identifier for the automated communication
+        tests:
+          - unique
+          - not_null
+      - name: communication_id
+        description: Foreign key to int_patient_communications
+      - name: template_id
+        description: Foreign key to int_communication_templates
+      - name: trigger_type
+        description: Type of trigger that initiated the communication
+      - name: trigger_details
+        description: Details about what triggered the communication
+      - name: scheduled_datetime
+        description: Date and time when the communication was scheduled
+      - name: sent_datetime
+        description: Date and time when the communication was sent
+      - name: status
+        description: Status of the automated communication
+      - name: recipient_count
+        description: Number of recipients
+      - name: open_count
+        description: Number of opens (for email)
+      - name: click_count
+        description: Number of clicks (for email)
+      - name: reply_count
+        description: Number of replies received
+      - name: bounce_count
+        description: Number of bounces (for email)
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model

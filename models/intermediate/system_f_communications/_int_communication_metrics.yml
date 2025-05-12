@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: int_communication_metrics
+    description: >
+      Intermediate model for communication metrics.
+      Tracks metrics related to patient communications.
+      Part of System F: Communications
+    columns:
+      - name: metric_id
+        description: Unique identifier for the metrics record
+        tests:
+          - unique
+          - not_null
+      - name: date
+        description: Date of the metrics
+      - name: user_id
+        description: ID of the user (for user-level metrics)
+      - name: communication_type
+        description: Type of communication (call, email, SMS, etc.)
+      - name: communication_direction
+        description: Direction of communication (inbound, outbound)
+      - name: communication_category
+        description: Category of communication (appointment, billing, clinical, etc.)
+      - name: total_count
+        description: Total number of communications
+      - name: successful_count
+        description: Number of successful communications
+      - name: failed_count
+        description: Number of failed communications
+      - name: average_duration
+        description: Average duration of communications (for calls)
+      - name: response_rate
+        description: Rate of response for outbound communications
+      - name: conversion_rate
+        description: Conversion rate (e.g., appointments scheduled from calls)
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model
+
