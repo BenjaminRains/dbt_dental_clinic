@@ -65,8 +65,8 @@ WITH AutomatedComms AS (
         1 AS recipient_count, -- Default to 1 per message, would aggregate batch sends in production
         
         -- Email tracking metrics (placeholder implementation)
-        CASE WHEN comm.communication_mode = 'email' AND comm.content LIKE '%opened%' THEN 1 ELSE 0 END AS open_count,
-        CASE WHEN comm.communication_mode = 'email' AND comm.content LIKE '%clicked%' THEN 1 ELSE 0 END AS click_count,
+        CASE WHEN comm.communication_mode = 1 AND comm.content LIKE '%opened%' THEN 1 ELSE 0 END AS open_count,
+        CASE WHEN comm.communication_mode = 1 AND comm.content LIKE '%clicked%' THEN 1 ELSE 0 END AS click_count,
         
         -- Reply tracking for all modes
         CASE WHEN EXISTS (
@@ -78,7 +78,7 @@ WITH AutomatedComms AS (
         ) THEN 1 ELSE 0 END AS reply_count,
         
         -- Bounce tracking for email
-        CASE WHEN comm.communication_mode = 'email' AND comm.content LIKE '%bounce%' THEN 1 ELSE 0 END AS bounce_count,
+        CASE WHEN comm.communication_mode = 1 AND comm.content LIKE '%bounce%' THEN 1 ELSE 0 END AS bounce_count,
         
         -- Metadata fields
         CURRENT_TIMESTAMP AS model_created_at,
@@ -88,8 +88,14 @@ WITH AutomatedComms AS (
         ON (
             -- Match based on content similarity
             comm.content LIKE '%' || LEFT(tmpl.content, 20) || '%'
-            -- Or match based on category and type (with explicit type cast for mode)
-            OR (comm.communication_category = tmpl.category AND comm.communication_mode::text = tmpl.template_type)
+            -- Or match based on category and type (with numeric mode handling)
+            OR (comm.communication_category = tmpl.category AND
+               (CASE
+                  WHEN tmpl.template_type = 'email' THEN 1
+                  WHEN tmpl.template_type = 'SMS' THEN 5
+                  WHEN tmpl.template_type = 'letter' THEN 3
+                  ELSE NULL
+                END) = comm.communication_mode)
         )
     WHERE 
         -- Filter for likely automated communications
