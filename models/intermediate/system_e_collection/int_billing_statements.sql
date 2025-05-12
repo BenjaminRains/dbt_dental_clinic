@@ -7,10 +7,11 @@
 /*
     ======================================================
     Note on key strategy:
-    - Using an MD5 hash of statement_id as billing_statement_id
+    - Using the source statement_id directly to generate billing_statement_id
     - This ensures stable IDs during incremental processing
     - Avoids problems that can occur with ROW_NUMBER() in incrementals
     - Maintains consistent surrogate keys for downstream models
+    - Keeps the numeric type for compatibility with existing data
     ======================================================
 */
 
@@ -172,8 +173,9 @@ CollectionFlag AS (
 
 -- Final selection
 SELECT
-    -- Create a stable hash-based unique ID for this model
-    MD5(CAST(sb.statement_id AS VARCHAR)) AS billing_statement_id,
+    -- Create a stable numeric ID based on the source ID
+    -- Use ABS() to ensure positive values, MOD to keep within bigint range
+    ABS(MOD(CAST(sb.statement_id AS BIGINT), 9223372036854775807)) AS billing_statement_id,
     sb.statement_id,
     sb.patient_id,
     sb.date_sent,
