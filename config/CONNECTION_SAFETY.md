@@ -199,4 +199,12 @@ def test_target_connection():
 - [ ] Never store credentials in code - always use environment variables
 
 Remember: The operational database is mission-critical for the dental clinic. Any disruption could
+
+
+
+
+
+
+
+
  affect patient care. Always prioritize safety and data integrity over convenience or performance.
