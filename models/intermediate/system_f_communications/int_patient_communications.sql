@@ -147,7 +147,7 @@ PatientInfo AS (
 UserInfo AS (
     SELECT
         u.user_id,
-        u.user_name,
+        u.username AS user_name,
         u.is_hidden,
         u.provider_id
     FROM {{ ref('stg_opendental__userod') }} u
