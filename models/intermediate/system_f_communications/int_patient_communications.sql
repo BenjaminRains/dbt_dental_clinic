@@ -96,6 +96,42 @@ WITH CommunicationBase AS (
     {% endif %}
 ),
 
+-- Get information about last completed visit from appointment data
+LastCompletedAppointment AS (
+    SELECT
+        patient_id,
+        MAX(appointment_datetime) AS last_appointment_date
+    FROM {{ ref('stg_opendental__appointment') }}
+    WHERE appointment_status = 2 -- Complete status
+    GROUP BY patient_id
+),
+
+-- Get information about completed visits from historical appointment data
+LastHistoricalVisit AS (
+    SELECT
+        patient_id,
+        MAX(history_timestamp) AS last_historical_date
+    FROM {{ ref('stg_opendental__histappointment') }}
+    WHERE history_action = 6 -- Complete action
+    GROUP BY patient_id
+),
+
+-- Combine both sources to get the most accurate last visit date
+LastCompletedVisit AS (
+    SELECT
+        COALESCE(lca.patient_id, lhv.patient_id) AS patient_id,
+        GREATEST(
+            COALESCE(lca.last_appointment_date, '1900-01-01'::timestamp),
+            COALESCE(lhv.last_historical_date, '1900-01-01'::timestamp)
+        ) AS last_visit_date
+    FROM LastCompletedAppointment lca
+    FULL OUTER JOIN LastHistoricalVisit lhv
+        ON lca.patient_id = lhv.patient_id
+    WHERE
+        lca.last_appointment_date IS NOT NULL
+        OR lhv.last_historical_date IS NOT NULL
+),
+
 PatientInfo AS (
     SELECT
         p.patient_id,
@@ -103,8 +139,9 @@ PatientInfo AS (
         p.patient_status,
         p.birth_date,
         p.first_visit_date,
-        p.last_visit_date
+        lcv.last_visit_date
     FROM {{ ref('int_patient_profile') }} p
+    LEFT JOIN LastCompletedVisit lcv ON p.patient_id = lcv.patient_id
 ),
 
 UserInfo AS (
