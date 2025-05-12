@@ -5,6 +5,16 @@
 ) }}
 
 /*
+    ======================================================
+    Note on key strategy:
+    - Using an MD5 hash of statement_id as billing_statement_id
+    - This ensures stable IDs during incremental processing
+    - Avoids problems that can occur with ROW_NUMBER() in incrementals
+    - Maintains consistent surrogate keys for downstream models
+    ======================================================
+*/
+
+/*
     Intermediate model for billing statements
     Part of System E: Collections
     
@@ -162,8 +172,8 @@ CollectionFlag AS (
 
 -- Final selection
 SELECT
-    -- Create a unique ID for this model
-    ROW_NUMBER() OVER (ORDER BY sb.statement_id) AS billing_statement_id,
+    -- Create a stable hash-based unique ID for this model
+    MD5(CAST(sb.statement_id AS VARCHAR)) AS billing_statement_id,
     sb.statement_id,
     sb.patient_id,
     sb.date_sent,
