@@ -7,12 +7,38 @@
 /*
     Intermediate model for collection campaigns
     Part of System E: Collections
-    
+
     This model:
     1. Creates and tracks collection campaigns
     2. Defines target criteria for collections
     3. Monitors collection performance by campaign
     4. Builds on AR analysis models for accurate targeting
+
+    ======================================================
+    FUTURE ENHANCEMENT NOTE:
+
+    Currently, the clinic doesn't actively use campaigns, but this model
+    provides the foundation for campaign-based collections when needed.
+
+    When expanding campaign functionality in the future, consider:
+
+    1. Moving campaign definitions to a seed file (CSV in seeds/ directory)
+       instead of hardcoding in SQL. This would allow:
+       - Non-technical users to manage campaign definitions
+       - Easier campaign additions without code changes
+       - Better separation of reference data from analytics logic
+
+    2. Separating the model into:
+       - A reference model for campaign definitions
+       - A metrics model for campaign performance
+
+    3. Adding a UI or admin interface for campaign management
+
+    Example seed file structure (campaigns.csv):
+    campaign_id,campaign_name,description,start_date,end_date,...
+
+    Then reference it in models using {{ ref('campaigns') }}
+    ======================================================
 */
 
 WITH CampaignDefinitions AS (
