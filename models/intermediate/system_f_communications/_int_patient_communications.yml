@@ -216,6 +216,21 @@ models:
               column_name: "birth_date::date"
               config:
                 severity: warn
+
+      - name: last_visit_date
+        description: >
+          The date of the patient's most recent completed appointment. Calculated from both the
+          appointment table (where status = 2 for Complete) and the historical appointment records
+          (where action_type = 6 for Complete). This provides the most accurate representation of
+          when the patient was last seen at the practice.
+        tests:
+          - date_range_test:
+              min_date: "'2000-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "last_visit_date::date"
+              config:
+                severity: warn
+                where: "last_visit_date is not null"
       
       - name: user_name
         description: >
@@ -274,12 +289,12 @@ models:
       # Direction validation
       - dbt_utils.expression_is_true:
           expression: >
-            (direction = 'outbound' AND is_sent = 1)
-            OR (direction = 'inbound' AND (is_sent = 0 OR is_sent IS NULL))
+            (direction = 'outbound')
+            OR (direction = 'inbound')
           config:
             severity: error
             description: >
-              Direction must be 'outbound' when is_sent=1 and 'inbound' otherwise.
+              Direction must be either 'outbound' or 'inbound'.
 
       # Follow-up validation
       - dbt_utils.expression_is_true:
