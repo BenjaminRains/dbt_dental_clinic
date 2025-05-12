@@ -97,8 +97,8 @@ WITH AutomatedComms AS (
         AND (
             -- Communications sent through a program
             comm.program_id IS NOT NULL
-            -- Messages with template-like content
-            OR comm.content LIKE '%' || '{' || '%' || '}' || '%'
+            -- Messages with template-like content (checking for template variables with pattern {VARIABLE_NAME})
+            OR comm.content ~ '\{[A-Za-z0-9_]+\}'
             OR (comm.content = tmpl.content)
             -- Messages sent in batches (look for identical content sent to multiple patients)
             OR EXISTS (
