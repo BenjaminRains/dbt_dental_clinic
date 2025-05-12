@@ -65,8 +65,8 @@ WITH TemplateBase AS (
             FROM regexp_matches(pp.property_value, '\{([A-Za-z0-9_]+)\}', 'g') AS matches
         ) AS variables,
         
-        TRUE AS is_active,
-        NULL AS created_by,
+        TRUE::boolean AS is_active,
+        NULL::integer AS created_by,
         CURRENT_TIMESTAMP AS created_at,
         CURRENT_TIMESTAMP AS updated_at
     FROM {{ ref('stg_opendental__programproperty') }} pp
@@ -101,8 +101,8 @@ CommunicationTemplates AS (
         MIN(content) AS content,
         -- Placeholder for variables detection
         ARRAY['PATIENT_NAME', 'DATE', 'PROVIDER']::text[] AS variables,
-        TRUE AS is_active,
-        MIN(user_id) AS created_by,
+        TRUE::boolean AS is_active,
+        MIN(user_id)::integer AS created_by,
         MIN(created_at) AS created_at,
         MAX(updated_at) AS updated_at
     FROM (
