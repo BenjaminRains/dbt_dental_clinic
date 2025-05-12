@@ -5,34 +5,97 @@ models:
     description: >
       Intermediate model for communication templates.
       Stores templates used for automated patient communications.
-      Part of System F: Communications
+      Part of System F: Communications - enables standardized communications
+      with patients and tracking of message templates across the system.
+    tests:
+      - dbt_utils.at_least_one_not_null:
+          column_list: [template_name, content]
+      - dbt_utils.expression_is_true:
+          expression: "LENGTH(content) > 10"
+          where: "content IS NOT NULL"
     columns:
       - name: template_id
         description: Unique identifier for the template
         tests:
           - unique
           - not_null
+      
       - name: template_name
         description: Name of the template
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "LENGTH(template_name) > 3"
+      
       - name: template_type
         description: Type of template (email, SMS, letter, etc.)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['email', 'SMS', 'letter', 'phone']
+      
       - name: category
         description: Category of the template (appointment, billing, clinical, etc.)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'recall', 'marketing', 'insurance', 'follow_up', 'general']
+      
       - name: subject
         description: Subject line for the template
+        tests:
+          - not_null:
+              where: "template_type IN ('email', 'letter')"
+      
       - name: content
         description: Content of the template
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "LENGTH(content) > 10"
+              where: "content IS NOT NULL"
+      
       - name: variables
-        description: Variables used in the template
+        description: Array of variables used in the template
+        tests:
+          - dbt_utils.not_empty_array:
+              where: "content LIKE '%{%}%'"
+      
       - name: is_active
         description: Flag indicating if the template is active
+        tests:
+          - not_null
+          - is_boolean_or_null:
+              where: "is_active IS NOT NULL"
+      
       - name: created_by
         description: ID of the user who created the template
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              where: "created_by IS NOT NULL"
+      
       - name: created_at
         description: Timestamp when this template was first created
+        tests:
+          - not_null
+          - date_function:
+              date_test: created_at < current_timestamp
+      
       - name: updated_at
         description: Timestamp when this template was last updated
+        tests:
+          - date_function:
+              date_test: updated_at >= created_at
+              where: "updated_at IS NOT NULL"
+      
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
+      
       - name: model_updated_at
         description: Timestamp when this record was last updated in the dbt model
+        tests:
+          - not_null
