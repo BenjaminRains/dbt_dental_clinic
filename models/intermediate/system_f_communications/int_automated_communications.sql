@@ -26,7 +26,7 @@ WITH AutomatedComms AS (
         {{ dbt_utils.generate_surrogate_key(['comm.communication_id', 'tmpl.template_id']) }} AS automated_communication_id,
         comm.communication_id,
         tmpl.template_id,
-        CASE
+        CASE 
             WHEN comm.content LIKE '%appointment reminder%' THEN 'appointment_reminder'
             WHEN comm.content LIKE '%recall%' THEN 'recall_notice'
             WHEN comm.content LIKE '%birthday%' THEN 'birthday_greeting'
@@ -37,12 +37,12 @@ WITH AutomatedComms AS (
         
         -- Extract details about what triggered the communication
         CASE
-            WHEN comm.note LIKE '%appointment%' AND comm.linked_appointment_id IS NOT NULL 
+            WHEN comm.content LIKE '%appointment%' AND comm.linked_appointment_id IS NOT NULL 
                 THEN 'appointment_id=' || comm.linked_appointment_id
-            WHEN comm.note LIKE '%statement%' AND comm.note ~ '(?:statement|bill)\\s+#\\s*([0-9]{1,7})\\b' 
-                THEN 'statement_id=' || REGEXP_REPLACE(SUBSTRING(comm.note FROM '(?:statement|bill)\\s+#\\s*([0-9]{1,7})\\b'), '[^0-9]', '', 'g')
-            WHEN comm.note LIKE '%recall%' AND comm.note ~ 'recall\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})' 
-                THEN 'recall_date=' || SUBSTRING(comm.note FROM 'recall\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})')
+            WHEN comm.content LIKE '%statement%' AND comm.content ~ '(?:statement|bill)\\s+#\\s*([0-9]{1,7})\\b' 
+                THEN 'statement_id=' || REGEXP_REPLACE(SUBSTRING(comm.content FROM '(?:statement|bill)\\s+#\\s*([0-9]{1,7})\\b'), '[^0-9]', '', 'g')
+            WHEN comm.content LIKE '%recall%' AND comm.content ~ 'recall\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})' 
+                THEN 'recall_date=' || SUBSTRING(comm.content FROM 'recall\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})')
             ELSE NULL
         END AS trigger_details,
         
@@ -65,8 +65,8 @@ WITH AutomatedComms AS (
         1 AS recipient_count, -- Default to 1 per message, would aggregate batch sends in production
         
         -- Email tracking metrics (placeholder implementation)
-        CASE WHEN comm.communication_mode = 'email' AND comm.note LIKE '%opened%' THEN 1 ELSE 0 END AS open_count,
-        CASE WHEN comm.communication_mode = 'email' AND comm.note LIKE '%clicked%' THEN 1 ELSE 0 END AS click_count,
+        CASE WHEN comm.communication_mode = 'email' AND comm.content LIKE '%opened%' THEN 1 ELSE 0 END AS open_count,
+        CASE WHEN comm.communication_mode = 'email' AND comm.content LIKE '%clicked%' THEN 1 ELSE 0 END AS click_count,
         
         -- Reply tracking for all modes
         CASE WHEN EXISTS (
@@ -78,7 +78,7 @@ WITH AutomatedComms AS (
         ) THEN 1 ELSE 0 END AS reply_count,
         
         -- Bounce tracking for email
-        CASE WHEN comm.communication_mode = 'email' AND comm.note LIKE '%bounce%' THEN 1 ELSE 0 END AS bounce_count,
+        CASE WHEN comm.communication_mode = 'email' AND comm.content LIKE '%bounce%' THEN 1 ELSE 0 END AS bounce_count,
         
         -- Metadata fields
         CURRENT_TIMESTAMP AS model_created_at,
