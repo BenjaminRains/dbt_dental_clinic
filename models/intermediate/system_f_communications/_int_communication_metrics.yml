@@ -6,6 +6,9 @@ models:
       Intermediate model for communication metrics.
       Tracks metrics related to patient communications.
       Part of System F: Communications
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: ref('int_communication_metrics')
     columns:
       - name: metric_id
         description: Unique identifier for the metrics record
@@ -14,28 +17,74 @@ models:
           - not_null
       - name: date
         description: Date of the metrics
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "date <= current_date"
       - name: user_id
         description: ID of the user (for user-level metrics)
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              severity: warn
       - name: communication_type
         description: Type of communication (call, email, SMS, etc.)
+        tests:
+          - not_null
       - name: communication_direction
         description: Direction of communication (inbound, outbound)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['inbound', 'outbound']
       - name: communication_category
         description: Category of communication (appointment, billing, clinical, etc.)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+              severity: warn
       - name: total_count
         description: Total number of communications
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "total_count >= 0"
       - name: successful_count
         description: Number of successful communications
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "successful_count >= 0 AND successful_count <= total_count"
       - name: failed_count
         description: Number of failed communications
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "failed_count >= 0 AND failed_count <= total_count"
       - name: average_duration
-        description: Average duration of communications (for calls)
+        description: Average duration of communications in minutes (for calls)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "average_duration IS NULL OR average_duration >= 0"
+              severity: warn
       - name: response_rate
         description: Rate of response for outbound communications
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "response_rate IS NULL OR (response_rate >= 0 AND response_rate <= 1)"
       - name: conversion_rate
         description: Conversion rate (e.g., appointments scheduled from calls)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1)"
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
       - name: model_updated_at
         description: Timestamp when this record was last updated in the dbt model
-
+        tests:
+          - not_null
