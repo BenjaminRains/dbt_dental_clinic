@@ -274,8 +274,8 @@ models:
       # Direction validation
       - dbt_utils.expression_is_true:
           expression: >
-            (direction = 'outbound' AND source_is_sent = 1)
-            OR (direction = 'inbound' AND (source_is_sent = 0 OR source_is_sent IS NULL))
+            (direction = 'outbound' AND is_sent = 1)
+            OR (direction = 'inbound' AND (is_sent = 0 OR is_sent IS NULL))
           config:
             severity: error
             description: >
@@ -296,10 +296,10 @@ models:
       # Outcome validation
       - dbt_utils.expression_is_true:
           expression: >
-            (content LIKE '%confirmed%' OR content LIKE '%agreed%') AND outcome = 'confirmed'
-            OR (content LIKE '%rescheduled%' OR content LIKE '%changed%') AND outcome = 'rescheduled'
-            OR (content LIKE '%cancelled%' OR content LIKE '%declined%') AND outcome = 'cancelled'
-            OR (content LIKE '%no answer%' OR content LIKE '%voicemail%') AND outcome = 'no_answer'
+            ((content LIKE '%confirmed%' OR content LIKE '%agreed%') AND outcome = 'confirmed')
+            OR ((content LIKE '%rescheduled%' OR content LIKE '%changed%') AND outcome = 'rescheduled')
+            OR ((content LIKE '%cancelled%' OR content LIKE '%declined%') AND outcome = 'cancelled')
+            OR ((content LIKE '%no answer%' OR content LIKE '%voicemail%') AND outcome = 'no_answer')
             OR outcome = 'completed'
           config:
             severity: error
@@ -325,6 +325,42 @@ models:
             description: >
               Communication datetime must be in the past and end datetime must be after start datetime if present.
 
+      # Regular expression pattern validation for linked entities
+      - dbt_utils.expression_is_true:
+          expression: >
+            (linked_appointment_id IS NULL OR
+             (content LIKE '%appointment%' OR content LIKE '%appt%') AND
+             (content LIKE '%#%' OR content LIKE '%id%' OR content LIKE '%number%'))
+          config:
+            severity: warn
+            description: >
+              Linked appointment IDs should only be extracted when content contains appointment-related keywords
+              and a potential ID pattern.
+
+      # Regular expression pattern validation for linked claims
+      - dbt_utils.expression_is_true:
+          expression: >
+            (linked_claim_id IS NULL OR
+             content LIKE '%claim%' AND
+             (content LIKE '%#%' OR content LIKE '%id%' OR content LIKE '%number%'))
+          config:
+            severity: warn
+            description: >
+              Linked claim IDs should only be extracted when content contains claim-related keywords
+              and a potential ID pattern.
+
+      # Regular expression pattern validation for linked procedures
+      - dbt_utils.expression_is_true:
+          expression: >
+            (linked_procedure_id IS NULL OR
+             (content LIKE '%procedure%' OR content LIKE '%proc%') AND
+             (content LIKE '%#%' OR content LIKE '%id%' OR content LIKE '%number%'))
+          config:
+            severity: warn
+            description: >
+              Linked procedure IDs should only be extracted when content contains procedure-related keywords
+              and a potential ID pattern.
+
     meta:
       business_owners: ["dental_communications_team", "patient_care_team"]
       technical_owners: ["data_engineering_team"]
@@ -338,3 +374,6 @@ models:
         - "Outcome must be correctly determined from content"
         - "All dates must be valid and chronological"
         - "Linked entities (appointments, claims, procedures) must be valid"
+        - "Regular expression pattern extraction must detect valid entity IDs"
+        - "Content analysis for categorization must be accurate and consistent"
+        - "Future incremental loading must only process new communications"
