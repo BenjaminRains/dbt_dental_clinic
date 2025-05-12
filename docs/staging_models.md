@@ -128,7 +128,7 @@ Our staging models typically use these configurations:
 - [Incremental Models](https://docs.getdbt.com/docs/building-a-dbt-project/building-models/incremental-models)
 - SQL Naming Conventions (link to your conventions doc)
 
-## Complete List of Staging Models
+## Complete List of Staging Models (needs updated)
 
 ### Incremental Models
 1. stg_opendental__adjustment (4,410 records)
