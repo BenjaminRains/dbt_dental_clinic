@@ -3,12 +3,85 @@ version: 2
 models:
   - name: int_communication_metrics
     description: >
-      Intermediate model for communication metrics.
-      Tracks metrics related to patient communications.
-      Part of System F: Communications
+      Comprehensive communication metrics model that aggregates and analyzes patient
+      communication patterns and effectiveness. This model serves as the analytical foundation
+      for evaluating communication strategies, staff performance, and patient engagement metrics.
+
+      Grain: One row per unique combination of date, user, communication type, direction, and category.
+      Each record represents aggregated metrics for a specific communication segment, enabling
+      multi-dimensional analysis of communication effectiveness across different parameters.
+
+      Key features:
+      - Aggregates communication volumes by type, direction, and category
+      - Tracks success and failure rates across different communication channels
+      - Measures response rates for outbound communications
+      - Calculates conversion rates for communications leading to appointments
+      - Monitors average call durations for phone communications
+      - Enables time-based trend analysis of communication patterns
+      - Provides user/staff level performance metrics
+      - Supports communication effectiveness reporting
+
+      Data Sources:
+      - int_patient_communications: Primary source for all communication events
+      - stg_opendental__appointment: Used for linking communications to appointment outcomes
+      - stg_opendental__userod: Used for user information and attribution
+
+      Business rules:
+      - Success determined by communication outcome (confirmed/completed = success)
+      - Failed communications include those with no_answer or cancelled outcomes
+      - Response rate calculated only for outbound communications
+      - Conversion rate measures communications that resulted in scheduled appointments
+      - Duration metrics only applicable to phone communications
+      - Metrics calculated daily with user-level granularity where applicable
+      - Success rates normalized as percentages of total communications
+      - All volume metrics must be non-negative integers
+      - Rate metrics normalized to values between 0 and 1
     tests:
       - dbt_utils.equal_rowcount:
           compare_model: ref('int_communication_metrics')
+
+      # Volume metrics validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            total_count >= 0 AND
+            successful_count >= 0 AND
+            failed_count >= 0 AND
+            total_count = successful_count + failed_count
+          config:
+            severity: error
+            description: >
+              Communication counts must be non-negative and the sum of successful and failed counts
+              must equal the total count.
+
+      # Rate metrics validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (response_rate IS NULL OR (response_rate >= 0 AND response_rate <= 1)) AND
+            (conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1))
+          config:
+            severity: error
+            description: >
+              Rate metrics must be between 0 and 1, representing percentages as decimals.
+
+      # Direction-specific metrics
+      - dbt_utils.expression_is_true:
+          expression: >
+            (communication_direction = 'outbound' AND response_rate IS NOT NULL) OR
+            (communication_direction = 'inbound' AND response_rate IS NULL)
+          config:
+            severity: warn
+            description: >
+              Response rate should only be calculated for outbound communications.
+
+      # Duration validation for calls
+      - dbt_utils.expression_is_true:
+          expression: >
+            (communication_type = 'PhoneCall' AND average_duration IS NOT NULL) OR
+            (communication_type != 'PhoneCall' AND average_duration IS NULL)
+          config:
+            severity: warn
+            description: >
+              Duration metrics should only be populated for phone call communications.
     columns:
       - name: metric_id
         description: Unique identifier for the metrics record
@@ -88,3 +161,24 @@ models:
         description: Timestamp when this record was last updated in the dbt model
         tests:
           - not_null
+
+    meta:
+      business_owners: ["dental_communications_team", "practice_management"]
+      technical_owners: ["data_engineering_team", "analytics_team"]
+      refresh_frequency: "daily"
+      contains_pii: false
+      primary_use_cases:
+        - "Staff performance evaluation for communication activities"
+        - "Communication channel effectiveness analysis"
+        - "Trend analysis of patient engagement metrics"
+        - "Conversion rate optimization for appointment scheduling"
+        - "Response rate monitoring for outbound campaigns"
+      data_quality_requirements:
+        - "All volume counts must be non-negative integers"
+        - "Total count must equal sum of successful and failed counts"
+        - "Rate metrics must be normalized between 0 and 1"
+        - "Duration metrics only applicable to phone communications"
+        - "Response rates only meaningful for outbound communications"
+        - "All metrics must be segmented by relevant dimensions (type, direction, category)"
+        - "Daily aggregation must include all communications for the day"
+        - "User attribution must be accurate for staff performance metrics"
