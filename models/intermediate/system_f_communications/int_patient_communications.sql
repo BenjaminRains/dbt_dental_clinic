@@ -31,24 +31,42 @@ WITH CommunicationBase AS (
         -- Fields to be populated with extracted data
         NULL AS subject,
         cl.note AS content,
-        -- Extract appointment ID if present in the note (simplified approach)
+        -- Extract appointment ID if present in the note with more precise pattern
+        -- Looks specifically for "appt #" or "appointment #" followed by 1-7 digits
+        -- Explicitly excludes phone numbers that follow "Number" in the note
         CASE
-            WHEN cl.note LIKE '%appointment%' OR cl.note LIKE '%appt%'
-            THEN REGEXP_REPLACE(SUBSTRING(cl.note FROM 'appt #([0-9]+)'), '[^0-9]', '', 'g')::integer
+            WHEN cl.note ~* '(appt|appointment)\\s+#\\s*([0-9]{1,7})\\b'
+                 AND NOT (SUBSTRING(cl.note FROM '(appt|appointment)\\s+#\\s*([0-9]{1,7})\\b') ~ 'Number')
+            THEN REGEXP_REPLACE(SUBSTRING(cl.note FROM '(appt|appointment)\\s+#\\s*([0-9]{1,7})\\b'), '[^0-9]', '', 'g')::bigint
             ELSE NULL
         END AS linked_appointment_id,
-        -- Extract claim ID if present in the note (simplified approach)
+
+        -- Extract claim ID if present in the note with more precise pattern
+        -- Looks specifically for "claim #" followed by 1-7 digits
+        -- Explicitly excludes phone numbers that follow "Number" in the note
         CASE
-            WHEN cl.note LIKE '%claim%'
-            THEN REGEXP_REPLACE(SUBSTRING(cl.note FROM 'claim #([0-9]+)'), '[^0-9]', '', 'g')::integer
+            WHEN cl.note ~* 'claim\\s+#\\s*([0-9]{1,7})\\b'
+                 AND NOT (SUBSTRING(cl.note FROM 'claim\\s+#\\s*([0-9]{1,7})\\b') ~ 'Number')
+            THEN REGEXP_REPLACE(SUBSTRING(cl.note FROM 'claim\\s+#\\s*([0-9]{1,7})\\b'), '[^0-9]', '', 'g')::bigint
             ELSE NULL
         END AS linked_claim_id,
-        -- Extract procedure ID if present in the note (simplified approach)
+
+        -- Extract procedure ID if present in the note with more precise pattern
+        -- Looks specifically for "proc #" or "procedure #" followed by 1-7 digits
+        -- Explicitly excludes phone numbers that follow "Number" in the note
         CASE
-            WHEN cl.note LIKE '%procedure%' OR cl.note LIKE '%proc%'
-            THEN REGEXP_REPLACE(SUBSTRING(cl.note FROM 'proc #([0-9]+)'), '[^0-9]', '', 'g')::integer
+            WHEN cl.note ~* '(proc|procedure)\\s+#\\s*([0-9]{1,7})\\b'
+                 AND NOT (SUBSTRING(cl.note FROM '(proc|procedure)\\s+#\\s*([0-9]{1,7})\\b') ~ 'Number')
+            THEN REGEXP_REPLACE(SUBSTRING(cl.note FROM '(proc|procedure)\\s+#\\s*([0-9]{1,7})\\b'), '[^0-9]', '', 'g')::bigint
             ELSE NULL
         END AS linked_procedure_id,
+
+        -- Extract phone number if present (for potential future use)
+        CASE
+            WHEN cl.note ~ 'Number\\s+([0-9]{10})\\b'
+            THEN REGEXP_REPLACE(SUBSTRING(cl.note FROM 'Number\\s+([0-9]{10})\\b'), '[^0-9]', '', 'g')
+            ELSE NULL
+        END AS contact_phone_number,
         -- Categorize communications
         CASE
             WHEN cl.note LIKE '%appointment%' OR cl.note LIKE '%appt%' THEN 'appointment'
@@ -168,6 +186,7 @@ SELECT
     cb.linked_appointment_id,
     cb.linked_claim_id,
     cb.linked_procedure_id,
+    cb.contact_phone_number,
     cb.communication_category,
     cb.outcome,
     cb.follow_up_required,
