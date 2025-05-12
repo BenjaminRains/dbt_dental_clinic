@@ -7,12 +7,23 @@
 /*
     Intermediate model for automated communications
     Part of System F: Communications
-    
+
     This model:
     1. Tracks communications sent through automated systems
     2. Links to templates and base communication records
     3. Provides metrics on communication engagement
     4. Supports analysis of automated communication effectiveness
+
+    NOTE ON CIRCULAR DEPENDENCY:
+    There is a circular dependency between this model and int_communication_templates:
+    - This model needs int_communication_templates for template matching
+    - int_communication_templates uses int_patient_communications to detect patterns
+    - int_patient_communications needs to add program_id for this model to filter by
+
+    REFACTORING OPTIONS:
+    1. Break the dependency cycle by having communication_templates use raw staging models
+    2. Add a direct reference to staging models in this file for program_id filtering
+    3. Use a two-phase approach with separate model runs
 */
 
 WITH AutomatedComms AS (
@@ -97,12 +108,15 @@ WITH AutomatedComms AS (
                   ELSE NULL
                 END) = comm.communication_mode)
         )
-    WHERE 
+    WHERE
         -- Filter for likely automated communications
         comm.direction = 'outbound'
         AND (
-            -- Communications sent through a program (program_id from stg_opendental__commlog.ProgramNum)
-            comm.program_id IS NOT NULL
+            -- Look for automated communications in other ways:
+            -- 1. Communications with identical content sent repeatedly
+            -- 2. Communications with standardized formats
+            -- 3. Communications with template-like content
+            comm.content ~* '(automated|auto-generated|auto generated|do not reply|do not respond|noreply)'
             -- Messages with template-like content (checking for template variables with pattern {VARIABLE_NAME})
             OR comm.content ~ '\{[A-Za-z0-9_]+\}'
             OR (comm.content = tmpl.content)
