@@ -3,56 +3,377 @@ version: 2
 models:
   - name: int_patient_communications
     description: >
-      Intermediate model for patient communications.
-      Tracks all types of patient communications, including calls, emails, and text messages.
-      Part of System F: Communications
+      Comprehensive patient communications model that consolidates all patient interaction
+      data into a structured, searchable format. This model serves as the central hub for tracking
+      and analyzing all patient communications within the dental practice.
+      
+      Key features:
+      - Consolidates communication logs with context from multiple sources
+      - Enhances communications with patient and user data for full visibility
+      - Categorizes communications for reporting and analysis
+      - Tracks follow-up activities and tasks
+      - Extracts linked entities from message content (appointments, claims, procedures)
+      - Determines communication direction (inbound vs outbound)
+      - Records outcomes based on message content analysis
+      - Includes full patient and staff context
+      
+      Data Sources:
+      - stg_opendental__commlog: Primary source of communication data
+      - int_patient_profile: Patient demographic and status information
+      - stg_opendental__userod: User and provider information
+      
+      Business rules:
+      - Communication direction determined by the is_sent flag (1=outbound, else inbound)
+      - Communication category extracted via keyword analysis from message content
+      - Linked entities (appointments, claims, procedures) extracted via regex pattern matching
+      - Follow-up requirements detected through keyword analysis
+      - Default follow-up date set to 7 days in the future when explicit date not found
+      - Full patient context linked through patient_id
+      - User context linked through user_id with optional provider association
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: communication_id
+    
     columns:
       - name: communication_id
-        description: Unique identifier for the communication record
+        description: >
+          Primary key - Unique identifier for the communication record.
+          Direct mapping from commlog_id in the source system.
         tests:
           - unique
           - not_null
+          - relationships:
+              to: ref('stg_opendental__commlog')
+              field: commlog_id
+      
       - name: patient_id
-        description: Foreign key to stg_opendental__patient
+        description: >
+          Foreign key to the patient profile. Identifies which patient
+          this communication is associated with.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+      
       - name: user_id
-        description: ID of the user who initiated or received the communication
+        description: >
+          Foreign key to the user record. Identifies which staff member
+          initiated or received the communication.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+      
       - name: communication_datetime
-        description: Date and time of the communication
+        description: >
+          Timestamp when the communication occurred. For outbound communications,
+          this represents when the message was sent. For inbound, when it was received.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+      
       - name: communication_end_datetime
-        description: End date and time of the communication (for calls)
+        description: >
+          Timestamp when the communication ended (optional). Particularly relevant
+          for phone calls or multi-message conversations.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+      
       - name: communication_type
-        description: Type of communication (call, email, text, letter, etc.)
+        description: >
+          The type of communication (e.g., PhoneCall, Email, Text, Mail).
+          Maintained from the source system's categorization.
+      
       - name: communication_mode
-        description: Mode of communication
+        description: >
+          The mode or channel used for communication. Maps from the source
+          system's "mode" field.
+      
       - name: direction
-        description: Direction of communication (inbound, outbound)
+        description: >
+          Indicates whether the communication was outbound (from practice to patient)
+          or inbound (from patient to practice). Derived from the is_sent flag.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['outbound', 'inbound']
+      
       - name: subject
-        description: Subject of the communication
+        description: >
+          Subject line or title of the communication. May be null for communications
+          without a formal subject (e.g., phone calls).
+      
       - name: content
-        description: Content of the communication
+        description: >
+          The full content or notes from the communication. Contains the actual
+          message text or call notes.
+        tests:
+          - not_null
+      
       - name: linked_appointment_id
-        description: ID of appointment related to this communication (if any)
+        description: >
+          Foreign key to appointment, if this communication references a specific
+          appointment. Extracted via regex pattern matching from the content.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              where: "linked_appointment_id is not null"
+      
       - name: linked_claim_id
-        description: ID of claim related to this communication (if any)
+        description: >
+          Foreign key to claim, if this communication references a specific
+          insurance claim. Extracted via regex pattern matching from the content.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              where: "linked_claim_id is not null"
+      
       - name: linked_procedure_id
-        description: ID of procedure related to this communication (if any)
+        description: >
+          Foreign key to procedure, if this communication references a specific
+          dental procedure. Extracted via regex pattern matching from the content.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              where: "linked_procedure_id is not null"
+      
       - name: communication_category
-        description: Category of communication (appointment, billing, clinical, etc.)
+        description: >
+          Categorization of the communication based on content analysis.
+          Possible values: appointment, billing, clinical, insurance, follow_up, general.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+      
       - name: outcome
-        description: Outcome of the communication
+        description: >
+          The result or outcome of the communication, derived from content analysis.
+          Possible values: confirmed, rescheduled, cancelled, no_answer, completed.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['confirmed', 'rescheduled', 'cancelled', 'no_answer', 'completed']
+      
       - name: follow_up_required
-        description: Flag indicating if follow-up is required
+        description: >
+          Boolean flag indicating whether this communication requires follow-up action.
+          Determined by keyword analysis of the content.
+        tests:
+          - not_null
+          - is_boolean_or_null
+      
       - name: follow_up_date
-        description: Date when follow-up is scheduled
+        description: >
+          The date when follow-up action should occur. If not explicitly specified,
+          defaults to 7 days from the communication date when follow-up is required.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              config:
+                where: "follow_up_required = true"
+      
       - name: follow_up_task_id
-        description: ID of the follow-up task (if any)
+        description: >
+          Foreign key to task record, if a follow-up task has been created.
+          Currently null as direct task creation is not implemented.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__task')
+              field: task_id
+              where: "follow_up_task_id is not null"
+      
+      - name: patient_name
+        description: >
+          Patient's preferred name, joined from int_patient_profile for convenient access.
+      
+      - name: patient_status
+        description: >
+          Current status of the patient (0-3 for active patients), joined from int_patient_profile.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+      
+      - name: birth_date
+        description: >
+          Patient's date of birth, joined from int_patient_profile for context.
+        tests:
+          - date_range_test:
+              min_date: "'1900-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "birth_date::date"
+              config:
+                severity: warn
+      
+      - name: user_name
+        description: >
+          Name of the staff member who initiated or received the communication,
+          joined from stg_opendental__userod.
+      
+      - name: provider_id
+        description: >
+          Provider ID associated with the user, if applicable. Joined from 
+          stg_opendental__userod for provider correlation.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              where: "provider_id is not null"
+      
       - name: created_at
-        description: Timestamp when this record was first created
+        description: >
+          Timestamp when the record was created in the source system.
+        tests:
+          - not_null
+      
       - name: updated_at
-        description: Timestamp when this record was last updated
+        description: >
+          Timestamp when the record was last updated in the source system.
+        tests:
+          - not_null
+      
       - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
+        description: >
+          Timestamp when the record was created in this model.
+        tests:
+          - not_null
+      
       - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+        description: >
+          Timestamp when the record was last updated in this model.
+        tests:
+          - not_null
 
+    tests:
+      # Communication categorization validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (content LIKE '%appointment%' OR content LIKE '%appt%') AND communication_category = 'appointment'
+            OR (content LIKE '%bill%' OR content LIKE '%payment%' OR content LIKE '%balance%') AND communication_category = 'billing'
+            OR (content LIKE '%treatment%' OR content LIKE '%procedure%') AND communication_category = 'clinical'
+            OR (content LIKE '%insurance%' OR content LIKE '%coverage%') AND communication_category = 'insurance'
+            OR (content LIKE '%follow up%' OR content LIKE '%followup%') AND communication_category = 'follow_up'
+            OR communication_category = 'general'
+          config:
+            severity: error
+            description: >
+              Communication category must match content keywords according to defined rules.
 
+      # Direction validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (direction = 'outbound' AND is_sent = 1)
+            OR (direction = 'inbound' AND (is_sent = 0 OR is_sent IS NULL))
+          config:
+            severity: error
+            description: >
+              Direction must be 'outbound' when is_sent=1 and 'inbound' otherwise.
+
+      # Follow-up validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (follow_up_required = true AND 
+             (content LIKE '%follow up%' OR content LIKE '%followup%' OR 
+              content LIKE '%call back%' OR content LIKE '%callback%'))
+            OR (follow_up_required = false)
+          config:
+            severity: error
+            description: >
+              Follow-up required must be true when content contains follow-up keywords.
+
+      # Outcome validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            ((content LIKE '%confirmed%' OR content LIKE '%agreed%') AND outcome = 'confirmed')
+            OR ((content LIKE '%rescheduled%' OR content LIKE '%changed%') AND outcome = 'rescheduled')
+            OR ((content LIKE '%cancelled%' OR content LIKE '%declined%') AND outcome = 'cancelled')
+            OR ((content LIKE '%no answer%' OR content LIKE '%voicemail%') AND outcome = 'no_answer')
+            OR outcome = 'completed'
+          config:
+            severity: error
+            description: >
+              Outcome must match content keywords according to defined rules.
+
+      # Relationship validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            patient_id IN (SELECT patient_id FROM {{ ref('int_patient_profile') }})
+          config:
+            severity: error
+            description: >
+              All communications must be associated with a valid patient.
+
+      # Communication datetime validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            communication_datetime <= CURRENT_TIMESTAMP
+            AND (communication_end_datetime IS NULL OR communication_end_datetime >= communication_datetime)
+          config:
+            severity: error
+            description: >
+              Communication datetime must be in the past and end datetime must be after start datetime if present.
+
+      # Regular expression pattern validation for linked entities
+      - dbt_utils.expression_is_true:
+          expression: >
+            (linked_appointment_id IS NULL OR
+             (content LIKE '%appointment%' OR content LIKE '%appt%') AND
+             (content LIKE '%#%' OR content LIKE '%id%' OR content LIKE '%number%'))
+          config:
+            severity: warn
+            description: >
+              Linked appointment IDs should only be extracted when content contains appointment-related keywords
+              and a potential ID pattern.
+
+      # Regular expression pattern validation for linked claims
+      - dbt_utils.expression_is_true:
+          expression: >
+            (linked_claim_id IS NULL OR
+             content LIKE '%claim%' AND
+             (content LIKE '%#%' OR content LIKE '%id%' OR content LIKE '%number%'))
+          config:
+            severity: warn
+            description: >
+              Linked claim IDs should only be extracted when content contains claim-related keywords
+              and a potential ID pattern.
+
+      # Regular expression pattern validation for linked procedures
+      - dbt_utils.expression_is_true:
+          expression: >
+            (linked_procedure_id IS NULL OR
+             (content LIKE '%procedure%' OR content LIKE '%proc%') AND
+             (content LIKE '%#%' OR content LIKE '%id%' OR content LIKE '%number%'))
+          config:
+            severity: warn
+            description: >
+              Linked procedure IDs should only be extracted when content contains procedure-related keywords
+              and a potential ID pattern.
+
+    meta:
+      business_owners: ["dental_communications_team", "patient_care_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "All communications must be associated with a valid patient"
+        - "Communication categories must accurately reflect content"
+        - "Direction must be correctly determined from is_sent flag"
+        - "Follow-up requirements must be accurately detected from content"
+        - "Outcome must be correctly determined from content"
+        - "All dates must be valid and chronological"
+        - "Linked entities (appointments, claims, procedures) must be valid"
+        - "Regular expression pattern extraction must detect valid entity IDs"
+        - "Content analysis for categorization must be accurate and consistent"
+        - "Future incremental loading must only process new communications"
