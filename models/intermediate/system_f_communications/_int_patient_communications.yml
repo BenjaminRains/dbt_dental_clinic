@@ -6,7 +6,11 @@ models:
       Comprehensive patient communications model that consolidates all patient interaction
       data into a structured, searchable format. This model serves as the central hub for tracking
       and analyzing all patient communications within the dental practice.
-      
+
+      Grain: One row per individual communication event between the dental office and a patient.
+      Each record represents a single interaction (phone call, email, text message, etc.) with
+      communication_id as the primary key derived from commlog_id in the source system.
+
       Key features:
       - Consolidates communication logs with context from multiple sources
       - Enhances communications with patient and user data for full visibility
@@ -16,16 +20,18 @@ models:
       - Determines communication direction (inbound vs outbound)
       - Records outcomes based on message content analysis
       - Includes full patient and staff context
-      
+      - Extracts phone numbers from note content when present
+
       Data Sources:
       - stg_opendental__commlog: Primary source of communication data
       - int_patient_profile: Patient demographic and status information
       - stg_opendental__userod: User and provider information
-      
+
       Business rules:
       - Communication direction determined by the is_sent flag (1=outbound, else inbound)
       - Communication category extracted via keyword analysis from message content
       - Linked entities (appointments, claims, procedures) extracted via regex pattern matching
+      - Phone numbers extracted from notes for contact tracking
       - Follow-up requirements detected through keyword analysis
       - Default follow-up date set to 7 days in the future when explicit date not found
       - Full patient context linked through patient_id
@@ -146,6 +152,13 @@ models:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
               where: "linked_procedure_id is not null"
+
+      - name: contact_phone_number
+        description: >
+          Phone number extracted from the communication note, typically in format "Number XXXXXXXXXX".
+          Extracted via regex pattern matching from the content when phone numbers are mentioned.
+          Useful for tracking contact methods and phone number changes over time.
+          Format is a 10-digit string without formatting characters.
       
       - name: communication_category
         description: >
