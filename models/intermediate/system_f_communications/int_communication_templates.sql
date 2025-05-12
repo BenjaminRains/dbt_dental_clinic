@@ -76,7 +76,7 @@ WITH TemplateBase AS (
         AND (
             pp.property_desc LIKE '%template%'
             OR pp.property_desc LIKE '%message%'
-            OR pp.property_value LIKE '%{%%}%' -- Contains placeholder variables
+            OR pp.property_value LIKE '%' || '{' || '%' || '}' || '%' -- Contains placeholder variables
         )
 ),
 
