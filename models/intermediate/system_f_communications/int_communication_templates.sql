@@ -22,7 +22,7 @@ WITH TemplateBase AS (
     
     SELECT
         -- Generate template IDs from program properties that might contain templates
-        {{ dbt_utils.generate_surrogate_key(['pp.program_property_num', 'pp.property_desc']) }} AS template_id,
+        {{ dbt_utils.generate_surrogate_key(['pp.program_property_id', 'pp.property_desc']) }} AS template_id,
         CASE
             WHEN pp.property_desc LIKE '%appointment%' THEN 'Appointment Reminder'
             WHEN pp.property_desc LIKE '%confirm%' THEN 'Appointment Confirmation'
