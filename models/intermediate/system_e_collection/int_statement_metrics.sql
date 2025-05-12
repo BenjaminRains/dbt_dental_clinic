@@ -1,8 +1,30 @@
 {{ config(
     materialized='incremental',
     schema='intermediate',
-    unique_key=['snapshot_date', 'metric_type']
+    unique_key=['snapshot_date', 'metric_type', 'delivery_method', 'campaign_id']
 ) }}
+
+/*
+    ======================================================
+    Note on grain and key strategy:
+
+    GRAIN:
+    - The grain of this model is (snapshot_date, metric_type, delivery_method, campaign_id)
+    - Each combination of these 4 fields represents a unique metrics record
+    - delivery_method is relevant for 'by_delivery_method' metric_type
+    - campaign_id is relevant for 'by_campaign' metric_type
+    - Both delivery_method and campaign_id are NULL for 'overall' metric_type
+    - All 4 fields must be included in the unique_key to prevent incorrect merges
+
+    KEY STRATEGY:
+    - Using a deterministic numeric ID based on hashing all grain fields
+    - The hash is converted to a stable numeric value using ABS(MOD())
+    - This ensures consistent IDs during incremental processing
+    - Maintains numeric type for compatibility with existing data
+    - Creates reliable surrogate keys for downstream models
+    - Avoids problems that can occur with ROW_NUMBER() in incremental models
+    ======================================================
+*/
 
 /*
     Intermediate model for statement metrics
@@ -144,7 +166,17 @@ DerivedMetrics AS (
 
 -- Final selection
 SELECT
-    ROW_NUMBER() OVER (ORDER BY snapshot_date, metric_type, COALESCE(delivery_method, 'N/A'), COALESCE(campaign_id, 0)) AS statement_metric_id,
+    -- Create a stable numeric ID based on the grain fields
+    -- Hash the combined fields then use ABS(MOD()) to get a stable numeric ID
+    ABS(MOD(
+        ('x' || SUBSTR(MD5(
+            CAST(snapshot_date AS VARCHAR) || '|' ||
+            CAST(metric_type AS VARCHAR) || '|' ||
+            COALESCE(CAST(delivery_method AS VARCHAR), 'NULL') || '|' ||
+            COALESCE(CAST(campaign_id AS VARCHAR), 'NULL')
+        ), 1, 16))::bit(64)::bigint,
+        9223372036854775807  -- Max bigint value to avoid overflow
+    )) AS statement_metric_id,
     snapshot_date,
     metric_type,
     delivery_method,
