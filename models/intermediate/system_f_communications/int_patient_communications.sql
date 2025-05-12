@@ -103,7 +103,8 @@ WITH CommunicationBase AS (
         END AS follow_up_date,
         
         NULL AS follow_up_task_id, -- Would be linked to a task record
-        
+
+        cl.program_id, -- Added program_id field
         cl.created_at,
         CURRENT_TIMESTAMP AS updated_at
     FROM {{ ref('stg_opendental__commlog') }} cl
@@ -192,7 +193,8 @@ SELECT
     cb.follow_up_required,
     cb.follow_up_date,
     cb.follow_up_task_id,
-    
+    cb.program_id, -- Added program_id to final selection
+
     -- Additional context fields
     pi.preferred_name AS patient_name,
     pi.patient_status,

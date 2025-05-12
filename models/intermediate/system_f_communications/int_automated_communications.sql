@@ -101,7 +101,7 @@ WITH AutomatedComms AS (
         -- Filter for likely automated communications
         comm.direction = 'outbound'
         AND (
-            -- Communications sent through a program
+            -- Communications sent through a program (program_id from stg_opendental__commlog.ProgramNum)
             comm.program_id IS NOT NULL
             -- Messages with template-like content (checking for template variables with pattern {VARIABLE_NAME})
             OR comm.content ~ '\{[A-Za-z0-9_]+\}'
