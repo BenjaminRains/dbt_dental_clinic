@@ -3,16 +3,83 @@ version: 2
 models:
   - name: int_communication_templates
     description: >
-      Intermediate model for communication templates.
-      Stores templates used for automated patient communications.
-      Part of System F: Communications - enables standardized communications
-      with patients and tracking of message templates across the system.
+      Comprehensive communication templates model that standardizes and consolidates messaging
+      templates used for patient communications. This model serves as the central repository
+      for all templated messages used in automated communications with patients.
+
+      Grain: One row per unique communication template.
+      Each template represents a distinct message pattern used in patient communications
+      and can be of various types (email, SMS, letter) and categories (appointment, billing, etc.).
+      The 12 records represent the system's standard communication templates used across all
+      patient interactions.
+
+      Key features:
+      - Consolidates templates from program properties and detected communication patterns
+      - Standardizes template structure with consistent metadata
+      - Classifies templates by type (email, SMS, letter) and purpose category
+      - Extracts variables/placeholders from template content
+      - Provides subject lines based on template purpose
+      - Tracks template creation and update timestamps
+      - Supports template reuse across the communication system
+      - Enables consistent patient messaging across the practice
+
+      Data Sources:
+      - stg_opendental__programproperty: Primary source for predefined templates
+      - int_patient_communications: Source for auto-detected communication patterns
+
+      Business rules:
+      - Templates extracted from program properties with template-like content
+      - Template type determined by keywords in property description (email, SMS, letter)
+      - Template category assigned based on content analysis and keywords
+      - Variables extracted via regex pattern matching for {VARIABLE_NAME} placeholders
+      - Auto-detected templates created from frequently used communication patterns
+      - Templates marked as active by default for immediate availability
+      - Template content must be substantial (over 20 characters)
+      - Each template has a standardized format regardless of source
     tests:
       - dbt_utils.at_least_one_not_null:
           column_list: [template_name, content]
       - dbt_utils.expression_is_true:
           expression: "LENGTH(content) > 10"
           where: "content IS NOT NULL"
+
+      # Template type validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            template_type IN ('email', 'SMS', 'letter', 'phone')
+          config:
+            severity: error
+            description: >
+              Template type must be one of the allowed values.
+
+      # Template category validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            category IN ('appointment', 'billing', 'clinical', 'recall', 'marketing', 'insurance', 'follow_up', 'general')
+          config:
+            severity: error
+            description: >
+              Template category must be one of the allowed values.
+
+      # Subject required for email and letter templates
+      - dbt_utils.expression_is_true:
+          expression: >
+            (template_type IN ('email', 'letter') AND subject IS NOT NULL)
+            OR (template_type NOT IN ('email', 'letter'))
+          config:
+            severity: error
+            description: >
+              Email and letter templates must have a subject line.
+
+      # Template variable extraction validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (content LIKE '%' || '{' || '%' || '}' || '%' AND array_length(variables, 1) > 0)
+            OR (content NOT LIKE '%' || '{' || '%' || '}' || '%')
+          config:
+            severity: warn
+            description: >
+              Templates with placeholder variables should have variables extracted.
     columns:
       - name: template_id
         description: Unique identifier for the template
@@ -99,3 +166,19 @@ models:
         description: Timestamp when this record was last updated in the dbt model
         tests:
           - not_null
+
+    meta:
+      business_owners: ["dental_communications_team", "marketing_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: false
+      data_quality_requirements:
+        - "All templates must have unique template_id values"
+        - "Template types must be one of the accepted values (email, SMS, letter, phone)"
+        - "Template categories must follow the established taxonomy"
+        - "Template content must be substantial (over 20 characters)"
+        - "Templates with variables must have non-empty variables array"
+        - "Email and letter templates must have subject lines"
+        - "Variables should be extracted in the format {VARIABLE_NAME}"
+        - "Template names should be descriptive and unique"
+        - "Content must be properly formatted for the template type"
