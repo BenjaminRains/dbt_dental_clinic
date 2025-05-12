@@ -5,9 +5,20 @@
 ) }}
 
 /*
+    ======================================================
+    Note on key strategy:
+    - Using a deterministic numeric ID based on the source task_id
+    - This ensures stable IDs during incremental processing
+    - Avoids problems that can occur with ROW_NUMBER() in incrementals
+    - Maintains consistent surrogate keys for downstream models
+    - Keeps the numeric type for compatibility with existing data
+    ======================================================
+*/
+
+/*
     Intermediate model for collection tasks
     Part of System E: Collections
-    
+
     This model:
     1. Tracks individual collection tasks from campaigns
     2. Ties tasks to specific patients and their AR balances
@@ -17,8 +28,9 @@
 
 WITH CollectionTasks AS (
     -- Join tasks with campaign and patient information
-    SELECT 
-        ROW_NUMBER() OVER (ORDER BY t.task_id) AS collection_task_id,
+    SELECT
+        -- Create a stable numeric ID based on the source task_id
+        ABS(MOD(CAST(t.task_id AS BIGINT), 9223372036854775807)) AS collection_task_id,
         cc.campaign_id,
         t.task_id,
         t.description,
