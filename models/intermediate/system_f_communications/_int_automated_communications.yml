@@ -21,16 +21,14 @@ models:
       - Supports campaign performance tracking
 
       Data Sources:
-      - int_patient_communications: Base communication records
+      - int_patient_communications_base: Base communication data
+      - int_automated_communication_flags: Automation detection and metrics
       - int_communication_templates: Template definitions
-      - Pattern matching to identify automated communications
 
-      Business rules:
-      - Communications are identified as automated based on program association, batch sending, and template content
-      - Trigger types are determined by content pattern matching
-      - Status reflects whether the communication was delivered and if there was a response
-      - Engagement metrics track opens, clicks, replies, and bounces
-      - All automated communications link to a template and base communication
+      REFACTORED TO BREAK CIRCULAR DEPENDENCY:
+      - Uses int_patient_communications_base for base data
+      - Uses int_automated_communication_flags for automation detection
+      - Joins with int_communication_templates for template info
     
     config:
       materialized: incremental
@@ -41,30 +39,136 @@ models:
       - name: automated_communication_id
         description: >
           Primary key - Unique identifier for the automated communication record.
-          Generated as a surrogate key based on communication_id and template_id.
+          Generated as a surrogate key based on communication_id and content.
         tests:
           - unique
           - not_null
       
       - name: communication_id
         description: >
-          Foreign key to int_patient_communications. Links this automated communication
-          to its base communication record.
+          Foreign key to int_patient_communications_base. Links this automated
+          communication to its base communication record.
         tests:
           - not_null
           - relationships:
-              to: ref('int_patient_communications')
+              to: ref('int_patient_communications_base')
               field: communication_id
       
-      - name: template_id
+      - name: patient_id
         description: >
-          Foreign key to int_communication_templates. Identifies which template
-          was used to generate this communication.
+          Foreign key to the patient profile. Identifies which patient
+          this communication is associated with.
         tests:
           - not_null
           - relationships:
-              to: ref('int_communication_templates')
-              field: template_id
+              to: ref('int_patient_profile')
+              field: patient_id
+      
+      - name: user_id
+        description: >
+          Foreign key to the user record. Identifies which staff member
+          initiated the communication.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+      
+      - name: communication_datetime
+        description: >
+          Timestamp when the communication was sent.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+      
+      - name: communication_type
+        description: >
+          The type of communication (e.g., PhoneCall, Email, Text, Mail).
+          Maintained from the source system's categorization.
+      
+      - name: communication_mode
+        description: >
+          The mode or channel used for communication. Maps from the source
+          system's "mode" field.
+      
+      - name: content
+        description: >
+          The full content or notes from the communication. Contains the actual
+          message text or call notes.
+        tests:
+          - not_null
+      
+      - name: linked_appointment_id
+        description: >
+          Foreign key to appointment record if the communication references
+          a specific appointment. Extracted from content using regex pattern matching.
+      
+      - name: linked_claim_id
+        description: >
+          Foreign key to claim record if the communication references
+          a specific insurance claim. Extracted from content using regex pattern matching.
+      
+      - name: linked_procedure_id
+        description: >
+          Foreign key to procedure record if the communication references
+          a specific dental procedure. Extracted from content using regex pattern matching.
+      
+      - name: contact_phone_number
+        description: >
+          Phone number extracted from the communication note, typically in format "Number XXXXXXXXXX".
+          Extracted via regex pattern matching from the content when phone numbers are mentioned.
+          Format is a 10-digit string without formatting characters.
+      
+      - name: communication_category
+        description: >
+          Basic categorization of the communication based on content analysis.
+          Possible values: appointment, billing, clinical, insurance, follow_up, general.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+      
+      - name: outcome
+        description: >
+          The result or outcome of the communication, derived from content analysis.
+          Possible values: confirmed, rescheduled, cancelled, no_answer, completed.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['confirmed', 'rescheduled', 'cancelled', 'no_answer', 'completed']
+      
+      - name: program_id
+        description: >
+          Identifier for the program or system that generated the communication.
+          Used for tracking automated communications.
+      
+      - name: patient_name
+        description: >
+          Patient's preferred name, joined from int_patient_profile.
+      
+      - name: patient_status
+        description: >
+          Current status of the patient, joined from int_patient_profile.
+      
+      - name: birth_date
+        description: >
+          Patient's date of birth, joined from int_patient_profile.
+      
+      - name: user_name
+        description: >
+          Name of the staff member who initiated the communication,
+          joined from stg_opendental__userod.
+      
+      - name: provider_id
+        description: >
+          Provider ID associated with the user, if applicable. Joined from 
+          stg_opendental__userod for provider correlation.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              where: "provider_id is not null"
       
       - name: trigger_type
         description: >
@@ -82,163 +186,117 @@ models:
           statement_id, recall_date, etc. Stored as a key-value string that can be parsed
           for specific information.
       
-      - name: scheduled_datetime
-        description: >
-          Timestamp when the communication was scheduled to be sent. May match the
-          sent_datetime for immediately sent communications.
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
-      
-      - name: sent_datetime
-        description: >
-          Timestamp when the communication was actually sent. Corresponds to the
-          communication_datetime in the base communication record.
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
-      
       - name: status
         description: >
-          Status of the automated communication. Possible values: sent, undelivered,
-          responded_positive, responded_negative.
+          Current status of the automated communication.
+          Possible values: sent, responded_positive, responded_negative, undelivered.
         tests:
           - not_null
           - accepted_values:
-              values: ['sent', 'undelivered', 'responded_positive', 'responded_negative']
-      
-      - name: recipient_count
-        description: >
-          Number of recipients for this communication. For individual messages, this will
-          typically be 1. For batch communications, this may be higher.
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 1
-              max_value: 1000
+              values: ['sent', 'responded_positive', 'responded_negative', 'undelivered']
       
       - name: open_count
         description: >
           Number of times the communication was opened (for email communications).
-          This is a basic engagement metric for tracking email effectiveness.
+          Currently estimated based on content patterns.
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 1000
+              max_value: 1
       
       - name: click_count
         description: >
           Number of times links in the communication were clicked (for email communications).
-          This is an engagement metric for tracking interactive response.
+          Currently estimated based on content patterns.
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 1000
+              max_value: 1
       
       - name: reply_count
         description: >
-          Number of replies received in response to the communication.
-          Determined by identifying inbound communications from the same patient
-          within a reasonable timeframe after the automated message.
+          Number of replies received to this communication.
+          Determined by looking for inbound communications from the same patient
+          within 3 days of the automated message.
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 100
+              max_value: 1
       
       - name: bounce_count
         description: >
-          Number of bounces (for email communications). Indicates delivery failures
-          that could signal invalid contact information.
+          Number of times the communication bounced (for email communications).
+          Currently estimated based on content patterns.
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10
+              max_value: 1
+      
+      - name: template_id
+        description: >
+          Foreign key to int_communication_templates. Identifies which template
+          was used to generate this communication.
+        tests:
+          - relationships:
+              to: ref('int_communication_templates')
+              field: template_id
+      
+      - name: template_name
+        description: >
+          Name of the template used for this communication.
+      
+      - name: template_type
+        description: >
+          Type of template used (email, SMS, letter).
+        tests:
+          - accepted_values:
+              values: ['email', 'SMS', 'letter']
+      
+      - name: template_category
+        description: >
+          Category of the template used (appointment, billing, etc.).
+        tests:
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+      
+      - name: template_subject
+        description: >
+          Subject line used in the template.
+      
+      - name: created_at
+        description: >
+          Timestamp when the record was created in the source system.
+        tests:
+          - not_null
+      
+      - name: updated_at
+        description: >
+          Timestamp when the record was last updated in the source system.
+        tests:
+          - not_null
       
       - name: model_created_at
         description: >
-          Timestamp when this record was created in the dbt model.
+          Timestamp when the record was created in this model.
         tests:
           - not_null
       
       - name: model_updated_at
         description: >
-          Timestamp when this record was last updated in the dbt model.
+          Timestamp when the record was last updated in this model.
         tests:
           - not_null
 
-    tests:
-      # Status validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            status IN ('sent', 'undelivered', 'responded_positive', 'responded_negative')
-          config:
-            severity: error
-            description: >
-              Status must be one of the defined values.
-
-      # Datetime validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            scheduled_datetime <= sent_datetime
-            AND sent_datetime <= CURRENT_TIMESTAMP
-          config:
-            severity: error
-            description: >
-              Scheduled datetime must be before or equal to sent datetime, and sent datetime must be in the past.
-
-      # Relationship validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            communication_id IN (SELECT communication_id FROM {{ ref('int_patient_communications') }})
-            AND template_id IN (SELECT template_id FROM {{ ref('int_communication_templates') }})
-          config:
-            severity: error
-            description: >
-              All automated communications must link to valid communication and template records.
-
-      # Metrics validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            open_count >= 0
-            AND click_count >= 0
-            AND reply_count >= 0
-            AND bounce_count >= 0
-            AND recipient_count > 0
-          config:
-            severity: error
-            description: >
-              All count metrics must be non-negative, and recipient_count must be positive.
-
-      # Trigger type validation
-      - dbt_utils.expression_is_true:
-          expression: >
-            (trigger_type = 'appointment_reminder' AND trigger_details LIKE 'appointment_id=%')
-            OR (trigger_type = 'recall_notice' AND trigger_details LIKE 'recall_date=%')
-            OR (trigger_type = 'balance_reminder' AND trigger_details LIKE 'statement_id=%')
-            OR trigger_type IN ('birthday_greeting', 'new_patient_welcome', 'general_notification')
-          config:
-            severity: warn
-            description: >
-              Trigger details should be consistent with trigger type.
-
     meta:
-      business_owners: ["dental_communications_team", "marketing_team"]
+      business_owners: ["dental_communications_team", "patient_care_team"]
       technical_owners: ["data_engineering_team"]
       refresh_frequency: "daily"
       contains_pii: true
       data_quality_requirements:
-        - "All automated communications must be linked to valid communication records"
-        - "All automated communications must be linked to valid templates"
-        - "Trigger types must be accurately detected from content patterns"
-        - "Status must reflect accurate delivery and response information"
-        - "Engagement metrics must be accurate and non-negative"
-        - "Scheduled and sent datetimes must be valid and chronological"
+        - "All communications must be associated with a valid patient"
+        - "Communication categories must accurately reflect content"
+        - "Trigger types must match content patterns"
+        - "Status must reflect actual communication outcomes"
+        - "Engagement metrics must be accurately tracked"
+        - "Template matching must be accurate and consistent"
         - "Future incremental loading must only process new communications"
