@@ -42,7 +42,7 @@ WITH BaseCommunications AS (
         base.user_id,
         base.communication_datetime,
         base.content,
-        base.direction,
+        base.direction,  -- Use the existing direction column from base model
         base.program_id,
         base.communication_mode,
         base.outcome,
@@ -70,7 +70,7 @@ FilteredCommunications AS (
         outcome,
         linked_appointment_id
     FROM BaseCommunications
-    WHERE direction = 'outbound'
+    WHERE direction = 'outbound'  -- This matches the new direction values from base model
     -- Add a limit for debugging
     LIMIT 1000000  -- Adjust this number based on your data volume
 ),
@@ -79,13 +79,14 @@ ContentPatterns AS (
     -- Pre-calculate pattern matches to avoid repeated operations
     SELECT
         comm.communication_id,
+        comm.patient_id,  -- propagate patient_id
         comm.content,
         comm.communication_datetime,
-        comm.patient_id,
         comm.program_id,
         comm.communication_mode,
         comm.outcome,
         comm.linked_appointment_id,
+        comm.direction,  -- propagate direction
         CASE
             WHEN comm.content LIKE 'Patient Text Sent via PbN%' THEN TRUE
             WHEN comm.content LIKE 'Email sent via PbN for campaign%' THEN TRUE
@@ -163,9 +164,11 @@ BatchCommunications AS (
     SELECT 
         content,
         communication_datetime,
+        direction,  -- propagate direction
+        patient_id,  -- propagate patient_id
         COUNT(DISTINCT patient_id) as patient_count
     FROM ContentPatterns
-    GROUP BY content, communication_datetime
+    GROUP BY content, communication_datetime, direction, patient_id
     HAVING COUNT(DISTINCT patient_id) > 3
     -- Add a limit for debugging
     LIMIT 10000  -- Adjust this number based on your data volume
@@ -176,17 +179,34 @@ ReplyTracking AS (
     -- Added safety check to prevent excessive joins
     SELECT 
         comm.communication_id,
+        comm.patient_id,  -- propagate patient_id
+        comm.direction,  -- propagate direction
         MAX(CASE 
-            WHEN reply.communication_id IS NOT NULL THEN 1 
+            WHEN reply.commlog_id IS NOT NULL THEN 1 
             ELSE 0 
         END) as has_reply
     FROM ContentPatterns comm
-    LEFT JOIN {{ ref('int_patient_communications_base') }} reply
+    LEFT JOIN (
+        SELECT 
+            commlog_id,
+            patient_id,
+            communication_datetime,
+            note,
+            CASE 
+                WHEN is_sent = 2 THEN 'outbound'
+                WHEN is_sent = 1 THEN 'inbound'
+                WHEN is_sent = 0 THEN 'system'
+                ELSE 'unknown'
+            END AS reply_direction  -- Renamed to avoid conflict
+        FROM "opendental_analytics"."public_staging"."stg_opendental__commlog"
+        WHERE is_sent = 1  -- Inbound messages
+        AND mode IN (1, 5)  -- Only consider email (1) and text (5) for replies
+        AND note IS NOT NULL
+    ) reply
         ON reply.patient_id = comm.patient_id
         AND reply.communication_datetime BETWEEN comm.communication_datetime 
             AND comm.communication_datetime + INTERVAL '3 days'
-        AND reply.direction = 'inbound'
-    GROUP BY comm.communication_id
+    GROUP BY comm.communication_id, comm.direction, comm.patient_id
     -- Add a limit for debugging
     LIMIT 100000  -- Adjust this number based on your data volume
 ),
@@ -194,6 +214,8 @@ ReplyTracking AS (
 AutomatedFlags AS (
     SELECT
         comm.communication_id,
+        comm.patient_id,  -- propagate patient_id
+        comm.direction,  -- propagate direction
         {{ dbt_utils.generate_surrogate_key(['comm.communication_id', 'comm.content']) }} AS automated_communication_id,
         comm.communication_datetime,
         
@@ -240,7 +262,9 @@ AutomatedFlags AS (
 -- Final selection with row limit for debugging
 SELECT
     communication_id,
+    patient_id,  -- propagate patient_id to final output
     automated_communication_id,
+    direction,  -- propagate direction to final output
     is_automated,
     trigger_type,
     campaign_type,
@@ -254,4 +278,3 @@ SELECT
     model_updated_at
 FROM AutomatedFlags
 WHERE is_automated = TRUE  -- Only return communications flagged as automated
-LIMIT 100000  -- Adjust this number based on your data volume 
