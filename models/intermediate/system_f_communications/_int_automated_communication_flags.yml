@@ -1,0 +1,182 @@
+version: 2
+
+models:
+  - name: int_automated_communication_flags
+    description: >
+      Model that adds automation detection flags to base communications.
+      This model identifies likely automated messages using patterns and provides
+      engagement metrics for automated communications.
+
+      Grain: One row per automated communication, identified by communication_id.
+      Each record represents a single automated message with its associated flags
+      and metrics.
+
+      Key features:
+      - Identifies automated communications using pattern matching
+      - Determines trigger types and details
+      - Tracks engagement metrics (opens, clicks, replies)
+      - Monitors delivery status
+      - Supports analysis of automated communication effectiveness
+
+      Data Sources:
+      - int_patient_communications_base: Base communication data
+      - Pattern matching for automation detection
+      - Content analysis for trigger identification
+
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: communication_id
+      indexes:
+        - columns: ['communication_datetime']
+        - columns: ['direction']
+        - columns: ['patient_id']
+    
+    columns:
+      - name: communication_id
+        description: >
+          Foreign key to int_patient_communications_base. Links this automated
+          communication to its base communication record.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_communications_base')
+              field: communication_id
+      
+      - name: patient_id
+        description: >
+          Foreign key to the patient record. Links this communication to the specific patient.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patients')
+              field: patient_id
+      
+      - name: automated_communication_id
+        description: >
+          Surrogate key for the automated communication record.
+          Generated based on communication_id and content.
+        tests:
+          - unique
+          - not_null
+      
+      - name: direction
+        description: >
+          Direction of the communication. For this model, only outbound communications
+          are processed for automation detection.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['outbound']
+      
+      - name: is_automated
+        description: >
+          Boolean flag indicating whether this communication is likely automated.
+          Determined through pattern matching, program association, and batch detection.
+        tests:
+          - not_null
+          - is_boolean_or_null
+      
+      - name: trigger_type
+        description: >
+          Type of trigger that initiated the automated communication.
+          Examples: appointment_reminder, appointment_confirmation, balance_notice,
+          form_request, review_request, post_op_instructions, broken_appointment, other.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment_reminder', 'appointment_confirmation', 'balance_notice', 
+                      'form_request', 'review_request', 'post_op_instructions', 
+                      'broken_appointment', 'other']
+      
+      - name: campaign_type
+        description: >
+          Type of campaign that generated this communication.
+          Examples: appointment_reminders, accounts_receivable, crown_instructions,
+          form_invite, unscheduled_treatment.
+        tests:
+          - accepted_values:
+              values: ['appointment_reminders', 'accounts_receivable', 'crown_instructions',
+                      'form_invite', 'unscheduled_treatment', null]
+      
+      - name: status
+        description: >
+          Current status of the automated communication.
+          Possible values: sent, responded_positive, responded_negative, undelivered.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sent', 'responded_positive', 'responded_negative', 'undelivered']
+      
+      - name: open_count
+        description: >
+          Number of times the communication was opened (for email communications).
+          Currently estimated based on content patterns.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: click_count
+        description: >
+          Number of times links in the communication were clicked (for email communications).
+          Currently estimated based on content patterns.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: reply_count
+        description: >
+          Number of replies received to this communication.
+          Determined by looking for inbound communications from the same patient
+          within 3 days of the automated message.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: bounce_count
+        description: >
+          Number of times the communication bounced (for email communications).
+          Currently estimated based on content patterns.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: communication_datetime
+        description: >
+          Timestamp when the communication was sent. Used for incremental processing
+          and temporal analysis of automated communications.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+      
+      - name: model_created_at
+        description: >
+          Timestamp when the record was created in this model.
+        tests:
+          - not_null
+      
+      - name: model_updated_at
+        description: >
+          Timestamp when the record was last updated in this model.
+        tests:
+          - not_null
+
+    meta:
+      business_owners: ["dental_communications_team", "patient_care_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: false
+      data_quality_requirements:
+        - "Automation detection must be accurate and consistent"
+        - "Trigger types must match content patterns"
+        - "Status must reflect actual communication outcomes"
+        - "Engagement metrics must be accurately tracked"
+        - "Future incremental loading must only process new communications"
+        - "Batch detection must prevent self-matching"
+        - "Reply tracking must be limited to 3-day window" 
