@@ -1,0 +1,217 @@
+version: 2
+
+models:
+  - name: int_patient_communications_base
+    description: >
+      Base model for patient communications that provides clean, foundational data
+      without any automation detection logic. This model serves as the starting point
+      for all communication-related models in the system.
+
+      Grain: One row per individual communication event between the dental office and a patient.
+      Each record represents a single interaction (phone call, email, text message, etc.) with
+      communication_id as the primary key derived from commlog_id in the source system.
+
+      Key features:
+      - Provides clean, foundational communication data
+      - Includes only essential fields and joins
+      - No automation detection logic
+      - Serves as the base for other communication models
+      - Extracts linked entities from message content
+      - Includes basic categorization and outcome determination
+      - Links to patient and user context
+
+      Data Sources:
+      - stg_opendental__commlog: Primary source of communication data
+      - int_patient_profile: Patient demographic information
+      - stg_opendental__userod: User and provider information
+
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: communication_id
+    
+    columns:
+      - name: communication_id
+        description: >
+          Primary key - Unique identifier for the communication record.
+          Direct mapping from commlog_id in the source system.
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__commlog')
+              field: commlog_id
+      
+      - name: patient_id
+        description: >
+          Foreign key to the patient profile. Identifies which patient
+          this communication is associated with.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+      
+      - name: user_id
+        description: >
+          Foreign key to the user record. Identifies which staff member
+          initiated or received the communication.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+      
+      - name: communication_datetime
+        description: >
+          Timestamp when the communication occurred. For outbound communications,
+          this represents when the message was sent. For inbound, when it was received.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+      
+      - name: communication_end_datetime
+        description: >
+          Timestamp when the communication ended (optional). Particularly relevant
+          for phone calls or multi-message conversations.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+      
+      - name: communication_type
+        description: >
+          The type of communication (e.g., PhoneCall, Email, Text, Mail).
+          Maintained from the source system's categorization.
+      
+      - name: communication_mode
+        description: >
+          The mode or channel used for communication. Maps from the source
+          system's "mode" field.
+      
+      - name: direction
+        description: >
+          Indicates whether the communication was outbound (from practice to patient)
+          or inbound (from patient to practice). Derived from the is_sent flag.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['outbound', 'inbound']
+      
+      - name: content
+        description: >
+          The full content or notes from the communication. Contains the actual
+          message text or call notes.
+        tests:
+          - not_null
+      
+      - name: linked_appointment_id
+        description: >
+          Foreign key to appointment record if the communication references
+          a specific appointment. Extracted from content using regex pattern matching.
+      
+      - name: linked_claim_id
+        description: >
+          Foreign key to claim record if the communication references
+          a specific insurance claim. Extracted from content using regex pattern matching.
+      
+      - name: linked_procedure_id
+        description: >
+          Foreign key to procedure record if the communication references
+          a specific dental procedure. Extracted from content using regex pattern matching.
+      
+      - name: contact_phone_number
+        description: >
+          Phone number extracted from the communication note, typically in format "Number XXXXXXXXXX".
+          Extracted via regex pattern matching from the content when phone numbers are mentioned.
+          Format is a 10-digit string without formatting characters.
+      
+      - name: communication_category
+        description: >
+          Basic categorization of the communication based on content analysis.
+          Possible values: appointment, billing, clinical, insurance, follow_up, general.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+      
+      - name: outcome
+        description: >
+          The result or outcome of the communication, derived from content analysis.
+          Possible values: confirmed, rescheduled, cancelled, no_answer, completed.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['confirmed', 'rescheduled', 'cancelled', 'no_answer', 'completed']
+      
+      - name: program_id
+        description: >
+          Identifier for the program or system that generated the communication.
+          Used for tracking automated communications.
+      
+      - name: patient_name
+        description: >
+          Patient's preferred name, joined from int_patient_profile.
+      
+      - name: patient_status
+        description: >
+          Current status of the patient, joined from int_patient_profile.
+      
+      - name: birth_date
+        description: >
+          Patient's date of birth, joined from int_patient_profile.
+      
+      - name: user_name
+        description: >
+          Name of the staff member who initiated or received the communication,
+          joined from stg_opendental__userod.
+      
+      - name: provider_id
+        description: >
+          Provider ID associated with the user, if applicable. Joined from 
+          stg_opendental__userod for provider correlation.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              where: "provider_id is not null"
+      
+      - name: created_at
+        description: >
+          Timestamp when the record was created in the source system.
+        tests:
+          - not_null
+      
+      - name: updated_at
+        description: >
+          Timestamp when the record was last updated in the source system.
+        tests:
+          - not_null
+      
+      - name: model_created_at
+        description: >
+          Timestamp when the record was created in this model.
+        tests:
+          - not_null
+      
+      - name: model_updated_at
+        description: >
+          Timestamp when the record was last updated in this model.
+        tests:
+          - not_null
+
+    meta:
+      business_owners: ["dental_communications_team", "patient_care_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "All communications must be associated with a valid patient"
+        - "Communication categories must accurately reflect content"
+        - "Direction must be correctly determined from is_sent flag"
+        - "All dates must be valid and chronological"
+        - "Linked entities (appointments, claims, procedures) must be valid"
+        - "Regular expression pattern extraction must detect valid entity IDs"
+        - "Content analysis for categorization must be accurate and consistent"
+        - "Future incremental loading must only process new communications" 
