@@ -23,6 +23,33 @@ models:
       - Implements fallback matching for non-PostgreSQL databases
       - Filters matches to active templates only
 
+      Special Note on provider_id = 0:
+      This is a special case used for communications that aren't directly from a specific provider.
+      Analysis shows these communications fall into several categories:
+      1. Truly automated system communications:
+         - Balance notices (811 records)
+         - Appointment reminders (46 records)
+         - Review requests (32 records)
+         - Post-op instructions (24 records)
+      2. Staff-initiated communications through system interfaces:
+         - Notes with staff initials (e.g., "-MW", "-KB")
+         - Communication department activities (marked with "CD")
+      3. Automated business communications:
+         - End of year letters
+         - Statements with final notices
+         - Insurance-related communications
+      
+      Distribution of provider_id = 0 communications by type:
+      - Type 228 (Secondary automated system): 2,462 records
+      - Type 226 (Billing communications): 998 records
+      - Type 603 (Tertiary system): 485 records
+      - Type 225 (Insurance communications): 436 records
+      - Type 571 (Insurance narratives): 227 records
+
+      This special case should be considered when analyzing provider-specific communications
+      or when building reports that need to distinguish between provider and non-provider
+      communications.
+
       Data Sources:
       - int_patient_communications_base: Base communication data
       - int_automated_communication_flags: Automation detection and metrics
@@ -249,7 +276,7 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
-              where: "provider_id is not null"
+              where: "provider_id is not null AND provider_id != 0"
       
       - name: trigger_type
         description: >
