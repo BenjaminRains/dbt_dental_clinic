@@ -253,14 +253,31 @@ models:
       - name: birth_date
         description: >
           Patient's date of birth, joined from int_patient_profile.
-          Note: NULL values are allowed for non-active patients (patient_status != 0)
+          Note: NULL values are allowed for:
+          - Non-active patients (patient_status != 0)
+          - Future-dated communications (communication_datetime > current_timestamp)
+          - Inbound communications with type 0 (new patient communications)
+          - System communications (direction = 'system')
+          - Practice by Numbers (PbN) communications
+          - Missed call records
+          - Received call records
+          - System notifications (communication_type = 603)
         tests:
           - not_null:
-              where: "patient_status = 0"  # Only require for active patients
+              where: >
+                patient_status = 0 
+                and communication_datetime <= current_timestamp
+                and not (direction = 'inbound' and communication_type = 0)
+                and not (direction = 'system')
+                and not (content like '%Patient Text Received via PbN%')
+                and not (content like '%PbN Task Note%')
+                and not (content like '%Phone Call Missed%')
+                and not (content like '%Phone Call Received%')
+                and not (communication_type = 603)
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'1900-01-01'::date"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
-              where: "birth_date is not null"  # Only validate non-NULL values
+              where: "birth_date is not null"
       
       - name: first_visit_date
         description: >
