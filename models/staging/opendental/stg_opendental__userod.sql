@@ -1,7 +1,6 @@
 with source as (
     select * 
     from {{ source('opendental', 'userod') }}
-    where "DateTLastLogin" >= '2023-01-01'
 ),
 
 renamed as (
