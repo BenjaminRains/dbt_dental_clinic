@@ -395,7 +395,7 @@ models:
           Subject line used in the template.
         tests:
           - not_null:
-              where: "template_id is not null"
+              where: "template_id is not null AND template_type = 'email'"
       
       - name: created_at
         description: >
