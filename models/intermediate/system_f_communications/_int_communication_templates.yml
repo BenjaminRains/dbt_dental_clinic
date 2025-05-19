@@ -25,7 +25,8 @@ models:
 
       Data Sources:
       - stg_opendental__programproperty: Primary source for predefined templates
-      - int_patient_communications: Source for auto-detected communication patterns
+      - int_patient_communications_base: Source for auto-detected communication patterns
+      - stg_opendental__commlog: Raw communication data
 
       Business rules:
       - Templates extracted from program properties with template-like content

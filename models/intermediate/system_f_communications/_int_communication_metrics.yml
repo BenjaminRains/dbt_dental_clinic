@@ -22,9 +22,10 @@ models:
       - Supports communication effectiveness reporting
 
       Data Sources:
-      - int_patient_communications: Primary source for all communication events
+      - int_patient_communications_base: Primary source for all communication events
       - stg_opendental__appointment: Used for linking communications to appointment outcomes
       - stg_opendental__userod: Used for user information and attribution
+      - stg_opendental__commlog: Raw communication data for additional context
 
       Business rules:
       - Success determined by communication outcome (confirmed/completed = success)

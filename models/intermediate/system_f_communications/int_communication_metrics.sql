@@ -9,7 +9,7 @@
     Part of System F: Communications
     
     This model:
-    1. Aggregates communication data from int_patient_communications
+    1. Aggregates communication data from int_patient_communications_base
     2. Generates metrics for reporting on communication activities
     3. Supports analysis of communication effectiveness
     4. Tracks performance by user, type, and category
@@ -33,7 +33,7 @@ WITH DailyCommunications AS (
                 ELSE NULL 
             END
         ) AS average_duration_minutes
-    FROM {{ ref('int_patient_communications') }}
+    FROM {{ ref('int_patient_communications_base') }}
     
     {% if is_incremental() %}
     WHERE communication_datetime >= (SELECT MAX(date) FROM {{ this }})
@@ -68,7 +68,7 @@ ResponseMetrics AS (
                 (COUNT(CASE WHEN communication_category = 'appointment' AND outcome = 'confirmed' THEN 1 ELSE NULL END)::float / COUNT(*))
             ELSE 0
         END AS conversion_rate
-    FROM {{ ref('int_patient_communications') }}
+    FROM {{ ref('int_patient_communications_base') }}
 
     {% if is_incremental() %}
     WHERE communication_datetime >= (SELECT MAX(date) FROM {{ this }})

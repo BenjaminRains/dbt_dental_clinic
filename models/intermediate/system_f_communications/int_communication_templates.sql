@@ -117,7 +117,7 @@ CommunicationTemplates AS (
             created_at,
             updated_at,
             COUNT(*) AS frequency
-        FROM {{ ref('int_patient_communications') }}
+        FROM {{ ref('int_patient_communications_base') }}
         WHERE content IS NOT NULL
         GROUP BY 
             communication_type,
