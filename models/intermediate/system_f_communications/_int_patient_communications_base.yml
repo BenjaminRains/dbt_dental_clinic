@@ -224,7 +224,8 @@ models:
           joined from stg_opendental__userod.
         tests:
           - not_null
-          - where: "user_id is not null"
+          - dbt_utils.expression_is_true:
+              expression: "user_id is not null"
       
       - name: provider_id
         description: >
