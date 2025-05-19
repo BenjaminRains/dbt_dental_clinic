@@ -83,11 +83,13 @@ models:
       - name: user_id
         description: >
           Foreign key to the user record. Identifies which staff member
-          initiated or received the communication.
+          initiated or received the communication. Note: user_id = 0 represents
+          system-generated communications.
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              where: "user_id != 0"
       
       - name: communication_datetime
         description: >
@@ -252,9 +254,11 @@ models:
       - name: user_name
         description: >
           Name of the staff member who initiated or received the communication,
-          joined from stg_opendental__userod.
+          joined from stg_opendental__userod. Note: System communications (user_id = 0)
+          will have NULL user_name.
         tests:
-          - not_null
+          - not_null:
+              where: "user_id != 0"
       
       - name: provider_id
         description: >
@@ -292,8 +296,9 @@ models:
 
     tests:
       # Validates that user_name column is populated whenever user_id column has a value
+      # Excludes system communications (user_id = 0) which are allowed to have NULL user_name
       - dbt_utils.expression_is_true:
-          expression: "user_id is null or user_name is not null"
+          expression: "user_id = 0 or (user_id is not null and user_name is not null)"
 
     meta:
       business_owners: ["dental_communications_team", "patient_care_team"]
