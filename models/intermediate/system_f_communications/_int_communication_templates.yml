@@ -9,39 +9,38 @@ models:
 
       Grain: One row per unique communication template.
       Each template represents a distinct message pattern used in patient communications
-      and can be of various types (email, SMS, letter) and categories (appointment, billing, etc.).
-      The 12 records represent the system's standard communication templates used across all
-      patient interactions.
+      and can be of various types (email, SMS) and categories (appointment, billing, etc.).
+      Templates are sourced from Practice by Numbers campaigns, standardized text messages,
+      and auto-detected communication patterns.
 
       Key features:
-      - Consolidates templates from program properties and detected communication patterns
+      - Extracts templates from Practice by Numbers (PbN) campaign messages
+      - Includes standardized text message templates for common scenarios
+      - Auto-detects templates from frequently used communication patterns
       - Standardizes template structure with consistent metadata
-      - Classifies templates by type (email, SMS, letter) and purpose category
-      - Extracts variables/placeholders from template content
+      - Classifies templates by type (email, SMS) and purpose category
+      - Defines variables/placeholders for template personalization
       - Provides subject lines based on template purpose
       - Tracks template creation and update timestamps
       - Supports template reuse across the communication system
       - Enables consistent patient messaging across the practice
       - Uses PostgreSQL's pg_trgm extension for efficient text similarity matching
       - Implements GIN index on content for fast trigram searches
-      - Optimizes template matching with similarity threshold of 0.4
 
       Data Sources:
-      - stg_opendental__programproperty: Primary source for predefined templates
-      - int_patient_communications_base: Source for auto-detected communication patterns
-      - stg_opendental__commlog: Raw communication data
+      - int_patient_communications_base: Source for PbN campaign templates and auto-detected patterns
+      - Standardized text message templates defined in the model
 
       Business rules:
-      - Templates extracted from program properties with template-like content
-      - Template type determined by keywords in property description (email, SMS, letter)
-      - Template category assigned based on content analysis and keywords
-      - Variables extracted via regex pattern matching for {VARIABLE_NAME} placeholders
+      - PbN templates extracted from campaign messages with distinct subjects
+      - Text message templates follow standardized formats for common scenarios
+      - Template type determined by source (email for PbN, SMS for text messages)
+      - Template category assigned based on campaign name and content analysis
+      - Variables defined for each template type (e.g., PATIENT_NAME, CLINIC_NAME)
       - Auto-detected templates created from frequently used communication patterns
       - Templates marked as active by default for immediate availability
-      - Template content must be substantial (over 20 characters)
       - Each template has a standardized format regardless of source
       - Template matching uses trigram similarity for accurate content comparison
-      - Fallback to LIKE matching for non-PostgreSQL databases
       - Only active templates are used for matching
     tests:
       - dbt_utils.at_least_one_not_null:
@@ -53,7 +52,7 @@ models:
       # Template type validation
       - dbt_utils.expression_is_true:
           expression: >
-            template_type IN ('email', 'SMS', 'letter', 'phone')
+            template_type IN ('email', 'SMS')
           config:
             severity: error
             description: >
@@ -62,21 +61,21 @@ models:
       # Template category validation
       - dbt_utils.expression_is_true:
           expression: >
-            category IN ('appointment', 'billing', 'clinical', 'recall', 'marketing', 'insurance', 'follow_up', 'general')
+            category IN ('appointment', 'billing', 'clinical', 'recall', 'forms', 'general')
           config:
             severity: error
             description: >
               Template category must be one of the allowed values.
 
-      # Subject required for email and letter templates
+      # Subject required for email templates
       - dbt_utils.expression_is_true:
           expression: >
-            (template_type IN ('email', 'letter') AND subject IS NOT NULL)
-            OR (template_type NOT IN ('email', 'letter'))
+            (template_type = 'email' AND subject IS NOT NULL)
+            OR (template_type != 'email')
           config:
             severity: error
             description: >
-              Email and letter templates must have a subject line.
+              Email templates must have a subject line.
 
       # Template variable extraction validation
       - dbt_utils.expression_is_true:
@@ -95,42 +94,43 @@ models:
           - not_null
       
       - name: template_name
-        description: Name of the template
+        description: Name of the template (campaign name for PbN templates, template type for text messages)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "LENGTH(template_name) > 3"
       
       - name: template_type
-        description: Type of template (email, SMS, letter, etc.)
+        description: Type of template (email for PbN campaigns, SMS for text messages)
         tests:
           - not_null
           - accepted_values:
-              values: ['email', 'SMS', 'letter', 'phone']
+              values: ['email', 'SMS']
       
       - name: category
         description: Category of the template (appointment, billing, clinical, etc.)
         tests:
           - not_null
           - accepted_values:
-              values: ['appointment', 'billing', 'clinical', 'recall', 'marketing', 'insurance', 'follow_up', 'general']
+              values: ['appointment', 'billing', 'clinical', 'recall', 'forms', 'general']
       
       - name: subject
-        description: Subject line for the template
+        description: Subject line for the template (required for email templates)
         tests:
           - not_null:
-              where: "template_type IN ('email', 'letter')"
+              where: "template_type = 'email'"
       
       - name: content
-        description: Content of the template
+        description: Content of the template (message body for text messages, NULL for PbN templates)
         tests:
-          - not_null
+          - not_null:
+              where: "template_type = 'SMS'"
           - dbt_utils.expression_is_true:
               expression: "LENGTH(content) > 10"
               where: "content IS NOT NULL"
       
       - name: variables
-        description: Array of variables used in the template
+        description: Array of variables used in the template for personalization
         tests:
           - dbt_utils.not_empty_array:
               where: "content LIKE '%' || '{' || '%' || '}' || '%'"
@@ -181,11 +181,11 @@ models:
       contains_pii: false
       data_quality_requirements:
         - "All templates must have unique template_id values"
-        - "Template types must be one of the accepted values (email, SMS, letter, phone)"
+        - "Template types must be one of the accepted values (email, SMS)"
         - "Template categories must follow the established taxonomy"
-        - "Template content must be substantial (over 20 characters)"
+        - "Template content must be substantial (over 10 characters)"
         - "Templates with variables must have non-empty variables array"
-        - "Email and letter templates must have subject lines"
-        - "Variables should be extracted in the format {VARIABLE_NAME}"
+        - "Email templates must have subject lines"
+        - "Variables should be defined in the format {VARIABLE_NAME}"
         - "Template names should be descriptive and unique"
         - "Content must be properly formatted for the template type"

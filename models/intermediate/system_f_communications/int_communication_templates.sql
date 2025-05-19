@@ -17,79 +17,76 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
     Part of System F: Communications
     
     This model:
-    1. Consolidates templates used for patient communications
-    2. Standardizes template structure and metadata
-    3. Enables template management and tracking
-    4. Supports communication automation
+    1. Extracts templates from Practice by Numbers (PbN) campaign messages
+    2. Includes standardized text message templates
+    3. Properly categorizes templates by type and purpose
+    4. Supports template variables for personalization
 */
 
-WITH TemplateBase AS (
-    -- Source data would typically come from a templates table
-    -- Since we don't have a direct source, this is a placeholder implementation
-    -- that creates templates based on common communication patterns
-    
-    SELECT
-        -- Generate template IDs from program properties that might contain templates
-        {{ dbt_utils.generate_surrogate_key(['pp.program_property_id', 'pp.property_desc']) }} AS template_id,
-        CASE
-            WHEN pp.property_desc LIKE '%appointment%' THEN 'Appointment Reminder'
-            WHEN pp.property_desc LIKE '%confirm%' THEN 'Appointment Confirmation'
-            WHEN pp.property_desc LIKE '%recall%' THEN 'Recall Notice'
-            WHEN pp.property_desc LIKE '%balance%' OR pp.property_desc LIKE '%statement%' THEN 'Balance Reminder'
-            WHEN pp.property_desc LIKE '%birthday%' THEN 'Birthday Greeting'
-            WHEN pp.property_desc LIKE '%welcome%' THEN 'New Patient Welcome'
-            ELSE 'General Template'
-        END AS template_name,
-        CASE
-            WHEN pp.property_desc LIKE '%email%' THEN 'email'
-            WHEN pp.property_desc LIKE '%text%' OR pp.property_desc LIKE '%sms%' THEN 'SMS'
-            WHEN pp.property_desc LIKE '%letter%' THEN 'letter'
-            ELSE 'email'
-        END::text AS template_type,
-        CASE
-            WHEN pp.property_desc LIKE '%appointment%' OR pp.property_desc LIKE '%confirm%' THEN 'appointment'
-            WHEN pp.property_desc LIKE '%balance%' OR pp.property_desc LIKE '%statement%' THEN 'billing'
-            WHEN pp.property_desc LIKE '%treatment%' THEN 'clinical'
-            WHEN pp.property_desc LIKE '%recall%' THEN 'recall'
-            WHEN pp.property_desc LIKE '%birthday%' OR pp.property_desc LIKE '%welcome%' THEN 'marketing'
+WITH PbNTemplates AS (
+    -- Extract templates from PbN campaign messages
+    SELECT DISTINCT
+        {{ dbt_utils.generate_surrogate_key(['campaign_name', 'subject']) }} AS template_id,
+        campaign_name AS template_name,
+        'email' AS template_type,
+        CASE 
+            WHEN campaign_name LIKE '%Appointment%' THEN 'appointment'
+            WHEN campaign_name LIKE '%Accounts%' THEN 'billing'
+            WHEN campaign_name LIKE '%Treatment%' THEN 'clinical'
+            WHEN campaign_name LIKE '%Form%' THEN 'forms'
+            WHEN campaign_name LIKE '%Recall%' THEN 'recall'
             ELSE 'general'
         END AS category,
-        CASE
-            WHEN pp.property_desc LIKE '%appointment%' THEN 'Your upcoming appointment'
-            WHEN pp.property_desc LIKE '%confirm%' THEN 'Please confirm your appointment'
-            WHEN pp.property_desc LIKE '%recall%' THEN 'Time for your dental checkup'
-            WHEN pp.property_desc LIKE '%balance%' THEN 'Your account balance reminder'
-            WHEN pp.property_desc LIKE '%statement%' THEN 'Your dental statement'
-            WHEN pp.property_desc LIKE '%birthday%' THEN 'Happy Birthday from your dental team!'
-            WHEN pp.property_desc LIKE '%welcome%' THEN 'Welcome to our dental practice'
-            ELSE 'Notification from your dental practice'
-        END AS subject,
-        pp.property_value AS content,
-        
-        -- Extract template variables using common placeholders
-        -- This extracts variables that appear in format: {VARIABLE_NAME}
-        ARRAY(
-            SELECT DISTINCT matches[1]
-            FROM regexp_matches(pp.property_value, '\{([A-Za-z0-9_]+)\}', 'g') AS matches
-        ) AS variables,
-        
-        TRUE::boolean AS is_active,
-        NULL::integer AS created_by,
+        subject,
+        NULL AS content,  -- Content would need to be extracted from a different source
+        ARRAY['PATIENT_NAME', 'CLINIC_NAME', 'APPOINTMENT_DATE', 'PROVIDER_NAME']::text[] AS variables,
+        TRUE AS is_active,
+        NULL AS created_by,
         CURRENT_TIMESTAMP AS created_at,
         CURRENT_TIMESTAMP AS updated_at
-    FROM {{ ref('stg_opendental__programproperty') }} pp
-    WHERE 
-        pp.property_value IS NOT NULL
-        AND LENGTH(pp.property_value) > 20
-        AND (
-            pp.property_desc LIKE '%template%'
-            OR pp.property_desc LIKE '%message%'
-            OR pp.property_value LIKE '%' || '{' || '%' || '}' || '%' -- Contains placeholder variables
-        )
+    FROM (
+        SELECT DISTINCT
+            SPLIT_PART(content, 'campaign ', 2) AS campaign_name,
+            SPLIT_PART(SPLIT_PART(content, 'Subject:', 2), '¶', 1) AS subject
+        FROM {{ ref('int_patient_communications_base') }}
+        WHERE content LIKE '%Email sent via PbN for campaign%'
+    ) campaign_data
+),
+
+TextTemplates AS (
+    -- Define standard text message templates
+    SELECT DISTINCT
+        {{ dbt_utils.generate_surrogate_key(['template_type', 'content_pattern']) }} AS template_id,
+        template_type AS template_name,
+        'SMS' AS template_type,
+        'appointment' AS category,
+        NULL AS subject,
+        content_pattern AS content,
+        ARRAY['PATIENT_NAME', 'PHONE_NUMBER', 'CLINIC_NAME']::text[] AS variables,
+        TRUE AS is_active,
+        NULL AS created_by,
+        CURRENT_TIMESTAMP AS created_at,
+        CURRENT_TIMESTAMP AS updated_at
+    FROM (
+        SELECT 
+            'Appointment Reminder' AS template_type,
+            'Hello {PATIENT_NAME}! It''s time for a dental cleaning and checkup. Please call us now at {PHONE_NUMBER} to schedule your appointment. {CLINIC_NAME}' AS content_pattern
+        UNION ALL
+        SELECT 
+            'Missed Call Response' AS template_type,
+            'We are sorry that we missed your phone call. We are currently helping other patients. We will call you back as soon as we are able to or you can send us a text message here. {CLINIC_NAME}' AS content_pattern
+        UNION ALL
+        SELECT 
+            'Opt-in Confirmation' AS template_type,
+            'Thank you for opting in to receive text messages from {CLINIC_NAME}. You will now receive appointment reminders and important updates via text.' AS content_pattern
+        UNION ALL
+        SELECT 
+            'Opt-out Confirmation' AS template_type,
+            'You have been unsubscribed from receiving text messages from {CLINIC_NAME}. You will no longer receive appointment reminders or updates via text.' AS content_pattern
+    ) template_patterns
 ),
 
 -- Additional templates derived from communication logs
--- Looking for patterns that suggest templated content
 CommunicationTemplates AS (
     SELECT
         {{ dbt_utils.generate_surrogate_key(['communication_type', 'communication_category', 'content_pattern']) }} AS template_id,
@@ -160,7 +157,25 @@ SELECT
     updated_at::timestamp,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM TemplateBase
+FROM PbNTemplates
+
+UNION ALL
+
+SELECT
+    template_id::text,
+    template_name::text,
+    template_type::text,
+    category::text,
+    subject::text,
+    content::text,
+    variables::text[],
+    is_active::boolean,
+    created_by::integer,
+    created_at::timestamp,
+    updated_at::timestamp,
+    CURRENT_TIMESTAMP AS model_created_at,
+    CURRENT_TIMESTAMP AS model_updated_at
+FROM TextTemplates
 
 UNION ALL
 
