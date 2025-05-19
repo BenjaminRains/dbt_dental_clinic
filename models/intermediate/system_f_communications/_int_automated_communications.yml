@@ -192,11 +192,15 @@ models:
         description: >
           Identifier for the program or system that generated the communication.
           Used for tracking automated communications.
+          - 0: Legacy system communications (not stored in program table)
+          - 95: Legacy communication system (not stored in program table)
+          - 137: Practice by Numbers (PbN) automated communications
+          Other values should reference valid programs in stg_opendental__program.
         tests:
           - relationships:
               to: ref('stg_opendental__program')
               field: program_id
-              where: "program_id is not null"
+              where: "program_id is not null and program_id not in (0, 95)"
       
       - name: patient_name
         description: >
