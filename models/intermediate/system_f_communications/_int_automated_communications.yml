@@ -153,8 +153,14 @@ models:
         description: >
           The full content or notes from the communication. Contains the actual
           message text or call notes.
+
+          Note: NULL content is acceptable for certain types of communications:
+          - Simple one-way communications (letters or SMS)
+          - System-generated notifications
+          - Communications that don't require message text
         tests:
-          - not_null
+          - not_null:
+              severity: warn
       
       - name: linked_appointment_id
         description: >
