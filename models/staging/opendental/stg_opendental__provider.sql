@@ -5,6 +5,8 @@ with source as (
 staged as (
     select
         -- Primary key
+        -- Note: provider_id = 0 is a special case used for system-generated communications
+        -- including automated notifications, system messages, and staff-initiated communications
         "ProvNum" as provider_id,
         
         -- Provider identifiers

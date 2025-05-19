@@ -264,11 +264,17 @@ models:
         description: >
           Provider ID associated with the user, if applicable. Joined from 
           stg_opendental__userod for provider correlation.
+          
+          Note: provider_id = 0 represents system-generated communications:
+          - Type 603: Tertiary communication system (mode 5)
+          - Type 224: Primary appointment notification system (mode 1,4)
+          - Type 228: Secondary automated communication system (mode 4)
+          - Type 0: Legacy system communications (mode 5)
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
-              where: "provider_id is not null"
+              where: "provider_id is not null AND provider_id != 0"
       
       - name: created_at
         description: >

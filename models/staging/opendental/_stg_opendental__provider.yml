@@ -5,7 +5,15 @@ models:
     description: Standardized provider information from OpenDental
     columns:
       - name: provider_id
-        description: Unique identifier for the provider
+        description: >
+          Unique identifier for the provider.
+          
+          Note: provider_id = 0 is a special case used for system-generated communications
+          in the dental practice management system. This ID is used for:
+          - Automated appointment notifications
+          - System-generated communications
+          - Legacy system messages
+          - Staff-initiated communications through system interfaces
         tests:
           - unique
           - not_null
