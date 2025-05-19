@@ -119,7 +119,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2020-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "'{{ var('max_valid_date') }} 23:59:59'"
       
       - name: communication_type
         description: >
@@ -264,7 +264,7 @@ models:
               severity: warn
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'1900-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "'{{ var('max_valid_date') }}'"
       
       - name: user_name
         description: >
