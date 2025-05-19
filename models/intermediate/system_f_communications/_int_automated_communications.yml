@@ -77,11 +77,13 @@ models:
       - name: user_id
         description: >
           Foreign key to the user record. Identifies which staff member
-          initiated the communication.
+          initiated the communication. Note: user_id = 0 represents
+          system-generated communications.
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              where: "user_id != 0"
       
       - name: communication_datetime
         description: >
@@ -229,9 +231,11 @@ models:
       - name: user_name
         description: >
           Name of the staff member who initiated the communication,
-          joined from stg_opendental__userod.
+          joined from stg_opendental__userod. Note: System communications (user_id = 0)
+          will have NULL user_name.
         tests:
-          - not_null
+          - not_null:
+              where: "user_id != 0"
       
       - name: provider_id
         description: >
