@@ -70,8 +70,15 @@ WITH AutomatedComms AS (
         ON flags.communication_id = base.communication_id
     LEFT JOIN {{ ref('int_communication_templates') }} tmpl
         ON (
-            -- Match based on content similarity
+            -- Match based on content similarity using trigram
+            {% if target.type == 'postgres' %}
+            similarity(base.content, tmpl.content) > 0.4
+            {% else %}
+            -- Fallback to LIKE matching for non-PostgreSQL databases
             base.content LIKE '%' || LEFT(tmpl.content, 20) || '%'
+            {% endif %}
+            -- Only match active templates
+            AND tmpl.is_active = TRUE
             -- Or match based on category and type (with numeric mode handling)
             OR (base.communication_category = tmpl.category AND
                (CASE

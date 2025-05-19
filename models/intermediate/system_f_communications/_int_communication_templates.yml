@@ -22,6 +22,9 @@ models:
       - Tracks template creation and update timestamps
       - Supports template reuse across the communication system
       - Enables consistent patient messaging across the practice
+      - Uses PostgreSQL's pg_trgm extension for efficient text similarity matching
+      - Implements GIN index on content for fast trigram searches
+      - Optimizes template matching with similarity threshold of 0.4
 
       Data Sources:
       - stg_opendental__programproperty: Primary source for predefined templates
@@ -37,6 +40,9 @@ models:
       - Templates marked as active by default for immediate availability
       - Template content must be substantial (over 20 characters)
       - Each template has a standardized format regardless of source
+      - Template matching uses trigram similarity for accurate content comparison
+      - Fallback to LIKE matching for non-PostgreSQL databases
+      - Only active templates are used for matching
     tests:
       - dbt_utils.at_least_one_not_null:
           column_list: [template_name, content]

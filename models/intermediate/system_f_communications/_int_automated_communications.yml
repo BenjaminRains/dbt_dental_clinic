@@ -19,11 +19,21 @@ models:
       - Provides metrics on engagement (opens, clicks, replies)
       - Enables analysis of automated communication effectiveness
       - Supports campaign performance tracking
+      - Uses advanced template matching with trigram similarity
+      - Implements fallback matching for non-PostgreSQL databases
+      - Filters matches to active templates only
 
       Data Sources:
       - int_patient_communications_base: Base communication data
       - int_automated_communication_flags: Automation detection and metrics
-      - int_communication_templates: Template definitions
+      - int_communication_templates: Template definitions with trigram indexing
+
+      Template Matching Strategy:
+      - Primary matching uses PostgreSQL's trigram similarity (threshold 0.4)
+      - Fallback to LIKE matching for non-PostgreSQL databases
+      - Only matches against active templates
+      - Additional matching based on category and communication mode
+      - Optimized with GIN index on template content
 
       REFACTORED TO BREAK CIRCULAR DEPENDENCY:
       - Uses int_patient_communications_base for base data

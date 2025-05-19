@@ -1,8 +1,16 @@
 {{ config(
     materialized='table',
     schema='intermediate',
-    unique_key='template_id'
+    unique_key='template_id',
+    indexes=[
+        {'columns': ['content'], 'type': 'gin', 'ops': 'gin_trgm_ops'}
+    ]
 ) }}
+
+-- Enable pg_trgm extension if not already enabled
+{% if target.type == 'postgres' %}
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+{% endif %}
 
 /*
     Intermediate model for communication templates
