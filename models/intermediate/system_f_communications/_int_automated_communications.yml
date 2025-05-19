@@ -143,11 +143,17 @@ models:
       - name: communication_mode
         description: >
           The mode or channel used for communication. Maps from the source
-          system's "mode" field (1=email, 3=letter, 5=SMS).
+          system's "mode" field:
+          - 0: Unknown/Unspecified mode
+          - 1: Email communications
+          - 2: Phone call communications
+          - 3: Letter communications
+          - 4: In-person communications
+          - 5: SMS/text message communications
         tests:
           - not_null
           - accepted_values:
-              values: [1, 3, 5]
+              values: [0, 1, 2, 3, 4, 5]
       
       - name: content
         description: >
