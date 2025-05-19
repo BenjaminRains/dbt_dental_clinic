@@ -288,12 +288,26 @@ models:
       - name: trigger_type
         description: >
           Type of trigger that initiated the automated communication.
-          Examples: appointment_reminder, recall_notice, birthday_greeting,
-          balance_reminder, new_patient_welcome, general_notification.
+          Examples:
+          - appointment_reminder: Standard appointment reminders
+          - appointment_confirmation: Confirmations of scheduled appointments
+          - review_request: Requests for patient reviews
+          - balance_notice: Notifications about account balances
+          - broken_appointment: Notifications about broken/cancelled appointments
+          - post_op_instructions: Post-operative care instructions
+          - form_request: Requests to complete forms
+          - patient_response: Inbound communications from patients
+          - preference_update: Updates to patient communication preferences
+          - annual_notification: Annual communications like end-of-year letters
+          - delivery_failure: System notifications about failed message delivery
+          - other: Miscellaneous automated communications
         tests:
           - not_null
           - accepted_values:
-              values: ['appointment_reminder', 'recall_notice', 'birthday_greeting', 'balance_reminder', 'new_patient_welcome', 'general_notification']
+              values: ['appointment_reminder', 'appointment_confirmation', 'review_request', 
+                      'balance_notice', 'broken_appointment', 'post_op_instructions', 
+                      'form_request', 'patient_response', 'preference_update', 
+                      'annual_notification', 'delivery_failure', 'other']
       
       - name: status
         description: >

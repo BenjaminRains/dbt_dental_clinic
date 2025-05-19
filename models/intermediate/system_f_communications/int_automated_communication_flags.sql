@@ -104,35 +104,58 @@ ContentPatterns AS (
             ELSE FALSE
         END as has_automation_indicators,
         CASE 
+            -- Appointment related triggers
             WHEN comm.content LIKE '%appointment%' AND (
                 comm.content LIKE '%starting on%' OR 
                 comm.content LIKE '%scheduled for%' OR
                 comm.content LIKE '%tomorrow%' OR
                 comm.content LIKE '%confirm%' OR
                 comm.content LIKE '%attempted to contact%' OR
-                comm.content LIKE '%on the schedule%'
+                comm.content LIKE '%on the schedule%' OR
+                comm.content LIKE '%time for a dental cleaning%'
             ) THEN 'appointment_reminder'
-            WHEN comm.content LIKE '%appointment%' AND comm.content LIKE '%has been confirmed%' THEN 'appointment_confirmation'
+            WHEN comm.content LIKE '%appointment%' AND (
+                comm.content LIKE '%confirmed via%' OR
+                comm.content LIKE '%has been confirmed%'
+            ) THEN 'appointment_confirmation'
+            WHEN comm.content LIKE '%broken%' OR 
+                 comm.content LIKE '%BROKEN%' OR
+                 comm.content LIKE '%change this appt%' THEN 'broken_appointment'
+            
+            -- Financial triggers
             WHEN comm.content LIKE '%balance%' OR 
                  comm.content LIKE '%account balance%' OR 
                  comm.content LIKE '%outstanding%' OR
                  comm.content LIKE '%payment%' OR
                  comm.content LIKE '%paid%' THEN 'balance_notice'
+            
+            -- Patient interaction triggers
+            WHEN comm.content LIKE '%Patient Text Received%' THEN 'patient_response'
+            WHEN comm.content LIKE '%opted in for text%' OR
+                 comm.content LIKE '%opted out%' THEN 'preference_update'
+            
+            -- Review and form triggers
+            WHEN comm.content LIKE '%review%' OR 
+                 comm.content LIKE '%experience%' OR 
+                 comm.content LIKE '%trusting us%' OR
+                 comm.content LIKE '%questions about the treatment%' THEN 'review_request'
             WHEN comm.content LIKE '%forms%' AND (
                 comm.content LIKE '%complete%' OR 
                 comm.content LIKE '%update%' OR
                 comm.content LIKE '%new patient%'
             ) THEN 'form_request'
-            WHEN comm.content LIKE '%review%' OR 
-                 comm.content LIKE '%experience%' OR 
-                 comm.content LIKE '%trusting us%' OR
-                 comm.content LIKE '%questions about the treatment%' THEN 'review_request'
+            
+            -- Clinical triggers
             WHEN comm.content LIKE '%post operative%' OR 
                  comm.content LIKE '%instructions%' OR
                  comm.content LIKE '%Crown%' THEN 'post_op_instructions'
-            WHEN comm.content LIKE '%broken%' OR 
-                 comm.content LIKE '%BROKEN%' OR
-                 comm.content LIKE '%change this appt%' THEN 'broken_appointment'
+            
+            -- System notifications
+            WHEN comm.content LIKE '%END OF YEAR LETTER%' OR
+                 comm.content LIKE '%annual%' THEN 'annual_notification'
+            WHEN comm.content LIKE '%DELIVERY FAILURE%' OR
+                 comm.content LIKE '%Send Failed%' THEN 'delivery_failure'
+            
             ELSE 'other'
         END as detected_trigger_type,
         CASE
