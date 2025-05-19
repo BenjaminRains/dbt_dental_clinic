@@ -20,6 +20,10 @@ models:
       - Includes basic categorization and outcome determination
       - Links to patient and user context
       - Enhanced direction handling (outbound, inbound, system, unknown)
+      - Improved regex patterns for entity extraction
+      - More comprehensive content analysis patterns
+      - Tracks first visit date for patient history
+      - Enhanced data quality validations and tests
 
       Data Sources:
       - stg_opendental__commlog: Primary source of communication data
@@ -27,6 +31,19 @@ models:
       - stg_opendental__userod: User and provider information
       - stg_opendental__appointment: Appointment data for last visit tracking
       - stg_opendental__histappointment: Historical appointment data for last visit tracking
+
+      Business rules:
+      - Communication direction determined by the is_sent flag (2=outbound, 1=inbound, 0=system, else unknown)
+      - Communication category extracted via keyword analysis from message content
+      - Linked entities (appointments, claims, procedures) extracted via regex pattern matching
+      - Phone numbers extracted from notes for contact tracking
+      - Follow-up requirements detected through keyword analysis
+      - Default follow-up date set to 7 days in the future when explicit date not found
+      - Full patient context linked through patient_id
+      - User context linked through user_id with optional provider association
+      - Last visit date calculated from both current and historical appointment data
+      - First visit date tracked for patient history
+      - Enhanced data quality validations for all fields
 
     config:
       materialized: incremental
@@ -102,6 +119,11 @@ models:
           - not_null
           - accepted_values:
               values: ['outbound', 'inbound', 'system', 'unknown']
+      
+      - name: subject
+        description: >
+          Subject line or title of the communication. May be null for communications
+          without a formal subject (e.g., phone calls).
       
       - name: content
         description: >
