@@ -25,6 +25,14 @@ models:
       - Tracks first visit date for patient history
       - Enhanced data quality validations and tests
 
+      System Communications (user_id = 0):
+      - Type 224: Primary appointment notification system (mode 1,4)
+      - Type 228: Secondary automated communication system (mode 4)
+      - Type 603: Tertiary communication system (mode 5)
+      - Type 0: Legacy system communications (mode 5)
+      These automated communications are primarily outbound and focused on appointment notifications
+      and general patient communications.
+
       Data Sources:
       - stg_opendental__commlog: Primary source of communication data
       - int_patient_profile: Patient demographic information
