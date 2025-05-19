@@ -104,9 +104,23 @@ models:
               field: user_id
               severity: warn
       - name: communication_type
-        description: Type of communication (call, email, SMS, etc.)
+        description: >
+          Type of communication in the system. Main types:
+          - 0: Legacy system communications (mode 5) - General automated communications
+          - 224: Primary appointment notification system (mode 1,4) - Appointment-related communications
+          - 228: Secondary automated communication system (mode 4) - General patient communications
+          - 603: Tertiary communication system (mode 5) - Clinical communications
+          - 226: Billing and financial communications
+          - 225: Insurance and claims communications
+          - 571: Insurance narratives and documentation
+          - 432: Medical clearances and prescriptions
+          - 509/510: Surgical procedures and clearances
+          - 614/615: Referrals and specialist communications
+          - 636: Treatment plans and financial arrangements
         tests:
           - not_null
+          - accepted_values:
+              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
       - name: communication_direction
         description: Direction of communication (inbound, outbound)
         tests:
