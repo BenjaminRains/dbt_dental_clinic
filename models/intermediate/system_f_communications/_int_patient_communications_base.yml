@@ -247,8 +247,6 @@ models:
           joined from stg_opendental__userod.
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "user_id is not null"
       
       - name: provider_id
         description: >
@@ -284,6 +282,11 @@ models:
         tests:
           - not_null
 
+    tests:
+      # Validates that user_name column is populated whenever user_id column has a value
+      - dbt_utils.expression_is_true:
+          expression: "user_id is null or user_name is not null"
+
     meta:
       business_owners: ["dental_communications_team", "patient_care_team"]
       technical_owners: ["data_engineering_team"]
@@ -299,4 +302,4 @@ models:
         - "Content analysis for categorization must be accurate and consistent"
         - "Follow-up tracking must accurately reflect communication requirements"
         - "Last visit date must be the most recent valid completed visit"
-        - "Future incremental loading must only process new communications" 
+        - "Future incremental loading must only process new communications"
