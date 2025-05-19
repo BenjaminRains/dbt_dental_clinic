@@ -4,7 +4,7 @@ models:
   - name: int_patient_communications_base
     description: >
       Base model for patient communications that provides clean, foundational data
-      without any automation detection logic. This model serves as the starting point
+      with enhanced tracking capabilities. This model serves as the starting point
       for all communication-related models in the system.
 
       Grain: One row per individual communication event between the dental office and a patient.
@@ -14,16 +14,19 @@ models:
       Key features:
       - Provides clean, foundational communication data
       - Includes only essential fields and joins
-      - No automation detection logic
-      - Serves as the base for other communication models
+      - Tracks follow-up activities and requirements
+      - Includes last visit date tracking
       - Extracts linked entities from message content
       - Includes basic categorization and outcome determination
       - Links to patient and user context
+      - Enhanced direction handling (outbound, inbound, system, unknown)
 
       Data Sources:
       - stg_opendental__commlog: Primary source of communication data
       - int_patient_profile: Patient demographic information
       - stg_opendental__userod: User and provider information
+      - stg_opendental__appointment: Appointment data for last visit tracking
+      - stg_opendental__histappointment: Historical appointment data for last visit tracking
 
     config:
       materialized: incremental
@@ -92,12 +95,13 @@ models:
       
       - name: direction
         description: >
-          Indicates whether the communication was outbound (from practice to patient)
-          or inbound (from patient to practice). Derived from the is_sent flag.
+          Indicates the direction of the communication. Can be outbound (from practice to patient),
+          inbound (from patient to practice), system (automated system message), or unknown.
+          Derived from the is_sent flag.
         tests:
           - not_null
           - accepted_values:
-              values: ['outbound', 'inbound']
+              values: ['outbound', 'inbound', 'system', 'unknown']
       
       - name: content
         description: >
@@ -110,22 +114,42 @@ models:
         description: >
           Foreign key to appointment record if the communication references
           a specific appointment. Extracted from content using regex pattern matching.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              where: "linked_appointment_id is not null"
       
       - name: linked_claim_id
         description: >
           Foreign key to claim record if the communication references
           a specific insurance claim. Extracted from content using regex pattern matching.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              where: "linked_claim_id is not null"
       
       - name: linked_procedure_id
         description: >
           Foreign key to procedure record if the communication references
           a specific dental procedure. Extracted from content using regex pattern matching.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              where: "linked_procedure_id is not null"
       
       - name: contact_phone_number
         description: >
           Phone number extracted from the communication note, typically in format "Number XXXXXXXXXX".
           Extracted via regex pattern matching from the content when phone numbers are mentioned.
           Format is a 10-digit string without formatting characters.
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 10
+              max_value: 10
+              where: "contact_phone_number is not null"
       
       - name: communication_category
         description: >
@@ -145,6 +169,23 @@ models:
           - accepted_values:
               values: ['confirmed', 'rescheduled', 'cancelled', 'no_answer', 'completed']
       
+      - name: follow_up_required
+        description: >
+          Boolean flag indicating whether this communication requires follow-up action.
+          Determined through content analysis looking for follow-up related keywords.
+        tests:
+          - not_null
+      
+      - name: follow_up_date
+        description: >
+          Date when follow-up action should be taken. Defaults to 7 days from communication
+          if follow-up is required but no specific date is mentioned.
+      
+      - name: follow_up_task_id
+        description: >
+          Foreign key to task record if a follow-up task was created.
+          Currently not implemented but reserved for future task integration.
+      
       - name: program_id
         description: >
           Identifier for the program or system that generated the communication.
@@ -153,19 +194,37 @@ models:
       - name: patient_name
         description: >
           Patient's preferred name, joined from int_patient_profile.
+        tests:
+          - not_null
       
       - name: patient_status
         description: >
           Current status of the patient, joined from int_patient_profile.
+        tests:
+          - not_null
       
       - name: birth_date
         description: >
           Patient's date of birth, joined from int_patient_profile.
+        tests:
+          - not_null
+      
+      - name: first_visit_date
+        description: >
+          Date of patient's first visit to the practice, joined from int_patient_profile.
+      
+      - name: last_visit_date
+        description: >
+          Date of patient's most recent completed visit, derived from both current
+          and historical appointment data.
       
       - name: user_name
         description: >
           Name of the staff member who initiated or received the communication,
           joined from stg_opendental__userod.
+        tests:
+          - not_null
+          - where: "user_id is not null"
       
       - name: provider_id
         description: >
@@ -214,4 +273,6 @@ models:
         - "Linked entities (appointments, claims, procedures) must be valid"
         - "Regular expression pattern extraction must detect valid entity IDs"
         - "Content analysis for categorization must be accurate and consistent"
+        - "Follow-up tracking must accurately reflect communication requirements"
+        - "Last visit date must be the most recent valid completed visit"
         - "Future incremental loading must only process new communications" 
