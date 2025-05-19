@@ -36,7 +36,9 @@ WITH DailyCommunications AS (
     FROM {{ ref('int_patient_communications_base') }}
     
     {% if is_incremental() %}
-    WHERE communication_datetime >= (SELECT MAX(date) FROM {{ this }})
+    WHERE communication_datetime::date >= (
+        SELECT MAX(date) + INTERVAL '1 day' FROM {{ this }}
+    )
     {% endif %}
     
     GROUP BY 
@@ -71,7 +73,9 @@ ResponseMetrics AS (
     FROM {{ ref('int_patient_communications_base') }}
 
     {% if is_incremental() %}
-    WHERE communication_datetime >= (SELECT MAX(date) FROM {{ this }})
+    WHERE communication_datetime::date >= (
+        SELECT MAX(date) + INTERVAL '1 day' FROM {{ this }}
+    )
     {% endif %}
 
     GROUP BY
