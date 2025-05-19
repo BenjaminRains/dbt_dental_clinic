@@ -64,7 +64,25 @@ WITH AutomatedComms AS (
         base.created_at,
         base.updated_at,
         CURRENT_TIMESTAMP AS model_created_at,
-        CURRENT_TIMESTAMP AS model_updated_at
+        CURRENT_TIMESTAMP AS model_updated_at,
+        
+        -- Add a row number to handle multiple template matches
+        ROW_NUMBER() OVER (
+            PARTITION BY base.communication_id 
+            ORDER BY 
+                -- Prioritize content similarity matches
+                CASE 
+                    WHEN {% if target.type == 'postgres' %}
+                         similarity(base.content, tmpl.content) > 0.4
+                    {% else %}
+                         base.content LIKE '%' || LEFT(tmpl.content, 20) || '%'
+                    {% endif %}
+                    THEN 1
+                    ELSE 2
+                END,
+                -- Then by template creation date (newer templates preferred)
+                tmpl.created_at DESC
+        ) as template_rank
     FROM {{ ref('int_automated_communication_flags') }} flags
     INNER JOIN {{ ref('int_patient_communications_base') }} base
         ON flags.communication_id = base.communication_id
@@ -79,14 +97,17 @@ WITH AutomatedComms AS (
             {% endif %}
             -- Only match active templates
             AND tmpl.is_active = TRUE
-            -- Or match based on category and type (with numeric mode handling)
-            OR (base.communication_category = tmpl.category AND
-               (CASE
-                  WHEN tmpl.template_type = 'email' THEN 1
-                  WHEN tmpl.template_type = 'SMS' THEN 5
-                  WHEN tmpl.template_type = 'letter' THEN 3
-                  ELSE NULL
-                END) = base.communication_mode)
+        )
+        OR (
+            -- Fallback to category/mode matching if no content match
+            base.communication_category = tmpl.category 
+            AND tmpl.is_active = TRUE
+            AND (CASE
+                WHEN tmpl.template_type = 'email' THEN 1
+                WHEN tmpl.template_type = 'SMS' THEN 5
+                WHEN tmpl.template_type = 'letter' THEN 3
+                ELSE NULL
+            END) = base.communication_mode
         )
     
     -- For incremental models, only process new records
@@ -133,3 +154,4 @@ SELECT
     model_created_at,
     model_updated_at
 FROM AutomatedComms
+WHERE template_rank = 1  -- Only keep the best template match
