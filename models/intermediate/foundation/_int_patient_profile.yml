@@ -129,12 +129,17 @@ models:
       - name: patient_status
         description: >
           Current status of the patient
-          - 2 = Active
-          - Other statuses indicate various inactive states
+          Values:
+          - 0 = Patient (active)
+          - 1 = NonPatient
+          - 2 = Inactive
+          - 3 = Archived
+          - 4 = Deceased
+          - 5 = Deleted
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+              values: [0, 1, 2, 3, 4, 5]
 
       - name: position_code
         description: Patient position classification
