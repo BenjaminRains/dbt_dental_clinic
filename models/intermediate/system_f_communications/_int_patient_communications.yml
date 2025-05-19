@@ -3,6 +3,10 @@ version: 2
 models:
   - name: int_patient_communications
     description: >
+      DEPRECATED: This model is deprecated and will be removed in a future version.
+      Please use int_patient_communications_base instead, which includes all the same functionality
+      plus additional features and better structure.
+      
       Comprehensive patient communications model that consolidates all patient interaction
       data into a structured, searchable format. This model serves as the central hub for tracking
       and analyzing all patient communications within the dental practice.

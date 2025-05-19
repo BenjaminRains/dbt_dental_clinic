@@ -6,7 +6,7 @@
 
 /*
     DEPRECATED: This model is deprecated and will be removed in a future version.
-    Please use int_patient_communications_base.sql instead, which includes all the same functionality
+    Please use int_patient_communications_base instead, which includes all the same functionality
     plus additional features and better structure.
     
     Original model description:
