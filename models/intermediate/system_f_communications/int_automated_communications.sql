@@ -13,128 +13,78 @@
     2. Links to templates and base communication records
     3. Provides metrics on communication engagement
     4. Supports analysis of automated communication effectiveness
-
-    NOTE ON CIRCULAR DEPENDENCY:
-    There is a circular dependency between this model and int_communication_templates:
-    - This model needs int_communication_templates for template matching
-    - int_communication_templates uses int_patient_communications to detect patterns
-    - int_patient_communications needs to add program_id for this model to filter by
-
-    REFACTORING OPTIONS:
-    1. Break the dependency cycle by having communication_templates use raw staging models
-    2. Add a direct reference to staging models in this file for program_id filtering
-    3. Use a two-phase approach with separate model runs
 */
 
 WITH AutomatedComms AS (
-    -- Identify likely automated communications from communication logs
-    -- We'll look for patterns that suggest automated origin:
-    -- 1. Communications sent in batches (multiple identical messages in short time)
-    -- 2. Communications with template-like content
-    -- 3. Communications linked to specific programs
     SELECT
-        -- Generate a surrogate key as the primary identifier
-        {{ dbt_utils.generate_surrogate_key(['comm.communication_id', 'tmpl.template_id']) }} AS automated_communication_id,
-        comm.communication_id,
+        -- Use the automated_communication_id from flags
+        flags.automated_communication_id,
+        
+        -- Base communication data
+        base.communication_id,
+        base.patient_id,
+        base.user_id,
+        base.communication_datetime,
+        base.communication_type,
+        base.communication_mode,
+        base.content,
+        base.linked_appointment_id,
+        base.linked_claim_id,
+        base.linked_procedure_id,
+        base.contact_phone_number,
+        base.communication_category,
+        base.outcome,
+        base.program_id,
+        
+        -- Patient context
+        base.patient_name,
+        base.patient_status,
+        base.birth_date,
+        
+        -- User context
+        base.user_name,
+        base.provider_id,
+        
+        -- Automation flags and metrics
+        flags.trigger_type,
+        flags.status,
+        flags.open_count,
+        flags.click_count,
+        flags.reply_count,
+        flags.bounce_count,
+        
+        -- Template information
         tmpl.template_id,
-        CASE 
-            WHEN comm.content LIKE '%appointment reminder%' THEN 'appointment_reminder'
-            WHEN comm.content LIKE '%recall%' THEN 'recall_notice'
-            WHEN comm.content LIKE '%birthday%' THEN 'birthday_greeting'
-            WHEN comm.content LIKE '%balance%' THEN 'balance_reminder'
-            WHEN comm.content LIKE '%welcome%' THEN 'new_patient_welcome'
-            ELSE 'general_notification'
-        END AS trigger_type,
+        tmpl.template_name,
+        tmpl.template_type,
+        tmpl.category AS template_category,
+        tmpl.subject AS template_subject,
         
-        -- Extract details about what triggered the communication
-        CASE
-            WHEN comm.content LIKE '%appointment%' AND comm.linked_appointment_id IS NOT NULL 
-                THEN 'appointment_id=' || comm.linked_appointment_id
-            WHEN comm.content LIKE '%statement%' AND comm.content ~ '(?:statement|bill)\\s+#\\s*([0-9]{1,7})\\b' 
-                THEN 'statement_id=' || REGEXP_REPLACE(SUBSTRING(comm.content FROM '(?:statement|bill)\\s+#\\s*([0-9]{1,7})\\b'), '[^0-9]', '', 'g')
-            WHEN comm.content LIKE '%recall%' AND comm.content ~ 'recall\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})' 
-                THEN 'recall_date=' || SUBSTRING(comm.content FROM 'recall\\s+([0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4})')
-            ELSE NULL
-        END AS trigger_details,
-        
-        -- Scheduled time - default to creation time for records without explicit schedule
-        comm.created_at AS scheduled_datetime,
-        
-        -- Sent time - communication_datetime from commlog
-        comm.communication_datetime AS sent_datetime,
-        
-        -- Status - derive from patterns in content and outcome
-        CASE
-            WHEN comm.outcome IN ('confirmed', 'rescheduled') THEN 'responded_positive'
-            WHEN comm.outcome = 'cancelled' THEN 'responded_negative'
-            WHEN comm.outcome = 'no_answer' THEN 'undelivered'
-            ELSE 'sent'
-        END AS status,
-        
-        -- Metrics - these would ideally come from message tracking systems
-        -- For now, we'll estimate based on patterns
-        1 AS recipient_count, -- Default to 1 per message, would aggregate batch sends in production
-        
-        -- Email tracking metrics (placeholder implementation)
-        CASE WHEN comm.communication_mode = 1 AND comm.content LIKE '%opened%' THEN 1 ELSE 0 END AS open_count,
-        CASE WHEN comm.communication_mode = 1 AND comm.content LIKE '%clicked%' THEN 1 ELSE 0 END AS click_count,
-        
-        -- Reply tracking for all modes
-        CASE WHEN EXISTS (
-            SELECT 1 FROM {{ ref('int_patient_communications') }} reply
-            WHERE reply.patient_id = comm.patient_id
-              AND reply.direction = 'inbound'
-              AND reply.communication_datetime BETWEEN comm.communication_datetime 
-                  AND comm.communication_datetime + INTERVAL '3 days'
-        ) THEN 1 ELSE 0 END AS reply_count,
-        
-        -- Bounce tracking for email
-        CASE WHEN comm.communication_mode = 1 AND comm.content LIKE '%bounce%' THEN 1 ELSE 0 END AS bounce_count,
-        
-        -- Metadata fields
+        -- Metadata
+        base.created_at,
+        base.updated_at,
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
-    FROM {{ ref('int_patient_communications') }} comm
-    JOIN {{ ref('int_communication_templates') }} tmpl
+    FROM {{ ref('int_automated_communication_flags') }} flags
+    INNER JOIN {{ ref('int_patient_communications_base') }} base
+        ON flags.communication_id = base.communication_id
+    LEFT JOIN {{ ref('int_communication_templates') }} tmpl
         ON (
             -- Match based on content similarity
-            comm.content LIKE '%' || LEFT(tmpl.content, 20) || '%'
+            base.content LIKE '%' || LEFT(tmpl.content, 20) || '%'
             -- Or match based on category and type (with numeric mode handling)
-            OR (comm.communication_category = tmpl.category AND
+            OR (base.communication_category = tmpl.category AND
                (CASE
                   WHEN tmpl.template_type = 'email' THEN 1
                   WHEN tmpl.template_type = 'SMS' THEN 5
                   WHEN tmpl.template_type = 'letter' THEN 3
                   ELSE NULL
-                END) = comm.communication_mode)
-        )
-    WHERE
-        -- Filter for likely automated communications
-        comm.direction = 'outbound'
-        AND (
-            -- Look for automated communications in other ways:
-            -- 1. Communications with identical content sent repeatedly
-            -- 2. Communications with standardized formats
-            -- 3. Communications with template-like content
-            comm.content ~* '(automated|auto-generated|auto generated|do not reply|do not respond|noreply)'
-            -- Messages with template-like content (checking for template variables with pattern {VARIABLE_NAME})
-            OR comm.content ~ '\{[A-Za-z0-9_]+\}'
-            OR (comm.content = tmpl.content)
-            -- Messages sent in batches (look for identical content sent to multiple patients)
-            OR EXISTS (
-                SELECT 1
-                FROM {{ ref('int_patient_communications') }} batch
-                WHERE batch.content = comm.content
-                AND batch.communication_datetime BETWEEN comm.communication_datetime - INTERVAL '5 minutes'
-                    AND comm.communication_datetime + INTERVAL '5 minutes'
-                GROUP BY batch.content, batch.communication_datetime
-                HAVING COUNT(DISTINCT batch.patient_id) > 3
-            )
+                END) = base.communication_mode)
         )
     
     -- For incremental models, only process new records
     {% if is_incremental() %}
-    AND comm.communication_datetime > (SELECT MAX(sent_datetime) FROM {{ this }})
+    WHERE base.communication_datetime > (SELECT MAX(communication_datetime) FROM {{ this }})
     {% endif %}
 )
 
@@ -142,17 +92,37 @@ WITH AutomatedComms AS (
 SELECT
     automated_communication_id,
     communication_id,
-    template_id,
+    patient_id,
+    user_id,
+    communication_datetime,
+    communication_type,
+    communication_mode,
+    content,
+    linked_appointment_id,
+    linked_claim_id,
+    linked_procedure_id,
+    contact_phone_number,
+    communication_category,
+    outcome,
+    program_id,
+    patient_name,
+    patient_status,
+    birth_date,
+    user_name,
+    provider_id,
     trigger_type,
-    trigger_details,
-    scheduled_datetime,
-    sent_datetime,
     status,
-    recipient_count,
     open_count,
     click_count,
     reply_count,
     bounce_count,
+    template_id,
+    template_name,
+    template_type,
+    template_category,
+    template_subject,
+    created_at,
+    updated_at,
     model_created_at,
     model_updated_at
 FROM AutomatedComms
