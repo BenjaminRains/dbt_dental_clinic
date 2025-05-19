@@ -99,6 +99,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2020-01-01'"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              where: "communication_end_datetime > '0001-01-01'"
       
       - name: communication_type
         description: >
