@@ -31,6 +31,7 @@ WITH CommunicationBase AS (
             WHEN cl.is_sent = 0 THEN 'system'
             ELSE 'unknown'
         END AS direction,
+        NULL AS subject,
         cl.note AS content,
         -- Extract appointment ID if present in the note
         CASE
@@ -165,6 +166,7 @@ SELECT
     cb.communication_type,
     cb.communication_mode,
     cb.direction,
+    cb.subject,
     cb.content,
     cb.linked_appointment_id,
     cb.linked_claim_id,
