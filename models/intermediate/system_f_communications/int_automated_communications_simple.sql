@@ -5,6 +5,28 @@
 ) }}
 
 /*
+    DEPRECATION NOTICE:
+    This model is deprecated and will be removed in a future release.
+    
+    Reason for deprecation:
+    - The circular dependency this model was created to solve has been properly resolved
+    - The main int_automated_communications model now provides better functionality
+    - The int_automated_communication_flags model handles automation detection more robustly
+    
+    Please use int_automated_communications instead, which provides:
+    - Better data quality checks and documentation
+    - Proper relationships and tests
+    - More comprehensive functionality
+    - Better template matching
+    - Improved automation detection
+    
+    Migration path:
+    - Replace references to this model with int_automated_communications
+    - Update any dependent models to use the new structure
+    - Contact the data engineering team if you need assistance with migration
+*/
+
+/*
     Simplified version of automated communications model
     Part of System F: Communications
     
