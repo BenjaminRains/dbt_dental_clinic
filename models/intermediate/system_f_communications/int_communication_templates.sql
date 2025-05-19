@@ -99,7 +99,13 @@ CommunicationTemplates AS (
             WHEN communication_category = 'follow_up' THEN 'Follow-up'
             ELSE 'General'
         END || ' Template' AS template_name,
-        communication_mode::text AS template_type,
+        CASE 
+            WHEN communication_mode = 1 THEN 'email'  -- Email communications
+            WHEN communication_mode = 3 THEN 'letter' -- Phone calls
+            WHEN communication_mode = 4 THEN 'SMS'    -- Text messages
+            WHEN communication_mode = 5 THEN 'SMS'    -- Alternative text message mode
+            ELSE NULL
+        END AS template_type,
         communication_category::text AS category,
         'Auto-detected ' || communication_category || ' communication' AS subject,
         -- Use a representative content example
