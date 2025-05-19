@@ -2,15 +2,18 @@
     materialized='table',
     schema='intermediate',
     unique_key='template_id',
-    indexes=[
-        {'columns': ['content'], 'type': 'gin', 'ops': 'gin_trgm_ops'}
+    post_hook=[
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_content_gin_idx ON {{ this }} USING gin (content gin_trgm_ops)"
     ]
 ) }}
 
--- Enable pg_trgm extension if not already enabled
-{% if target.type == 'postgres' %}
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-{% endif %}
+/*
+    Note: The pg_trgm extension must be created at the database level before running this model.
+    You can create it using:
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    
+    This should be done by a database administrator or through your database migration process.
+*/
 
 /*
     Intermediate model for communication templates
