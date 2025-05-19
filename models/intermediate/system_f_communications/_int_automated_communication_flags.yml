@@ -17,11 +17,15 @@ models:
       - Tracks engagement metrics (opens, clicks, replies)
       - Monitors delivery status
       - Supports analysis of automated communication effectiveness
+      - Pre-aggregates batch communications for performance
+      - Optimizes pattern matching with pre-filtered content
+      - Includes safety checks for batch detection and self-matching
 
       Data Sources:
       - int_patient_communications_base: Base communication data
       - Pattern matching for automation detection
       - Content analysis for trigger identification
+      - stg_opendental__commlog: For reply tracking
 
     config:
       materialized: incremental
@@ -49,13 +53,13 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('int_patients')
+              to: ref('int_patient_profile')
               field: patient_id
       
       - name: automated_communication_id
         description: >
           Surrogate key for the automated communication record.
-          Generated based on communication_id and content.
+          Generated based on communication_id and content using dbt_utils.generate_surrogate_key.
         tests:
           - unique
           - not_null
@@ -73,6 +77,7 @@ models:
         description: >
           Boolean flag indicating whether this communication is likely automated.
           Determined through pattern matching, program association, and batch detection.
+          True if any of: has automation indicators, has program_id, or is part of a batch.
         tests:
           - not_null
           - is_boolean_or_null
@@ -82,6 +87,7 @@ models:
           Type of trigger that initiated the automated communication.
           Examples: appointment_reminder, appointment_confirmation, balance_notice,
           form_request, review_request, post_op_instructions, broken_appointment, other.
+          Determined through content pattern matching.
         tests:
           - not_null
           - accepted_values:
@@ -94,6 +100,7 @@ models:
           Type of campaign that generated this communication.
           Examples: appointment_reminders, accounts_receivable, crown_instructions,
           form_invite, unscheduled_treatment.
+          Determined through content pattern matching.
         tests:
           - accepted_values:
               values: ['appointment_reminders', 'accounts_receivable', 'crown_instructions',
@@ -103,6 +110,7 @@ models:
         description: >
           Current status of the automated communication.
           Possible values: sent, responded_positive, responded_negative, undelivered.
+          Derived from the outcome field in the base model.
         tests:
           - not_null
           - accepted_values:
@@ -111,20 +119,24 @@ models:
       - name: open_count
         description: >
           Number of times the communication was opened (for email communications).
-          Currently estimated based on content patterns.
+          Currently estimated based on content patterns, only applicable for email mode (1).
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+          - dbt_utils.expression_is_true:
+              expression: "communication_mode = 1 OR open_count = 0"
       
       - name: click_count
         description: >
           Number of times links in the communication were clicked (for email communications).
-          Currently estimated based on content patterns.
+          Currently estimated based on content patterns, only applicable for email mode (1).
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+          - dbt_utils.expression_is_true:
+              expression: "communication_mode = 1 OR click_count = 0"
       
       - name: reply_count
         description: >
@@ -139,11 +151,13 @@ models:
       - name: bounce_count
         description: >
           Number of times the communication bounced (for email communications).
-          Currently estimated based on content patterns.
+          Currently estimated based on content patterns, only applicable for email mode (1).
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+          - dbt_utils.expression_is_true:
+              expression: "communication_mode = 1 OR bounce_count = 0"
       
       - name: communication_datetime
         description: >
@@ -179,4 +193,7 @@ models:
         - "Engagement metrics must be accurately tracked"
         - "Future incremental loading must only process new communications"
         - "Batch detection must prevent self-matching"
-        - "Reply tracking must be limited to 3-day window" 
+        - "Reply tracking must be limited to 3-day window"
+        - "Email metrics (opens, clicks, bounces) must only be non-zero for email mode"
+        - "Pattern matching must be consistent across all content types"
+        - "Campaign type detection must match content patterns" 
