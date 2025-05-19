@@ -96,18 +96,21 @@ models:
 
       - name: birth_date
         description: >
-          Patient's date of birth
+          Patient's date of birth.
+          
           Note: 
-          - '1900-01-01' is a default placeholder date indicating missing data
-          - As of 2025, approximately 2,614 patients have missing birth dates
+          - NULL values are allowed for non-active patients (patient_status != 0)
+          - As of 2025, approximately 2,614 patients have NULL birth dates
           - Most of these patients have first visits from the 1990s or 2006
           - Stakeholders should collect birth date information when these patients visit
           - This affects age calculation (these patients will have NULL ages)
         tests:
-          - not_null
+          - not_null:
+              where: "patient_status = 0"  # Only require for active patients
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'1900-01-01'"
               max_value: "{{ var('max_valid_date', 'current_date') }}"
+              where: "birth_date is not null"  # Only validate non-NULL values
 
       - name: age
         description: >
