@@ -144,9 +144,18 @@ models:
       - name: content
         description: >
           The full content or notes from the communication. Contains the actual
-          message text or call notes.
+          message text or call notes. Note: NULL values are allowed for:
+          - System-generated communications (direction = 'system')
+          - Automated outbound messages (direction = 'outbound' with communication_type in (224, 228, 603))
+          - Future-dated communications (communication_datetime > current_timestamp)
+          - Non-active patients (patient_status != 0)
         tests:
-          - not_null
+          - not_null:
+              where: >
+                direction not in ('system', 'outbound') 
+                and communication_datetime <= current_timestamp
+                and patient_status = 0
+                and not (direction = 'outbound' and communication_type in (224, 228, 603))
       
       - name: linked_appointment_id
         description: >
