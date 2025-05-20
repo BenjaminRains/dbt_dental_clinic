@@ -22,12 +22,23 @@ WITH AppointmentBase AS (
         apt.provider_id,
         apt.appointment_datetime,
         apt.appointment_datetime + 
-            INTERVAL '1 minute' * COALESCE(apt.pattern::integer, 30) AS appointment_end_datetime,
+            INTERVAL '1 minute' * (
+                CASE 
+                    WHEN apt.pattern IS NULL THEN 30
+                    WHEN apt.pattern ~ '^[0-9]+$' THEN apt.pattern::integer
+                    ELSE LENGTH(apt.pattern) * 10  -- Each character represents 10 minutes
+                END
+            ) AS appointment_end_datetime,
         apt.appointment_type_id,
         apt.appointment_status,
         apt.confirmation_status as confirmed,
         apt.operatory_id as operatory,
         apt.pattern,
+        CASE
+            WHEN apt.pattern ~ '^[0-9]+$' THEN apt.pattern::integer
+            WHEN apt.pattern IS NULL THEN 30
+            ELSE LENGTH(apt.pattern) * 10
+        END as pattern_length,
         apt.note,
         apt.is_hygiene,
         apt.is_new_patient,
@@ -50,7 +61,11 @@ AppointmentTypes AS (
     SELECT
         at.appointment_type_id,
         at.appointment_type_name,
-        at.pattern::integer as appointment_length,
+        CASE
+            WHEN at.pattern ~ '^[0-9]+$' THEN at.pattern::integer
+            WHEN at.pattern IS NULL THEN 30
+            ELSE LENGTH(at.pattern) * 10
+        END as appointment_length,
         at.appointment_type_color as color
     FROM {{ ref('stg_opendental__appointmenttype') }} at
 ),
