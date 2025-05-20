@@ -13,6 +13,11 @@ EOB attachments provide supporting documentation for insurance claim payments.
 Key relationships:
 - Each EOB attachment is related to a specific claim payment through claim_payment_id
 - Multiple EOB attachments can exist for a single claim payment
+
+Data limitations:
+- The EOB attachments table contains data from 2020-2025
+- The claim payments table only contains data from 2023-2025
+- This model filters EOB attachments to 2023 and later to maintain referential integrity
 */
 
 with EobAttach as (
@@ -28,6 +33,7 @@ with EobAttach as (
         file_name,
         raw_base64
     from {{ ref('stg_opendental__eobattach') }}
+    where created_at >= '2023-01-01' -- Filter to match claim payment date range
 ),
 
 ClaimPayment as (

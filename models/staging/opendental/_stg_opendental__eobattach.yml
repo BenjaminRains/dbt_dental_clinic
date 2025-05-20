@@ -2,7 +2,12 @@ version: 2
 
 models:
   - name: stg_opendental__eobattach
-    description: Staging model for EOB (Explanation of Benefits) attachments. Contains information about attached files related to claim payments.
+    description: >-
+      Staging model for EOB (Explanation of Benefits) attachments. Contains file attachments for
+      insurance claim payments including scanned documents and electronic files.
+      Note: This table contains data from 2020-2025, while the claim payments table only contains
+      data from 2023-2025. When joining to claim payments, filter for dates >= 2023 to maintain
+      referential integrity.
     columns:
       - name: eob_attach_id
         description: Primary key of the EOB attachment record

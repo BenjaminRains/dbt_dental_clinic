@@ -45,6 +45,7 @@ EobAttachments as (
         array_agg(eob_attach_id) as eob_attachment_ids,
         array_agg(file_name) as eob_attachment_file_names
     from {{ ref('stg_opendental__eobattach') }}
+    where created_at >= '2023-01-01' -- Filter to match claim payment date range
     group by claim_payment_id
 ),
 
