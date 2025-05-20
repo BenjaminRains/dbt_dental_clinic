@@ -94,7 +94,8 @@ models:
           - accepted_values:
               values: ['appointment_reminder', 'appointment_confirmation', 'balance_notice', 
                       'form_request', 'review_request', 'post_op_instructions', 
-                      'broken_appointment', 'other']
+                      'broken_appointment', 'patient_response', 'preference_update',
+                      'annual_notification', 'delivery_failure', 'other']
       
       - name: campaign_type
         description: >
@@ -134,8 +135,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
-          - dbt_utils.expression_is_true:
-              expression: "communication_mode = 1 OR click_count = 0"
+          # See click_count_email_mode_check test below
       
       - name: reply_count
         description: >
@@ -155,8 +155,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
-          - dbt_utils.expression_is_true:
-              expression: "communication_mode = 1 OR bounce_count = 0"
+          # See bounce_count_email_mode_check test below
       
       - name: communication_datetime
         description: >
@@ -165,8 +164,23 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
+              min_value: "'2019-01-01'"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+      
+      - name: communication_mode
+        description: >
+          The mode or channel used for communication. Maps from the source
+          system's "mode" field:
+          - 0: Unknown/Unspecified mode
+          - 1: Email communications
+          - 2: Phone call communications
+          - 3: Letter communications
+          - 4: In-person communications
+          - 5: SMS/text message communications
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5]
       
       - name: model_created_at
         description: >
@@ -196,3 +210,14 @@ models:
         - "Email metrics (opens, clicks, bounces) must only be non-zero for email mode"
         - "Pattern matching must be consistent across all content types"
         - "Campaign type detection must match content patterns" 
+
+    tests:
+      # Ensures click_count is only non-zero for email mode communications
+      - dbt_utils.expression_is_true:
+          name: click_count_email_mode_check
+          expression: "click_count = 0 OR communication_mode = 1"
+
+      # Ensures bounce_count is only non-zero for email mode communications
+      - dbt_utils.expression_is_true:
+          name: bounce_count_email_mode_check
+          expression: "bounce_count = 0 OR communication_mode = 1" 

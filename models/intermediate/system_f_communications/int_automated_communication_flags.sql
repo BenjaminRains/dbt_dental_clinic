@@ -241,6 +241,7 @@ AutomatedFlags AS (
         comm.direction,  -- propagate direction
         {{ dbt_utils.generate_surrogate_key(['comm.communication_id', 'comm.content']) }} AS automated_communication_id,
         comm.communication_datetime,
+        comm.communication_mode,  -- Add communication_mode here
         
         -- Simplified automation detection using pre-calculated flags
         -- Added safety check to prevent self-matching in batch detection
@@ -297,6 +298,7 @@ SELECT
     reply_count,
     bounce_count,
     communication_datetime,
+    communication_mode,  -- Add communication_mode to final output
     model_created_at,
     model_updated_at
 FROM AutomatedFlags
