@@ -11,10 +11,10 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "EobAttachNum" as eob_attach_num,
+        "EobAttachNum" as eob_attach_id,
         
         -- Foreign Keys
-        "ClaimPaymentNum" as claim_payment_num,
+        "ClaimPaymentNum" as claim_payment_id,
         
         -- Attributes
         "DateTCreated" as created_at,
