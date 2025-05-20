@@ -44,60 +44,60 @@ models:
       - Only active templates are used for matching
     tests:
       # Validates template_name and content have at least one non-null value
-      - dbt_utils.at_least_one_not_null:
-          name: template_name_content_validation
-          column_list: [template_name, content]
+      - dbt_utils.expression_is_true:
+          expression: "template_name IS NOT NULL OR content IS NOT NULL"
           config:
             severity: error
+            description: "At least one of template_name or content must be non-null"
 
       # Validates content length for non-null content
       - dbt_utils.expression_is_true:
-          name: content_length_validation
           expression: "content IS NULL OR LENGTH(content) > 10"
           config:
             severity: error
+            description: "Content must be at least 10 characters long when present"
 
       # Validates template_type values
       - dbt_utils.expression_is_true:
-          name: template_type_validation
           expression: "template_type IN ('email', 'SMS', 'letter')"
           config:
             severity: error
+            description: "Template type must be one of: email, SMS, or letter"
 
       # Validates template category values
       - dbt_utils.expression_is_true:
-          name: category_validation
           expression: "category IN ('appointment', 'billing', 'clinical', 'recall', 'forms', 'general')"
           config:
             severity: error
+            description: "Category must be one of the accepted values"
 
       # Validates email templates have subject lines
       - dbt_utils.expression_is_true:
-          name: email_subject_validation
           expression: "(template_type = 'email' AND subject IS NOT NULL) OR (template_type != 'email')"
           config:
             severity: error
+            description: "Email templates must have subject lines"
 
       # Validates template variables for templates with placeholders
       - dbt_utils.expression_is_true:
-          name: template_variables_validation
           expression: "(content LIKE '%' || '{' || '%' || '}' || '%' AND array_length(variables, 1) > 0) OR (content NOT LIKE '%' || '{' || '%' || '}' || '%')"
           config:
             severity: warn
+            description: "Templates with placeholders must have defined variables"
 
       # Validates template_name length
       - dbt_utils.expression_is_true:
-          name: template_name_length_validation
           expression: "LENGTH(template_name) > 3"
           config:
             severity: error
+            description: "Template name must be at least 4 characters long"
 
       # Validates updated_at is after created_at when present
       - dbt_utils.expression_is_true:
-          name: updated_at_validation
           expression: "updated_at IS NULL OR updated_at >= created_at"
           config:
             severity: error
+            description: "Updated timestamp must be after or equal to created timestamp"
     columns:
       - name: template_id
         description: Unique identifier for the template
@@ -144,7 +144,8 @@ models:
       - name: variables
         description: Array of variables used in the template for personalization
         tests:
-          - dbt_utils.not_empty_array:
+          - dbt_utils.expression_is_true:
+              expression: "array_length(variables, 1) > 0"
               where: "content LIKE '%' || '{' || '%' || '}' || '%'"
       
       - name: is_active
