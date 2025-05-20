@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: stg_opendental__taskunread
+    description: Staging model for task unread statuses. This model tracks which tasks are marked as unread by which users.
+    columns:
+      - name: task_unread_id
+        description: Primary key of the task unread record
+        tests:
+          - unique
+          - not_null
+      
+      - name: task_id
+        description: Foreign key to the task that is marked as unread
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__task')
+              field: task_id
+      
+      - name: user_id
+        description: Foreign key to the user who has the task marked as unread
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id

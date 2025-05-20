@@ -535,6 +535,32 @@ sources:
                   to: source('opendental', 'task')
                   field: "TaskNum"
 
+      - name: taskunread
+        description: >
+          Tracks which tasks are marked as unread by which users. This table maintains
+          the read/unread status of tasks for each user, enabling task notification
+          and tracking functionality in the system.
+        columns:
+          - name: "TaskUnreadNum"
+            description: "Primary key - Unique identifier for each task unread record"
+            tests:
+              - unique
+              - not_null
+          - name: "TaskNum"
+            description: "Foreign key to the task that is marked as unread"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: "TaskNum"
+          - name: "UserNum"
+            description: "Foreign key to the user who has the task marked as unread"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
