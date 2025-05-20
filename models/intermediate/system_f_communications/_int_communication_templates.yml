@@ -60,7 +60,7 @@ models:
       # Validates template_type values
       - dbt_utils.expression_is_true:
           name: template_type_validation
-          expression: "template_type IN ('email', 'SMS')"
+          expression: "template_type IN ('email', 'SMS', 'letter')"
           config:
             severity: error
 
