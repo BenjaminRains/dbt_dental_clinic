@@ -3,10 +3,59 @@ version: 2
 models:
   - name: int_task_management
     description: >
-      Intermediate model for task management.
-      Provides a comprehensive view of tasks, their history, and associated metadata.
-      Integrates with the appointment scheduling system to track tasks related to appointments.
-      Part of System G: Scheduling
+      Comprehensive task management model that provides a complete view of tasks, their history,
+      and associated metadata. This model serves as the foundation for task tracking, workflow
+      management, and appointment-related task integration in the dental clinic.
+      
+      Key features:
+      - Aggregates task data with task lists and history
+      - Tracks task status and changes over time
+      - Manages task subscriptions and notifications
+      - Integrates with appointment scheduling system
+      - Supports task prioritization and triage
+      - Enables task list organization
+      - Tracks task completion and deadlines
+      - Manages task notes and communications
+      - Supports task assignment and ownership
+      - Provides comprehensive task history
+      
+      Data Sources:
+      - stg_opendental__task: Base task data
+      - stg_opendental__tasklist: Task list information
+      - stg_opendental__taskhist: Task history records
+      - stg_opendental__tasknote: Task notes
+      - stg_opendental__tasksubscription: Task subscriptions
+      - stg_opendental__taskunread: Task unread status
+      - stg_opendental__appointment: Appointment data for task integration
+      
+      Business rules:
+      - One record per task
+      - Task completion time must be after creation time
+      - Last edit time must be after original creation time
+      - Task lists must have valid parent-child relationships
+      - Task history must maintain chronological order
+      - Task notes must be associated with valid tasks
+      - Task subscriptions must reference valid users
+      - Unread status must reference valid users
+      - Appointment tasks must reference valid appointments
+      - Task priorities must be valid
+      - Task triage categories must be valid
+      - Required fields must not be null
+      - Timestamps must be in chronological order
+      
+      Grain:
+      - One record per task (task_id)
+      - Latest history record for each task
+      - Latest note for each task
+      - Current subscription status
+      - Current unread status
+      - Incremental updates based on last_edit_timestamp
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: task_id
+
     columns:
       - name: task_id
         description: Unique identifier for the task
