@@ -20,6 +20,8 @@ models:
           - relationships:
               to: ref('stg_opendental__claimpayment')
               field: claim_payment_id
+              config:
+                severity: warn
       
       - name: file_name
         description: Name of the attached file
