@@ -15,8 +15,7 @@
     2. Maintains user-clinic specific configurations
     3. Supports appointment scheduling preferences
     4. Integrates with System G scheduling models
-    
-    Part of System G: Scheduling
+    5. Links with appointment and task views
 */
 
 with user_preferences as (
@@ -41,6 +40,29 @@ user_appointment_views as (
         CURRENT_TIMESTAMP as view_created_at,
         CURRENT_TIMESTAMP as view_updated_at
     from {{ ref('stg_opendental__userodapptview') }}
+),
+
+-- Add appointment view details
+appointment_view_details as (
+    select
+        av.appt_view_id,
+        av.description as view_description,
+        av.view_type,
+        av.is_hidden,
+        av.sort_order,
+        av.color
+    from {{ ref('stg_opendental__apptview') }} av
+),
+
+-- Add task view preferences
+task_view_preferences as (
+    select
+        user_id,
+        clinic_id,
+        value_string as task_view_settings,
+        CURRENT_TIMESTAMP as task_view_updated_at
+    from {{ ref('stg_opendental__userodpref') }}
+    where fkey_type = 'TaskView'
 )
 
 select
@@ -61,6 +83,17 @@ select
     uav.view_created_at,
     uav.view_updated_at,
     
+    -- Appointment View Details
+    avd.view_description,
+    avd.view_type,
+    avd.is_hidden as view_is_hidden,
+    avd.sort_order,
+    avd.color as view_color,
+    
+    -- Task View Preferences
+    tvp.task_view_settings,
+    tvp.task_view_updated_at,
+    
     -- Metadata
     CURRENT_TIMESTAMP as model_created_at,
     CURRENT_TIMESTAMP as model_updated_at
@@ -68,4 +101,9 @@ select
 from user_preferences up
 left join user_appointment_views uav
     on up.user_id = uav.appt_view_user_id
-    and up.clinic_id = uav.appt_view_clinic_id 
+    and up.clinic_id = uav.appt_view_clinic_id
+left join appointment_view_details avd
+    on uav.appt_view_id = avd.appt_view_id
+left join task_view_preferences tvp
+    on up.user_id = tvp.user_id
+    and up.clinic_id = tvp.clinic_id 

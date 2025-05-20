@@ -25,6 +25,7 @@ WITH AppointmentMetrics AS (
     SELECT
         'provider' as metric_level,
         a.provider_id,
+        p.clinic_id,
         DATE(a.appointment_datetime) as date,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
@@ -34,8 +35,10 @@ WITH AppointmentMetrics AS (
         AVG(a.waiting_time) as average_wait_time,
         SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
     FROM {{ ref('int_appointment_details') }} a
+    LEFT JOIN {{ ref('stg_opendental__provider') }} p
+        ON a.provider_id = p.provider_id
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY a.provider_id, DATE(a.appointment_datetime)
+    GROUP BY a.provider_id, p.clinic_id, DATE(a.appointment_datetime)
 
     UNION ALL
 
@@ -43,6 +46,7 @@ WITH AppointmentMetrics AS (
     SELECT
         'clinic' as metric_level,
         NULL as provider_id,
+        p.clinic_id,
         DATE(a.appointment_datetime) as date,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
@@ -52,8 +56,10 @@ WITH AppointmentMetrics AS (
         AVG(a.waiting_time) as average_wait_time,
         SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
     FROM {{ ref('int_appointment_details') }} a
+    LEFT JOIN {{ ref('stg_opendental__provider') }} p
+        ON a.provider_id = p.provider_id
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY DATE(a.appointment_datetime)
+    GROUP BY p.clinic_id, DATE(a.appointment_datetime)
 
     UNION ALL
 
@@ -61,6 +67,7 @@ WITH AppointmentMetrics AS (
     SELECT
         'overall' as metric_level,
         NULL as provider_id,
+        NULL as clinic_id,
         DATE(a.appointment_datetime) as date,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
@@ -103,12 +110,72 @@ ChairTimeUtilization AS (
     FROM {{ ref('int_appointment_details') }} a
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
     GROUP BY a.provider_id, DATE(a.appointment_datetime)
+),
+
+-- Add rolling averages
+RollingMetrics AS (
+    SELECT
+        *,
+        -- 7-day rolling averages
+        AVG(total_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id 
+            ORDER BY date 
+            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        ) as rolling_7d_total_appointments,
+        AVG(completed_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id 
+            ORDER BY date 
+            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        ) as rolling_7d_completed_appointments,
+        AVG(cancelled_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id 
+            ORDER BY date 
+            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        ) as rolling_7d_cancelled_appointments,
+        AVG(no_show_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id 
+            ORDER BY date 
+            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        ) as rolling_7d_no_show_appointments,
+        AVG(average_appointment_length) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id 
+            ORDER BY date 
+            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        ) as rolling_7d_avg_appointment_length,
+        AVG(average_wait_time) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id 
+            ORDER BY date 
+            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        ) as rolling_7d_avg_wait_time,
+        -- Month-to-date totals
+        SUM(total_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id, 
+            DATE_TRUNC('month', date)
+            ORDER BY date
+        ) as mtd_total_appointments,
+        SUM(completed_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id, 
+            DATE_TRUNC('month', date)
+            ORDER BY date
+        ) as mtd_completed_appointments,
+        SUM(cancelled_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id, 
+            DATE_TRUNC('month', date)
+            ORDER BY date
+        ) as mtd_cancelled_appointments,
+        SUM(no_show_appointments) OVER (
+            PARTITION BY metric_level, provider_id, clinic_id, 
+            DATE_TRUNC('month', date)
+            ORDER BY date
+        ) as mtd_no_show_appointments
+    FROM AppointmentMetrics
 )
 
 SELECT
     -- Generate unique metric ID
     MD5(
         COALESCE(am.provider_id::text, '') || 
+        COALESCE(am.clinic_id::text, '') ||
         am.date::text || 
         am.metric_level
     ) as metric_id,
@@ -116,6 +183,7 @@ SELECT
     -- Base metrics
     am.date,
     am.provider_id,
+    am.clinic_id,
     am.metric_level,
     am.total_appointments,
     am.completed_appointments,
@@ -155,11 +223,25 @@ SELECT
         ELSE 0 
     END as new_patient_rate,
     
+    -- Rolling averages
+    am.rolling_7d_total_appointments,
+    am.rolling_7d_completed_appointments,
+    am.rolling_7d_cancelled_appointments,
+    am.rolling_7d_no_show_appointments,
+    am.rolling_7d_avg_appointment_length,
+    am.rolling_7d_avg_wait_time,
+    
+    -- Month-to-date totals
+    am.mtd_total_appointments,
+    am.mtd_completed_appointments,
+    am.mtd_cancelled_appointments,
+    am.mtd_no_show_appointments,
+    
     -- Metadata
     CURRENT_TIMESTAMP as model_created_at,
     CURRENT_TIMESTAMP as model_updated_at
 
-FROM AppointmentMetrics am
+FROM RollingMetrics am
 LEFT JOIN ScheduleUtilization su
     ON am.provider_id = su.provider_id
     AND am.date = su.date

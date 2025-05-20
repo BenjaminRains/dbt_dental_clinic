@@ -30,20 +30,44 @@ WITH ProviderSchedules AS (
         AND schedule_date >= CURRENT_DATE - INTERVAL '{{ var("schedule_window_days") }} days'
 ),
 
+-- Handle overlapping schedule blocks by merging them
+MergedSchedules AS (
+    SELECT
+        provider_id,
+        schedule_date,
+        MIN(start_time) as start_time,
+        MAX(end_time) as end_time,
+        -- Calculate total available minutes accounting for overlaps
+        SUM(
+            EXTRACT(EPOCH FROM (
+                LEAST(end_time, LEAD(start_time) OVER (PARTITION BY provider_id, schedule_date ORDER BY start_time))
+                - start_time
+            ))/60
+        ) as available_minutes,
+        -- Track schedule status
+        CASE
+            WHEN COUNT(*) > 1 THEN 'Multiple Blocks'
+            WHEN COUNT(*) = 1 THEN 'Single Block'
+            ELSE 'No Schedule'
+        END as schedule_status
+    FROM ProviderSchedules
+    GROUP BY provider_id, schedule_date
+),
+
 DailyAvailability AS (
     SELECT
         md5(COALESCE(provider_id::text, '') || COALESCE(schedule_date::text, '')) as provider_schedule_id,
         provider_id,
         schedule_date,
-        MIN(start_time) as start_time,
-        MAX(end_time) as end_time,
+        start_time,
+        end_time,
         CASE 
-            WHEN MIN(start_time) IS NULL OR MAX(end_time) IS NULL THEN true
+            WHEN start_time IS NULL OR end_time IS NULL THEN true
             ELSE false
         END as is_day_off,
-        EXTRACT(EPOCH FROM (MAX(end_time) - MIN(start_time)))/60 as available_minutes
-    FROM ProviderSchedules
-    GROUP BY provider_id, schedule_date
+        COALESCE(available_minutes, 0) as available_minutes,
+        schedule_status
+    FROM MergedSchedules
 )
 
 SELECT
@@ -54,6 +78,7 @@ SELECT
     end_time,
     is_day_off,
     available_minutes,
+    schedule_status,
     CURRENT_TIMESTAMP as model_created_at,
     CURRENT_TIMESTAMP as model_updated_at
 FROM DailyAvailability

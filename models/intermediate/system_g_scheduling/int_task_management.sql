@@ -32,7 +32,23 @@ with task_base as (
         entry_timestamp,
         finished_timestamp,
         original_timestamp,
-        last_edit_timestamp
+        last_edit_timestamp,
+        -- Add task type based on object_type
+        CASE
+            WHEN object_type = 1 THEN 'Appointment'
+            WHEN object_type = 2 THEN 'Patient'
+            WHEN object_type = 3 THEN 'Lab Case'
+            WHEN object_type = 4 THEN 'Insurance'
+            WHEN object_type = 5 THEN 'Referral'
+            ELSE 'Other'
+        END as task_type,
+        -- Add due_soon flag (tasks due within 24 hours)
+        CASE
+            WHEN task_date <= CURRENT_TIMESTAMP + INTERVAL '24 hours'
+            AND finished_timestamp IS NULL
+            THEN true
+            ELSE false
+        END as is_due_soon
     from {{ ref('stg_opendental__task') }}
     {% if is_incremental() %}
     where last_edit_timestamp > (select max(last_edit_timestamp) from {{ this }})
@@ -141,6 +157,8 @@ select
     t.finished_timestamp,
     t.original_timestamp,
     t.last_edit_timestamp,
+    t.task_type,
+    t.is_due_soon,
     
     -- Appointment Task Information (if applicable)
     at.appointment_id,

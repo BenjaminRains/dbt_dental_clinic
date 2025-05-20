@@ -21,7 +21,8 @@ WITH ProviderSchedule AS (
         p.provider_id,
         p.provider_abbreviation as provider_name,
         p.is_hidden,
-        p.specialty_id as specialty
+        p.specialty_id as specialty,
+        p.clinic_id
     FROM {{ ref('stg_opendental__provider') }} p
     WHERE p.is_hidden = 0  -- 0 = not hidden, 1 = hidden
 ),
@@ -61,6 +62,7 @@ DailySchedule AS (
         COALESCE(am.schedule_date, pa.schedule_date) as schedule_date,
         ps.provider_id,
         ps.provider_name,
+        ps.clinic_id,
         COALESCE(am.total_appointments, 0) as total_appointments,
         COALESCE(am.completed_appointments, 0) as completed_appointments,
         COALESCE(am.cancelled_appointments, 0) as cancelled_appointments,
@@ -74,7 +76,9 @@ DailySchedule AS (
         END as utilization_rate,
         pa.start_time,
         pa.end_time,
-        COALESCE(pa.is_day_off, true) as is_day_off
+        COALESCE(pa.is_day_off, true) as is_day_off,
+        COUNT(*) OVER (PARTITION BY ps.provider_id) as days_scheduled,
+        COUNT(*) FILTER (WHERE NOT COALESCE(pa.is_day_off, true)) OVER (PARTITION BY ps.provider_id) as days_worked
     FROM ProviderSchedule ps
     CROSS JOIN (
         SELECT DISTINCT schedule_date 
@@ -96,6 +100,7 @@ SELECT
     schedule_date,
     provider_id,
     provider_name,
+    clinic_id,
     total_appointments,
     completed_appointments,
     cancelled_appointments,
@@ -107,6 +112,8 @@ SELECT
     start_time,
     end_time,
     is_day_off,
+    days_scheduled,
+    days_worked,
     CURRENT_TIMESTAMP as model_created_at,
     CURRENT_TIMESTAMP as model_updated_at
 FROM DailySchedule
