@@ -32,7 +32,7 @@ WITH AppointmentMetrics AS (
         SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
         AVG(a.actual_length) as average_appointment_length,
         AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient THEN 1 ELSE 0 END) as new_patient_appointments
+        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
     FROM {{ ref('int_appointment_details') }} a
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
     GROUP BY a.provider_id, DATE(a.appointment_datetime)
@@ -50,7 +50,7 @@ WITH AppointmentMetrics AS (
         SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
         AVG(a.actual_length) as average_appointment_length,
         AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient THEN 1 ELSE 0 END) as new_patient_appointments
+        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
     FROM {{ ref('int_appointment_details') }} a
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
     GROUP BY DATE(a.appointment_datetime)
@@ -68,7 +68,7 @@ WITH AppointmentMetrics AS (
         SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
         AVG(a.actual_length) as average_appointment_length,
         AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient THEN 1 ELSE 0 END) as new_patient_appointments
+        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
     FROM {{ ref('int_appointment_details') }} a
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
     GROUP BY DATE(a.appointment_datetime)
