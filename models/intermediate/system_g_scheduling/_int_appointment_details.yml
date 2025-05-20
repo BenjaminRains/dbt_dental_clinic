@@ -12,55 +12,155 @@ models:
         tests:
           - unique
           - not_null
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
       - name: patient_id
         description: Foreign key to stg_opendental__patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
       - name: provider_id
         description: ID of the provider assigned to this appointment
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
       - name: appointment_datetime
         description: Date and time of the appointment
+        tests:
+          - not_null
       - name: appointment_end_datetime
         description: Expected end date and time of the appointment
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "appointment_end_datetime > appointment_datetime"
       - name: appointment_type_id
         description: Foreign key to appointment type
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointmenttype')
+              field: appointment_type_id
       - name: appointment_type_name
         description: Name of the appointment type
       - name: appointment_length
         description: Duration of the appointment in minutes
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "appointment_length > 0"
       - name: appointment_status
         description: Status code of the appointment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8]
       - name: appointment_status_desc
         description: Description of the appointment status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Scheduled', 'Complete', 'UnschedList', 'ASAP', 'Broken', 'Planned', 'PtNote', 'PtNoteCompleted', 'Unknown']
       - name: is_confirmed
         description: Flag indicating if the appointment is confirmed
+        tests:
+          - not_null
       - name: is_complete
         description: Flag indicating if the appointment is complete
+        tests:
+          - not_null
       - name: is_hygiene
         description: Flag indicating if the appointment is for hygiene
+        tests:
+          - not_null
       - name: is_new_patient
         description: Flag indicating if this is a new patient appointment
+        tests:
+          - not_null
       - name: note
         description: Appointment notes
       - name: operatory
         description: Operatory assigned to this appointment
       - name: check_in_time
         description: Time when patient checked in
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "check_in_time IS NULL OR check_in_time >= appointment_datetime"
       - name: check_out_time
         description: Time when patient checked out
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "check_out_time IS NULL OR check_out_time >= check_in_time"
       - name: actual_length
         description: Actual duration of the appointment in minutes
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "actual_length IS NULL OR actual_length > 0"
       - name: waiting_time
         description: Time patient spent waiting (in minutes)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "waiting_time IS NULL OR waiting_time >= 0"
       - name: cancellation_reason
         description: Reason for cancellation (if applicable)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "cancellation_reason IS NULL OR appointment_status = 5"
       - name: rescheduled_appointment_id
         description: ID of the rescheduled appointment (if applicable)
-      - name: created_by
-        description: ID of the user who created the appointment
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "rescheduled_appointment_id IS NULL OR rescheduled_appointment_id != appointment_id"
+      - name: provider_name
+        description: Abbreviated name of the provider
+        tests:
+          - not_null
+      - name: provider_specialty
+        description: Specialty of the provider
+      - name: provider_color
+        description: Color code for the provider
+      - name: patient_name
+        description: Preferred name of the patient
+        tests:
+          - not_null
+      - name: patient_status
+        description: Status of the patient
+      - name: first_visit_date
+        description: Date of patient's first visit
       - name: created_at
         description: Timestamp when this appointment was created
+        tests:
+          - not_null
       - name: updated_at
         description: Timestamp when this appointment was last updated
+        tests:
+          - not_null
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
       - name: model_updated_at
         description: Timestamp when this record was last updated in the dbt model
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of:
+            - appointment_id
+            - appointment_datetime
+      - dbt_utils.expression_is_true:
+          expression: "appointment_end_datetime > appointment_datetime"
+      - dbt_utils.expression_is_true:
+          expression: "check_out_time IS NULL OR check_out_time >= check_in_time"
+      - dbt_utils.expression_is_true:
+          expression: "actual_length IS NULL OR actual_length > 0"
+      - dbt_utils.expression_is_true:
+          expression: "waiting_time IS NULL OR waiting_time >= 0"
+      - dbt_utils.expression_is_true:
+          expression: "cancellation_reason IS NULL OR appointment_status = 5"
+      - dbt_utils.expression_is_true:
+          expression: "rescheduled_appointment_id IS NULL OR rescheduled_appointment_id != appointment_id"
