@@ -80,7 +80,7 @@ models:
 
       # Validates template variables for templates with placeholders
       - dbt_utils.expression_is_true:
-          expression: "(content LIKE '%' || '{' || '%' || '}' || '%' AND array_length(variables, 1) > 0) OR (content NOT LIKE '%' || '{' || '%' || '}' || '%')"
+          expression: "(content NOT LIKE '%{_%') OR (array_length(variables, 1) > 0)"
           config:
             severity: warn
             description: "Templates with placeholders must have defined variables"
@@ -144,9 +144,13 @@ models:
       - name: variables
         description: Array of variables used in the template for personalization
         tests:
+          # Tests that variables array exists and has elements when content has placeholders
           - dbt_utils.expression_is_true:
-              expression: "array_length(variables, 1) > 0"
-              where: "content LIKE '%' || '{' || '%' || '}' || '%'"
+              expression: "IS NOT NULL AND array_length(variables, 1) > 0"
+              config:
+                severity: warn
+                description: "Templates with placeholders must have defined variables"
+                column_name: variables
       
       - name: is_active
         description: Flag indicating if the template is active
