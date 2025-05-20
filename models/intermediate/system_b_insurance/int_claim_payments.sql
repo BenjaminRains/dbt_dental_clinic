@@ -38,6 +38,16 @@ ClaimPayment as (
     from {{ ref('stg_opendental__claimpayment') }}
 ),
 
+EobAttachments as (
+    select
+        claim_payment_id,
+        count(eob_attach_id) as eob_attachment_count,
+        array_agg(eob_attach_id) as eob_attachment_ids,
+        array_agg(file_name) as eob_attachment_file_names
+    from {{ ref('stg_opendental__eobattach') }}
+    group by claim_payment_id
+),
+
 -- Deduplicate at the source using the full composite key
 DeduplicatedClaims as (
     select
@@ -82,6 +92,11 @@ Final as (
         cpy.payment_type_id,
         cpy.is_partial,
 
+        -- EOB Attachment Information
+        coalesce(eob.eob_attachment_count, 0) as eob_attachment_count,
+        eob.eob_attachment_ids,
+        eob.eob_attachment_file_names,
+        
         -- Meta Fields
         cpy.check_date as created_at,
         cpy.check_date as updated_at
@@ -89,6 +104,8 @@ Final as (
     from DeduplicatedClaims dc
     left join ClaimPayment cpy
         on dc.claim_payment_id = cpy.claim_payment_id
+    left join EobAttachments eob
+        on dc.claim_payment_id = eob.claim_payment_id
     where dc.rn = 1 -- Only keep one record per unique composite key combination
 )
 
