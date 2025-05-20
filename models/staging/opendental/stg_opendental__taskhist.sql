@@ -6,6 +6,7 @@
 
 with source as (
     select * from {{ source('opendental', 'taskhist') }}
+    where "DateTStamp" >= '2023-01-01'
 ),
 
 renamed as (
