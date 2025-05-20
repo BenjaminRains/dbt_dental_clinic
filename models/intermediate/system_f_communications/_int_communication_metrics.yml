@@ -139,7 +139,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "total_count >= 0"
+              expression: ">= 0"
+              column_name: total_count
+              config:
+                severity: error
       - name: successful_count
         description: Number of successful communications
         tests:
