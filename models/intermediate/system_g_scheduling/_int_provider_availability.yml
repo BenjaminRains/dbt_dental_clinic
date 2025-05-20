@@ -4,33 +4,68 @@ models:
   - name: int_provider_availability
     description: >
       Intermediate model for provider availability.
-      Tracks when providers are available for appointments.
+      Calculates daily schedule windows and availability for each provider.
       Part of System G: Scheduling
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - provider_id
+            - schedule_date
     columns:
-      - name: availability_id
-        description: Unique identifier for the availability record
+      - name: provider_schedule_id
+        description: Unique identifier for the provider schedule record
         tests:
           - unique
           - not_null
       - name: provider_id
         description: ID of the provider
-      - name: date
-        description: Date of availability
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+      - name: schedule_date
+        description: Date of the schedule
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "schedule_date >= CURRENT_DATE - INTERVAL '90 days'"
+              name: schedule_date_within_range
       - name: start_time
-        description: Start time of availability
+        description: Start time of the provider's schedule
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "start_time IS NULL OR start_time::time <= end_time::time"
+              name: start_time_before_end_time
       - name: end_time
-        description: End time of availability
-      - name: is_available
-        description: Flag indicating if the provider is available
-      - name: reason
-        description: Reason for unavailability (if applicable)
-      - name: schedule_id
-        description: Foreign key to int_appointment_schedule
-      - name: day_of_week
-        description: Day of the week (0-6, where 0 is Sunday)
-      - name: is_recurring
-        description: Flag indicating if this is a recurring availability
+        description: End time of the provider's schedule
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "end_time IS NULL OR end_time::time >= start_time::time"
+              name: end_time_after_start_time
+      - name: is_day_off
+        description: Flag indicating if this is a day off
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "(is_day_off = true AND (start_time IS NULL OR end_time IS NULL)) OR (is_day_off = false AND start_time IS NOT NULL AND end_time IS NOT NULL)"
+              name: day_off_consistency
+      - name: available_minutes
+        description: Total available minutes in the schedule
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "(available_minutes >= 0 AND available_minutes <= 1440) OR available_minutes IS NULL"
+              name: available_minutes_range
+          - dbt_utils.expression_is_true:
+              expression: "(is_day_off = true AND available_minutes = 0) OR (is_day_off = false AND available_minutes > 0)"
+              name: available_minutes_day_off_consistency
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
       - name: model_updated_at
         description: Timestamp when this record was last updated in the dbt model
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "model_updated_at >= model_created_at"
+              name: updated_after_created
