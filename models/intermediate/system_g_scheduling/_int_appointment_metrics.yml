@@ -3,9 +3,52 @@ version: 2
 models:
   - name: int_appointment_metrics
     description: >
-      Intermediate model for appointment metrics.
-      Tracks metrics related to appointments and scheduling.
-      Part of System G: Scheduling
+      Comprehensive metrics model that aggregates appointment data to provide key performance
+      indicators and operational insights for the dental clinic. This model serves as the
+      foundation for scheduling analytics and performance reporting.
+      
+      Key features:
+      - Aggregates appointment metrics at multiple levels (provider, clinic, overall)
+      - Tracks appointment completion and cancellation rates
+      - Monitors schedule and chair time utilization
+      - Calculates average appointment lengths and wait times
+      - Measures new patient acquisition rates
+      - Provides daily metrics for trend analysis
+      - Supports provider performance evaluation
+      - Enables clinic efficiency monitoring
+      
+      Data Sources:
+      - int_appointment_details: Base appointment data with status and timing
+      - int_provider_availability: Provider schedule and availability
+      - int_appointment_schedule: Schedule patterns and blocks
+      - stg_opendental__provider: Provider information
+      
+      Business rules:
+      - One record per date per metric level (provider/clinic/overall)
+      - Metrics are calculated for the last 90 days
+      - Completion rate = completed_appointments / total_appointments * 100
+      - Cancellation rate = cancelled_appointments / total_appointments * 100
+      - No-show rate = no_shows / total_appointments * 100
+      - Schedule utilization = scheduled_time / available_time * 100
+      - Chair time utilization = actual_chair_time / scheduled_chair_time * 100
+      - New patient rate = new_patient_appointments / total_appointments * 100
+      - All rates must be between 0 and 100
+      - Completed appointments cannot exceed total appointments
+      - Cancelled appointments cannot exceed total appointments
+      - Average wait time must be non-negative
+      - Average appointment length must be positive
+      - Metrics are calculated at end of day
+      
+      Grain:
+      - One record per date per metric level
+      - Metric levels: provider, clinic, overall
+      - Daily aggregation of appointment data
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: ['metric_id']
+
     columns:
       - name: metric_id
         description: Unique identifier for the metrics record
@@ -35,13 +78,13 @@ models:
           - accepted_values:
               values: ['provider', 'clinic', 'overall']
       - name: total_appointments
-        description: Total number of appointments
+        description: Total number of appointments scheduled for the day
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: completed_appointments
-        description: Number of completed appointments
+        description: Number of appointments marked as complete
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -49,7 +92,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: cancelled_appointments
-        description: Number of cancelled appointments
+        description: Number of appointments that were cancelled
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -57,7 +100,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: no_show_rate
-        description: Rate of no-show appointments
+        description: Percentage of appointments where patient did not show up
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -65,7 +108,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: cancellation_rate
-        description: Rate of cancelled appointments
+        description: Percentage of appointments that were cancelled
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -73,7 +116,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: completion_rate
-        description: Rate of completed appointments
+        description: Percentage of appointments that were completed
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -81,7 +124,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: schedule_utilization
-        description: Percentage of available time scheduled
+        description: Percentage of available scheduling time that was booked
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -89,7 +132,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: chair_time_utilization
-        description: Percentage of chair time utilized
+        description: Percentage of scheduled chair time that was actually used
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -97,19 +140,19 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: average_appointment_length
-        description: Average length of appointments in minutes
+        description: Average duration of appointments in minutes
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "> 0"
       - name: average_wait_time
-        description: Average patient wait time in minutes
+        description: Average time patients waited before being seen (minutes)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: new_patient_rate
-        description: Percentage of appointments that are new patients
+        description: Percentage of appointments that were for new patients
         tests:
           - not_null
           - dbt_utils.expression_is_true:

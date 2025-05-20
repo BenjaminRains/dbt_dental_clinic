@@ -44,6 +44,12 @@ models:
       - Timestamps must be in chronological order
       - History records are ranked by timestamp (history_rank = 1 means "latest relevant status change")
       
+      Grain:
+      - One record per appointment (appointment_id)
+      - Latest history record for each appointment (history_rank = 1)
+      - Only includes rescheduled or cancelled history actions (action_type IN (1, 4))
+      - Incremental updates based on appointment_datetime
+      
     config:
       materialized: incremental
       schema: intermediate
