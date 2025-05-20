@@ -6,7 +6,7 @@ models:
         Staging model for employer data from OpenDental. Contains information about 
         employers including their contact details and addresses.
     columns:
-      - name: employer_num
+      - name: employer_id
         description: Primary key - Unique identifier for each employer
         tests:
           - unique

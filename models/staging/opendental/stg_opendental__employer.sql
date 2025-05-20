@@ -11,7 +11,7 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "EmployerNum" as employer_num,
+        "EmployerNum" as employer_id,
         
         -- Attributes
         "EmpName" as employer_name,
