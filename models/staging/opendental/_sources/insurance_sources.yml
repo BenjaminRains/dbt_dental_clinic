@@ -6,7 +6,33 @@ sources:
     database: opendental_analytics
     schema: public  # PostgreSQL schema
     tables:
- 
+      - name: employer
+        description: >
+          Employer information and contact details. Contains data about employers 
+          associated with insurance plans and their contact information.
+        columns:
+          - name: EmployerNum
+            description: "Primary key - Unique identifier for each employer"
+            tests:
+              - unique
+              - not_null
+          - name: EmpName
+            description: "Name of the employer"
+            tests:
+              - not_null
+          - name: Address
+            description: "Primary address line of the employer"
+          - name: Address2
+            description: "Secondary address line of the employer (if applicable)"
+          - name: City
+            description: "City where the employer is located"
+          - name: State
+            description: "State where the employer is located"
+          - name: Zip
+            description: "ZIP/Postal code of the employer's location"
+          - name: Phone
+            description: "Contact phone number for the employer"
+
       - name: insplan
         description: >
           Insurance plan details and configuration. Contains core insurance plan data 
