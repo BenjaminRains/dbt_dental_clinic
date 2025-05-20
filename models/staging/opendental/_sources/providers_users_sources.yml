@@ -434,6 +434,38 @@ sources:
           - name: "SecuUserNumEntry"
             description: "Foreign key to security user table - identifies which user entered or approved this time adjustment"
 
+      - name: tasklist
+        description: >
+          Task lists and categories for organizing tasks in the practice. Contains information
+          about task groupings, their descriptions, and hierarchical relationships. Task lists
+          can be used to organize tasks by department, priority, or workflow stage.
+        columns:
+          - name: "TaskListNum"
+            description: "Primary key - Unique identifier for each task list"
+            tests:
+              - unique
+              - not_null
+          - name: "Descript"
+            description: "Description or name of the task list"
+          - name: "Parent"
+            description: "Foreign key to parent task list if this is a sub-list"
+          - name: "DateTL"
+            description: "Date associated with the task list"
+          - name: "IsRepeating"
+            description: "Flag indicating if this is a repeating task list (0=no, 1=yes)"
+          - name: "DateType"
+            description: "Type of date associated with the task list"
+          - name: "FromNum"
+            description: "Reference to the source entity that created this task list"
+          - name: "ObjectType"
+            description: "Type of object this task list is associated with"
+          - name: "DateTimeEntry"
+            description: "Timestamp when the task list was created"
+          - name: "GlobalTaskFilterType"
+            description: "Type of global task filter applied to this list"
+          - name: "TaskListStatus"
+            description: "Current status of the task list"
+
         meta:
           data_quality_results:
             last_tested: '2024-03-14'

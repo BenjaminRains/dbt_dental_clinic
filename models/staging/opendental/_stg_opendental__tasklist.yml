@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: stg_opendental__tasklist
+    description: Staging model for OpenDental tasklist table. Contains task information including descriptions, dates, and status.
+    columns:
+      - name: task_id
+        description: Primary key of the tasklist table
+        tests:
+          - unique
+          - not_null
+
+      - name: description
+        description: Description of the task
+
+      - name: parent_id
+        description: Reference to parent task if this is a subtask
+
+      - name: task_date
+        description: Date associated with the task
+
+      - name: is_repeating
+        description: Flag indicating if the task repeats
+
+      - name: date_type
+        description: Type of date associated with the task
+
+      - name: from_id
+        description: Reference ID for the source of the task
+
+      - name: object_type
+        description: Type of object associated with the task
+
+      - name: entry_datetime
+        description: Timestamp when the task was entered
+
+      - name: global_task_filter_type
+        description: Type of global task filter
+
+      - name: task_status
+        description: Current status of the task
