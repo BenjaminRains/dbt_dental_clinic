@@ -1,5 +1,6 @@
 with source as (
     select * from {{ source('opendental', 'tasklist') }}
+    where "DateTimeEntry" >= '2023-01-01'
 ),
 
 renamed as (
