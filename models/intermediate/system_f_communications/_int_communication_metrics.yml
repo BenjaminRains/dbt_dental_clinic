@@ -100,12 +100,15 @@ models:
         tests:
           - not_null
       - name: user_id
-        description: ID of the user (for user-level metrics)
+        description: >
+          ID of the user (for user-level metrics). Note: user_id = 0 represents
+          system-generated communications which don't have corresponding user records.
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              where: "user_id != 0"  # Exclude system communications
               severity: warn
       - name: communication_type
         description: >
