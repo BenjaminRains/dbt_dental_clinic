@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: stg_opendental__userodapptview
+    description: |
+      Staging model for user appointment views from OpenDental. This table links users to their appointment views.
+      Note: This implementation is for a single-clinic MDC setup, so clinic_id is not actively used.
+    columns:
+      - name: userod_appt_view_id
+        description: Primary key for the user appointment view record
+        tests:
+          - unique
+          - not_null
+      
+      - name: user_id
+        description: Foreign key to the user table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+      
+      - name: clinic_id
+        description: Foreign key to the clinic table (not actively used in this single-clinic implementation)
+      
+      - name: appt_view_id
+        description: Foreign key to the appointment view table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__apptview')
+              field: appt_view_id
