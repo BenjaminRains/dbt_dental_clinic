@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: stg_opendental__eobattach
+    description: Staging model for EOB (Explanation of Benefits) attachments. Contains information about attached files related to claim payments.
+    columns:
+      - name: eob_attach_num
+        description: Primary key of the EOB attachment record
+        tests:
+          - unique
+          - not_null
+      
+      - name: claim_payment_num
+        description: Foreign key to the claim payment record this attachment is associated with
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claimpayment')
+              field: claim_payment_num
+      
+      - name: created_at
+        description: Timestamp when the EOB attachment was created
+        tests:
+          - not_null
+      
+      - name: file_name
+        description: Name of the attached file
+        tests:
+          - not_null
+      
+      - name: raw_base64
+        description: Base64 encoded content of the attached file
+        tests:
+          - not_null
+      
+      - name: _airbyte_ab_id
+        description: Unique identifier for the Airbyte record
+        tests:
+          - not_null
+      
+      - name: _airbyte_emitted_at
+        description: Timestamp when the record was emitted by Airbyte
+        tests:
+          - not_null
+      
+      - name: _airbyte_normalized_at
+        description: Timestamp when the record was normalized
+        tests:
+          - not_null
+      
+      - name: _airbyte_eobattach_hashid
+        description: Hash identifier for the EOB attachment record
+        tests:
+          - not_null
