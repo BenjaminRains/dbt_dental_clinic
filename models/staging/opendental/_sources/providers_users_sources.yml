@@ -239,3 +239,206 @@ sources:
               - not_null
               - dbt_utils.expression_is_true:
                   expression: "<= current_timestamp"
+
+      - name: task
+        description: >
+          Tasks and to-do items for staff related to patients, appointments, 
+          or administrative work. This table maintains the practice's task management system,
+          tracking assignments, due dates, priorities, and completion status. Tasks can be
+          associated with various object types (patients, appointments, etc.) and organized
+          into task lists. The system supports reminders, recurring tasks, and triage categories
+          for workflow prioritization. Only tasks created on or after January 1, 2023 are
+          included in the analytics models.
+        columns:
+          - name: "TaskNum"
+            description: "Primary key - Unique identifier for each task"
+          - name: "TaskListNum"
+            description: "Foreign key to the task list this task belongs to"
+          - name: "DateTask"
+            description: "The date associated with the task"
+          - name: "KeyNum" 
+            description: "Reference key to associated entity depending on the ObjectType"
+          - name: "Descript"
+            description: "Main description text of the task"
+          - name: "TaskStatus"
+            description: "Status code of the task (pending, completed, etc.)"
+          - name: "IsRepeating"
+            description: "Flag indicating if this is a recurring/repeating task"
+          - name: "DateType"
+            description: "Type code indicating how dates are used for this task"
+          - name: "FromNum"
+            description: "Foreign key to the entity that created or assigned the task"
+          - name: "ObjectType"
+            description: "Code indicating what type of object this task is associated with"
+          - name: "DateTimeEntry"
+            description: "Timestamp when the task was entered into the system"
+          - name: "UserNum"
+            description: "Foreign key to the user assigned to complete this task"
+          - name: "DateTimeFinished"
+            description: "Timestamp when the task was marked as finished/completed"
+          - name: "PriorityDefNum"
+            description: "Foreign key to the priority definition for this task"
+          - name: "ReminderGroupId"
+            description: "Identifier for grouping related reminders"
+          - name: "ReminderType"
+            description: "Type code for the reminder associated with this task"
+          - name: "ReminderFrequency"
+            description: "How frequently reminders should be sent for this task"
+          - name: "DateTimeOriginal"
+            description: "Timestamp when the task was originally created"
+          - name: "SecDateTEdit"
+            description: "Timestamp of the last edit to this task record"
+          - name: "DescriptOverride"
+            description: "Optional override text for the description"
+          - name: "IsReadOnly"
+            description: "Flag indicating if the task is read-only and cannot be modified"
+          - name: "TriageCategory"
+            description: "Foreign key to triage category for task prioritization in workflows"
+
+      - name: taskhist
+        description: "Historical tracking of task changes and status updates"
+        loaded_at_field: "DateTStamp"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: "TaskHistNum"
+            description: "Primary key for task history records"
+            tests:
+              - unique
+              - not_null
+          - name: "UserNumHist"
+            description: "Foreign key to the user who made the historical change"
+            tests:
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "DateTStamp"
+            description: "Timestamp when the history record was created"
+            tests:
+              - not_null
+          - name: "IsNoteChange"
+            description: "Flag indicating if this history record represents a note change"
+            tests:
+              - not_null
+          - name: "TaskNum"
+            description: "Foreign key to the task record"
+            tests:
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: task_id
+          - name: "TaskListNum"
+            description: "Foreign key to the task list this task belongs to"
+            tests:
+              - relationships:
+                  to: source('opendental', 'tasklist')
+                  field: task_list_id
+          - name: "DateTask"
+            description: "Date when the task is scheduled for"
+            tests:
+              - not_null
+          - name: "KeyNum"
+            description: "Foreign key to the related entity (varies by object type)"
+          - name: "Descript"
+            description: "Main description of the task"
+            tests:
+              - not_null
+          - name: "TaskStatus"
+            description: "Current status of the task"
+            tests:
+              - not_null
+          - name: "IsRepeating"
+            description: "Flag indicating if this is a repeating task"
+            tests:
+              - not_null
+          - name: "DateType"
+            description: "Type of date associated with the task"
+            tests:
+              - not_null
+          - name: "FromNum"
+            description: "Foreign key to the source entity"
+          - name: "ObjectType"
+            description: "Type of object this task is associated with"
+            tests:
+              - not_null
+          - name: "DateTimeEntry"
+            description: "Timestamp when the task was entered"
+            tests:
+              - not_null
+          - name: "UserNum"
+            description: "Foreign key to the user who created the task"
+            tests:
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "DateTimeFinished"
+            description: "Timestamp when the task was completed"
+          - name: "PriorityDefNum"
+            description: "Foreign key to the priority definition"
+            tests:
+              - relationships:
+                  to: source('opendental', 'prioritydef')
+                  field: priority_def_id
+          - name: "ReminderGroupId"
+            description: "Identifier for the reminder group"
+          - name: "ReminderType"
+            description: "Type of reminder associated with the task"
+          - name: "ReminderFrequency"
+            description: "Frequency of reminders for this task"
+          - name: "DateTimeOriginal"
+            description: "Original timestamp of the task"
+          - name: "DescriptOverride"
+            description: "Overriding description for the task"
+          - name: "IsReadOnly"
+            description: "Flag indicating if the task is read-only"
+            tests:
+              - not_null
+          - name: "TriageCategory"
+            description: "Foreign key to the triage category"
+            tests:
+              - relationships:
+                  to: source('opendental', 'triagedef')
+                  field: triage_def_id
+
+      - name: timeadjust
+        description: >
+          Time clock adjustments for provider and staff time tracking, including 
+          modifications to recorded hours and attendance records. Contains details about
+          employee time entries with regular, overtime, and PTO hour adjustments. 
+          This table is used for payroll processing, attendance tracking, and labor 
+          management. It includes clinic associations and notes about why adjustments 
+          were made. Supports both manual and automatic adjustments to time records.
+        columns:
+          - name: "TimeAdjustNum"
+            description: "Primary key - Unique identifier for each time adjustment record"
+          - name: "EmployeeNum"
+            description: "Foreign key to employee table - identifies which staff member this time adjustment applies to"
+          - name: "TimeEntry"
+            description: "Timestamp when the adjusted time entry was recorded"
+          - name: "RegHours"
+            description: "Regular (non-overtime) hours being adjusted"
+          - name: "OTimeHours"
+            description: "Overtime hours being adjusted"
+          - name: "Note"
+            description: "Additional notes or explanation for why the time adjustment was made"
+          - name: "IsAuto"
+            description: "Flag indicating if this adjustment was created automatically by the system (1) or manually entered (0)"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic location this time adjustment applies to"
+          - name: "PtoDefNum"
+            description: "Foreign key to the PTO definition table - indicates which type of paid time off is being used if applicable"
+          - name: "PtoHours"
+            description: "Paid time off hours being adjusted"
+          - name: "IsUnpaidProtectedLeave"
+            description: "Flag indicating if this adjustment represents unpaid protected leave (1) or standard paid time (0)"
+          - name: "SecuUserNumEntry"
+            description: "Foreign key to security user table - identifies which user entered or approved this time adjustment"
+
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 15
+            tests_total: 15
+          contains_pii: true
+          business_owners: ["dental_operations_team"]
+          technical_owners: ["data_engineering_team"]
