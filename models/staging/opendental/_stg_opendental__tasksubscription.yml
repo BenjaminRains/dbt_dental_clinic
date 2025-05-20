@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: stg_opendental__tasksubscription
+    description: Staging model for task subscriptions. This model transforms the raw task subscription data from OpenDental, converting column names to snake_case and standardizing ID fields.
+    columns:
+      - name: task_subscription_id
+        description: Primary key of the task subscription record
+        tests:
+          - unique
+          - not_null
+
+      - name: user_id
+        description: Foreign key to the user who is subscribed to the task
+        tests:
+          - not_null
+
+      - name: task_list_id
+        description: Foreign key to the task list that contains the task
+        tests:
+          - not_null
+
+      - name: task_id
+        description: Foreign key to the specific task being subscribed to
+        tests:
+          - not_null

@@ -502,6 +502,39 @@ sources:
             tests:
               - not_null
 
+      - name: tasksubscription
+        description: >
+          Task subscription records that track which users are subscribed to specific tasks
+          or task lists. This table manages user notifications and task assignments by
+          maintaining the relationships between users and their subscribed tasks.
+        columns:
+          - name: "TaskSubscriptionNum"
+            description: "Primary key - Unique identifier for each task subscription record"
+            tests:
+              - unique
+              - not_null
+          - name: "UserNum"
+            description: "Foreign key to the user who is subscribed to the task"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "TaskListNum"
+            description: "Foreign key to the task list that contains the task"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'tasklist')
+                  field: "TaskListNum"
+          - name: "TaskNum"
+            description: "Foreign key to the specific task being subscribed to"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: "TaskNum"
+
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
