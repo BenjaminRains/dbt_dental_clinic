@@ -466,6 +466,42 @@ sources:
           - name: "TaskListStatus"
             description: "Current status of the task list"
 
+      - name: tasknote
+        description: >
+          Notes and comments associated with tasks in the system. Contains detailed information
+          about task updates, progress, and communications between staff members. Each note is
+          linked to a specific task and includes the user who created it and when it was added.
+        columns:
+          - name: "TaskNoteNum"
+            description: "Primary key - Unique identifier for each task note"
+            tests:
+              - unique
+              - not_null
+          - name: "TaskNum"
+            description: "Foreign key to the task this note is associated with"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: "TaskNum"
+          - name: "UserNum"
+            description: "Foreign key to the user who created the note"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "DateTimeNote"
+            description: "Timestamp when the note was created"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "Note"
+            description: "The content of the task note"
+            tests:
+              - not_null
+
         meta:
           data_quality_results:
             last_tested: '2024-03-14'

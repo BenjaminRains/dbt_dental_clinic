@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: stg_opendental__tasknote
+    description: Staging model for task notes from OpenDental. Contains notes associated with tasks in the system.
+    columns:
+      - name: task_note_id
+        description: Primary key for the task note record
+        tests:
+          - unique
+          - not_null
+
+      - name: task_id
+        description: Foreign key to the associated task
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__task')
+              field: task_id
+
+      - name: user_id
+        description: Foreign key to the user who created the note
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+
+      - name: note_datetime
+        description: Timestamp when the note was created
+        tests:
+          - not_null
+
+      - name: note
+        description: The content of the task note
