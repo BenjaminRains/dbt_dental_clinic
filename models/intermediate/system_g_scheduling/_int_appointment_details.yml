@@ -3,9 +3,51 @@ version: 2
 models:
   - name: int_appointment_details
     description: >
-      Intermediate model for appointment details.
-      Provides comprehensive information about appointments including type, status, and patient context.
-      Part of System G: Scheduling
+      Comprehensive appointment details model that provides a complete view of all appointments
+      and their associated metadata. This model serves as the foundation for scheduling analysis
+      and reporting, providing detailed information about appointments, patients, and providers.
+      
+      Key features:
+      - Aggregates appointment data with patient and provider information
+      - Tracks appointment status and confirmation
+      - Monitors check-in and check-out times
+      - Calculates actual appointment duration
+      - Records appointment patterns and types
+      - Maintains one-to-one relationship with appointments
+      - Includes comprehensive provider information
+      - Tracks patient demographics and status
+      - Integrates with System G scheduling models
+      - Provides detailed appointment history
+      
+      Data Sources:
+      - stg_opendental__appointment: Base appointment data
+      - stg_opendental__appointmenttype: Appointment type information
+      - stg_opendental__provider: Provider details
+      - stg_opendental__patient: Patient information
+      - stg_opendental__histappointment: Historical appointment data
+      
+      Business rules:
+      - One record per appointment
+      - Appointment end time must be after start time
+      - Check-out time must be after check-in time
+      - Actual length must be positive when check-in/out times exist
+      - Waiting time must be non-negative
+      - Cancellation reason only present for cancelled appointments
+      - Rescheduled appointment ID must be different from current appointment
+      - Pattern length calculated based on OpenDental's pattern format:
+        * 'X' represents provider time
+        * '/' represents assistant time
+        * Each character represents a 10-minute increment
+      - Status codes must be valid (1-8)
+      - Status descriptions must match status codes
+      - Required fields must not be null
+      - Timestamps must be in chronological order
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: appointment_id
+
     columns:
       - name: appointment_id
         description: Unique identifier for the appointment
