@@ -83,6 +83,7 @@ models:
             severity: warn
             description: >
               Duration metrics should only be populated for phone call communications.
+
     columns:
       - name: metric_id
         description: Unique identifier for the metrics record
@@ -93,8 +94,6 @@ models:
         description: Date of the metrics
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "date <= current_date"
       - name: user_id
         description: ID of the user (for user-level metrics)
         tests:
@@ -138,39 +137,29 @@ models:
         description: Total number of communications
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
-              column_name: total_count
-              config:
-                severity: error
       - name: successful_count
         description: Number of successful communications
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "successful_count >= 0 AND successful_count <= total_count"
       - name: failed_count
         description: Number of failed communications
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "failed_count >= 0 AND failed_count <= total_count"
       - name: average_duration
         description: Average duration of communications in minutes (for calls)
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "average_duration IS NULL OR average_duration >= 0"
-              severity: warn
+          - not_null:
+              where: "communication_type = 'PhoneCall'"
       - name: response_rate
         description: Rate of response for outbound communications
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "response_rate IS NULL OR (response_rate >= 0 AND response_rate <= 1)"
+          - not_null:
+              where: "communication_direction = 'outbound'"
       - name: conversion_rate
         description: Conversion rate (e.g., appointments scheduled from calls)
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1)"
+          - not_null:
+              where: "communication_category = 'appointment'"
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
         tests:
@@ -200,3 +189,46 @@ models:
         - "All metrics must be segmented by relevant dimensions (type, direction, category)"
         - "Daily aggregation must include all communications for the day"
         - "User attribution must be accurate for staff performance metrics"
+
+    tests:
+      # Validates that successful_count is non-negative and doesn't exceed total_count
+      - dbt_utils.expression_is_true:
+          name: successful_count_validation
+          expression: "successful_count >= 0 AND successful_count <= total_count"
+          config:
+            severity: error
+
+      # Validates that failed_count is non-negative and doesn't exceed total_count
+      - dbt_utils.expression_is_true:
+          name: failed_count_validation
+          expression: "failed_count >= 0 AND failed_count <= total_count"
+          config:
+            severity: error
+
+      # Validates that average_duration is non-negative when present
+      - dbt_utils.expression_is_true:
+          name: average_duration_validation
+          expression: "average_duration IS NULL OR average_duration >= 0"
+          config:
+            severity: warn
+
+      # Validates that response_rate is between 0 and 1 when present
+      - dbt_utils.expression_is_true:
+          name: response_rate_validation
+          expression: "response_rate IS NULL OR (response_rate >= 0 AND response_rate <= 1)"
+          config:
+            severity: error
+
+      # Validates that conversion_rate is between 0 and 1 when present
+      - dbt_utils.expression_is_true:
+          name: conversion_rate_validation
+          expression: "conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1)"
+          config:
+            severity: error
+
+      # Validates that date is not in the future
+      - dbt_utils.expression_is_true:
+          name: date_validation
+          expression: "date <= current_date"
+          config:
+            severity: error
