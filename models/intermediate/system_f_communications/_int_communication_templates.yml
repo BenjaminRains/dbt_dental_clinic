@@ -152,20 +152,22 @@ models:
         description: Array of variables used in the template for personalization
         tests:
           - dbt_utils.expression_is_true:
-              expression: "variables IS NOT NULL AND array_length(variables, 1) > 0"
+              expression: "IS NOT NULL AND array_length(variables, 1) > 0"
               config:
                 severity: warn
                 description: "Templates with placeholders must have defined variables"
+                column_name: variables
       
       - name: is_active
         description: Flag indicating if the template is active
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "is_active IS TRUE OR is_active IS FALSE"
+              expression: "IS TRUE OR IS FALSE"
               config:
                 severity: error
                 description: "is_active must be either TRUE or FALSE"
+                column_name: is_active
       
       - name: created_by
         description: ID of the user who created the template
@@ -180,19 +182,21 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "created_at < current_timestamp"
+              expression: "< current_timestamp"
               config:
                 severity: error
                 description: "Created timestamp must be in the past"
+                column_name: created_at
       
       - name: updated_at
         description: Timestamp when this template was last updated
         tests:
           - dbt_utils.expression_is_true:
-              expression: "updated_at IS NULL OR updated_at >= created_at"
+              expression: "IS NULL OR updated_at >= created_at"
               config:
                 severity: error
                 description: "Updated timestamp must be after or equal to created timestamp"
+                column_name: updated_at
       
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
