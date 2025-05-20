@@ -1,6 +1,6 @@
 {{
     config(
-        materialized='incremental',
+        materialized='table',
         schema='intermediate',
         unique_key='user_od_pref_id'
     )
@@ -27,12 +27,9 @@ with user_preferences as (
         fkey_type,
         value_string,
         clinic_id,
-        entry_datetime as created_at,
-        last_modified_datetime as updated_at
+        CURRENT_TIMESTAMP as created_at,
+        CURRENT_TIMESTAMP as updated_at
     from {{ ref('stg_opendental__userodpref') }}
-    {% if is_incremental() %}
-    where last_modified_datetime > (select max(updated_at) from {{ this }})
-    {% endif %}
 ),
 
 user_appointment_views as (
@@ -41,12 +38,9 @@ user_appointment_views as (
         user_id as appt_view_user_id,
         clinic_id as appt_view_clinic_id,
         appt_view_id,
-        entry_datetime as view_created_at,
-        last_modified_datetime as view_updated_at
+        CURRENT_TIMESTAMP as view_created_at,
+        CURRENT_TIMESTAMP as view_updated_at
     from {{ ref('stg_opendental__userodapptview') }}
-    {% if is_incremental() %}
-    where last_modified_datetime > (select max(updated_at) from {{ this }})
-    {% endif %}
 )
 
 select

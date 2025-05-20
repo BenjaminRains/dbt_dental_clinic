@@ -13,7 +13,9 @@ renamed as (
         "Fkey" as fkey,
         "FkeyType" as fkey_type,
         "ValueString" as value_string,
-        "ClinicNum" as clinic_id
+        "ClinicNum" as clinic_id,
+        CURRENT_TIMESTAMP as created_at,
+        CURRENT_TIMESTAMP as updated_at
     from source
 )
 
