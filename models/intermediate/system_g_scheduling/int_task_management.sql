@@ -39,6 +39,21 @@ with task_base as (
     {% endif %}
 ),
 
+-- Add appointment tasks CTE
+appointment_tasks as (
+    select
+        t.task_id,
+        t.key_id as appointment_id,
+        a.appointment_datetime,
+        a.appointment_status,
+        a.provider_id,
+        a.patient_id
+    from {{ ref('stg_opendental__task') }} t
+    inner join {{ ref('stg_opendental__appointment') }} a
+        on t.key_id = a.appointment_id
+    where t.object_type = 'appointment'  -- Assuming this is how appointment tasks are identified
+),
+
 task_list as (
     select
         task_id as task_list_id,
@@ -127,6 +142,13 @@ select
     t.original_timestamp,
     t.last_edit_timestamp,
     
+    -- Appointment Task Information (if applicable)
+    at.appointment_id,
+    at.appointment_datetime,
+    at.appointment_status,
+    at.provider_id as appointment_provider_id,
+    at.patient_id as appointment_patient_id,
+    
     -- Task List Information
     tl.task_list_description,
     tl.parent_task_list_id,
@@ -174,6 +196,8 @@ select
     CURRENT_TIMESTAMP as model_updated_at
 
 from task_base t
+left join appointment_tasks at
+    on t.task_id = at.task_id
 left join task_list tl
     on t.task_list_id = tl.task_list_id
 left join task_history th

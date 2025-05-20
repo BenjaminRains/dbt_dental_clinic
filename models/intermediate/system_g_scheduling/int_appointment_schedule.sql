@@ -35,15 +35,9 @@ AppointmentMetrics AS (
         COUNT(CASE WHEN apt.appointment_status = 5 THEN 1 END) as cancelled_appointments,
         COUNT(CASE WHEN apt.appointment_status = 3 THEN 1 END) as no_show_appointments,
         COUNT(CASE WHEN apt.confirmation_status = 0 THEN 1 END) as unconfirmed_appointments,
-        SUM(
-            CASE 
-                WHEN apt.pattern IS NULL THEN 30
-                WHEN apt.pattern ~ '^[0-9]+$' THEN apt.pattern::integer
-                ELSE LENGTH(apt.pattern) * 10
-            END
-        ) as total_appointment_minutes
+        SUM({{ calculate_pattern_length('apt.pattern') }}) as total_appointment_minutes
     FROM {{ ref('stg_opendental__appointment') }} apt
-    WHERE apt.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
+    WHERE apt.appointment_datetime >= CURRENT_DATE - INTERVAL '{{ var("schedule_window_days") }} days'
     GROUP BY DATE(apt.appointment_datetime), apt.provider_id
 ),
 

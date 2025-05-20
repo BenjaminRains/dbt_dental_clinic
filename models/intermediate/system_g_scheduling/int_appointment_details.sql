@@ -23,22 +23,14 @@ WITH AppointmentBase AS (
         apt.appointment_datetime,
         apt.appointment_datetime + 
             INTERVAL '1 minute' * (
-                CASE 
-                    WHEN apt.pattern IS NULL THEN 30
-                    WHEN apt.pattern ~ '^[0-9]+$' THEN apt.pattern::integer
-                    ELSE LENGTH(apt.pattern) * 10  -- Each character represents 10 minutes
-                END
+                {{ calculate_pattern_length('apt.pattern') }}
             ) AS appointment_end_datetime,
         apt.appointment_type_id,
         apt.appointment_status,
         apt.confirmation_status as confirmed,
         apt.operatory_id as operatory,
         apt.pattern,
-        CASE
-            WHEN apt.pattern ~ '^[0-9]+$' THEN apt.pattern::integer
-            WHEN apt.pattern IS NULL THEN 30
-            ELSE LENGTH(apt.pattern) * 10
-        END as pattern_length,
+        {{ calculate_pattern_length('apt.pattern') }} as pattern_length,
         apt.note,
         apt.is_hygiene,
         apt.is_new_patient,
@@ -61,11 +53,7 @@ AppointmentTypes AS (
     SELECT
         at.appointment_type_id,
         at.appointment_type_name,
-        CASE
-            WHEN at.pattern ~ '^[0-9]+$' THEN at.pattern::integer
-            WHEN at.pattern IS NULL THEN 30
-            ELSE LENGTH(at.pattern) * 10
-        END as appointment_length,
+        {{ calculate_pattern_length('at.pattern') }} as appointment_length,
         at.appointment_type_color as color
     FROM {{ ref('stg_opendental__appointmenttype') }} at
 ),
@@ -117,7 +105,11 @@ HistoricalAppointments AS (
                 '[^0-9]', '', 'g'
             )::integer
             ELSE NULL
-        END AS rescheduled_appointment_id
+        END AS rescheduled_appointment_id,
+        ROW_NUMBER() OVER (
+            PARTITION BY appointment_id 
+            ORDER BY timestamp DESC
+        ) as history_rank
     FROM {{ ref('stg_opendental__histappointment') }}
 )
 
@@ -184,4 +176,5 @@ LEFT JOIN PatientInfo pat
     ON ab.patient_id = pat.patient_id
 LEFT JOIN HistoricalAppointments ha
     ON ab.appointment_id = ha.appointment_id
+    AND ha.history_rank = 1  -- Only get the latest history record
     AND ha.action_type IN (1, 4) -- Rescheduled or Cancelled

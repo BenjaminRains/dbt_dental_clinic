@@ -27,7 +27,7 @@ WITH ProviderSchedules AS (
     FROM {{ ref('stg_opendental__schedule') }}
     WHERE schedule_type = 0  -- Provider schedules
         AND provider_id IS NOT NULL
-        AND schedule_date >= CURRENT_DATE - INTERVAL '90 days'
+        AND schedule_date >= CURRENT_DATE - INTERVAL '{{ var("schedule_window_days") }} days'
 ),
 
 DailyAvailability AS (

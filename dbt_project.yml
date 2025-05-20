@@ -52,6 +52,7 @@ vars:
   dental_database: opendental_analytics
   # Set maximum valid date for data validation
   max_valid_date: '2025-02-28'
+  schedule_window_days: 90  # Number of days to look back for scheduling data
 
 # Package dependencies
 packages:
