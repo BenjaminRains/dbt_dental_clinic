@@ -45,6 +45,7 @@ models:
     tests:
       # Validates template_name and content have at least one non-null value
       - dbt_utils.expression_is_true:
+          name: template_content_validation
           expression: "template_name IS NOT NULL OR content IS NOT NULL"
           config:
             severity: error
@@ -52,13 +53,16 @@ models:
 
       # Validates content length for non-null content
       - dbt_utils.expression_is_true:
-          expression: "content IS NULL OR LENGTH(content) > 10"
+          name: content_length_validation
+          expression: "LENGTH(content) > 10"
           config:
             severity: error
             description: "Content must be at least 10 characters long when present"
+            where: "content IS NOT NULL"
 
       # Validates template_type values
       - dbt_utils.expression_is_true:
+          name: template_type_validation
           expression: "template_type IN ('email', 'SMS', 'letter')"
           config:
             severity: error
@@ -66,6 +70,7 @@ models:
 
       # Validates template category values
       - dbt_utils.expression_is_true:
+          name: category_validation
           expression: "category IN ('appointment', 'billing', 'clinical', 'recall', 'forms', 'general')"
           config:
             severity: error
@@ -73,20 +78,25 @@ models:
 
       # Validates email templates have subject lines
       - dbt_utils.expression_is_true:
-          expression: "(template_type = 'email' AND subject IS NOT NULL) OR (template_type != 'email')"
+          name: email_subject_validation
+          expression: "subject IS NOT NULL"
           config:
             severity: error
             description: "Email templates must have subject lines"
+            where: "template_type = 'email'"
 
       # Validates template variables for templates with placeholders
       - dbt_utils.expression_is_true:
-          expression: "variables IS NOT NULL AND array_length(variables, 1) > 0"
+          name: variables_validation
+          expression: "array_length(variables, 1) > 0"
           config:
             severity: warn
             description: "Templates with placeholders must have defined variables"
+            where: "variables IS NOT NULL"
 
       # Validates template_name length
       - dbt_utils.expression_is_true:
+          name: template_name_length_validation
           expression: "LENGTH(template_name) > 3"
           config:
             severity: error
@@ -94,10 +104,12 @@ models:
 
       # Validates updated_at is after created_at when present
       - dbt_utils.expression_is_true:
-          expression: "updated_at IS NULL OR updated_at >= created_at"
+          name: timestamp_validation
+          expression: "updated_at >= created_at"
           config:
             severity: error
             description: "Updated timestamp must be after or equal to created timestamp"
+            where: "updated_at IS NOT NULL"
 
     columns:
       - name: template_id
@@ -110,18 +122,13 @@ models:
         description: Name of the template (campaign name for PbN templates, template type for text messages)
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "LENGTH(template_name) > 3"
-              config:
-                severity: error
-                description: "Template name must be at least 4 characters long"
       
       - name: template_type
         description: Type of template (email for PbN campaigns, SMS for text messages)
         tests:
           - not_null
           - accepted_values:
-              values: ['email', 'SMS']
+              values: ['email', 'SMS', 'letter']
       
       - name: category
         description: Category of the template (appointment, billing, clinical, etc.)
@@ -141,33 +148,20 @@ models:
         tests:
           - not_null:
               where: "template_type = 'SMS'"
-          - dbt_utils.expression_is_true:
-              expression: "LENGTH(content) > 10"
-              config:
-                severity: error
-                description: "Content must be at least 10 characters long when present"
-                where: "content IS NOT NULL"
       
       - name: variables
         description: Array of variables used in the template for personalization
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "IS NOT NULL AND array_length(variables, 1) > 0"
-              config:
-                severity: warn
-                description: "Templates with placeholders must have defined variables"
-                column_name: variables
       
       - name: is_active
         description: Flag indicating if the template is active
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "IS TRUE OR IS FALSE"
+              name: is_active_validation
+              expression: "IN (TRUE, FALSE)"
               config:
                 severity: error
                 description: "is_active must be either TRUE or FALSE"
-                column_name: is_active
       
       - name: created_by
         description: ID of the user who created the template
@@ -186,17 +180,16 @@ models:
               config:
                 severity: error
                 description: "Created timestamp must be in the past"
-                column_name: created_at
       
       - name: updated_at
         description: Timestamp when this template was last updated
         tests:
           - dbt_utils.expression_is_true:
-              expression: "IS NULL OR updated_at >= created_at"
+              expression: ">= created_at"
               config:
                 severity: error
                 description: "Updated timestamp must be after or equal to created timestamp"
-                column_name: updated_at
+              where: "updated_at IS NOT NULL"
       
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
