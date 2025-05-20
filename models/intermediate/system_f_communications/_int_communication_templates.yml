@@ -80,7 +80,7 @@ models:
 
       # Validates template variables for templates with placeholders
       - dbt_utils.expression_is_true:
-          expression: "(content NOT LIKE '%{_%') OR (array_length(variables, 1) > 0)"
+          expression: "variables IS NOT NULL AND array_length(variables, 1) > 0"
           config:
             severity: warn
             description: "Templates with placeholders must have defined variables"
@@ -98,6 +98,7 @@ models:
           config:
             severity: error
             description: "Updated timestamp must be after or equal to created timestamp"
+
     columns:
       - name: template_id
         description: Unique identifier for the template
@@ -111,6 +112,9 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "LENGTH(template_name) > 3"
+              config:
+                severity: error
+                description: "Template name must be at least 4 characters long"
       
       - name: template_type
         description: Type of template (email for PbN campaigns, SMS for text messages)
@@ -139,18 +143,19 @@ models:
               where: "template_type = 'SMS'"
           - dbt_utils.expression_is_true:
               expression: "LENGTH(content) > 10"
-              where: "content IS NOT NULL"
+              config:
+                severity: error
+                description: "Content must be at least 10 characters long when present"
+                where: "content IS NOT NULL"
       
       - name: variables
         description: Array of variables used in the template for personalization
         tests:
-          # Tests that variables array exists and has elements when content has placeholders
           - dbt_utils.expression_is_true:
-              expression: "IS NOT NULL AND array_length(variables, 1) > 0"
+              expression: "variables IS NOT NULL AND array_length(variables, 1) > 0"
               config:
                 severity: warn
                 description: "Templates with placeholders must have defined variables"
-                column_name: variables
       
       - name: is_active
         description: Flag indicating if the template is active
@@ -158,7 +163,9 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "is_active IS TRUE OR is_active IS FALSE"
-              where: "is_active IS NOT NULL"
+              config:
+                severity: error
+                description: "is_active must be either TRUE or FALSE"
       
       - name: created_by
         description: ID of the user who created the template
@@ -174,12 +181,18 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "created_at < current_timestamp"
+              config:
+                severity: error
+                description: "Created timestamp must be in the past"
       
       - name: updated_at
         description: Timestamp when this template was last updated
         tests:
           - dbt_utils.expression_is_true:
               expression: "updated_at IS NULL OR updated_at >= created_at"
+              config:
+                severity: error
+                description: "Updated timestamp must be after or equal to created timestamp"
       
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
