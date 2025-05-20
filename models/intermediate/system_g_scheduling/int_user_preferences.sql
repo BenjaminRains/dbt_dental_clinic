@@ -1,8 +1,23 @@
 {{
     config(
-        materialized='view'
+        materialized='incremental',
+        schema='intermediate',
+        unique_key='user_od_pref_id'
     )
 }}
+
+/*
+    Intermediate model for user preferences and appointment views.
+    Tracks user-specific settings and appointment view configurations.
+    
+    This model:
+    1. Joins user preferences with appointment view settings
+    2. Maintains user-clinic specific configurations
+    3. Supports appointment scheduling preferences
+    4. Integrates with System G scheduling models
+    
+    Part of System G: Scheduling
+*/
 
 with user_preferences as (
     select
@@ -11,8 +26,13 @@ with user_preferences as (
         fkey,
         fkey_type,
         value_string,
-        clinic_id
+        clinic_id,
+        entry_datetime as created_at,
+        last_modified_datetime as updated_at
     from {{ ref('stg_opendental__userodpref') }}
+    {% if is_incremental() %}
+    where last_modified_datetime > (select max(updated_at) from {{ this }})
+    {% endif %}
 ),
 
 user_appointment_views as (
@@ -20,8 +40,13 @@ user_appointment_views as (
         userod_appt_view_id,
         user_id as appt_view_user_id,
         clinic_id as appt_view_clinic_id,
-        appt_view_id
+        appt_view_id,
+        entry_datetime as view_created_at,
+        last_modified_datetime as view_updated_at
     from {{ ref('stg_opendental__userodapptview') }}
+    {% if is_incremental() %}
+    where last_modified_datetime > (select max(updated_at) from {{ this }})
+    {% endif %}
 )
 
 select
@@ -32,11 +57,19 @@ select
     up.fkey_type,
     up.value_string,
     up.clinic_id,
+    up.created_at,
+    up.updated_at,
     
     -- Appointment View Information
     uav.userod_appt_view_id,
     uav.appt_view_id,
-    uav.appt_view_clinic_id
+    uav.appt_view_clinic_id,
+    uav.view_created_at,
+    uav.view_updated_at,
+    
+    -- Metadata
+    CURRENT_TIMESTAMP as model_created_at,
+    CURRENT_TIMESTAMP as model_updated_at
 
 from user_preferences up
 left join user_appointment_views uav

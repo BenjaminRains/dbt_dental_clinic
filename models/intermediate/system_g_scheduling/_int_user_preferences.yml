@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: int_user_preferences
+    description: >
+      Intermediate model for user preferences and appointment views.
+      Tracks user-specific settings and appointment view configurations.
+      Integrates with the appointment scheduling system to maintain user preferences.
+      Part of System G: Scheduling
+    columns:
+      - name: user_od_pref_id
+        description: Unique identifier for the user preference record
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: ID of the user
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+      - name: fkey
+        description: Foreign key reference
+      - name: fkey_type
+        description: Type of the foreign key reference
+      - name: value_string
+        description: Preference value stored as string
+      - name: clinic_id
+        description: ID of the clinic
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+      - name: created_at
+        description: When the preference was created
+        tests:
+          - not_null
+      - name: updated_at
+        description: When the preference was last updated
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "updated_at >= created_at"
+      
+      # Appointment View Information
+      - name: userod_appt_view_id
+        description: ID of the appointment view record
+      - name: appt_view_id
+        description: ID of the appointment view type
+      - name: appt_view_clinic_id
+        description: ID of the clinic for this view
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "appt_view_clinic_id IS NULL OR appt_view_clinic_id = clinic_id"
+      - name: view_created_at
+        description: When the view was created
+      - name: view_updated_at
+        description: When the view was last updated
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "view_updated_at IS NULL OR view_updated_at >= view_created_at"
+      
+      # Metadata
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "model_updated_at >= model_created_at" 
