@@ -3,10 +3,54 @@ version: 2
 models:
   - name: int_user_preferences
     description: >
-      Intermediate model for user preferences and appointment views.
-      Tracks user-specific settings and appointment view configurations.
-      Integrates with the appointment scheduling system to maintain user preferences.
-      Part of System G: Scheduling
+      Comprehensive user preferences model that manages user-specific settings and appointment
+      view configurations. This model serves as the foundation for personalized scheduling
+      experiences, view customization, and user preference persistence in the dental clinic.
+      
+      Key features:
+      - Manages user-specific preferences and settings
+      - Tracks appointment view configurations
+      - Supports clinic-specific view settings
+      - Maintains preference history and changes
+      - Enables view customization
+      - Supports multi-clinic configurations
+      - Tracks preference timestamps
+      - Integrates with scheduling system
+      - Manages view type associations
+      - Provides preference audit trail
+      
+      Data Sources:
+      - stg_opendental__userodpref: Base user preferences
+      - stg_opendental__userodapptview: Appointment view settings
+      - stg_opendental__user: User information
+      - stg_opendental__clinic: Clinic information
+      - stg_opendental__apptview: Appointment view definitions
+      
+      Business rules:
+      - One record per user preference
+      - User must exist in the system
+      - Clinic must exist in the system
+      - View clinic ID must match user's clinic ID
+      - Update timestamps must be after creation timestamps
+      - Foreign key references must be valid
+      - Preference values must be properly formatted
+      - View configurations must be valid
+      - Required fields must not be null
+      - Timestamps must be in chronological order
+      - Model updates must maintain data integrity
+      
+      Grain:
+      - One record per user preference (user_od_pref_id)
+      - One record per appointment view (userod_appt_view_id)
+      - User-level preference settings
+      - Clinic-level view configurations
+      - Incremental updates based on updated_at
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: ['user_od_pref_id']
+
     columns:
       - name: user_od_pref_id
         description: Unique identifier for the user preference record
