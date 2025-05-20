@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_opendental__entrylog
+    description: >
+      Staging model for system entry logs. Contains audit trail information about 
+      user actions and system events, tracking who performed what action and when.
+    columns:
+      - name: entry_log_num
+        description: "Primary key - Unique identifier for each log entry"
+        tests:
+          - unique
+          - not_null
+      
+      - name: user_num
+        description: "Foreign key to the user who performed the action"
+        tests:
+          - relationships:
+              to: source('opendental', 'userod')
+              field: usernum
+      
+      - name: foreign_key_type
+        description: >
+          Type identifier for the foreign key reference. Indicates what type of 
+          record the foreign_key points to.
+        tests:
+          - not_null
+      
+      - name: foreign_key
+        description: >
+          Foreign key reference to the related record. The actual table referenced 
+          depends on the foreign_key_type value.
+        tests:
+          - not_null
+      
+      - name: log_source
+        description: >
+          Source of the log entry. Indicates which system component or module 
+          generated the log entry.
+        tests:
+          - not_null
+      
+      - name: entry_datetime
+        description: "Timestamp when the log entry was created"
+        tests:
+          - not_null
