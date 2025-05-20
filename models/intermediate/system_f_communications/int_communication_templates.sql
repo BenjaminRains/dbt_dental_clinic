@@ -116,7 +116,11 @@ CommunicationTemplates AS (
         -- Placeholder for variables detection
         ARRAY['PATIENT_NAME', 'DATE', 'PROVIDER']::text[] AS variables,
         TRUE::boolean AS is_active,
-        MIN(user_id)::integer AS created_by,
+        -- Only set created_by if user_id exists in stg_opendental__userod
+        CASE 
+            WHEN MIN(user_id) IN (SELECT user_id FROM {{ ref('stg_opendental__userod') }}) THEN MIN(user_id)
+            ELSE NULL
+        END::integer AS created_by,
         MIN(created_at) AS created_at,
         MAX(updated_at) AS updated_at
     FROM (
