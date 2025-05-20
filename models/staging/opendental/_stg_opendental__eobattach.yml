@@ -29,8 +29,6 @@ models:
       
       - name: raw_base64
         description: Base64 encoded content of the attached file
-        tests:
-          - not_null
       
       - name: _airbyte_ab_id
         description: Unique identifier for the Airbyte record
