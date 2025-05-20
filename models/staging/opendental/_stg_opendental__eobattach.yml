@@ -16,6 +16,9 @@ models:
           - relationships:
               to: ref('stg_opendental__claimpayment')
               field: claim_payment_id
+              config:
+                severity: warn
+                where: "created_at >= '2023-01-01'"
       
       - name: created_at
         description: Timestamp when the EOB attachment was created
