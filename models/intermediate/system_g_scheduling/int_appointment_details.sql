@@ -108,7 +108,7 @@ HistoricalAppointments AS (
         END AS rescheduled_appointment_id,
         ROW_NUMBER() OVER (
             PARTITION BY appointment_id 
-            ORDER BY timestamp DESC
+            ORDER BY history_timestamp DESC
         ) as history_rank
     FROM {{ ref('stg_opendental__histappointment') }}
 )
