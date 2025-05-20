@@ -34,6 +34,7 @@ InsurancePlan as (
         
         -- Foreign Keys
         carrier_id,
+        employer_id,
         
         -- Plan Details
         group_name,
@@ -60,6 +61,15 @@ Carrier as (
         carrier_id,
         carrier_name
     from {{ ref('stg_opendental__carrier') }}
+),
+
+Employer as (
+    select
+        employer_id,
+        employer_name,
+        city,
+        state
+    from {{ ref('stg_opendental__employer') }}
 ),
 
 Subscriber as (
@@ -160,6 +170,24 @@ Final as (
         -- Benefit Details
         b.benefit_details,
 
+        -- Employer Information
+        case
+            when ip.employer_id is null then null
+            else ip.employer_id
+        end as employer_id,
+        case
+            when ip.employer_id is null then ''
+            else e.employer_name
+        end as employer_name,
+        case
+            when ip.employer_id is null then ''
+            else e.city
+        end as employer_city,
+        case
+            when ip.employer_id is null then ''
+            else e.state
+        end as employer_state,
+        
         -- Status Flags
         case
             when pp.is_pending = 1 then false
@@ -207,6 +235,8 @@ Final as (
         on pp.patplan_id = ip.insurance_plan_id
     left join Carrier c
         on ip.carrier_id = c.carrier_id
+    left join Employer e
+        on ip.employer_id = e.employer_id
     left join Subscriber s
         on pp.insurance_subscriber_id = s.subscriber_id
     left join Verification v
