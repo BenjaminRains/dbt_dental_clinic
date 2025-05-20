@@ -3,9 +3,51 @@ version: 2
 models:
   - name: int_appointment_schedule
     description: >
-      Intermediate model for appointment scheduling.
-      Provides a view of the appointment schedule per provider and day.
-      Part of System G: Scheduling
+      Comprehensive scheduling model that provides daily provider schedules and utilization metrics.
+      This model serves as the foundation for schedule analysis, capacity planning, and provider
+      availability tracking in the dental clinic.
+      
+      Key features:
+      - Daily schedule aggregation per provider
+      - Tracks appointment completion and cancellation rates
+      - Monitors schedule utilization and capacity
+      - Calculates available time and booked minutes
+      - Identifies provider days off
+      - Supports schedule optimization
+      - Enables capacity planning
+      - Provides schedule performance metrics
+      
+      Data Sources:
+      - int_appointment_details: Base appointment data with status and timing
+      - int_provider_availability: Provider schedule and availability
+      - stg_opendental__provider: Provider information
+      - stg_opendental__appointmenttype: Appointment type durations
+      
+      Business rules:
+      - One record per provider per day
+      - Schedule window is 90 days from current date
+      - Utilization rate = total_appointment_minutes / available_minutes * 100
+      - Completed appointments cannot exceed total appointments
+      - Cancelled appointments cannot exceed total appointments
+      - No-show appointments cannot exceed total appointments
+      - Unconfirmed appointments cannot exceed total appointments
+      - Total appointment minutes must be less than or equal to available minutes
+      - Utilization rate must be between 0 and 100
+      - Start time must be before end time
+      - Days off are tracked via is_day_off flag
+      - Schedule metrics are calculated at end of day
+      
+      Grain:
+      - One record per provider per day
+      - Daily aggregation of appointment data
+      - Provider-level schedule metrics
+      - 90-day rolling window
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: ['schedule_id']
+
     columns:
       - name: schedule_id
         description: Unique identifier for the schedule record
@@ -32,13 +74,13 @@ models:
         tests:
           - not_null
       - name: total_appointments
-        description: Total number of appointments scheduled
+        description: Total number of appointments scheduled for the day
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: completed_appointments
-        description: Number of completed appointments
+        description: Number of appointments marked as complete
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -46,7 +88,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: cancelled_appointments
-        description: Number of cancelled appointments
+        description: Number of appointments that were cancelled
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -54,7 +96,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: no_show_appointments
-        description: Number of no-show appointments
+        description: Number of appointments where patient did not show up
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -62,7 +104,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: unconfirmed_appointments
-        description: Number of unconfirmed appointments
+        description: Number of appointments that are not yet confirmed
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -70,19 +112,19 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: total_appointment_minutes
-        description: Total scheduled appointment minutes
+        description: Total minutes scheduled for appointments
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: available_minutes
-        description: Total available minutes in the schedule
+        description: Total minutes available in the schedule
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: utilization_rate
-        description: Percentage of available time utilized for appointments
+        description: Percentage of available time that is scheduled
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -90,11 +132,11 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: start_time
-        description: Start time of the schedule
+        description: Start time of the provider's schedule
       - name: end_time
-        description: End time of the schedule
+        description: End time of the provider's schedule
       - name: is_day_off
-        description: Flag indicating if this is a day off
+        description: Flag indicating if the provider is off on this day
         tests:
           - not_null
       - name: model_created_at
