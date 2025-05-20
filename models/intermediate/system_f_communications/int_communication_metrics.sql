@@ -25,14 +25,43 @@ WITH DailyCommunications AS (
         COUNT(*) AS total_count,
         SUM(CASE WHEN outcome IN ('confirmed', 'completed', 'rescheduled') THEN 1 ELSE 0 END) AS successful_count,
         SUM(CASE WHEN outcome IN ('cancelled', 'no_answer') THEN 1 ELSE 0 END) AS failed_count,
-        -- Calculate average duration when end datetime is available
+        -- Calculate average duration only for completed phone calls with valid timestamps
         AVG(
             CASE 
-                WHEN communication_end_datetime IS NOT NULL 
+                WHEN communication_mode = 2  -- Only phone calls
+                AND communication_datetime <= CURRENT_TIMESTAMP  -- Not future scheduled
+                AND communication_end_datetime > '0001-01-01 00:00:00'  -- Has valid end time
+                AND communication_end_datetime > communication_datetime  -- End time after start time
                 THEN EXTRACT(EPOCH FROM (communication_end_datetime - communication_datetime))/60 
                 ELSE NULL 
             END
-        ) AS average_duration_minutes
+        ) AS average_duration_minutes,
+        -- Add diagnostic columns
+        MIN(communication_datetime) as min_start_time,
+        MAX(communication_datetime) as max_start_time,
+        MIN(CASE WHEN communication_end_datetime > '0001-01-01 00:00:00' THEN communication_end_datetime END) as min_end_time,
+        MAX(CASE WHEN communication_end_datetime > '0001-01-01 00:00:00' THEN communication_end_datetime END) as max_end_time,
+        COUNT(CASE WHEN communication_end_datetime > '0001-01-01 00:00:00' THEN 1 END) as records_with_end_time,
+        COUNT(*) as total_records,
+        COUNT(CASE 
+            WHEN communication_mode = 2  -- Only phone calls
+            AND communication_datetime <= CURRENT_TIMESTAMP  -- Not future scheduled
+            AND communication_end_datetime > '0001-01-01 00:00:00'  -- Has valid end time
+            AND communication_end_datetime > communication_datetime  -- End time after start time
+            THEN 1 
+        END) as valid_durations,
+        -- Add future date diagnostics
+        COUNT(CASE WHEN communication_datetime > CURRENT_TIMESTAMP THEN 1 END) as future_dates_count,
+        MIN(CASE WHEN communication_datetime > CURRENT_TIMESTAMP THEN communication_datetime END) as earliest_future_date,
+        MAX(CASE WHEN communication_datetime > CURRENT_TIMESTAMP THEN communication_datetime END) as latest_future_date,
+        -- Add mode-specific counts
+        COUNT(CASE WHEN communication_mode = 1 THEN 1 END) as email_count,
+        COUNT(CASE WHEN communication_mode = 2 THEN 1 END) as phone_count,
+        COUNT(CASE WHEN communication_mode = 3 THEN 1 END) as mail_count,
+        COUNT(CASE WHEN communication_mode = 5 THEN 1 END) as text_count,
+        -- Add program-specific counts
+        COUNT(CASE WHEN program_id = 0 THEN 1 END) as system_default_count,
+        COUNT(CASE WHEN program_id = 95 THEN 1 END) as legacy_system_count
     FROM {{ ref('int_patient_communications_base') }}
     
     {% if is_incremental() %}
