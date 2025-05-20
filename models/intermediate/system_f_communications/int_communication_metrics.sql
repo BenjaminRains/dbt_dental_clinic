@@ -129,6 +129,24 @@ SELECT
     dc.average_duration_minutes AS average_duration,
     rm.response_rate,
     rm.conversion_rate,
+    -- Add all diagnostic columns
+    dc.min_start_time,
+    dc.max_start_time,
+    dc.min_end_time,
+    dc.max_end_time,
+    dc.records_with_end_time,
+    dc.valid_durations,
+    dc.future_dates_count,
+    dc.earliest_future_date,
+    dc.latest_future_date,
+    -- Add mode-specific counts
+    dc.email_count,
+    dc.phone_count,
+    dc.mail_count,
+    dc.text_count,
+    -- Add program-specific counts
+    dc.system_default_count,
+    dc.legacy_system_count,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
 FROM DailyCommunications dc
