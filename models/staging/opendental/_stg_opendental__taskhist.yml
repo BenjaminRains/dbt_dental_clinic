@@ -1,0 +1,147 @@
+version: 2
+
+models:
+  - name: stg_opendental__taskhist
+    description: Staging model for task history records. Contains historical tracking of task changes, status updates, and task-related metadata.
+    columns:
+      - name: task_hist_id
+        description: Primary key for task history records
+        tests:
+          - unique
+          - not_null
+      
+      - name: user_hist_id
+        description: Foreign key to the user who made the historical change
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+      
+      - name: task_id
+        description: Foreign key to the task record
+        tests:
+          - relationships:
+              to: ref('stg_opendental__task')
+              field: task_id
+      
+      - name: task_list_id
+        description: Foreign key to the task list this task belongs to
+        tests:
+          - relationships:
+              to: ref('stg_opendental__tasklist')
+              field: task_list_id
+      
+      - name: key_id
+        description: Foreign key to the related entity (varies by object type)
+      
+      - name: from_id
+        description: Foreign key to the source entity
+      
+      - name: user_id
+        description: Foreign key to the user who created the task
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+      
+      - name: priority_def_id
+        description: Foreign key to the priority definition
+        tests:
+          - relationships:
+              to: ref('stg_opendental__prioritydef')
+              field: priority_def_id
+      
+      - name: triage_category_id
+        description: Foreign key to the triage category
+        tests:
+          - relationships:
+              to: ref('stg_opendental__triagedef')
+              field: triage_def_id
+      
+      - name: timestamp
+        description: Timestamp when the history record was created
+        tests:
+          - not_null
+      
+      - name: is_note_change
+        description: Flag indicating if this history record represents a note change
+        tests:
+          - not_null
+      
+      - name: task_date
+        description: Date when the task is scheduled for
+        tests:
+          - not_null
+      
+      - name: description
+        description: Main description of the task
+        tests:
+          - not_null
+      
+      - name: task_status
+        description: Current status of the task
+        tests:
+          - not_null
+      
+      - name: is_repeating
+        description: Flag indicating if this is a repeating task
+        tests:
+          - not_null
+      
+      - name: date_type
+        description: Type of date associated with the task
+        tests:
+          - not_null
+      
+      - name: object_type
+        description: Type of object this task is associated with
+        tests:
+          - not_null
+      
+      - name: entry_datetime
+        description: Timestamp when the task was entered
+        tests:
+          - not_null
+      
+      - name: finished_datetime
+        description: Timestamp when the task was completed
+      
+      - name: reminder_group_id
+        description: Identifier for the reminder group
+      
+      - name: reminder_type
+        description: Type of reminder associated with the task
+      
+      - name: reminder_frequency
+        description: Frequency of reminders for this task
+      
+      - name: original_datetime
+        description: Original timestamp of the task
+      
+      - name: description_override
+        description: Override description for the task
+      
+      - name: is_read_only
+        description: Flag indicating if the task is read-only
+        tests:
+          - not_null
+      
+      - name: _airbyte_ab_id
+        description: Unique identifier for the Airbyte record
+        tests:
+          - not_null
+      
+      - name: _airbyte_emitted_at
+        description: Timestamp when the record was emitted by Airbyte
+        tests:
+          - not_null
+      
+      - name: _airbyte_normalized_at
+        description: Timestamp when the record was normalized
+        tests:
+          - not_null
+      
+      - name: _airbyte_taskhist_hashid
+        description: Hash identifier for the task history record
+        tests:
+          - not_null
