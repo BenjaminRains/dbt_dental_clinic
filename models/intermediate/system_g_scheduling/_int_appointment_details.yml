@@ -42,6 +42,7 @@ models:
       - Status descriptions must match status codes
       - Required fields must not be null
       - Timestamps must be in chronological order
+      - History records are ranked by timestamp (history_rank = 1 means "latest relevant status change")
       
     config:
       materialized: incremental
