@@ -22,23 +22,23 @@ WITH AppointmentBase AS (
         apt.provider_id,
         apt.appointment_datetime,
         apt.appointment_datetime + 
-            INTERVAL '1 minute' * COALESCE(apt.pattern_length, 30) AS appointment_end_datetime,
+            INTERVAL '1 minute' * COALESCE(apt.pattern::integer, 30) AS appointment_end_datetime,
         apt.appointment_type_id,
         apt.appointment_status,
-        apt.confirmed,
-        apt.op AS operatory,
-        apt.pattern_length,
+        apt.confirmation_status as confirmed,
+        apt.operatory_id as operatory,
+        apt.pattern,
         apt.note,
         apt.is_hygiene,
         apt.is_new_patient,
-        apt.check_in_time,
-        apt.check_out_time,
+        apt.arrival_datetime as check_in_time,
+        apt.dismissed_datetime as check_out_time,
         CASE
-            WHEN apt.check_in_time IS NOT NULL AND apt.check_out_time IS NOT NULL
-            THEN EXTRACT(EPOCH FROM (apt.check_out_time - apt.check_in_time))/60
+            WHEN apt.arrival_datetime IS NOT NULL AND apt.dismissed_datetime IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (apt.dismissed_datetime - apt.arrival_datetime))/60
             ELSE NULL
         END AS actual_length,
-        apt.created_at
+        apt.entry_datetime as created_at
     FROM {{ ref('stg_opendental__appointment') }} apt
     
     {% if is_incremental() %}
@@ -50,18 +50,18 @@ AppointmentTypes AS (
     SELECT
         at.appointment_type_id,
         at.appointment_type_name,
-        at.appointment_length,
-        at.color
+        at.pattern::integer as appointment_length,
+        at.appointment_type_color as color
     FROM {{ ref('stg_opendental__appointmenttype') }} at
 ),
 
 ProviderInfo AS (
     SELECT
         p.provider_id,
-        p.provider_abbr,
+        p.provider_abbreviation as provider_abbr,
         p.provider_color,
         p.is_hidden,
-        p.specialty
+        p.specialty_id as specialty
     FROM {{ ref('stg_opendental__provider') }} p
 ),
 
@@ -79,26 +79,26 @@ HistoricalAppointments AS (
         patient_id,
         appointment_id,
         appointment_status,
-        action_type,
+        history_action as action_type,
         CASE
-            WHEN action_type = 1 THEN 'Rescheduled'
-            WHEN action_type = 2 THEN 'Confirmed'
-            WHEN action_type = 3 THEN 'Failed Appointment'
-            WHEN action_type = 4 THEN 'Cancelled'
-            WHEN action_type = 5 THEN 'ASAP'
-            WHEN action_type = 6 THEN 'Complete'
+            WHEN history_action = 1 THEN 'Rescheduled'
+            WHEN history_action = 2 THEN 'Confirmed'
+            WHEN history_action = 3 THEN 'Failed Appointment'
+            WHEN history_action = 4 THEN 'Cancelled'
+            WHEN history_action = 5 THEN 'ASAP'
+            WHEN history_action = 6 THEN 'Complete'
             ELSE 'Unknown'
         END AS action_description,
-        action_note,
+        note as action_note,
         CASE
-            WHEN action_type = 4 AND action_note IS NOT NULL
-            THEN action_note
+            WHEN history_action = 4 AND note IS NOT NULL
+            THEN note
             ELSE NULL
         END AS cancellation_reason,
         CASE
-            WHEN action_type = 1 AND action_note LIKE '%new appt:#%'
+            WHEN history_action = 1 AND note LIKE '%new appt:#%'
             THEN REGEXP_REPLACE(
-                SUBSTRING(action_note FROM 'new appt:#([0-9]+)'),
+                SUBSTRING(note FROM 'new appt:#([0-9]+)'),
                 '[^0-9]', '', 'g'
             )::integer
             ELSE NULL
