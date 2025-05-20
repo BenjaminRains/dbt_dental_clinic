@@ -14,33 +14,113 @@ models:
           - not_null
       - name: date
         description: Date of the metrics
+        tests:
+          - not_null
+          - dbt_utils.date_after:
+              datepart: day
+              field: date
+              interval: -90
       - name: provider_id
         description: ID of the provider (for provider-level metrics)
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                severity: warn
       - name: metric_level
         description: Level of the metric (provider, clinic, overall)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['provider', 'clinic', 'overall']
       - name: total_appointments
         description: Total number of appointments
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
       - name: completed_appointments
         description: Number of completed appointments
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= total_appointments"
       - name: cancelled_appointments
         description: Number of cancelled appointments
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= total_appointments"
       - name: no_show_rate
         description: Rate of no-show appointments
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 100"
       - name: cancellation_rate
         description: Rate of cancelled appointments
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 100"
       - name: completion_rate
         description: Rate of completed appointments
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 100"
       - name: schedule_utilization
         description: Percentage of available time scheduled
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 100"
       - name: chair_time_utilization
         description: Percentage of chair time utilized
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 100"
       - name: average_appointment_length
         description: Average length of appointments in minutes
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
       - name: average_wait_time
         description: Average patient wait time in minutes
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
       - name: new_patient_rate
         description: Percentage of appointments that are new patients
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 100"
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
       - name: model_updated_at
         description: Timestamp when this record was last updated in the dbt model
+        tests:
+          - not_null
