@@ -29,7 +29,7 @@ models:
         tests:
           - relationships:
               to: ref('stg_opendental__tasklist')
-              field: task_list_id
+              field: task_id
       
       - name: key_id
         description: Foreign key to the related entity (varies by object type)
