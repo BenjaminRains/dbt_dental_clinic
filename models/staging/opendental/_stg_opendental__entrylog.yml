@@ -6,13 +6,13 @@ models:
       Staging model for system entry logs. Contains audit trail information about 
       user actions and system events, tracking who performed what action and when.
     columns:
-      - name: entry_log_num
+      - name: entry_log_id
         description: "Primary key - Unique identifier for each log entry"
         tests:
           - unique
           - not_null
       
-      - name: user_num
+      - name: user_id
         description: "Foreign key to the user who performed the action"
         tests:
           - relationships:

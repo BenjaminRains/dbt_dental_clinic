@@ -11,10 +11,10 @@ with source as (
 renamed as (
     select
         -- Primary Key
-        "EntryLogNum" as entry_log_num,
+        "EntryLogNum" as entry_log_id,
         
         -- Foreign Keys
-        "UserNum" as user_num,
+        "UserNum" as user_id,
         "FKeyType" as foreign_key_type,
         "FKey" as foreign_key,
         
