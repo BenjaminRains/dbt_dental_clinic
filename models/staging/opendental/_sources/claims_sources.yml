@@ -448,3 +448,42 @@ sources:
           contains_pii: false
           business_owners: ["dental_finance_team", "insurance_team"]
           technical_owners: ["data_engineering_team"]
+
+      - name: eobattach
+        description: "Explanation of Benefits (EOB) attachments associated with claim payments"
+        loaded_at_field: "DateTCreated"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: "EobAttachNum"
+            description: "Primary key for EOB attachments"
+            tests:
+              - unique
+              - not_null
+          - name: "ClaimPaymentNum"
+            description: "Foreign key to the claim payment this attachment is associated with"
+            tests:
+              - relationships:
+                  to: source('opendental', 'claimpayment')
+                  field: "ClaimPaymentNum"
+          - name: "DateTCreated"
+            description: "Timestamp when the EOB attachment was created"
+            tests:
+              - not_null
+          - name: "FileName"
+            description: "Name of the attached file"
+            tests:
+              - not_null
+          - name: "RawBase64"
+            description: "Base64 encoded content of the attached file"
+            tests:
+              - not_null
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 5
+            tests_total: 5
+          contains_pii: true
+          business_owners: ["dental_finance_team", "insurance_team"]
+          technical_owners: ["data_engineering_team"]
