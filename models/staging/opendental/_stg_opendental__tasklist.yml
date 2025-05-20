@@ -2,7 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__tasklist
-    description: Staging model for OpenDental tasklist table. Contains task information including descriptions, dates, and status.
+    description: >
+      Staging model for OpenDental tasklist table. Contains task information including descriptions, dates, and status.
+      Note: This model only includes task lists created on or after January 1st, 2023. Historical task lists (created before 2023)
+      are excluded, which may result in relationship test failures with taskhist records that reference older task lists.
+      This is expected behavior as we focus on recent task management data.
     columns:
       - name: task_id
         description: Primary key of the tasklist table

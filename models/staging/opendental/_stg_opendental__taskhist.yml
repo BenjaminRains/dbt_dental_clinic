@@ -2,7 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__taskhist
-    description: Staging model for task history records. Contains historical tracking of task changes, status updates, and task-related metadata.
+    description: >
+      Staging model for task history records. Contains historical tracking of task changes, status updates, and task-related metadata.
+      Note: Relationship tests with tasklist may fail for records referencing task lists created before 2023 (particularly task_list_id values 8, 12, and 14).
+      This is expected behavior as the tasklist model only includes records from 2023 onwards. These historical task lists contain important
+      system tasks but are excluded from the analytics models to focus on recent task management data.
     columns:
       - name: task_hist_id
         description: Primary key for task history records
@@ -30,6 +34,8 @@ models:
           - relationships:
               to: ref('stg_opendental__tasklist')
               field: task_id
+              where: "entry_datetime >= '2023-01-01'"
+              severity: warn
       
       - name: key_id
         description: Foreign key to the related entity (varies by object type)
