@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: stg_opendental__userodpref
+    description: Staging model for OpenDental user preferences. Contains user-specific preferences and settings.
+    columns:
+      - name: user_od_pref_id
+        description: Primary key for the user preference record
+        tests:
+          - unique
+          - not_null
+
+      - name: user_id
+        description: Foreign key to the user this preference belongs to
+        tests:
+          - not_null
+
+      - name: fkey
+        description: Foreign key value associated with the preference
+        tests:
+          - not_null
+
+      - name: fkey_type
+        description: Type identifier for the foreign key
+        tests:
+          - not_null
+
+      - name: value_string
+        description: The preference value stored as a string
+
+      - name: clinic_id
+        description: Foreign key to the clinic this preference is associated with
+        tests:
+          - not_null

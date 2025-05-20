@@ -561,6 +561,33 @@ sources:
                   to: source('opendental', 'userod')
                   field: user_id
 
+      - name: userodpref
+        description: "User-specific preferences and settings for OpenDental users"
+        columns:
+          - name: "UserOdPrefNum"
+            description: "Primary key for user preference records"
+            tests:
+              - unique
+              - not_null
+          - name: "UserNum"
+            description: "Foreign key to the user this preference belongs to"
+            tests:
+              - not_null
+          - name: "Fkey"
+            description: "Foreign key value associated with the preference (varies by FkeyType)"
+            tests:
+              - not_null
+          - name: "FkeyType"
+            description: "Type identifier for the foreign key (defines what Fkey refers to)"
+            tests:
+              - not_null
+          - name: "ValueString"
+            description: "The actual preference value stored as a string"
+          - name: "ClinicNum"
+            description: "Foreign key to the clinic this preference is associated with"
+            tests:
+              - not_null
+
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
