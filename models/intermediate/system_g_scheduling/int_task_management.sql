@@ -1,8 +1,23 @@
 {{
     config(
-        materialized='view'
+        materialized='incremental',
+        schema='intermediate',
+        unique_key='task_id'
     )
 }}
+
+/*
+    Intermediate model for task management.
+    Provides a comprehensive view of tasks, their history, and associated metadata.
+    
+    This model:
+    1. Joins task data with task lists and history
+    2. Tracks task status and changes
+    3. Manages task subscriptions and notifications
+    4. Integrates with appointment scheduling system
+    
+    Part of System G: Scheduling
+*/
 
 with task_base as (
     select
@@ -19,6 +34,9 @@ with task_base as (
         original_timestamp,
         last_edit_timestamp
     from {{ ref('stg_opendental__task') }}
+    {% if is_incremental() %}
+    where last_edit_timestamp > (select max(last_edit_timestamp) from {{ this }})
+    {% endif %}
 ),
 
 task_list as (
@@ -149,7 +167,11 @@ select
     
     -- Unread Status
     tu.task_unread_id,
-    tu.unread_user_id
+    tu.unread_user_id,
+    
+    -- Metadata
+    CURRENT_TIMESTAMP as model_created_at,
+    CURRENT_TIMESTAMP as model_updated_at
 
 from task_base t
 left join task_list tl
