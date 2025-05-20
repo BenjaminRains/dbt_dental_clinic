@@ -51,7 +51,7 @@ appointment_tasks as (
     from {{ ref('stg_opendental__task') }} t
     inner join {{ ref('stg_opendental__appointment') }} a
         on t.key_id = a.appointment_id
-    where t.object_type = 'appointment'  -- Assuming this is how appointment tasks are identified
+    where t.object_type = 1  -- 1 represents appointment tasks
 ),
 
 task_list as (
