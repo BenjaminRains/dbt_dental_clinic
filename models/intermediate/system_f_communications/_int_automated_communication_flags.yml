@@ -80,8 +80,8 @@ models:
           True if any of: has automation indicators, has program_id, or is part of a batch.
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "is_automated IN (TRUE, FALSE)"
+          - accepted_values:
+              values: [true, false]
       
       - name: trigger_type
         description: >
