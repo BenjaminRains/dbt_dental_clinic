@@ -126,11 +126,16 @@ models:
           - accepted_values:
               values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
       - name: communication_direction
-        description: Direction of communication (inbound, outbound)
+        description: >
+          Direction of communication. Possible values:
+          - inbound: Communication from patient to practice
+          - outbound: Communication from practice to patient
+          - system: Automated system message
+          - unknown: Direction cannot be determined
         tests:
           - not_null
           - accepted_values:
-              values: ['inbound', 'outbound']
+              values: ['inbound', 'outbound', 'system', 'unknown']
       - name: communication_category
         description: Category of communication (appointment, billing, clinical, etc.)
         tests:
