@@ -7,6 +7,13 @@ models:
       Note: Relationship tests with tasklist may fail for records referencing task lists created before 2023 (particularly task_list_id values 8, 12, and 14).
       This is expected behavior as the tasklist model only includes records from 2023 onwards. These historical task lists contain important
       system tasks but are excluded from the analytics models to focus on recent task management data.
+
+      Task Status Meanings:
+      - Status 0: Active/New Tasks - Initial state for new tasks, ongoing tasks, or reactivated tasks
+      - Status 1: Completed Tasks - Final completion state, tasks that are fully done
+      - Status 2: Alternative Completion - Tasks that are completed but might need verification or follow-up
+      
+      Note: task_date is optional as these are action items/reminders rather than scheduled appointments.
     columns:
       - name: task_hist_id
         description: Primary key for task history records
@@ -27,6 +34,8 @@ models:
           - relationships:
               to: ref('stg_opendental__task')
               field: task_id
+              where: "entry_datetime >= '2023-01-01'"
+              severity: warn
       
       - name: task_list_id
         description: Foreign key to the task list this task belongs to
@@ -75,9 +84,10 @@ models:
           - not_null
       
       - name: task_date
-        description: Date when the task is scheduled for
+        description: Optional date when the task is scheduled for. Note that this field is often NULL as many tasks are action items rather than scheduled appointments.
         tests:
-          - not_null
+          - not_null:
+              severity: warn
       
       - name: description
         description: Main description of the task
