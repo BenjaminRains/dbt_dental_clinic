@@ -88,7 +88,9 @@ models:
           - dbt_utils.expression_is_true:
               expression: "appointment_end_datetime > appointment_datetime"
       - name: appointment_type_id
-        description: Foreign key to appointment type
+        description: |
+          Foreign key to appointment type. If appointment_type_id = 0, this means the appointment 
+          type is 'None' (a valid appointment that hasn't had any details appended to it yet).
         tests:
           - relationships:
               to: ref('stg_opendental__appointmenttype')
