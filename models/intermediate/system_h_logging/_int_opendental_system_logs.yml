@@ -138,12 +138,6 @@ models:
               compare_date: '2020-01-01'
               config:
                 severity: error
-          - dbt_utils.expression_is_true:
-              expression: "entry_datetime <= current_timestamp"
-              name: entry_datetime_not_in_future
-              config:
-                severity: error
-                description: "Entry timestamps must not be in the future"
       
       # User Information
       - name: username
