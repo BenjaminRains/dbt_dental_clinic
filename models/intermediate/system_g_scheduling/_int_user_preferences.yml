@@ -108,7 +108,7 @@ models:
         description: When the view was last updated
         tests:
           - dbt_utils.expression_is_true:
-              expression: "IS NULL OR >= view_created_at"
+              expression: "IS NULL OR view_updated_at >= view_created_at"
               column_name: view_updated_at
               name: view_updated_at_after_created
       
