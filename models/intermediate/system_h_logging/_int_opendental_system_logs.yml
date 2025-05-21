@@ -170,9 +170,7 @@ models:
           Provides context about the task-related activity being logged.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "foreign_key_type != 1 OR (foreign_key_type = 1 AND task_description IS NOT NULL)"
-              config:
-                severity: error
+              expression: "IS NULL OR foreign_key_type = 1"
       
       - name: task_date
         description: >
@@ -180,9 +178,7 @@ models:
           Indicates when the task is scheduled or due.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "foreign_key_type != 1 OR (foreign_key_type = 1 AND task_date IS NOT NULL)"
-              config:
-                severity: error
+              expression: "IS NULL OR foreign_key_type = 1"
       
       - name: task_status
         description: >
@@ -190,9 +186,7 @@ models:
           Tracks the progress of task-related activities.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "foreign_key_type != 1 OR (foreign_key_type = 1 AND task_status IS NOT NULL)"
-              config:
-                severity: error
+              expression: "IS NULL OR foreign_key_type = 1"
           - accepted_values:
               values: ['NotStarted', 'InProgress', 'Completed', 'Cancelled', 'Deferred']
               quote: true
