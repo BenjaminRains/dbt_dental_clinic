@@ -72,7 +72,7 @@ task_view_preferences as (
         value_string as task_view_settings,
         CURRENT_TIMESTAMP as task_view_updated_at
     from {{ ref('stg_opendental__userodpref') }}
-    where fkey_type = 'TaskView'
+    where fkey_type = 3
 )
 
 select
