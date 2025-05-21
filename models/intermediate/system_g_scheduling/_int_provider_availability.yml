@@ -64,6 +64,9 @@ models:
       - dbt_utils.expression_is_true:
           expression: "end_time IS NULL OR end_time::time >= start_time::time"
           name: end_time_after_start_time
+      - dbt_utils.expression_is_true:
+          expression: "schedule_date >= CURRENT_DATE - INTERVAL '90 days'"
+          name: schedule_date_within_range
 
     columns:
       - name: provider_schedule_id
@@ -82,9 +85,6 @@ models:
         description: Date of the schedule
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "schedule_date >= CURRENT_DATE - INTERVAL '90 days'"
-              name: schedule_date_within_range
       - name: start_time
         description: Start time of the provider's schedule
         tests:
