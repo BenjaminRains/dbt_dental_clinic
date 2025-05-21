@@ -27,10 +27,37 @@ from {{ source('opendental', 'patient') }}
 - **Purpose**: Business logic implementation
 - **Organization**: Aligned with major business systems
   - System A: Fee Processing & Verification
+    - Status: Complete
+    - Models: `int_fee_processing`, `int_fee_verification`
+    - Tests: All passing
   - System B: Insurance Processing
+    - Status: Complete
+    - Models: `int_insurance_claims`, `int_insurance_verification`
+    - Tests: All passing
   - System C: Payment Allocation
+    - Status: Complete
+    - Models: `int_payment_allocation`, `int_payment_reconciliation`
+    - Tests: All passing
   - System D: AR Analysis
+    - Status: Complete
+    - Models: `int_ar_aging`, `int_ar_analysis`
+    - Tests: All passing
   - System E: Collection Process
+    - Status: Complete
+    - Models: `int_collection_metrics`, `int_collection_analysis`
+    - Tests: All passing
+  - System F: Patient Demographics
+    - Status: Complete
+    - Models: `int_patient_demographics`, `int_patient_segments`
+    - Tests: All passing
+  - System G: Appointment Analytics
+    - Status: Complete
+    - Models: `int_appointment_metrics`, `int_scheduling_analysis`
+    - Tests: All passing
+  - System H: Treatment Analytics
+    - Status: Complete
+    - Models: `int_treatment_metrics`, `int_treatment_analysis`
+    - Tests: All passing
 - **Naming**: Prefixed with `int_`
 - **Key Functions**:
   - Complex transformations
