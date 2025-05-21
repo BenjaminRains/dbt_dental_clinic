@@ -132,12 +132,10 @@ models:
           and audit purposes.
         tests:
           - not_null
-          - dbt_utils.date_after:
-              datepart: day
-              field: entry_datetime
-              compare_date: '2020-01-01'
-              config:
-                severity: error
+          - dbt_utils.expression_is_true:
+              expression: ">= '2020-01-01'"
+          - dbt_utils.expression_is_true:
+              expression: "<= current_timestamp"
       
       # User Information
       - name: username
