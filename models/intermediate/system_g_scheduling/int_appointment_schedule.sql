@@ -16,7 +16,20 @@
     4. Computes utilization rates
 */
 
-WITH ProviderSchedule AS (
+WITH date_spine AS (
+    {{ dbt_utils.date_spine(
+        datepart="day",
+        start_date="(CURRENT_DATE - INTERVAL '" ~ var('schedule_window_days') ~ " days')::date",
+        end_date="CURRENT_DATE::date"
+    ) }}
+),
+
+DateSpine AS (
+    SELECT date_day::date as schedule_date
+    FROM date_spine
+),
+
+ProviderSchedule AS (
     SELECT
         p.provider_id,
         p.provider_abbreviation as provider_name,
@@ -57,8 +70,8 @@ ProviderAvailability AS (
 
 DailySchedule AS (
     SELECT
-        md5(COALESCE(ps.provider_id::text, '') || COALESCE(dates.schedule_date::text, '')) as schedule_id,
-        dates.schedule_date,
+        md5(COALESCE(ps.provider_id::text, '') || COALESCE(ds.schedule_date::text, '')) as schedule_id,
+        ds.schedule_date,
         ps.provider_id,
         ps.provider_name,
         COALESCE(am.total_appointments, 0) as total_appointments,
@@ -78,23 +91,17 @@ DailySchedule AS (
         COUNT(*) OVER (PARTITION BY ps.provider_id) as days_scheduled,
         COUNT(*) FILTER (WHERE NOT COALESCE(pa.is_day_off, true)) OVER (PARTITION BY ps.provider_id) as days_worked
     FROM ProviderSchedule ps
-    CROSS JOIN (
-        SELECT DISTINCT schedule_date 
-        FROM AppointmentMetrics
-        UNION
-        SELECT DISTINCT schedule_date 
-        FROM ProviderAvailability
-    ) dates
+    CROSS JOIN DateSpine ds
     LEFT JOIN AppointmentMetrics am
         ON ps.provider_id = am.provider_id
-        AND dates.schedule_date = am.schedule_date
+        AND ds.schedule_date = am.schedule_date
     LEFT JOIN ProviderAvailability pa
         ON ps.provider_id = pa.provider_id
-        AND dates.schedule_date = pa.schedule_date
+        AND ds.schedule_date = pa.schedule_date
     GROUP BY 
         ps.provider_id,
         ps.provider_name,
-        dates.schedule_date,
+        ds.schedule_date,
         am.total_appointments,
         am.completed_appointments,
         am.cancelled_appointments,

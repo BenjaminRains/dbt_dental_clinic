@@ -5,9 +5,12 @@ models:
     description: >
       Comprehensive scheduling model that provides daily provider schedules and utilization metrics.
       This model serves as the foundation for schedule analysis, capacity planning, and provider
-      availability tracking in the dental clinic.
+      availability tracking in the dental clinic. It ensures complete date coverage for all providers
+      by using a date spine, guaranteeing a record exists for every provider for every day in the
+      schedule window, even when no appointments or availability records exist.
       
       Key features:
+      - Complete date coverage using date spine
       - Daily schedule aggregation per provider
       - Tracks appointment completion and cancellation rates
       - Monitors schedule utilization and capacity
@@ -16,16 +19,21 @@ models:
       - Supports schedule optimization
       - Enables capacity planning
       - Provides schedule performance metrics
+      - Guarantees data continuity across date ranges
       
       Data Sources:
       - int_appointment_details: Base appointment data with status and timing
       - int_provider_availability: Provider schedule and availability
       - stg_opendental__provider: Provider information
       - stg_opendental__appointmenttype: Appointment type durations
+      - dbt_utils.date_spine: Generates complete date sequence
       
       Business rules:
-      - One record per provider per day
+      - One record per provider per day (guaranteed by date spine)
       - Schedule window is 90 days from current date
+      - Every provider has a record for every day in the window
+      - Days without appointments show zero counts
+      - Days without availability are marked as day off
       - Utilization rate = total_appointment_minutes / available_minutes * 100
       - Completed appointments cannot exceed total appointments
       - Cancelled appointments cannot exceed total appointments
@@ -38,10 +46,11 @@ models:
       - Schedule metrics are calculated at end of day
       
       Grain:
-      - One record per provider per day
+      - One record per provider per day (enforced by date spine)
       - Daily aggregation of appointment data
       - Provider-level schedule metrics
       - 90-day rolling window
+      - Complete date coverage with no gaps
       
     config:
       materialized: incremental
@@ -50,18 +59,16 @@ models:
 
     columns:
       - name: schedule_id
-        description: Unique identifier for the schedule record
+        description: Unique identifier for the schedule record, generated from provider_id and schedule_date
         tests:
           - unique
           - not_null
       - name: schedule_date
-        description: Date of the schedule
+        description: Date of the schedule, generated from date spine to ensure complete coverage
         tests:
           - not_null
-          - dbt_utils.date_after:
-              datepart: day
-              field: schedule_date
-              interval: -90
+          - dbt_utils.expression_is_true:
+              expression: ">= (CURRENT_DATE - INTERVAL '90 days')"
       - name: provider_id
         description: ID of the provider
         tests:
@@ -74,13 +81,13 @@ models:
         tests:
           - not_null
       - name: total_appointments
-        description: Total number of appointments scheduled for the day
+        description: Total number of appointments scheduled for the day (0 if none)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: completed_appointments
-        description: Number of appointments marked as complete
+        description: Number of appointments marked as complete (0 if none)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -88,7 +95,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: cancelled_appointments
-        description: Number of appointments that were cancelled
+        description: Number of appointments that were cancelled (0 if none)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -96,7 +103,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: no_show_appointments
-        description: Number of appointments where patient did not show up
+        description: Number of appointments where patient did not show up (0 if none)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -104,7 +111,7 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: unconfirmed_appointments
-        description: Number of appointments that are not yet confirmed
+        description: Number of appointments that are not yet confirmed (0 if none)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -112,19 +119,19 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= total_appointments"
       - name: total_appointment_minutes
-        description: Total minutes scheduled for appointments
+        description: Total minutes scheduled for appointments (0 if no appointments)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: available_minutes
-        description: Total minutes available in the schedule
+        description: Total minutes available in the schedule (0 if day off or no availability)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
       - name: utilization_rate
-        description: Percentage of available time that is scheduled
+        description: Percentage of available time that is scheduled (0 if no availability)
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -132,11 +139,19 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: start_time
-        description: Start time of the provider's schedule
+        description: Start time of the provider's schedule (null if day off)
       - name: end_time
-        description: End time of the provider's schedule
+        description: End time of the provider's schedule (null if day off)
       - name: is_day_off
-        description: Flag indicating if the provider is off on this day
+        description: Flag indicating if the provider is off on this day (true if no availability)
+        tests:
+          - not_null
+      - name: days_scheduled
+        description: Total number of days in the schedule window for this provider
+        tests:
+          - not_null
+      - name: days_worked
+        description: Number of working days (non-day-off) in the schedule window for this provider
         tests:
           - not_null
       - name: model_created_at
