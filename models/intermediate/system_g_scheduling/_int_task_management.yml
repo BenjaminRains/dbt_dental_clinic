@@ -109,7 +109,9 @@ models:
         description: When the task was completed
         tests:
           - dbt_utils.expression_is_true:
-              expression: "finished_timestamp IS NULL OR finished_timestamp >= entry_timestamp"
+              expression: "IS NULL OR finished_timestamp >= entry_timestamp"
+              column_name: finished_timestamp
+              name: finished_after_entry
       - name: original_timestamp
         description: Original creation timestamp
         tests:
