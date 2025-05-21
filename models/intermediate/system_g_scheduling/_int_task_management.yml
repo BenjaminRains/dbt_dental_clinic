@@ -95,9 +95,12 @@ models:
       - name: triage_category_id
         description: ID of the triage category
       - name: task_date
-        description: Date when the task is due
-        tests:
-          - not_null
+        description: >
+          Date when the task is due. Can be null for certain recurring tasks where entry_timestamp 
+          serves as the due date. This is common for:
+          - Patient Balance F/U tasks (task_list_id = 29) which follow monthly patterns
+          - Treatment Plans tasks (task_list_id = 47) which are scheduled in advance
+          In these cases, the entry_timestamp represents the future date when the task should be completed.
       - name: entry_timestamp
         description: When the task was created
         tests:
@@ -126,9 +129,9 @@ models:
       - name: task_list_date
         description: Date associated with the task list
       - name: is_repeating
-        description: Whether the task list repeats
-        tests:
-          - not_null
+        description: >
+          Whether the task list repeats. Can be null for historical tasks from pre-Dec 2023
+          task lists (IDs 0, 8, 12, 14, 20, 21) which used a different data structure.
       - name: date_type
         description: Type of date for the task list
       - name: task_list_from_id
