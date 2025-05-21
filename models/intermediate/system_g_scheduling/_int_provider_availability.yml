@@ -124,13 +124,20 @@ models:
         description: Total available minutes in the schedule
         tests:
           - dbt_utils.expression_is_true:
+              expression: ">= 0 AND available_minutes <= 1440"
               column_name: available_minutes
-              expression: "IS NULL OR (available_minutes >= 0 AND available_minutes <= 1440)"
+              where: "available_minutes IS NOT NULL"
               name: available_minutes_range
           - dbt_utils.expression_is_true:
+              expression: "= 0"
               column_name: available_minutes
-              expression: "(is_day_off = true AND available_minutes = 0) OR (is_day_off = false AND available_minutes > 0)"
+              where: "is_day_off = true"
               name: available_minutes_day_off_consistency
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+              column_name: available_minutes
+              where: "is_day_off = false"
+              name: available_minutes_working_day_consistency
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
         tests:
