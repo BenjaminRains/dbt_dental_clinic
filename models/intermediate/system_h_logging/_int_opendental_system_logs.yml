@@ -26,7 +26,7 @@ models:
       Business rules:
       - One record per system activity (entry_log_id)
       - System-generated entries (user_id = 0) have null user_name
-      - Task information only populated for foreign_key_type = 'Task'
+      - Task information only populated for foreign_key_type = 1
       - All timestamps must be after 2023-01-01
       - User group information required for non-system entries
       - Task status must be one of: NotStarted, InProgress, Completed, Cancelled, Deferred
@@ -89,13 +89,12 @@ models:
       - name: foreign_key_type
         description: >
           Type identifier for the foreign key reference. Indicates what type of 
-          record the foreign_key points to. Valid values include Task, Patient,
-          Procedure, Appointment, and Document.
+          record the foreign_key points to. Valid values include 1 (Task), 2 (Patient),
+          3 (Procedure), 4 (Appointment), and 5 (Document).
         tests:
           - not_null
           - accepted_values:
-              values: ['Task', 'Patient', 'Procedure', 'Appointment', 'Document']
-              quote: true
+              values: [1, 2, 3, 4, 5]
               config:
                 severity: error
       
@@ -109,7 +108,7 @@ models:
           - relationships:
               to: ref('stg_opendental__task')
               field: task_id
-              where: "foreign_key_type = 'Task'"
+              where: "foreign_key_type = 1"
               config:
                 severity: error
       
@@ -166,37 +165,37 @@ models:
       # Task Information
       - name: task_description
         description: >
-          Description of the task. Only populated when foreign_key_type is 'Task'.
+          Description of the task. Only populated when foreign_key_type is 1 (Task).
           Provides context about the task-related activity being logged.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "foreign_key_type != 'Task' OR (foreign_key_type = 'Task' AND task_description IS NOT NULL)"
+              expression: "foreign_key_type != 1 OR (foreign_key_type = 1 AND task_description IS NOT NULL)"
               config:
                 severity: error
       
       - name: task_date
         description: >
-          Date associated with the task. Only populated when foreign_key_type is 'Task'.
+          Date associated with the task. Only populated when foreign_key_type is 1 (Task).
           Indicates when the task is scheduled or due.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "foreign_key_type != 'Task' OR (foreign_key_type = 'Task' AND task_date IS NOT NULL)"
+              expression: "foreign_key_type != 1 OR (foreign_key_type = 1 AND task_date IS NOT NULL)"
               config:
                 severity: error
       
       - name: task_status
         description: >
-          Current status of the task. Only populated when foreign_key_type is 'Task'.
+          Current status of the task. Only populated when foreign_key_type is 1 (Task).
           Tracks the progress of task-related activities.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "foreign_key_type != 'Task' OR (foreign_key_type = 'Task' AND task_status IS NOT NULL)"
+              expression: "foreign_key_type != 1 OR (foreign_key_type = 1 AND task_status IS NOT NULL)"
               config:
                 severity: error
           - accepted_values:
               values: ['NotStarted', 'InProgress', 'Completed', 'Cancelled', 'Deferred']
               quote: true
-              where: "foreign_key_type = 'Task'"
+              where: "foreign_key_type = 1"
               config:
                 severity: error
 
@@ -224,7 +223,7 @@ models:
             description: "System-generated entries must have null user_name"
       
       - dbt_utils.expression_is_true:
-          expression: "foreign_key_type = 'Task' OR (foreign_key_type != 'Task' AND task_description IS NULL)"
+          expression: "foreign_key_type = 1 OR (foreign_key_type != 1 AND task_description IS NULL)"
           name: task_fields_only_for_task_type
           config:
             severity: error
