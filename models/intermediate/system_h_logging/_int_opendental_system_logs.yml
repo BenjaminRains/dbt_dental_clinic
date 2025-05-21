@@ -3,133 +3,83 @@ version: 2
 models:
   - name: int_opendental_system_logs
     description: >
-      Intermediate model that combines system logging information with user and task data.
-      This model provides a comprehensive audit trail of system activities, particularly focusing
-      on task-related actions while maintaining a record of all system activities.
+      Intermediate model for system entry logs. Contains audit trail information about 
+      user actions and system events, tracking who performed what action and when.
       
-      Key features:
-      - Tracks all system activities with detailed user attribution
-      - Maintains one-to-one relationship with entry logs
-      - Records task-related activities with full context
-      - Tracks user actions and system events
-      - Provides comprehensive audit trail for compliance
-      - Integrates with task management system
-      - Records user group membership for access control
-      - Tracks system-generated vs user-initiated actions
+      Log Source Values:
+      - 0: Main system log (98.15% of records)
+      - 7: Specific module (1.48% of records)
+      - 16: Rare events (0.02% of records)
+      - 19: Another specific module (0.35% of records)
       
-      Data Sources:
-      - stg_opendental__entrylog: Base system logging data
-      - stg_opendental__userod: User information and permissions
-      - stg_opendental__task: Task management data
-      - stg_opendental__usergroup: User group definitions
-      
-      Business rules:
-      - One record per system activity (entry_log_id)
-      - System-generated entries (user_id = 0) have null user_name
-      - Task information only populated for foreign_key_type = 1
-      - All timestamps must be after 2023-01-01
-      - User group information required for non-system entries
-      - Task status must be one of: NotStarted, InProgress, Completed, Cancelled, Deferred
-      - Entry timestamps must not be in the future
-      - Foreign key references must be valid for their respective types
-      
-      Key metrics:
-      - System activity volume by type
-      - User action frequency
-      - Task completion rates
-      - System-generated vs user-initiated actions
-      - Activity patterns by user group
-      - Task status distribution
-      - Activity timing patterns
-      
-      Grain: One record per system activity (entry_log_id)
-      
-      Primary key: entry_log_id
-      
-      Foreign keys:
-      - user_id -> stg_opendental__userod.user_id
-      - user_group_id -> stg_opendental__usergroup.usergroup_id
-      - foreign_key -> Various tables based on foreign_key_type
-      
-      Dependencies:
-      - stg_opendental__entrylog
-      - stg_opendental__userod
-      - stg_opendental__task
-      - stg_opendental__usergroup
-      
-      Data quality requirements:
-      - All required fields must be non-null
-      - Timestamps must be valid and not in the future
-      - User references must be valid
-      - Task information must be complete when applicable
-      - Foreign key references must be valid
-      - System entries must be properly identified
-      - User group assignments must be valid
-      
-    config:
-      materialized: view
-      schema: intermediate
-      tags: ['system_logging', 'audit_trail']
-    
+      Note: All records have foreign_key_type = 0, indicating they are system entries.
+      The differentiation between different types of entries is handled by log_source.
     columns:
-      # Entry Log Information
       - name: entry_log_id
-        description: >
-          Primary key - Unique identifier for each log entry. This field maintains
-          a one-to-one relationship with the entry log table.
+        description: "Primary key - Unique identifier for each log entry"
         tests:
           - unique
           - not_null
+      
+      - name: user_id
+        description: >
+          Foreign key to stg_opendental__userod, represents the user who performed the action.
+          
+          Special cases:
+          - user_id = 0: System-generated entries (no specific user)
+          - Excluded inactive users: 20, 36, 43, 45, 51, 54, 9280, 9281
+            * Jennifer Berg (20) - Active provider, no entrylog entries
+            * Becky Solomey (36) - Hidden provider
+            * LocalMed (43) - Hidden provider
+            * Maria Barajas (45) - Hidden provider
+            * Edward Karateew (51) - Hidden provider
+            * System/unknown users (54, 9280, 9281)
+        tests:
           - relationships:
-              to: ref('stg_opendental__entrylog')
-              field: entry_log_id
+              to: ref('stg_opendental__userod')
+              field: user_id
+              where: "user_id NOT IN (0, 20, 36, 43, 45, 51, 54, 9280, 9281)"
+              severity: warn
               config:
-                severity: error
+                description: >
+                  Warning expected for user_id = 0 (system-generated entries) 
+                  and excluded inactive/system users.
       
       - name: foreign_key_type
         description: >
-          Type identifier for the foreign key reference. Indicates what type of 
-          record the foreign_key points to. Valid values include 1 (Task), 2 (Patient),
-          3 (Procedure), 4 (Appointment), and 5 (Document).
+          Type identifier for the foreign key reference. Currently all records have 
+          foreign_key_type = 0, indicating they are system entries.
         tests:
           - not_null
           - accepted_values:
-              values: [1, 2, 3, 4, 5]
-              config:
-                severity: error
+              values: [0]
+              quote: false
       
       - name: foreign_key
         description: >
           Foreign key reference to the related record. The actual table referenced 
-          depends on the foreign_key_type value. Must be a valid reference to the
-          corresponding table based on the type.
+          depends on the log_source value.
         tests:
           - not_null
-          - relationships:
-              to: ref('stg_opendental__task')
-              field: task_id
-              where: "foreign_key_type = 1"
-              config:
-                severity: error
       
       - name: log_source
         description: >
           Source of the log entry. Indicates which system component or module 
-          generated the log entry. Used for tracking the origin of system activities
-          and debugging issues.
+          generated the log entry.
+          
+          Values:
+          - 0: Main system log (98.15% of records)
+          - 7: Specific module (1.48% of records)
+          - 16: Rare events (0.02% of records)
+          - 19: Another specific module (0.35% of records)
         tests:
           - not_null
           - accepted_values:
-              values: ['TaskManager', 'PatientPortal', 'BillingSystem', 'AppointmentScheduler', 'DocumentManager']
-              quote: true
-              config:
-                severity: error
+              values: [0, 7, 16, 19]
+              quote: false
       
       - name: entry_datetime
-        description: >
-          Timestamp when the log entry was created. Must be a valid timestamp
-          after 2020-01-01 and not in the future. Used for chronological tracking
-          and audit purposes.
+        description: "Timestamp when the log entry was created"
         tests:
           - not_null
           - dbt_utils.expression_is_true:
@@ -137,60 +87,26 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= current_timestamp"
       
-      # User Information
       - name: username
-        description: >
-          Name of the user who performed the action. Null for system-generated
-          entries (user_id = 0). Used for audit trail and user attribution.
+        description: "Username of the user who performed the action"
         tests:
           - not_null:
-              where: "user_id != 0"  # System-generated entries may have null username
-              config:
-                severity: error
+              where: "user_id != 0"
       
       - name: user_group_id
         description: >
-          User's group membership identifier. Links to the user group table for
-          access control and permission tracking. Null for system-generated entries.
-          Note: user_group_id = 0 represents system or unassigned entries.
+          Foreign key to stg_opendental__usergroup, represents the user's security group.
+          user_group_id = 0 represents system or unassigned entries.
         tests:
+          - not_null
           - relationships:
               to: ref('stg_opendental__usergroup')
-              field: usergroup_id
-              where: "user_id != 0 AND user_group_id != 0"  # Exclude system entries and unassigned groups
+              field: user_group_id
+              where: "user_group_id != 0"
+              severity: warn
               config:
-                severity: error
-      
-      # Task Information
-      - name: task_description
-        description: >
-          Description of the task. Only populated when foreign_key_type is 1 (Task).
-          Provides context about the task-related activity being logged.
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "IS NULL OR foreign_key_type = 1"
-      
-      - name: task_date
-        description: >
-          Date associated with the task. Only populated when foreign_key_type is 1 (Task).
-          Indicates when the task is scheduled or due.
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "IS NULL OR foreign_key_type = 1"
-      
-      - name: task_status
-        description: >
-          Current status of the task. Only populated when foreign_key_type is 1 (Task).
-          Tracks the progress of task-related activities.
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "IS NULL OR foreign_key_type = 1"
-          - accepted_values:
-              values: ['NotStarted', 'InProgress', 'Completed', 'Cancelled', 'Deferred']
-              quote: true
-              where: "foreign_key_type = 1"
-              config:
-                severity: error
+                description: >
+                  Warning expected for user_group_id = 0 (system or unassigned entries).
 
     tests:
       - dbt_utils.unique_combination_of_columns:

@@ -21,16 +21,6 @@ users as (
         username,
         user_group_id
     from {{ ref('stg_opendental__userod') }}
-),
-
-tasks as (
-    select
-        task_id,
-        task_list_id,
-        description as task_description,
-        task_date,
-        task_status
-    from {{ ref('stg_opendental__task') }}
 )
 
 select
@@ -44,16 +34,19 @@ select
     
     -- User Information
     u.username,
-    u.user_group_id,
-    
-    -- Task Information (when applicable)
-    t.task_description,
-    t.task_date,
-    t.task_status
+    u.user_group_id
 
 from entry_logs el
 left join users u
     on el.user_id = u.user_id
-left join tasks t
-    on el.foreign_key_type = 1  -- 1 represents Task type
-    and el.foreign_key::bigint = t.task_id 
+
+/*
+Log Source Values:
+- 0: Main system log (98.15% of records)
+- 7: Specific module (1.48% of records)
+- 16: Rare events (0.02% of records)
+- 19: Another specific module (0.35% of records)
+
+Note: All records have foreign_key_type = 0, indicating they are system entries.
+The differentiation between different types of entries is handled by log_source.
+*/ 
