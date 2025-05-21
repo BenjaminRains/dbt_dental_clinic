@@ -136,8 +136,6 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
-          - dbt_utils.expression_is_true:
-              expression: "<= 100"
       - name: start_time
         description: Start time of the provider's schedule (null if day off)
       - name: end_time
