@@ -106,12 +106,16 @@ models:
         tests:
           - not_null
       - name: finished_timestamp
-        description: When the task was completed
+        description: >
+          When the task was completed. For recurring tasks, the finished_timestamp
+          may be before the current entry_timestamp but must be after the original_timestamp.
+          This is common for Patient Balance F/U tasks that are completed in previous cycles
+          but re-entered into the system.
         tests:
           - dbt_utils.expression_is_true:
-              expression: "IS NULL OR finished_timestamp >= entry_timestamp"
+              expression: "IS NULL OR finished_timestamp >= original_timestamp"
               column_name: finished_timestamp
-              name: finished_after_entry
+              name: finished_after_original
       - name: original_timestamp
         description: Original creation timestamp
         tests:
