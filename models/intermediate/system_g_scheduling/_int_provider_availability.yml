@@ -124,9 +124,11 @@ models:
         description: Total available minutes in the schedule
         tests:
           - dbt_utils.expression_is_true:
-              expression: "(available_minutes >= 0 AND available_minutes <= 1440) OR available_minutes IS NULL"
+              column_name: available_minutes
+              expression: "IS NULL OR (available_minutes >= 0 AND available_minutes <= 1440)"
               name: available_minutes_range
           - dbt_utils.expression_is_true:
+              column_name: available_minutes
               expression: "(is_day_off = true AND available_minutes = 0) OR (is_day_off = false AND available_minutes > 0)"
               name: available_minutes_day_off_consistency
       - name: model_created_at
