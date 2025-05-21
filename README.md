@@ -123,7 +123,7 @@ The project has made significant progress in both staging and intermediate layer
    - Historical data validation complete
    - Full documentation and lineage tracking
 
-2. **Intermediate Layer - Completed Systems**
+2. **Intermediate Layer - All Systems Complete**
    - **System A: Fee Processing & Verification**
      - `int_procedure_complete`: Comprehensive procedure model
      - `int_adjustments`: Fee adjustment tracking
@@ -139,36 +139,57 @@ The project has made significant progress in both staging and intermediate layer
      - Comprehensive validation rules implemented
      - Test coverage for edge cases
 
+   - **System D: AR Analysis**
+     - `int_ar_aging`: Accounts receivable aging model
+     - AR metrics and aging analysis
+     - Comprehensive validation rules
+
+   - **System E: Collection Process**
+     - `int_collection_activity`: Collection tracking model
+     - Payment plan monitoring
+     - Collection status tracking
+
+   - **System F: Patient-Clinic Communications**
+     - `int_communication_log`: Communication tracking model
+     - Multi-channel interaction history
+     - Response rate analysis
+
+   - **System G: Scheduling & Referrals**
+     - `int_appointment_metrics`: Appointment tracking model
+     - Scheduling efficiency metrics
+     - No-show analysis
+
+   - **System H: System Logging**
+     - `int_opendental_system_logs`: System activity tracking
+     - User action audit trail
+     - Log source analysis
+
 ### In Progress 🚧
 
-1. **Intermediate Layer - Remaining Systems**
-   - System D: AR Analysis (Planning)
-   - System E: Collection Process (Planning)
-   - System F: Patient-Clinic Communications (Planning)
-   - System G: Scheduling & Referrals (Planning)
-
-2. **Mart Layer**
-   - Initial planning and design
+1. **Mart Layer**
+   - Initial implementation of core analytics models
    - Business requirements gathering
    - Performance optimization strategies
+   - Dashboard development planning
 
 ### Upcoming Work 📅
 
-1. **Intermediate Layer**
-   - Implement remaining systems (D-G)
-   - Develop cross-system models
-   - Enhance existing models with additional business rules
-   - Expand test coverage for edge cases
-
-2. **Mart Layer**
-   - Begin implementation of core analytics models
+1. **Mart Layer**
+   - Complete implementation of core analytics models
    - Develop reporting views
    - Create data marts for specific business areas
+   - Implement dashboard data models
 
-3. **Documentation**
+2. **Documentation**
    - Update technical documentation
    - Create user guides for new models
    - Document data lineage and dependencies
+   - Create dashboard documentation
+
+3. **Frontend Development**
+   - Begin implementation of web application
+   - Develop interactive dashboards
+   - Create user interfaces for data exploration
 
 For detailed information about the intermediate models, see `dbt_int_models_plan.md`.
 

@@ -61,12 +61,40 @@ and final analytics models.
   - Includes detailed payment type information
   - Contains comprehensive validation rules
 
-### Pending Implementation
-- System D: AR Analysis
-- System E: Collection Process
-- System F: Patient-Clinic Communications
-- System G: Scheduling & Referrals
-- Cross-system models
+### System D: AR Analysis (✅ Implemented)
+- `int_ar_aging`: Accounts receivable aging model
+  - Categorizes outstanding balances by age
+  - Tracks payment history and trends
+  - Includes aging buckets and thresholds
+  - Provides AR metrics and KPIs
+
+### System E: Collection Process (✅ Implemented)
+- `int_collection_activity`: Collection process tracking model
+  - Records collection attempts and outcomes
+  - Tracks payment plans and agreements
+  - Includes collection status and history
+  - Links to AR and patient information
+
+### System F: Patient-Clinic Communications (✅ Implemented)
+- `int_communication_log`: Patient communication tracking model
+  - Records all patient-clinic interactions
+  - Tracks communication channels and outcomes
+  - Includes response rates and patterns
+  - Links to appointments and procedures
+
+### System G: Scheduling & Referrals (✅ Implemented)
+- `int_appointment_metrics`: Appointment and scheduling model
+  - Tracks appointment status and history
+  - Includes no-show and cancellation analysis
+  - Provides scheduling efficiency metrics
+  - Links to procedures and providers
+
+### System H: System Logging (✅ Implemented)
+- `int_opendental_system_logs`: System activity tracking model
+  - Records all system activities and user actions
+  - Tracks log sources and entry types
+  - Includes user attribution and timestamps
+  - Maintains comprehensive audit trail
 
 ## Implementation Approach
 
@@ -95,8 +123,8 @@ Each implemented model includes:
 
 ## Next Steps
 
-1. Implement remaining system-specific models (D-G)
-2. Develop cross-system models
+1. Begin implementation of mart layer models
+2. Develop cross-system analytics models
 3. Enhance existing models with additional business rules
 4. Expand test coverage for edge cases
 5. Improve documentation and lineage tracking
