@@ -55,6 +55,9 @@ models:
           combination_of_columns:
             - provider_id
             - schedule_date
+      - dbt_utils.expression_is_true:
+          expression: "model_updated_at >= model_created_at"
+          name: updated_after_created
 
     columns:
       - name: provider_schedule_id
@@ -111,6 +114,3 @@ models:
         description: Timestamp when this record was last updated in the dbt model
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "{{ ref('int_provider_availability') }}.model_updated_at >= {{ ref('int_provider_availability') }}.model_created_at"
-              name: updated_after_created
