@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+-
+
+## [2025-05-20]
+### Added
+- Appointment view staging model and DDL files
+- System G scheduling module enhancements
+- Appointment metrics model and comprehensive test suite
+- Appointment schedule and provider availability models with tests
+- User preferences and task management models integrated into System G
+- `system_h` logging model
+- EOB attachments, employer models, and insurance integration
+- Entrylog, tasklist, tasknote, tasksubscription, and taskunread staging models
+- Source definitions for EOB, entrylog, employer, task, taskhist, and timeadjust
+
+### Changed
+- Centralized pattern length logic in scheduling models
+- Improved model relationships across scheduling module
+- Reorganized dbt tests in communication templates model
+- Updated test format and logic for `communication_datetime`, `is_automated`, and template type handling
+- Enhanced communication metrics model structure and documentation
+
+### Fixed
+- CASE statement type mismatches in appointment metrics
+- Column references and timestamps in appointment details and task management models
+- Validation structure in `_int_communication_templates.yml` and related dbt_utils test expressions
+- Filtering logic for EOB attachments, task notes, tasklist, and taskhist staging models
+- Handling of OpenDental appointment patterns and `user_id` edge cases
+
+### Docs
+- Enhanced documentation for all major scheduling models (user preferences, task management, provider availability, appointment schedule, int_appointment_details)
+- Clarified grain definitions and model-specific metadata
+
+### Removed
+- Removed legacy model (unspecified in log message)
+
+### Added
 - 
 
 ### Changed
