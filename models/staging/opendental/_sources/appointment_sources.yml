@@ -8,6 +8,56 @@ sources:
     schema: public  # PostgreSQL schema
     tables:
     
+      - name: apptview
+        description: >
+          Defines different views of the appointment schedule that users can access.
+          Each view can have different settings for display preferences, scheduling
+          restrictions, and clinic-specific configurations.
+        columns:
+          - name: "ApptViewNum"
+            description: "Primary key - Unique identifier for each appointment view"
+            tests:
+              - unique
+              - not_null
+          - name: "Description"
+            description: "Name or description of the appointment view (e.g., 'Office', 'HIPAA', 'Week')"
+          - name: "ItemOrder"
+            description: "Numeric value determining the display order of views"
+            tests:
+              - not_null
+          - name: "RowsPerIncr"
+            description: "Number of rows per increment in the schedule display"
+            tests:
+              - not_null
+          - name: "OnlyScheduledProvs"
+            description: "Flag indicating if only scheduled providers should be shown"
+          - name: "OnlySchedBeforeTime"
+            description: "Time restriction for showing only appointments before this time"
+          - name: "OnlySchedAfterTime"
+            description: "Time restriction for showing only appointments after this time"
+          - name: "StackBehavUR"
+            description: "Stack behavior setting for up/right direction"
+          - name: "StackBehavLR"
+            description: "Stack behavior setting for left/right direction"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic this view applies to"
+            tests:
+              - relationships:
+                  to: source('opendental', 'clinic')
+                  field: "ClinicNum"
+          - name: "ApptTimeScrollStart"
+            description: "Starting time for appointment scrolling"
+          - name: "IsScrollStartDynamic"
+            description: "Flag indicating if the scroll start time is dynamic"
+          - name: "IsApptBubblesDisabled"
+            description: "Flag indicating if appointment bubbles are disabled"
+          - name: "WidthOpMinimum"
+            description: "Minimum width for operatory display"
+          - name: "WaitingRmName"
+            description: "Name of the waiting room associated with this view"
+          - name: "OnlyScheduledProvDays"
+            description: "Flag indicating if only scheduled provider days should be shown"
+
       - name: userodapptview
         description: >
           Junction table that manages user permissions for appointment views.
