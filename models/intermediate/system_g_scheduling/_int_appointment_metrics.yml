@@ -59,10 +59,8 @@ models:
         description: Date of the metrics
         tests:
           - not_null
-          - dbt_utils.date_after:
-              datepart: day
-              field: date
-              interval: -90
+          - dbt_utils.expression_is_true:
+              expression: ">= (CURRENT_DATE - INTERVAL '90 days')"
       - name: provider_id
         description: ID of the provider (for provider-level metrics)
         tests:
