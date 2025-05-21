@@ -54,5 +54,5 @@ from entry_logs el
 left join users u
     on el.user_id = u.user_id
 left join tasks t
-    on el.foreign_key_type = 'Task'
-    and el.foreign_key = t.task_id::text 
+    on el.foreign_key_type = 1  -- 1 represents Task type
+    and el.foreign_key::bigint = t.task_id 
