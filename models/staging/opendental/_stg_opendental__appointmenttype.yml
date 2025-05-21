@@ -2,19 +2,37 @@ version: 2
 
 models:
   - name: stg_opendental__appointmenttype
-    description: >
+    description: |
       Staging model for appointment types from OpenDental.
       Contains information about different types of appointments,
       their display properties, and associated metadata.
+      
+      Note: Some appointment types have is_hidden = 1 and are not selectable in the UI 
+      (e.g., legacy, deprecated, or system types). Only types with is_hidden = 0 are visible
+       to users in the appointment type selection window. The 'None' type (appointment_type_id = 0)
+       is a valid, selectable option in the UI for appointments that have not had any details
+        appended yet.
     columns:
       - name: appointment_type_id
-        description: Primary key - Unique identifier for each appointment type
+        description: |
+          Primary key - Unique identifier for each appointment type.
+          If appointment_type_id = 0, this means the appointment type is 'None' 
+          (a valid appointment that hasn't had any details appended to it yet).
         tests:
           - unique
           - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
       
       - name: appointment_type_name
         description: The name of the appointment type displayed to users
+        tests:
+          - accepted_values:
+              values: ['......', 'Adult Cleaning (Existing Patient)', 'zzzzzzzzDO NOT USE',
+               'Child Cleaning (Existing Patient)', 'Adult Cleaning (New Patient)',
+                'Child Cleaning (New Patient)', '30 Minute Appt', 'Emergency Pain',
+                 'Crown Prep', 'WebSched New Patient Default', 'Implant Consult',
+                  'Prophy Child New', 'None']
       
       - name: appointment_type_color
         description: Integer representing the color code for the appointment type
