@@ -19,6 +19,15 @@ models:
       - Supports task assignment and ownership
       - Provides comprehensive task history
       
+      Task Lists:
+      - Current task lists (as of Dec 2023):
+        * Clinical: URGENT, Unscheduled Treatment F/U, Pre-Treatment F/U, Treatment Plans
+        * Staff-specific: Liz, Chelsea, Katie
+        * Special purpose: Patient Balance F/U, NP Insurance, X-rays, DOCTOR URGENT
+        * Other: Same day HYG, Appt Cancellations, $$$ TX FOLLOWUP
+      - Historical task lists (pre-Dec 2023) may have different IDs
+      - task_list_id = 0 indicates no assigned list
+      
       Data Sources:
       - stg_opendental__task: Base task data
       - stg_opendental__tasklist: Task list information
@@ -69,6 +78,8 @@ models:
           - relationships:
               to: ref('stg_opendental__tasklist')
               field: task_id
+              config:
+                severity: warn
       - name: key_id
         description: Reference ID for the associated entity (e.g., appointment_id)
       - name: from_id
