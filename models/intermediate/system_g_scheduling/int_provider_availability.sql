@@ -32,6 +32,15 @@ WITH ProviderSchedules AS (
 
 -- Handle overlapping schedule blocks by merging them
 MergedSchedules AS (
+    WITH ScheduleWithNextStart AS (
+        SELECT
+            provider_id,
+            schedule_date,
+            start_time,
+            end_time,
+            LEAD(start_time) OVER (PARTITION BY provider_id, schedule_date ORDER BY start_time) as next_start_time
+        FROM ProviderSchedules
+    )
     SELECT
         provider_id,
         schedule_date,
@@ -40,8 +49,10 @@ MergedSchedules AS (
         -- Calculate total available minutes accounting for overlaps
         SUM(
             EXTRACT(EPOCH FROM (
-                LEAST(end_time, LEAD(start_time) OVER (PARTITION BY provider_id, schedule_date ORDER BY start_time))
-                - start_time
+                CASE 
+                    WHEN next_start_time IS NULL THEN end_time
+                    ELSE LEAST(end_time, next_start_time)
+                END - start_time
             ))/60
         ) as available_minutes,
         -- Track schedule status
@@ -50,7 +61,7 @@ MergedSchedules AS (
             WHEN COUNT(*) = 1 THEN 'Single Block'
             ELSE 'No Schedule'
         END as schedule_status
-    FROM ProviderSchedules
+    FROM ScheduleWithNextStart
     GROUP BY provider_id, schedule_date
 ),
 
