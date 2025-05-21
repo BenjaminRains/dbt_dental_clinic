@@ -152,7 +152,7 @@ models:
           - not_null
           - relationships:
               to: ref('stg_opendental__usergroup')
-              field: user_group_id
+              field: usergroup_id
               where: "user_group_id != 0"
               severity: warn
               config:

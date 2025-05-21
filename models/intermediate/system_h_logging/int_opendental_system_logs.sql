@@ -34,7 +34,7 @@ select
     
     -- User Information
     u.username,
-    u.user_group_id
+    COALESCE(u.user_group_id, 0) as user_group_id  -- Default to 0 for system entries
 
 from entry_logs el
 left join users u
