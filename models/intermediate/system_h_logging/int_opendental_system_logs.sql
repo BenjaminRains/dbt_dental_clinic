@@ -18,7 +18,7 @@ with entry_logs as (
 users as (
     select
         user_id,
-        user_name,
+        username,
         user_group_id
     from {{ ref('stg_opendental__userod') }}
 ),
@@ -42,7 +42,7 @@ select
     el.entry_datetime,
     
     -- User Information
-    u.user_name,
+    u.username,
     u.user_group_id,
     
     -- Task Information (when applicable)
