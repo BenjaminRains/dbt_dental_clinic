@@ -42,7 +42,58 @@ WITH AppointmentBase AS (
             AND apt.dismissed_datetime > apt.arrival_datetime
             AND apt.dismissed_datetime::time != '00:00:00'::time  -- Exclude placeholder times
             AND apt.arrival_datetime::time != '00:00:00'::time    -- Exclude placeholder times
-            THEN ROUND(EXTRACT(EPOCH FROM (apt.dismissed_datetime - apt.arrival_datetime))/60)::integer
+            THEN (
+                -- Count business hours between check-in and check-out
+                WITH RECURSIVE dates AS (
+                    SELECT 
+                        apt.arrival_datetime as dt,
+                        LEAST(
+                            apt.dismissed_datetime,
+                            DATE(apt.arrival_datetime) + INTERVAL '1 day' - INTERVAL '1 second'
+                        ) as end_dt
+                    UNION ALL
+                    SELECT 
+                        dt + INTERVAL '1 day',
+                        LEAST(
+                            apt.dismissed_datetime,
+                            dt + INTERVAL '2 days' - INTERVAL '1 second'
+                        )
+                    FROM dates
+                    WHERE dt + INTERVAL '1 day' < apt.dismissed_datetime
+                )
+                SELECT 
+                    CASE 
+                        WHEN SUM(
+                            CASE 
+                                -- Skip Sundays
+                                WHEN EXTRACT(DOW FROM dt) = 0 THEN 0
+                                -- Business hours only (9:00-17:00)
+                                ELSE LEAST(
+                                    EXTRACT(EPOCH FROM (
+                                        LEAST(end_dt, dt + INTERVAL '17:00:00') - 
+                                        GREATEST(dt, dt + INTERVAL '09:00:00')
+                                    ))/60,
+                                    480  -- 8 hours in minutes
+                                )
+                            END
+                        ) > 0 THEN ROUND(SUM(
+                            CASE 
+                                -- Skip Sundays
+                                WHEN EXTRACT(DOW FROM dt) = 0 THEN 0
+                                -- Business hours only (9:00-17:00)
+                                ELSE LEAST(
+                                    EXTRACT(EPOCH FROM (
+                                        LEAST(end_dt, dt + INTERVAL '17:00:00') - 
+                                        GREATEST(dt, dt + INTERVAL '09:00:00')
+                                    ))/60,
+                                    480  -- 8 hours in minutes
+                                )
+                            END
+                        ))::integer
+                        ELSE NULL
+                    END
+                FROM dates
+            )
             ELSE NULL
         END AS actual_length,
         apt.entry_datetime as created_at

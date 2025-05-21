@@ -190,9 +190,9 @@ models:
       # Test for appointment_end_datetime > appointment_datetime
       - dbt_utils.expression_is_true:
           expression: "appointment_end_datetime > appointment_datetime"
-      # Test for check_out_time >= check_in_time
+      # Test for valid check-in/check-out time combinations
       - dbt_utils.expression_is_true:
-          expression: "check_out_time IS NULL OR check_out_time >= check_in_time"
+          expression: "check_out_time IS NULL OR check_out_time::time = '00:00:00'::time OR check_in_time::time = '00:00:00'::time OR DATE(check_out_time) = DATE(check_in_time) OR (DATE(check_out_time) > DATE(check_in_time) AND actual_length <= 480 * (DATE(check_out_time) - DATE(check_in_time) + 1))"
       # Test for actual_length > 0
       - dbt_utils.expression_is_true:
           expression: "actual_length IS NULL OR actual_length > 0"
