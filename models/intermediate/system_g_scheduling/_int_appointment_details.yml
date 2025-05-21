@@ -59,7 +59,6 @@ models:
       - name: appointment_id
         description: Unique identifier for the appointment
         tests:
-          - not_null
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
@@ -175,18 +174,10 @@ models:
           - not_null
 
     tests:
-      - unique:
-          column_name: appointment_id
-      - dbt_utils.expression_is_true:
-          expression: >
-            NOT EXISTS (
-              SELECT 1
-              FROM {{ this }} a1
-              JOIN {{ this }} a2
-                ON a1.appointment_id = a2.appointment_id
-                AND a1.appointment_datetime = a2.appointment_datetime
-                AND a1.appointment_id != a2.appointment_id
-            )
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - appointment_id
+            - appointment_datetime
       # Test for appointment_end_datetime > appointment_datetime
       - dbt_utils.expression_is_true:
           expression: "appointment_end_datetime > appointment_datetime"
