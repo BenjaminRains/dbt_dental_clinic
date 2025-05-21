@@ -58,19 +58,58 @@ WITH AppointmentMetrics AS (
     GROUP BY DATE(a.appointment_datetime)
 ),
 
+date_spine AS (
+    {{ dbt_utils.date_spine(
+        datepart="day",
+        start_date="(CURRENT_DATE - INTERVAL '90 days')::date",
+        end_date="(CURRENT_DATE + INTERVAL '365 days')::date"
+    ) }}
+),
+
+schedule_with_dates AS (
+    SELECT
+        COALESCE(s.provider_id, p.provider_id) as provider_id,
+        COALESCE(s.schedule_date, d.date_day::date) as schedule_date,
+        d.date_day::date as spine_date,
+        s.available_minutes,
+        s.total_appointment_minutes
+    FROM date_spine d
+    CROSS JOIN {{ ref('stg_opendental__provider') }} p
+    LEFT JOIN {{ ref('int_appointment_schedule') }} s
+        ON s.schedule_date = d.date_day::date
+        AND s.provider_id = p.provider_id
+    WHERE d.date_day::date >= CURRENT_DATE - INTERVAL '90 days'
+        AND p.is_hidden = 0  -- Only include active providers
+),
+
 ScheduleUtilization AS (
+    -- Provider-level utilization
     SELECT
         s.provider_id,
-        s.schedule_date as date,
-        s.available_minutes,
-        s.total_appointment_minutes,
+        s.spine_date as date,
+        COALESCE(s.available_minutes, 480) as available_minutes,
+        COALESCE(s.total_appointment_minutes, 0) as total_appointment_minutes,
         CASE 
-            WHEN s.available_minutes > 0 
-            THEN (s.total_appointment_minutes::float / s.available_minutes) * 100 
-            ELSE 0 
+            WHEN COALESCE(s.available_minutes, 480) = 0 THEN 0
+            ELSE ROUND((COALESCE(s.total_appointment_minutes, 0)::numeric / COALESCE(s.available_minutes, 480)) * 100, 2)
         END as schedule_utilization
-    FROM {{ ref('int_appointment_schedule') }} s
-    WHERE s.schedule_date >= CURRENT_DATE - INTERVAL '90 days'
+    FROM schedule_with_dates s
+    WHERE s.provider_id IS NOT NULL
+
+    UNION ALL
+
+    -- Overall utilization (aggregated across all providers)
+    SELECT
+        NULL as provider_id,
+        s.spine_date as date,
+        SUM(COALESCE(s.available_minutes, 480)) as available_minutes,
+        SUM(COALESCE(s.total_appointment_minutes, 0)) as total_appointment_minutes,
+        CASE 
+            WHEN SUM(COALESCE(s.available_minutes, 480)) = 0 THEN 0
+            ELSE ROUND((SUM(COALESCE(s.total_appointment_minutes, 0))::numeric / SUM(COALESCE(s.available_minutes, 480))) * 100, 2)
+        END as schedule_utilization
+    FROM schedule_with_dates s
+    GROUP BY s.spine_date
 ),
 
 ChairTimeUtilization AS (
@@ -214,10 +253,10 @@ SELECT
 
 FROM RollingMetrics am
 LEFT JOIN ScheduleUtilization su
-    ON am.provider_id = su.provider_id
+    ON COALESCE(am.provider_id, -1) = COALESCE(su.provider_id, -1)
     AND am.date = su.date
 LEFT JOIN ChairTimeUtilization ctu
-    ON am.provider_id = ctu.provider_id
+    ON COALESCE(am.provider_id, -1) = COALESCE(ctu.provider_id, -1)
     AND am.date = ctu.date
 
 {% if is_incremental() %}
