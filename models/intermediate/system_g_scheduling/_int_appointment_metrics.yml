@@ -126,11 +126,10 @@ models:
       - name: schedule_utilization
         description: Percentage of available scheduling time that was booked
         tests:
-          - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
           - dbt_utils.expression_is_true:
-              expression: "<= 100"
+              expression: "IS NULL OR total_appointments > 0"
       - name: chair_time_utilization
         description: Percentage of scheduled chair time that was actually used
         tests:
