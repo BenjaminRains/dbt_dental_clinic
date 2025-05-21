@@ -99,7 +99,7 @@ models:
         description: ID of the clinic for this view
         tests:
           - dbt_utils.expression_is_true:
-              expression: "IS NULL OR = clinic_id"
+              expression: "IS NULL OR appt_view_clinic_id = clinic_id"
               column_name: appt_view_clinic_id
               name: appt_view_clinic_id_matches_clinic_id
       - name: view_created_at
