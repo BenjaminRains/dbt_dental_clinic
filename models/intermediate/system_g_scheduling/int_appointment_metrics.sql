@@ -25,7 +25,6 @@ WITH AppointmentMetrics AS (
     SELECT
         'provider' as metric_level,
         a.provider_id,
-        p.clinic_id,
         DATE(a.appointment_datetime) as date,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
@@ -38,28 +37,7 @@ WITH AppointmentMetrics AS (
     LEFT JOIN {{ ref('stg_opendental__provider') }} p
         ON a.provider_id = p.provider_id
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY a.provider_id, p.clinic_id, DATE(a.appointment_datetime)
-
-    UNION ALL
-
-    -- Clinic-level metrics
-    SELECT
-        'clinic' as metric_level,
-        NULL as provider_id,
-        p.clinic_id,
-        DATE(a.appointment_datetime) as date,
-        COUNT(*) as total_appointments,
-        SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
-        SUM(CASE WHEN a.appointment_status = 5 THEN 1 ELSE 0 END) as cancelled_appointments,
-        SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
-        AVG(a.actual_length) as average_appointment_length,
-        AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
-    FROM {{ ref('int_appointment_details') }} a
-    LEFT JOIN {{ ref('stg_opendental__provider') }} p
-        ON a.provider_id = p.provider_id
-    WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY p.clinic_id, DATE(a.appointment_datetime)
+    GROUP BY a.provider_id, DATE(a.appointment_datetime)
 
     UNION ALL
 
@@ -67,7 +45,6 @@ WITH AppointmentMetrics AS (
     SELECT
         'overall' as metric_level,
         NULL as provider_id,
-        NULL as clinic_id,
         DATE(a.appointment_datetime) as date,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
@@ -118,53 +95,53 @@ RollingMetrics AS (
         *,
         -- 7-day rolling averages
         AVG(total_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id 
+            PARTITION BY metric_level, provider_id
             ORDER BY date 
             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
         ) as rolling_7d_total_appointments,
         AVG(completed_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id 
+            PARTITION BY metric_level, provider_id
             ORDER BY date 
             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
         ) as rolling_7d_completed_appointments,
         AVG(cancelled_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id 
+            PARTITION BY metric_level, provider_id
             ORDER BY date 
             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
         ) as rolling_7d_cancelled_appointments,
         AVG(no_show_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id 
+            PARTITION BY metric_level, provider_id
             ORDER BY date 
             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
         ) as rolling_7d_no_show_appointments,
         AVG(average_appointment_length) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id 
+            PARTITION BY metric_level, provider_id
             ORDER BY date 
             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
         ) as rolling_7d_avg_appointment_length,
         AVG(average_wait_time) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id 
+            PARTITION BY metric_level, provider_id
             ORDER BY date 
             ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
         ) as rolling_7d_avg_wait_time,
         -- Month-to-date totals
         SUM(total_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id, 
+            PARTITION BY metric_level, provider_id, 
             DATE_TRUNC('month', date)
             ORDER BY date
         ) as mtd_total_appointments,
         SUM(completed_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id, 
+            PARTITION BY metric_level, provider_id, 
             DATE_TRUNC('month', date)
             ORDER BY date
         ) as mtd_completed_appointments,
         SUM(cancelled_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id, 
+            PARTITION BY metric_level, provider_id, 
             DATE_TRUNC('month', date)
             ORDER BY date
         ) as mtd_cancelled_appointments,
         SUM(no_show_appointments) OVER (
-            PARTITION BY metric_level, provider_id, clinic_id, 
+            PARTITION BY metric_level, provider_id, 
             DATE_TRUNC('month', date)
             ORDER BY date
         ) as mtd_no_show_appointments
@@ -174,8 +151,7 @@ RollingMetrics AS (
 SELECT
     -- Generate unique metric ID
     MD5(
-        COALESCE(am.provider_id::text, '') || 
-        COALESCE(am.clinic_id::text, '') ||
+        COALESCE(am.provider_id::text, '') ||
         am.date::text || 
         am.metric_level
     ) as metric_id,
@@ -183,7 +159,6 @@ SELECT
     -- Base metrics
     am.date,
     am.provider_id,
-    am.clinic_id,
     am.metric_level,
     am.total_appointments,
     am.completed_appointments,
@@ -209,19 +184,8 @@ SELECT
     END as completion_rate,
     
     -- Utilization metrics
-    COALESCE(su.schedule_utilization, 0) as schedule_utilization,
-    COALESCE(ctu.chair_time_utilization, 0) as chair_time_utilization,
-    
-    -- Time metrics
-    am.average_appointment_length,
-    am.average_wait_time,
-    
-    -- New patient rate
-    CASE 
-        WHEN am.total_appointments > 0 
-        THEN (am.new_patient_appointments::float / am.total_appointments) * 100 
-        ELSE 0 
-    END as new_patient_rate,
+    su.schedule_utilization,
+    ctu.chair_time_utilization,
     
     -- Rolling averages
     am.rolling_7d_total_appointments,
@@ -231,15 +195,22 @@ SELECT
     am.rolling_7d_avg_appointment_length,
     am.rolling_7d_avg_wait_time,
     
-    -- Month-to-date totals
+    -- Month-to-date metrics
     am.mtd_total_appointments,
     am.mtd_completed_appointments,
     am.mtd_cancelled_appointments,
     am.mtd_no_show_appointments,
     
+    -- Additional metrics
+    am.average_appointment_length,
+    am.average_wait_time,
+    am.new_patient_appointments,
+    
     -- Metadata
-    CURRENT_TIMESTAMP as model_created_at,
-    CURRENT_TIMESTAMP as model_updated_at
+    current_timestamp as dbt_created_at,
+    '{{ invocation_id }}' as dbt_pipeline_id,
+    '{{ this.name }}' as dbt_model,
+    '{{ this.schema }}' as dbt_schema
 
 FROM RollingMetrics am
 LEFT JOIN ScheduleUtilization su
