@@ -21,8 +21,7 @@ WITH ProviderSchedule AS (
         p.provider_id,
         p.provider_abbreviation as provider_name,
         p.is_hidden,
-        p.specialty_id as specialty,
-        p.clinic_id
+        p.specialty_id as specialty
     FROM {{ ref('stg_opendental__provider') }} p
     WHERE p.is_hidden = 0  -- 0 = not hidden, 1 = hidden
 ),
@@ -58,11 +57,10 @@ ProviderAvailability AS (
 
 DailySchedule AS (
     SELECT
-        md5(COALESCE(ps.provider_id::text, '') || COALESCE(am.schedule_date::text, '')) as schedule_id,
-        COALESCE(am.schedule_date, pa.schedule_date) as schedule_date,
+        md5(COALESCE(ps.provider_id::text, '') || COALESCE(dates.schedule_date::text, '')) as schedule_id,
+        dates.schedule_date,
         ps.provider_id,
         ps.provider_name,
-        ps.clinic_id,
         COALESCE(am.total_appointments, 0) as total_appointments,
         COALESCE(am.completed_appointments, 0) as completed_appointments,
         COALESCE(am.cancelled_appointments, 0) as cancelled_appointments,
@@ -93,6 +91,20 @@ DailySchedule AS (
     LEFT JOIN ProviderAvailability pa
         ON ps.provider_id = pa.provider_id
         AND dates.schedule_date = pa.schedule_date
+    GROUP BY 
+        ps.provider_id,
+        ps.provider_name,
+        dates.schedule_date,
+        am.total_appointments,
+        am.completed_appointments,
+        am.cancelled_appointments,
+        am.no_show_appointments,
+        am.unconfirmed_appointments,
+        am.total_appointment_minutes,
+        pa.available_minutes,
+        pa.start_time,
+        pa.end_time,
+        pa.is_day_off
 )
 
 SELECT
@@ -100,7 +112,6 @@ SELECT
     schedule_date,
     provider_id,
     provider_name,
-    clinic_id,
     total_appointments,
     completed_appointments,
     cancelled_appointments,
