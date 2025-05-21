@@ -37,8 +37,12 @@ WITH AppointmentBase AS (
         apt.arrival_datetime as check_in_time,
         apt.dismissed_datetime as check_out_time,
         CASE
-            WHEN apt.arrival_datetime IS NOT NULL AND apt.dismissed_datetime IS NOT NULL
-            THEN EXTRACT(EPOCH FROM (apt.dismissed_datetime - apt.arrival_datetime))/60
+            WHEN apt.arrival_datetime IS NOT NULL 
+            AND apt.dismissed_datetime IS NOT NULL
+            AND apt.dismissed_datetime > apt.arrival_datetime
+            AND apt.dismissed_datetime::time != '00:00:00'::time  -- Exclude placeholder times
+            AND apt.arrival_datetime::time != '00:00:00'::time    -- Exclude placeholder times
+            THEN ROUND(EXTRACT(EPOCH FROM (apt.dismissed_datetime - apt.arrival_datetime))/60)::integer
             ELSE NULL
         END AS actual_length,
         apt.entry_datetime as created_at
@@ -145,9 +149,12 @@ SELECT
     ab.check_out_time,
     ab.actual_length,
     CASE
-        WHEN ab.check_in_time IS NOT NULL AND ab.appointment_datetime IS NOT NULL
-        THEN EXTRACT(EPOCH FROM (ab.check_in_time - ab.appointment_datetime))/60
-        ELSE NULL
+        WHEN ab.check_in_time IS NOT NULL 
+        AND ab.appointment_datetime IS NOT NULL
+        AND ab.check_in_time::time != '00:00:00'::time  -- Exclude placeholder times
+        AND ab.check_in_time >= ab.appointment_datetime
+        THEN ROUND(EXTRACT(EPOCH FROM (ab.check_in_time - ab.appointment_datetime))/60)::integer
+        ELSE 0  -- Default to 0 for waiting time when no valid check-in time
     END AS waiting_time,
     ha.cancellation_reason,
     ha.rescheduled_appointment_id,
