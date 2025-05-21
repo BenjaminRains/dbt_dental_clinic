@@ -36,6 +36,7 @@ tasks as (
 select
     -- Entry Log Information
     el.entry_log_id,
+    el.user_id,
     el.foreign_key_type,
     el.foreign_key,
     el.log_source,

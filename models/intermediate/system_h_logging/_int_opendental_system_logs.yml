@@ -216,7 +216,7 @@ models:
             description: "Entry timestamps must not be in the future"
       
       - dbt_utils.expression_is_true:
-          expression: "user_id != 0 OR (user_id = 0 AND user_name IS NULL)"
+          expression: "user_id != 0 OR (user_id = 0 AND username IS NULL)"
           name: system_entries_have_null_user_name
           config:
             severity: error
