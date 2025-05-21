@@ -222,6 +222,12 @@ SELECT
         ELSE 0 
     END as completion_rate,
     
+    CASE 
+        WHEN am.total_appointments > 0 
+        THEN (am.new_patient_appointments::float / am.total_appointments) * 100 
+        ELSE 0 
+    END as new_patient_rate,
+    
     -- Utilization metrics
     su.schedule_utilization,
     ctu.chair_time_utilization,
