@@ -86,7 +86,9 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "updated_at >= created_at"
+              expression: ">= created_at"
+              column_name: updated_at
+              name: updated_at_after_created
       
       # Appointment View Information
       - name: userod_appt_view_id
@@ -97,14 +99,18 @@ models:
         description: ID of the clinic for this view
         tests:
           - dbt_utils.expression_is_true:
-              expression: "appt_view_clinic_id IS NULL OR appt_view_clinic_id = clinic_id"
+              expression: "IS NULL OR = clinic_id"
+              column_name: appt_view_clinic_id
+              name: appt_view_clinic_id_matches_clinic_id
       - name: view_created_at
         description: When the view was created
       - name: view_updated_at
         description: When the view was last updated
         tests:
           - dbt_utils.expression_is_true:
-              expression: "view_updated_at IS NULL OR view_updated_at >= view_created_at"
+              expression: "IS NULL OR >= view_created_at"
+              column_name: view_updated_at
+              name: view_updated_at_after_created
       
       # Metadata
       - name: model_created_at
@@ -116,4 +122,6 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "model_updated_at >= model_created_at" 
+              expression: ">= model_created_at"
+              column_name: model_updated_at
+              name: model_updated_at_after_created 
