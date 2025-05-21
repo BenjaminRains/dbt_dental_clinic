@@ -140,13 +140,13 @@ models:
                 severity: error
       
       # User Information
-      - name: user_name
+      - name: username
         description: >
           Name of the user who performed the action. Null for system-generated
           entries (user_id = 0). Used for audit trail and user attribution.
         tests:
           - not_null:
-              where: "user_id != 0"  # System-generated entries may have null user_name
+              where: "user_id != 0"  # System-generated entries may have null username
               config:
                 severity: error
       
@@ -154,11 +154,12 @@ models:
         description: >
           User's group membership identifier. Links to the user group table for
           access control and permission tracking. Null for system-generated entries.
+          Note: user_group_id = 0 represents system or unassigned entries.
         tests:
           - relationships:
               to: ref('stg_opendental__usergroup')
               field: usergroup_id
-              where: "user_id != 0"  # System-generated entries may have null user_group_id
+              where: "user_id != 0 AND user_group_id != 0"  # Exclude system entries and unassigned groups
               config:
                 severity: error
       
@@ -220,7 +221,7 @@ models:
           name: system_entries_have_null_user_name
           config:
             severity: error
-            description: "System-generated entries must have null user_name"
+            description: "System-generated entries must have null username"
       
       - dbt_utils.expression_is_true:
           expression: "foreign_key_type = 1 OR (foreign_key_type != 1 AND task_description IS NULL)"
