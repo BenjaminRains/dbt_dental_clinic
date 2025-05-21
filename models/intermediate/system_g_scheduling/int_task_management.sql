@@ -137,10 +137,11 @@ task_subscriptions as (
 
 task_unread as (
     select
-        task_unread_id,
         task_id as unread_task_id,
-        user_id as unread_user_id
+        array_agg(user_id) as unread_user_ids,
+        array_agg(task_unread_id) as task_unread_ids
     from {{ ref('stg_opendental__taskunread') }}
+    group by task_id
 )
 
 select
@@ -205,9 +206,9 @@ select
     ts.task_subscription_id,
     ts.subscriber_user_id,
     
-    -- Unread Status
-    tu.task_unread_id,
-    tu.unread_user_id,
+    -- Unread Status (now as arrays)
+    tu.task_unread_ids,
+    tu.unread_user_ids,
     
     -- Metadata
     CURRENT_TIMESTAMP as model_created_at,

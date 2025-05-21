@@ -178,7 +178,7 @@ models:
         description: ID of the subscribing user
       
       # Unread Status
-      - name: task_unread_id
-        description: ID of the unread record
-      - name: unread_user_id
-        description: ID of the user who hasn't read the task 
+      - name: task_unread_ids
+        description: Array of task unread record IDs for this task
+      - name: unread_user_ids
+        description: Array of user IDs who haven't read this task 
