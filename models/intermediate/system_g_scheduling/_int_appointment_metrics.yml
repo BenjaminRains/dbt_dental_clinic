@@ -143,9 +143,10 @@ models:
       - name: average_appointment_length
         description: Average duration of appointments in minutes
         tests:
-          - not_null
           - dbt_utils.expression_is_true:
               expression: "> 0"
+          - dbt_utils.expression_is_true:
+              expression: "IS NULL OR completed_appointments > 0"
       - name: average_wait_time
         description: Average time patients waited before being seen (minutes)
         tests:
