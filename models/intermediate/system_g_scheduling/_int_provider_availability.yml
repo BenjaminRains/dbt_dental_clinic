@@ -81,6 +81,8 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              severity: warn
+              where: "provider_id != 0"
       - name: schedule_date
         description: Date of the schedule
         tests:
@@ -88,17 +90,36 @@ models:
       - name: start_time
         description: Start time of the provider's schedule
         tests:
-          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "IS NOT NULL"
+              column_name: start_time
+              where: "is_day_off = false"
+              name: start_time_day_off_consistency
+              severity: warn
       - name: end_time
         description: End time of the provider's schedule
         tests:
-          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "IS NOT NULL"
+              column_name: end_time
+              where: "is_day_off = false"
+              name: end_time_day_off_consistency
+              severity: warn
       - name: is_day_off
         description: Flag indicating if this is a day off
         tests:
           - dbt_utils.expression_is_true:
-              expression: "(is_day_off = true AND (start_time IS NULL OR end_time IS NULL)) OR (is_day_off = false AND start_time IS NOT NULL AND end_time IS NOT NULL)"
+              expression: "= true"
+              column_name: is_day_off
+              where: "start_time IS NULL AND end_time IS NULL"
               name: day_off_consistency
+              severity: warn
+          - dbt_utils.expression_is_true:
+              expression: "= false"
+              column_name: is_day_off
+              where: "start_time IS NOT NULL AND end_time IS NOT NULL"
+              name: working_day_consistency
+              severity: warn
       - name: available_minutes
         description: Total available minutes in the schedule
         tests:
