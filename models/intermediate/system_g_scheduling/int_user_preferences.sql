@@ -46,11 +46,21 @@ user_appointment_views as (
 appointment_view_details as (
     select
         av.appt_view_id,
-        av.description as view_description,
-        av.view_type,
-        av.is_hidden,
+        av.view_description,
         av.sort_order,
-        av.color
+        av.rows_per_increment,
+        av.only_scheduled_providers,
+        av.only_scheduled_before_time,
+        av.only_scheduled_after_time,
+        av.stack_behavior_up_right,
+        av.stack_behavior_left_right,
+        av.clinic_id,
+        av.appointment_time_scroll_start,
+        av.is_scroll_start_dynamic,
+        av.is_appointment_bubbles_disabled,
+        av.width_operatory_minimum,
+        av.waiting_room_name,
+        av.only_scheduled_provider_days
     from {{ ref('stg_opendental__apptview') }} av
 ),
 
@@ -85,10 +95,20 @@ select
     
     -- Appointment View Details
     avd.view_description,
-    avd.view_type,
-    avd.is_hidden as view_is_hidden,
     avd.sort_order,
-    avd.color as view_color,
+    avd.rows_per_increment,
+    avd.only_scheduled_providers,
+    avd.only_scheduled_before_time,
+    avd.only_scheduled_after_time,
+    avd.stack_behavior_up_right,
+    avd.stack_behavior_left_right,
+    avd.clinic_id as view_clinic_id,
+    avd.appointment_time_scroll_start,
+    avd.is_scroll_start_dynamic,
+    avd.is_appointment_bubbles_disabled,
+    avd.width_operatory_minimum,
+    avd.waiting_room_name,
+    avd.only_scheduled_provider_days,
     
     -- Task View Preferences
     tvp.task_view_settings,
