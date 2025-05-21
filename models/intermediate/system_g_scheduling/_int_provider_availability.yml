@@ -112,5 +112,5 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "model_updated_at >= model_created_at"
+              expression: "{{ ref('int_provider_availability') }}.model_updated_at >= {{ ref('int_provider_availability') }}.model_created_at"
               name: updated_after_created
