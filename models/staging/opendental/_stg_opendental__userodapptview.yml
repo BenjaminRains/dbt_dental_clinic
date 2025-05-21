@@ -24,9 +24,12 @@ models:
         description: Foreign key to the clinic table (not actively used in this single-clinic implementation)
       
       - name: appt_view_id
-        description: Foreign key to the appointment view table
+        description: |
+          Foreign key to the appointment view table.
+          Note: appt_view_id = 0 represents a system default view.
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__apptview')
               field: appt_view_id
+              where: "appt_view_id != 0"  # Exclude system default view from relationship test
