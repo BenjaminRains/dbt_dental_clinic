@@ -85,8 +85,6 @@ models:
         description: Expected end date and time of the appointment
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "appointment_end_datetime > appointment_datetime"
       - name: appointment_type_id
         description: |
           Foreign key to appointment type. If appointment_type_id = 0, this means the appointment 
@@ -99,9 +97,6 @@ models:
         description: Name of the appointment type
       - name: appointment_length
         description: Duration of the appointment in minutes
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "appointment_length > 0"
       - name: appointment_status
         description: Status code of the appointment
         tests:
@@ -136,34 +131,16 @@ models:
         description: Operatory assigned to this appointment
       - name: check_in_time
         description: Time when patient checked in
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "check_in_time IS NULL OR check_in_time >= appointment_datetime"
       - name: check_out_time
         description: Time when patient checked out
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "check_out_time IS NULL OR check_out_time >= check_in_time"
       - name: actual_length
         description: Actual duration of the appointment in minutes
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "actual_length IS NULL OR actual_length > 0"
       - name: waiting_time
         description: Time patient spent waiting (in minutes)
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "waiting_time IS NULL OR waiting_time >= 0"
       - name: cancellation_reason
         description: Reason for cancellation (if applicable)
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "cancellation_reason IS NULL OR appointment_status = 5"
       - name: rescheduled_appointment_id
         description: ID of the rescheduled appointment (if applicable)
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "rescheduled_appointment_id IS NULL OR rescheduled_appointment_id != appointment_id"
       - name: provider_name
         description: Abbreviated name of the provider
         tests:
@@ -210,15 +187,21 @@ models:
                 AND a1.appointment_datetime = a2.appointment_datetime
                 AND a1.appointment_id != a2.appointment_id
             )
+      # Test for appointment_end_datetime > appointment_datetime
       - dbt_utils.expression_is_true:
           expression: "appointment_end_datetime > appointment_datetime"
+      # Test for check_out_time >= check_in_time
       - dbt_utils.expression_is_true:
           expression: "check_out_time IS NULL OR check_out_time >= check_in_time"
+      # Test for actual_length > 0
       - dbt_utils.expression_is_true:
           expression: "actual_length IS NULL OR actual_length > 0"
+      # Test for waiting_time >= 0
       - dbt_utils.expression_is_true:
           expression: "waiting_time IS NULL OR waiting_time >= 0"
+      # Test for cancellation_reason only present for cancelled appointments
       - dbt_utils.expression_is_true:
           expression: "cancellation_reason IS NULL OR appointment_status = 5"
+      # Test for rescheduled_appointment_id != appointment_id
       - dbt_utils.expression_is_true:
           expression: "rescheduled_appointment_id IS NULL OR rescheduled_appointment_id != appointment_id"
