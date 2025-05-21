@@ -58,6 +58,12 @@ models:
       - dbt_utils.expression_is_true:
           expression: "model_updated_at >= model_created_at"
           name: updated_after_created
+      - dbt_utils.expression_is_true:
+          expression: "start_time IS NULL OR start_time::time <= end_time::time"
+          name: start_time_before_end_time
+      - dbt_utils.expression_is_true:
+          expression: "end_time IS NULL OR end_time::time >= start_time::time"
+          name: end_time_after_start_time
 
     columns:
       - name: provider_schedule_id
@@ -82,15 +88,11 @@ models:
       - name: start_time
         description: Start time of the provider's schedule
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "start_time IS NULL OR start_time::time <= end_time::time"
-              name: start_time_before_end_time
+          - not_null
       - name: end_time
         description: End time of the provider's schedule
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "end_time IS NULL OR end_time::time >= start_time::time"
-              name: end_time_after_start_time
+          - not_null
       - name: is_day_off
         description: Flag indicating if this is a day off
         tests:
