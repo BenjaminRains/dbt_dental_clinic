@@ -128,16 +128,22 @@ models:
       - name: entry_datetime
         description: >
           Timestamp when the log entry was created. Must be a valid timestamp
-          after 2023-01-01 and not in the future. Used for chronological tracking
+          after 2020-01-01 and not in the future. Used for chronological tracking
           and audit purposes.
         tests:
           - not_null
           - dbt_utils.date_after:
               datepart: day
               field: entry_datetime
-              compare_date: '2023-01-01'
+              compare_date: '2020-01-01'
               config:
                 severity: error
+          - dbt_utils.expression_is_true:
+              expression: "entry_datetime <= current_timestamp"
+              name: entry_datetime_not_in_future
+              config:
+                severity: error
+                description: "Entry timestamps must not be in the future"
       
       # User Information
       - name: username
@@ -231,11 +237,11 @@ models:
             description: "Task fields should only be populated for task-type entries"
       
       - dbt_utils.expression_is_true:
-          expression: "entry_datetime >= '2023-01-01'"
-          name: logs_after_2023
+          expression: "entry_datetime >= '2020-01-01'"
+          name: logs_after_2020
           config:
             severity: error
-            description: "All logs must be from 2023 or later"
+            description: "All logs must be from 2020 or later"
 
     meta:
       business_owners: ["system_administrators", "compliance_team"]
@@ -254,4 +260,4 @@ models:
         - "Log sources must be valid system components"
         - "All required fields must be non-null"
         - "Entry logs must have unique ID-timestamp combinations"
-        - "All logs must be from 2023 or later" 
+        - "All logs must be from 2020 or later" 
