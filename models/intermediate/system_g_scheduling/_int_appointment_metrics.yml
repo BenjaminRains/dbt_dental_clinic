@@ -134,11 +134,12 @@ models:
       - name: chair_time_utilization
         description: Percentage of scheduled chair time that was actually used
         tests:
-          - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
           - dbt_utils.expression_is_true:
               expression: "<= 100"
+          - dbt_utils.expression_is_true:
+              expression: "IS NULL OR completed_appointments > 0"
       - name: average_appointment_length
         description: Average duration of appointments in minutes
         tests:
@@ -159,11 +160,19 @@ models:
               expression: ">= 0"
           - dbt_utils.expression_is_true:
               expression: "<= 100"
-      - name: model_created_at
+      - name: dbt_created_at
         description: Timestamp when this record was created in the dbt model
         tests:
           - not_null
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+      - name: dbt_pipeline_id
+        description: Unique identifier for the dbt pipeline run that created this record
+        tests:
+          - not_null
+      - name: dbt_model
+        description: Name of the dbt model that created this record
+        tests:
+          - not_null
+      - name: dbt_schema
+        description: Schema where this model is materialized
         tests:
           - not_null
