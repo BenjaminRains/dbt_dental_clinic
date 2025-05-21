@@ -1,0 +1,257 @@
+version: 2
+
+models:
+  - name: int_opendental_system_logs
+    description: >
+      Intermediate model that combines system logging information with user and task data.
+      This model provides a comprehensive audit trail of system activities, particularly focusing
+      on task-related actions while maintaining a record of all system activities.
+      
+      Key features:
+      - Tracks all system activities with detailed user attribution
+      - Maintains one-to-one relationship with entry logs
+      - Records task-related activities with full context
+      - Tracks user actions and system events
+      - Provides comprehensive audit trail for compliance
+      - Integrates with task management system
+      - Records user group membership for access control
+      - Tracks system-generated vs user-initiated actions
+      
+      Data Sources:
+      - stg_opendental__entrylog: Base system logging data
+      - stg_opendental__userod: User information and permissions
+      - stg_opendental__task: Task management data
+      - stg_opendental__usergroup: User group definitions
+      
+      Business rules:
+      - One record per system activity (entry_log_id)
+      - System-generated entries (user_id = 0) have null user_name
+      - Task information only populated for foreign_key_type = 'Task'
+      - All timestamps must be after 2023-01-01
+      - User group information required for non-system entries
+      - Task status must be one of: NotStarted, InProgress, Completed, Cancelled, Deferred
+      - Entry timestamps must not be in the future
+      - Foreign key references must be valid for their respective types
+      
+      Key metrics:
+      - System activity volume by type
+      - User action frequency
+      - Task completion rates
+      - System-generated vs user-initiated actions
+      - Activity patterns by user group
+      - Task status distribution
+      - Activity timing patterns
+      
+      Grain: One record per system activity (entry_log_id)
+      
+      Primary key: entry_log_id
+      
+      Foreign keys:
+      - user_id -> stg_opendental__userod.user_id
+      - user_group_id -> stg_opendental__usergroup.usergroup_id
+      - foreign_key -> Various tables based on foreign_key_type
+      
+      Dependencies:
+      - stg_opendental__entrylog
+      - stg_opendental__userod
+      - stg_opendental__task
+      - stg_opendental__usergroup
+      
+      Data quality requirements:
+      - All required fields must be non-null
+      - Timestamps must be valid and not in the future
+      - User references must be valid
+      - Task information must be complete when applicable
+      - Foreign key references must be valid
+      - System entries must be properly identified
+      - User group assignments must be valid
+      
+    config:
+      materialized: view
+      schema: intermediate
+      tags: ['system_logging', 'audit_trail']
+    
+    columns:
+      # Entry Log Information
+      - name: entry_log_id
+        description: >
+          Primary key - Unique identifier for each log entry. This field maintains
+          a one-to-one relationship with the entry log table.
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__entrylog')
+              field: entry_log_id
+              config:
+                severity: error
+      
+      - name: foreign_key_type
+        description: >
+          Type identifier for the foreign key reference. Indicates what type of 
+          record the foreign_key points to. Valid values include Task, Patient,
+          Procedure, Appointment, and Document.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Task', 'Patient', 'Procedure', 'Appointment', 'Document']
+              quote: true
+              config:
+                severity: error
+      
+      - name: foreign_key
+        description: >
+          Foreign key reference to the related record. The actual table referenced 
+          depends on the foreign_key_type value. Must be a valid reference to the
+          corresponding table based on the type.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__task')
+              field: task_id
+              where: "foreign_key_type = 'Task'"
+              config:
+                severity: error
+      
+      - name: log_source
+        description: >
+          Source of the log entry. Indicates which system component or module 
+          generated the log entry. Used for tracking the origin of system activities
+          and debugging issues.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['TaskManager', 'PatientPortal', 'BillingSystem', 'AppointmentScheduler', 'DocumentManager']
+              quote: true
+              config:
+                severity: error
+      
+      - name: entry_datetime
+        description: >
+          Timestamp when the log entry was created. Must be a valid timestamp
+          after 2023-01-01 and not in the future. Used for chronological tracking
+          and audit purposes.
+        tests:
+          - not_null
+          - dbt_utils.date_after:
+              datepart: day
+              field: entry_datetime
+              compare_date: '2023-01-01'
+              config:
+                severity: error
+      
+      # User Information
+      - name: user_name
+        description: >
+          Name of the user who performed the action. Null for system-generated
+          entries (user_id = 0). Used for audit trail and user attribution.
+        tests:
+          - not_null:
+              where: "user_id != 0"  # System-generated entries may have null user_name
+              config:
+                severity: error
+      
+      - name: user_group_id
+        description: >
+          User's group membership identifier. Links to the user group table for
+          access control and permission tracking. Null for system-generated entries.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__usergroup')
+              field: usergroup_id
+              where: "user_id != 0"  # System-generated entries may have null user_group_id
+              config:
+                severity: error
+      
+      # Task Information
+      - name: task_description
+        description: >
+          Description of the task. Only populated when foreign_key_type is 'Task'.
+          Provides context about the task-related activity being logged.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "foreign_key_type != 'Task' OR (foreign_key_type = 'Task' AND task_description IS NOT NULL)"
+              config:
+                severity: error
+      
+      - name: task_date
+        description: >
+          Date associated with the task. Only populated when foreign_key_type is 'Task'.
+          Indicates when the task is scheduled or due.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "foreign_key_type != 'Task' OR (foreign_key_type = 'Task' AND task_date IS NOT NULL)"
+              config:
+                severity: error
+      
+      - name: task_status
+        description: >
+          Current status of the task. Only populated when foreign_key_type is 'Task'.
+          Tracks the progress of task-related activities.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "foreign_key_type != 'Task' OR (foreign_key_type = 'Task' AND task_status IS NOT NULL)"
+              config:
+                severity: error
+          - accepted_values:
+              values: ['NotStarted', 'InProgress', 'Completed', 'Cancelled', 'Deferred']
+              quote: true
+              where: "foreign_key_type = 'Task'"
+              config:
+                severity: error
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - entry_log_id
+            - entry_datetime
+          config:
+            severity: error
+            description: "Each entry log must have a unique combination of ID and timestamp"
+      
+      - dbt_utils.expression_is_true:
+          expression: "entry_datetime <= current_timestamp"
+          name: entry_datetime_not_in_future
+          config:
+            severity: error
+            description: "Entry timestamps must not be in the future"
+      
+      - dbt_utils.expression_is_true:
+          expression: "user_id != 0 OR (user_id = 0 AND user_name IS NULL)"
+          name: system_entries_have_null_user_name
+          config:
+            severity: error
+            description: "System-generated entries must have null user_name"
+      
+      - dbt_utils.expression_is_true:
+          expression: "foreign_key_type = 'Task' OR (foreign_key_type != 'Task' AND task_description IS NULL)"
+          name: task_fields_only_for_task_type
+          config:
+            severity: error
+            description: "Task fields should only be populated for task-type entries"
+      
+      - dbt_utils.expression_is_true:
+          expression: "entry_datetime >= '2023-01-01'"
+          name: logs_after_2023
+          config:
+            severity: error
+            description: "All logs must be from 2023 or later"
+
+    meta:
+      business_owners: ["system_administrators", "compliance_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "real-time"
+      contains_pii: true
+      data_quality_requirements:
+        - "All system activities must be logged"
+        - "User attribution must be accurate"
+        - "Task information must be complete when applicable"
+        - "Timestamps must be valid and chronological"
+        - "Foreign key references must be valid"
+        - "System entries must be properly identified"
+        - "User group assignments must be valid"
+        - "Task status must be one of the accepted values"
+        - "Log sources must be valid system components"
+        - "All required fields must be non-null"
+        - "Entry logs must have unique ID-timestamp combinations"
+        - "All logs must be from 2023 or later" 
