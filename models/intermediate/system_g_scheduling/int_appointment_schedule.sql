@@ -80,10 +80,10 @@ DailySchedule AS (
         COALESCE(am.no_show_appointments, 0) as no_show_appointments,
         COALESCE(am.unconfirmed_appointments, 0) as unconfirmed_appointments,
         COALESCE(am.total_appointment_minutes, 0) as total_appointment_minutes,
-        COALESCE(pa.available_minutes, 0) as available_minutes,
+        COALESCE(pa.available_minutes, 480) as available_minutes,  -- Default to 8 hours (480 minutes) if NULL
         CASE 
-            WHEN COALESCE(pa.available_minutes, 0) = 0 THEN 0
-            ELSE ROUND((COALESCE(am.total_appointment_minutes, 0)::numeric / pa.available_minutes) * 100, 2)
+            WHEN COALESCE(pa.available_minutes, 480) = 0 THEN 0
+            ELSE ROUND((COALESCE(am.total_appointment_minutes, 0)::numeric / COALESCE(pa.available_minutes, 480)) * 100, 2)
         END as utilization_rate,
         pa.start_time,
         pa.end_time,
