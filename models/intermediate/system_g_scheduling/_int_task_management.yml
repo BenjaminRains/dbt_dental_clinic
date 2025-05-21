@@ -119,7 +119,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "last_edit_timestamp >= original_timestamp"
+              expression: ">= original_timestamp"
+              column_name: last_edit_timestamp
+              where: "last_edit_timestamp IS NOT NULL"
+              name: last_edit_after_original
       
       # Task List Information
       - name: task_list_description
