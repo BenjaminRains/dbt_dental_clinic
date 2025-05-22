@@ -59,3 +59,19 @@ models:
         description: Hash identifier for the EOB attachment record
         tests:
           - not_null
+
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: >
+          Timestamp when the EOB attachment was created in the source system (OpenDental).
+          This is the same as the created_at field since EOB attachments are created
+          when they are uploaded.
+
+      - name: _updated_at
+        description: >
+          Timestamp when the EOB attachment was last updated in the source system (OpenDental).
+          For EOB attachments, this is the same as created_at since attachments are immutable
+          and don't get updated after creation.
