@@ -151,8 +151,8 @@ models:
           - test_date_after:
               compare_column: entry_date
               allow_null: false
-          - dbt_utils.expression_is_true:
-              expression: "_created_at <= current_timestamp"
+          - test_timestamp_not_future:
+              allow_null: false
 
       - name: _updated_at
         description: Timestamp when the record was last updated in the source system (OpenDental)
@@ -161,8 +161,8 @@ models:
           - test_date_after:
               compare_column: _created_at
               allow_null: false
-          - dbt_utils.expression_is_true:
-              expression: "_updated_at <= current_timestamp"
+          - test_timestamp_not_future:
+              allow_null: false
 
     tests:
       - dbt_utils.relationships_where:
