@@ -239,37 +239,53 @@ models:
       - name: claim_status
         description: >
           Single character status code for the claim:
-          - R: Received - Claim has been received from insurance with payment or denial
-          - S: Sent - Claim has been sent to insurance and is being tracked
-          - H: Hold until Pri received - Secondary claim waiting for primary insurance
-          - W: Waiting - Special status for claims in transition
+          - R: Received - Claim has been fully processed by insurance with payment or denial.
+            All received claims have sent dates, received dates, and plan IDs.
+            Average payment is $233.02 on average claim fee of $572.79.
+          - S: Sent - Claim has been sent to insurance and is being tracked.
+            All sent claims have sent dates and plan IDs.
+            Some may have partial payments (avg $5.03) on higher value claims (avg $792.92).
+          - H: Hold - Secondary claim waiting for primary insurance processing.
+            All hold claims have both primary and secondary plan IDs.
+            No sent or received dates as they wait for primary insurance.
+            Average claim fee is $537.67.
+          - W: Waiting - Special status for high-value claims ($1,117.17 avg) in transition.
+            Most have sent dates and all have both primary and secondary plan IDs.
+            No received dates as they are still being processed.
         tests:
           - not_null
           - accepted_values:
               values: ['R', 'S', 'H', 'W']
               config:
-                severity: warn
+                severity: error
           - dbt_utils.expression_is_true:
-              expression: "= 'S' and sent_date is null"
+              expression: "!= 'S' or sent_date is not null"
               column_name: claim_status
               name: sent_claims_missing_sent_date
               config:
                 severity: error
-                description: "Claims marked as sent must have a sent date"
+                description: "Sent claims must have a sent date as they have been transmitted to insurance"
           - dbt_utils.expression_is_true:
-              expression: "= 'R' and received_date is null"
+              expression: "!= 'R' or received_date is not null"
               column_name: claim_status
               name: received_claims_missing_received_date
               config:
                 severity: error
-                description: "Claims marked as received must have a received date"
+                description: "Received claims must have a received date as they have been processed by insurance"
           - dbt_utils.expression_is_true:
-              expression: "= 'H' and plan_id is null"
+              expression: "!= 'H' or (plan_id is not null and secondary_plan_id is not null)"
               column_name: claim_status
-              name: hold_claims_missing_plan_id
+              name: hold_claims_missing_plan_ids
               config:
                 severity: error
-                description: "Claims marked as hold must have a plan ID for tracking secondary insurance"
+                description: "Hold claims must have both primary and secondary plan IDs as they are waiting for primary insurance processing"
+          - dbt_utils.expression_is_true:
+              expression: "!= 'W' or (plan_id is not null and secondary_plan_id is not null)"
+              column_name: claim_status
+              name: waiting_claims_missing_plan_ids
+              config:
+                severity: error
+                description: "Waiting claims must have both primary and secondary plan IDs as they are high-value claims in transition"
       - name: pre_auth_string
         description: "Pre-authorization string or number"
       - name: is_prosthesis
