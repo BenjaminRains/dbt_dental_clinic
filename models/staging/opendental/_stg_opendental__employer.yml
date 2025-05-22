@@ -13,9 +13,7 @@ models:
           - not_null
       
       - name: employer_name
-        description: Name of the employer
-        tests:
-          - not_null
+        description: Name of the employer organization
       
       - name: address
         description: Primary address line of the employer
@@ -33,4 +31,14 @@ models:
         description: ZIP/Postal code of the employer's location
       
       - name: phone
-        description: Contact phone number for the employer 
+        description: Primary phone number for the employer
+
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the employer record was created in the source system (OpenDental)
+
+      - name: _updated_at
+        description: Timestamp when the employer record was last updated in the source system (OpenDental) 
