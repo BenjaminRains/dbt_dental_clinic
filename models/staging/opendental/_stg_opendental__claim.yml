@@ -144,7 +144,7 @@ models:
         description: "Estimated payment amount from insurance"
         tests:
           - dbt_utils.expression_is_true:
-              expression: "insurance_payment_estimate is null or insurance_payment_estimate >= 0"
+              expression: "is null or insurance_payment_estimate >= 0"
       - name: insurance_payment_amount
         description: "Actual payment amount received from insurance"
         tests:
