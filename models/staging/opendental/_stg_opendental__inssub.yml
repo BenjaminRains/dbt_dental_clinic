@@ -73,14 +73,14 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [true, false]
+              values: [1, 0]
 
       - name: is_assign_benefits
         description: Flag indicating if benefits assignment is authorized
         tests:
           - not_null
           - accepted_values:
-              values: [true, false]
+              values: [1, 0]
 
       - name: subscriber_external_id
         description: External identifier for the subscriber (often used for insurance claims)
