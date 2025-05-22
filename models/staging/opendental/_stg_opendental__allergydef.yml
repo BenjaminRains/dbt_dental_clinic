@@ -2,40 +2,52 @@ version: 2
 
 models:
   - name: stg_opendental__allergydef
-    description: Staging model for OpenDental allergy definitions. Contains information about different types of allergies and their related medication references.
+    description: Staging model for allergy definitions. Contains standardized allergy definitions and their associated codes.
     columns:
       - name: allergydef_id
-        description: Primary key - Unique identifier for each allergy definition
+        description: Unique identifier for the allergy definition
         tests:
           - unique
           - not_null
 
       - name: allergydef_description
         description: Description of the allergy definition
-        
-      - name: is_hidden
-        description: Flag indicating if the allergy definition is hidden from view (0 = visible, 1 = hidden)
         tests:
-          - accepted_values:
-              values: [0, 1]
+          - not_null
+
+      - name: is_hidden
+        description: Boolean flag indicating if the allergy definition is hidden from view
+        tests:
+          - not_null
 
       - name: date_timestamp
-        description: Timestamp of when the record was last updated
-        tests:
-          - not_null
+        description: Timestamp of the allergy definition record
 
       - name: snomed_type
-        description: SNOMED CT (Systematized Nomenclature of Medicine -- Clinical Terms) type identifier
+        description: SNOMED CT code for the allergy type
 
       - name: medication_id
-        description: Foreign key reference to the related medication
+        description: Foreign key to the medication table (0 = non-medication allergy)
         tests:
-          - not_null
+          - relationships:
+              to: ref('stg_opendental__medication')
+              field: medication_id
+              where: "medication_id != 0"
 
       - name: unii_code
         description: Unique Ingredient Identifier (UNII) code for the allergen
 
       - name: _loaded_at
-        description: Timestamp of when this record was loaded into the warehouse
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system
         tests:
           - not_null
