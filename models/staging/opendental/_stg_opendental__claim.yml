@@ -9,20 +9,15 @@ models:
       - dbt_utils.expression_is_true:
           expression: "insurance_payment_amount is null or claim_fee is null or insurance_payment_amount <= claim_fee"
           name: insurance_payment_not_greater_than_claim_fee
-          description: >
-            Warning: Some claims show total payments (deductible + insurance + write-off) exceeding claim fee.
-            This typically occurs when both deductible and insurance payment are applied to the same claim.
-            Example: A $248 claim with $238 deductible and $158.40 insurance payment.
-            This may need business review to determine if this is expected behavior.
       - dbt_utils.expression_is_true:
           expression: "deductible_applied is null or insurance_payment_amount is null or write_off is null or claim_fee is null or deductible_applied + insurance_payment_amount + write_off <= claim_fee"
           name: total_payments_not_greater_than_claim_fee
           config:
             severity: warn
-          description: >
-            Warning: Some claims show total payments exceeding claim fee.
-            This can occur in rare cases when both deductible and insurance payment are applied to the same claim.
-            While valid, these cases should be reviewed to ensure they are intentional.
+            description: >
+              Warning: Some claims show total payments exceeding claim fee.
+              This can occur in rare cases when both deductible and insurance payment are applied to the same claim.
+              While valid, these cases should be reviewed to ensure they are intentional.
       - dbt_utils.expression_is_true:
           expression: "ortho_remaining_months is null or ortho_total_months is null or ortho_remaining_months <= ortho_total_months"
           name: ortho_remaining_not_greater_than_total
