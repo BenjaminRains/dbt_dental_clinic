@@ -136,7 +136,8 @@ models:
         description: "Amount written off by the provider"
         tests:
           - dbt_utils.expression_is_true:
-              expression: "write_off is null or write_off >= 0"
+              expression: ">= 0"
+              column_name: write_off
       - name: share_of_cost
         description: "Patient's share of cost for the claim"
 
