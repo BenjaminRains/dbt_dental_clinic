@@ -22,9 +22,20 @@ models:
               field: '2023-01-01'
       
       - name: date_issued
-        description: Date the payment was issued by the insurance carrier
+        description: |
+          Date the payment was issued by the insurance carrier.
+          Note: This field is intentionally null for certain payment types:
+          - Payment type 261: Rarely populated (0-0.57% of records)
+          - Payment type 303: Occasionally populated (0-7.44% of records)
+          - Payment type 465: Sometimes populated (25.93% of records)
+          
+          The system uses check_date as the primary date field, with date_issued
+          being an optional field that is only populated by certain carriers
+          (primarily Delta Dental) when they provide this information.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           - dbt_utils.date_after:
               datepart: day
               field: '2023-01-01'
