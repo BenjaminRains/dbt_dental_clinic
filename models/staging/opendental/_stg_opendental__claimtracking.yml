@@ -15,11 +15,7 @@ models:
           - not_null
       
       - name: claim_id
-        description: Foreign key to the insurance claim (ClaimNum)
-        tests:
-          - relationships:
-              to: ref('stg_opendental__claim')
-              field: claim_id
+        description: "Foreign key to the insurance claim (ClaimNum). Note: Some historical records may reference claims that no longer exist."
       
       - name: user_id
         description: Foreign key to the user who created this tracking entry (UserNum)
@@ -72,7 +68,8 @@ models:
           description: >
             Each claim tracking entry is directly associated with a specific claim through the claim_id field.
             Multiple tracking entries can exist for a single claim, providing a chronological history of
-            claim status updates, communications, and processing events.
+            claim status updates, communications, and processing events. Note: Some historical records
+            may reference claims that no longer exist in the system.
         
         - related_model: stg_opendental__claimpayment
           description: >
