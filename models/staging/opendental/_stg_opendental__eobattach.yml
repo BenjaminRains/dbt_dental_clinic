@@ -8,6 +8,8 @@ models:
       Note: This table contains data from 2020-2025, while the claim payments table only contains
       data from 2023-2025. When joining to claim payments, filter for dates >= 2023 to maintain
       referential integrity.
+      Note: Relationship test warnings may occur for EOB attachments referencing claim payments with
+      CheckDate < 2023-01-01 or for attachments without corresponding claim payments in the source.
     columns:
       - name: eob_attach_id
         description: Primary key of the EOB attachment record
