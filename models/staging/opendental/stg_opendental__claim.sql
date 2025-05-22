@@ -92,7 +92,12 @@ renamed as (
         "ClaimIdentifier" as claim_identifier,
         "OrigRefNum" as original_reference_number,
         "SecurityHash" as security_hash,
-        "Narrative" as narrative
+        "Narrative" as narrative,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "SecDateEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
     
     from source
 )
