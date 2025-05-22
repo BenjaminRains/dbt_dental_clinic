@@ -195,10 +195,10 @@ models:
           - dbt_utils.expression_is_true:
               expression: "is null or (ortho_remaining_months >= 0 and ortho_remaining_months <= 60)"
       - name: patient_relation
-        description: "Code for patient's relationship to primary subscriber"
+        description: "Code for patient's relationship to primary subscriber (0=Self, 1=Spouse, 2=Child, 4=Other, 8=Unknown)"
         tests:
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+              values: [0, 1, 2, 4, 8]
               config:
                 severity: warn
       - name: secondary_patient_relation
