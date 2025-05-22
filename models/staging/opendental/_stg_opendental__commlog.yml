@@ -96,17 +96,31 @@ models:
 
       - name: mode
         description: >
-          The mode or channel used for communication:
-          - 0: Unknown/Unspecified mode
-          - 1: Email communications
-          - 2: Phone call communications
-          - 3: Letter communications
-          - 4: In-person communications
-          - 5: SMS/text message communications
+          The mode or channel used for communication, ordered by frequency of use:
+          
+          Primary Communication Modes (99.99% of records):
+          - 4: In-person communications (37.31%)
+            Used for all communication types except legacy system communications
+          - 5: SMS/text message communications (22.07%)
+            Used for appointment notifications, clinical, and treatment plan communications
+          - 1: Email communications (20.09%)
+            Used for appointment notifications, clinical, and treatment plan communications
+          - 3: Letter communications (16.78%)
+            Used for all communication types including insurance and medical clearances
+          - 0: Unknown/Unspecified mode (3.54%)
+            Used across all communication types, likely historical or system-generated
+          - 2: Phone call communications (0.20%)
+            Used primarily for insurance, clinical, and treatment plan communications
+          
+          Rare/Historical Modes (0.01% of records):
+          - 6: Clinical communication mode (1 record)
+            Used once for clinical communications (type 603)
+          - 8: Additional communication mode (1 record)
+            Used once for general patient communications (type 228)
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5]
+              values: [0, 1, 2, 3, 4, 5, 6, 8]
 
       - name: is_sent
         description: >
