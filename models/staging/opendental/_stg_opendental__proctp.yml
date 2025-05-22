@@ -36,7 +36,7 @@ models:
         description: Foreign key to the provider (references stg_opendental__provider.provider_id)
 
       - name: clinic_id
-        description: Foreign key to the clinic (references stg_opendental__clinic.clinic_id)
+        description: Foreign key # unused by the MDC clinic 
       
       - name: user_num_entry
         description: Foreign key to the user who entered the record
