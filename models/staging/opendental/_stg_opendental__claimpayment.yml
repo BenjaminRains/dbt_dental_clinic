@@ -15,51 +15,118 @@ models:
       
       - name: check_date
         description: Date the insurance check was issued or received
+        tests:
+          - not_null
+          - dbt_utils.date_after:
+              datepart: day
+              field: '2023-01-01'
       
       - name: date_issued
         description: Date the payment was issued by the insurance carrier
+        tests:
+          - not_null
+          - dbt_utils.date_after:
+              datepart: day
+              field: '2023-01-01'
       
       - name: check_amount
         description: Total amount of the insurance check
+        tests:
+          - not_null
+          - dbt_utils.positive_value
       
       - name: check_number
         description: Check number or payment reference from the insurance carrier
+        tests:
+          - not_null
+          - unique
       
       - name: bank_branch
         description: Bank branch information for the payment
+        tests:
+          - not_null
       
       - name: note
         description: Additional notes related to the payment
       
       - name: clinic_id
         description: Foreign key to clinic where the payment was processed
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
       
       - name: deposit_id
         description: Foreign key to the deposit record if this payment was part of a deposit
+        tests:
+          - relationships:
+              to: ref('stg_opendental__deposit')
+              field: deposit_id
       
       - name: carrier_name
         description: Name of the insurance carrier that issued the payment
+        tests:
+          - not_null
       
       - name: is_partial
         description: Boolean flag indicating if this is a partial payment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
       - name: payment_type_id
         description: Foreign key to payment type definition
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+              config:
+                severity: error
       
       - name: payment_group_id
         description: Foreign key to payment group
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__paymentgroup')
+              field: payment_group_id
       
       - name: created_by_user_id
         description: ID of the user who created this payment record
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
       
       - name: _created_at
         description: Timestamp when the record was created in the source system (from SecDateEntry)
+        tests:
+          - not_null
+          - dbt_utils.date_after:
+              datepart: day
+              field: '2023-01-01'
       
       - name: _updated_at
         description: Timestamp when the record was last modified in the source system (from SecDateTEdit)
+        tests:
+          - not_null
+          - dbt_utils.date_after:
+              datepart: day
+              field: '2023-01-01'
+          - dbt_utils.date_after:
+              datepart: day
+              field: _created_at
       
       - name: _loaded_at
         description: Timestamp when the record was loaded into the data warehouse
+        tests:
+          - not_null
+          - dbt_utils.date_after:
+              datepart: day
+              field: _updated_at
     
     meta:
       relationships:
