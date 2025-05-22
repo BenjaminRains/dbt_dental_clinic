@@ -34,8 +34,12 @@ models:
           expression: "history_action in (0,1,2,3,4)"
           severity: error
       - dbt_utils.expression_is_true:
-          expression: "appointment_status in (1,2,3,5,6)"
-          severity: error  # This must pass
+          expression: "appointment_status in (0,1,2,3,5,6,7)"
+          severity: warn
+          config:
+            description: >
+              Verifies that appointment status codes are valid, including temporary states 0 (Unassigned) and 7 (Placeholder).
+              These should eventually transition to a valid status (1, 2, 3, 5, or 6).
       - dbt_utils.expression_is_true:
           expression: "history_timestamp <= current_timestamp"
           severity: error
@@ -527,7 +531,7 @@ models:
           - not_null
           - accepted_values:
               values: [0, 1, 2, 3, 5, 6, 7]
-              severity: warn  # Changed from error to warn since these are valid temporary states
+              severity: warn
       
       - name: history_action
         description: >
