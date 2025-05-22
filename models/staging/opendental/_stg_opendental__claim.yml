@@ -75,9 +75,11 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "service_date >= '2000-01-01'"
+              expression: ">= '2000-01-01'"
+              column_name: service_date
           - dbt_utils.expression_is_true:
-              expression: "service_date <= current_date + interval '1 year'"
+              expression: "<= current_date + interval '1 year'"
+              column_name: service_date
       - name: sent_date
         description: "Date when the claim was sent to the insurance company"
         tests:
