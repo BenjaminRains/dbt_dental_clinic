@@ -79,6 +79,7 @@ insufficient_history AS (
     WHERE 
         COALESCE(h.history_count, 0) = 0  -- No history records at all
         AND a.appointment_datetime <= CURRENT_DATE - INTERVAL '1 day'  -- Only consider non-future appointments
+        AND a.appointment_status != 3  -- Exclude Unknown status appointments
 ),
 
 -- INFORMATIONAL: These might be legitimate system behavior we don't understand
