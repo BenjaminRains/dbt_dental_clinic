@@ -24,11 +24,22 @@ select
     "StackBehavLR" as stack_behavior_left_right,
     "ClinicNum" as clinic_id,
     "ApptTimeScrollStart" as appointment_time_scroll_start,
-    "IsScrollStartDynamic" as is_scroll_start_dynamic,
-    "IsApptBubblesDisabled" as is_appointment_bubbles_disabled,
+    CASE 
+        WHEN "IsScrollStartDynamic" = 1 THEN true
+        WHEN "IsScrollStartDynamic" = 0 THEN false
+        ELSE null 
+    END as is_scroll_start_dynamic,
+    CASE 
+        WHEN "IsApptBubblesDisabled" = 1 THEN true
+        WHEN "IsApptBubblesDisabled" = 0 THEN false
+        ELSE null 
+    END as is_appointment_bubbles_disabled,
     "WidthOpMinimum" as width_operatory_minimum,
     "WaitingRmName" as waiting_room_name,
     "OnlyScheduledProvDays" as only_scheduled_provider_days,
-    CURRENT_TIMESTAMP as model_created_at,
-    CURRENT_TIMESTAMP as model_updated_at
+    
+    -- Required metadata columns
+    current_timestamp as _loaded_at,
+    current_timestamp as _created_at,  -- No creation timestamp in source
+    current_timestamp as _updated_at   -- No update timestamp in source
 from {{ source('opendental', 'apptview') }}

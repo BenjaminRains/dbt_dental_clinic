@@ -48,10 +48,10 @@ models:
         description: Starting time for appointment scrolling in the scheduler
 
       - name: is_scroll_start_dynamic
-        description: Flag indicating if the scroll start time is dynamic
+        description: Boolean flag indicating if the scroll start time is dynamic
 
       - name: is_appointment_bubbles_disabled
-        description: Flag indicating if appointment bubbles are disabled in this view
+        description: Boolean flag indicating if appointment bubbles are disabled in this view
 
       - name: width_operatory_minimum
         description: Minimum width for operatory display in the scheduler
@@ -62,8 +62,12 @@ models:
       - name: only_scheduled_provider_days
         description: Flag indicating if only scheduled provider days should be shown
 
-      - name: model_created_at
-        description: Timestamp when this record was created in the staging model
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
 
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the staging model
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (placeholder - source table has no creation timestamp)
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (placeholder - source table has no update timestamp)
