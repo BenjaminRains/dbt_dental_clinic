@@ -35,6 +35,16 @@ models:
       - name: icd10_code
         description: International Classification of Diseases, 10th Revision (ICD-10) code for the disease
 
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the disease definition was created in the source system (OpenDental)
+
+      - name: _updated_at
+        description: Timestamp when the disease definition was last updated in the source system (OpenDental)
+
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
