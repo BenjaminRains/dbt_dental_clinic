@@ -44,10 +44,13 @@ renamed as (
         ("EraAutomationOverride" = 1)::boolean as era_automation_override,
         ("OrthoInsPayConsolidate" = 1)::boolean as ortho_insurance_payment_consolidate,
         
-        -- Metadata
-        "SecUserNumEntry" as user_entry_id,
-        "SecDateEntry" as created_at,
-        "SecDateTEdit" as updated_at
+        -- Metadata columns (required)
+        current_timestamp as _loaded_at,
+        "SecDateEntry" as _created_at,
+        "SecDateTEdit" as _updated_at,
+        
+        -- Legacy metadata (for compatibility)
+        "SecUserNumEntry" as user_entry_id
         
     from source
 )

@@ -87,14 +87,20 @@ models:
       - name: ortho_insurance_payment_consolidate
         description: Flag for consolidating orthodontic insurance payments
 
-      # Metadata
-      - name: user_entry_id
-        description: ID of the user who created the record
-
-      - name: created_at
-        description: Timestamp when the record was created
-
-      - name: updated_at
-        description: Timestamp when the record was last modified
+      # Metadata columns (required)
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
         tests:
           - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system
+
+      # Legacy metadata (for compatibility)
+      - name: user_entry_id
+        description: ID of the user who created the record
