@@ -156,11 +156,17 @@ models:
               severity: warn
       
       - name: provider_id
-        description: Foreign key to the provider table
+        description: >
+          Foreign key to the provider table.
+          Note: provider_id = 0 is a valid value indicating "No Provider" or "Unassigned".
+          This is commonly seen in special modification records (history_action = 4) where
+          appointments are being configured or modified without an assigned provider.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              where: "provider_id != 0"  # Exclude unassigned provider records
+              severity: error
       
       - name: hygienist_id
         description: Foreign key to the provider table for the hygienist
