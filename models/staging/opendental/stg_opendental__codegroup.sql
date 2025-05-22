@@ -22,7 +22,9 @@ renamed as (
         "ShowInAgeLimit" = 1 as show_in_age_limit,
         
         -- Metadata
-        current_timestamp as _loaded_at
+        current_timestamp as _loaded_at,
+        "DateEntry" as _created_at,
+        coalesce("DateTStamp", "DateEntry") as _updated_at
     
     from Source
 )
