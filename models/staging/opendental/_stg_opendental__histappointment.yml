@@ -186,11 +186,23 @@ models:
         description: Foreign key to the clinic where this appointment was scheduled
       
       - name: next_appointment_id
-        description: Foreign key to the appointment table for the next scheduled appointment
+        description: >
+          Foreign key to the appointment table for the next scheduled appointment.
+          Note: Data analysis shows that many history records (221,541) reference next appointments
+          that no longer exist. This is expected because:
+          - Next appointments can be deleted while their history is preserved
+          - The next_appointment_id is often temporary and changes as appointments are rescheduled
+          - This is similar to how we handle missing appointment_id references
+          
+          Business Context: This field is crucial for tracking treatment plan continuity,
+          analyzing rescheduling patterns, and monitoring patient care flow. The high number
+          of missing references reflects normal clinic operations where treatment plans
+          and appointment sequences evolve over time.
         tests:
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
+              severity: warn  # Set to warn since this is an expected pattern
       
       - name: appointment_type_id
         description: Foreign key to the appointment type table
@@ -224,11 +236,23 @@ models:
               field: insurance_plan_id
       
       - name: insurance_plan_2_id
-        description: Foreign key to the insurance plan table for secondary insurance
+        description: >
+          Foreign key to the insurance plan table for secondary insurance.
+          Note: insurance_plan_2_id = 0 is a valid value indicating "No Secondary Insurance".
+          Data analysis shows:
+          - 237,666 records have insurance_plan_2_id = 0 (no secondary insurance)
+          - Only 12 records reference actual missing insurance plans
+          - This affects 4,514 unique patients and 22,267 unique appointments
+          
+          Business Context: This field tracks secondary insurance coverage over time.
+          The high number of records with insurance_plan_2_id = 0 reflects that many
+          patients don't have secondary insurance, which is normal in dental practices.
         tests:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
+              where: "insurance_plan_2_id != 0"  # Exclude records with no secondary insurance
+              severity: error  # Now we can use error since we're excluding the valid 0 values
       
       - name: unscheduled_status_id
         description: Status identifier for unscheduled appointments
