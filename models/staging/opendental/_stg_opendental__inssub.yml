@@ -10,6 +10,8 @@ models:
         tests:
           - unique
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: "inssub_id > 0"
 
       - name: insurance_plan_id
         description: Foreign key to stg_opendental__insplan. Links to the insurance plan details.
@@ -18,43 +20,134 @@ models:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
+          - dbt_utils.expression_is_true:
+              expression: "insurance_plan_id > 0"
 
       - name: subscriber_id
         description: Foreign key to the subscriber (patient) record
         tests:
           - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+          - dbt_utils.expression_is_true:
+              expression: "subscriber_id > 0"
 
       - name: user_entry_id
         description: Foreign key - ID of the user who created the record
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+          - dbt_utils.expression_is_true:
+              expression: "user_entry_id > 0"
 
       - name: effective_date
         description: Date when the insurance subscription becomes effective
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "effective_date >= '2000-01-01'"
+          - dbt_utils.expression_is_true:
+              expression: "effective_date <= current_date + interval '1 year'"
 
       - name: termination_date
         description: Date when the insurance subscription terminates
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "termination_date is null or termination_date >= effective_date"
+          - dbt_utils.expression_is_true:
+              expression: "termination_date is null or termination_date <= current_date + interval '5 years'"
 
       - name: is_release_info
         description: Flag indicating if information release is authorized
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: is_assign_benefits
         description: Flag indicating if benefits assignment is authorized
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: subscriber_external_id
         description: External identifier for the subscriber (often used for insurance claims)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "subscriber_external_id is null or length(trim(subscriber_external_id)) > 0"
 
       - name: benefit_notes
         description: Notes regarding the benefits
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "benefit_notes is null or length(trim(benefit_notes)) <= 1000"
 
       - name: subscriber_notes
         description: Notes about the subscriber
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "subscriber_notes is null or length(trim(subscriber_notes)) <= 1000"
 
       - name: entry_date
         description: Date when the record was created
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "entry_date >= '2000-01-01'"
+          - dbt_utils.expression_is_true:
+              expression: "entry_date <= current_date"
 
       - name: last_modified_at
         description: Timestamp of the last modification to the record
         tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: "last_modified_at >= entry_date"
+          - dbt_utils.expression_is_true:
+              expression: "last_modified_at <= current_timestamp"
+
+      - name: subscriber_status
+        description: Current status of the subscriber (ACTIVE, TERMINATED, or FUTURE_TERMINATED)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ACTIVE', 'TERMINATED', 'FUTURE_TERMINATED']
+          - dbt_utils.expression_is_true:
+              expression: "(termination_date is null and subscriber_status = 'ACTIVE') or (termination_date is not null and subscriber_status != 'ACTIVE')"
+          - dbt_utils.expression_is_true:
+              expression: "(termination_date < current_date and subscriber_status = 'TERMINATED') or (termination_date >= current_date and subscriber_status != 'TERMINATED')"
+          - dbt_utils.expression_is_true:
+              expression: "(termination_date >= current_date and subscriber_status = 'FUTURE_TERMINATED') or (termination_date < current_date and subscriber_status != 'FUTURE_TERMINATED')"
+
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "_loaded_at >= _created_at"
+          - dbt_utils.expression_is_true:
+              expression: "_loaded_at <= current_timestamp"
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "_created_at >= entry_date"
+          - dbt_utils.expression_is_true:
+              expression: "_created_at <= current_timestamp"
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "_updated_at >= _created_at"
+          - dbt_utils.expression_is_true:
+              expression: "_updated_at <= current_timestamp"
 
     tests:
       - dbt_utils.relationships_where:
@@ -118,6 +211,7 @@ models:
               (DATE_PART('month', effective_date) = 1 
                and effective_date <= current_date
                and effective_date >= current_date - interval '90 days'
+               and effective_date <= current_date - interval '7 days'
                and insurance_plan_id in (
                  select insurance_plan_id
                  from public_staging.stg_opendental__inssub
