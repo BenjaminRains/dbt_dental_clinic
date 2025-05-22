@@ -63,12 +63,13 @@ models:
           - relationships:
               to: ref('stg_opendental__program')
               field: program_id
-              severity: warn
+              where: "program_id NOT IN (0, 95)"  # Only check non-system program IDs
+              severity: error  # Error if any other program_id doesn't exist in program table
               config:
                 description: >
-                  Known data pattern: 51.74% of records use program_id=0 (system default) 
-                  and 48.26% use program_id=95 (legacy system).
-                  These IDs are not present in the program table by design.
+                  This test verifies that any program_id other than 0 (system default) or 95 (legacy system)
+                  must exist in the program table. These two special IDs are excluded from the check as they
+                  represent internal system communications and are not present in the program table by design.
 
       # Other important fields
       - name: communication_datetime
