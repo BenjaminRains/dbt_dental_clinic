@@ -28,7 +28,12 @@ renamed as (
         
         -- Numeric fields
         "ProbStatus" as problem_status,
-        "FunctionStatus" as function_status
+        "FunctionStatus" as function_status,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateStart" as _created_at,
+        coalesce("DateTStamp", "DateStart") as _updated_at
 
     from source
 )

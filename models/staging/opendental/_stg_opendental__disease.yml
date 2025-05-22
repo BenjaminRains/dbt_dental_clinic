@@ -43,3 +43,13 @@ models:
 
       - name: function_status
         description: Numeric indicator of the patient's functional status related to this condition
+
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the disease record was created in the source system (OpenDental)
+
+      - name: _updated_at
+        description: Timestamp when the disease record was last updated in the source system (OpenDental)
