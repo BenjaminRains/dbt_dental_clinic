@@ -149,7 +149,7 @@ models:
         description: "Actual payment amount received from insurance"
         tests:
           - dbt_utils.expression_is_true:
-              expression: "insurance_payment_amount is null or insurance_payment_amount >= 0"
+              expression: "is null or insurance_payment_amount >= 0"
       - name: deductible_applied
         description: "Amount of deductible applied to this claim"
         tests:
