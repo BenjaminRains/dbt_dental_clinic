@@ -26,12 +26,16 @@ models:
               severity: warn
 
       - name: carrier_id
-        description: Foreign key to insurance carriers table
+        description: >
+          Foreign key to insurance carriers table.
+          Note: This field is required (not null) but may reference deleted carriers
+          in historical data.
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__carrier')
               field: carrier_id
+              severity: warn
 
       - name: user_entry_id
         description: Foreign key to users table for the user who created the plan
