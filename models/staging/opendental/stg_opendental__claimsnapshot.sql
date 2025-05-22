@@ -26,7 +26,13 @@ renamed as (
         "InsPayEst" as insurance_payment_estimate,
         "Fee" as fee_amount,
         "DateTEntry" as entry_timestamp,
-        "SnapshotTrigger" as snapshot_trigger
+        "SnapshotTrigger" as snapshot_trigger,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTEntry" as _created_at,
+        "DateTEntry" as _updated_at  -- Using DateTEntry since this is a snapshot table
+        
     from source
 )
 

@@ -2,23 +2,34 @@ version: 2
 
 models:
   - name: stg_opendental__claimsnapshot
-    description: Staging model for claim snapshots from OpenDental. Contains snapshots of claim states at various points in time.
+    description: >
+      Standardized staging model for claim snapshots from OpenDental.
+      This model represents point-in-time snapshots of claim data, capturing
+      the state of claims at specific moments for historical tracking.
+    
     columns:
       - name: claim_snapshot_id
-        description: Primary key for the claim snapshot record
+        description: Primary key for the claim snapshot record (from ClaimSnapshotNum)
         tests:
           - unique
           - not_null
       
       - name: procedure_id
-        description: Foreign key to the procedure this snapshot is associated with
+        description: Foreign key to the procedure record (ProcNum)
         tests:
           - relationships:
               to: ref('stg_opendental__procedure')
               field: procedure_id
       
+      - name: claim_procedure_id
+        description: Foreign key to the claim procedure record (ClaimProcNum)
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claimprocedure')
+              field: claim_procedure_id
+      
       - name: claim_type
-        description: Type of claim (e.g., primary, secondary)
+        description: Type of claim being snapshotted
       
       - name: write_off_amount
         description: Amount written off for this claim
@@ -26,26 +37,34 @@ models:
           - not_null
       
       - name: insurance_payment_estimate
-        description: Estimated insurance payment amount
+        description: Estimated payment from insurance
         tests:
           - not_null
       
       - name: fee_amount
-        description: Fee amount for the procedure
+        description: Fee amount for the claim
         tests:
           - not_null
       
       - name: entry_timestamp
-        description: Timestamp when this snapshot was created
+        description: Timestamp when the snapshot was created
         tests:
           - not_null
       
-      - name: claim_procedure_id
-        description: Foreign key to the claim procedure record
-        tests:
-          - relationships:
-              to: ref('stg_opendental__claimprocedure')
-              field: claim_procedure_id
-      
       - name: snapshot_trigger
-        description: Indicator of what triggered this snapshot (e.g., claim submission, payment received) 
+        description: Event that triggered this snapshot
+      
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the snapshot was created in OpenDental (from DateTEntry)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the snapshot was last updated in OpenDental (from DateTEntry)
+        tests:
+          - not_null 
