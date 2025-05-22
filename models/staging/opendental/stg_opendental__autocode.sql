@@ -15,8 +15,8 @@ renamed as (
         
         -- Attributes
         "Description" as description,
-        "IsHidden" = 1 as is_hidden,
-        "LessIntrusive" = 1 as is_less_intrusive,
+        CASE WHEN "IsHidden" = 1 THEN true WHEN "IsHidden" = 0 THEN false ELSE null END as is_hidden,
+        CASE WHEN "LessIntrusive" = 1 THEN true WHEN "LessIntrusive" = 0 THEN false ELSE null END as is_less_intrusive,
         
         -- Metadata
         current_timestamp as _loaded_at
