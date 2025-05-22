@@ -46,7 +46,7 @@ renamed as (
         
         -- Metadata columns (required)
         current_timestamp as _loaded_at,
-        "SecDateEntry" as _created_at,
+        COALESCE("SecDateEntry", "SecDateTEdit") as _created_at,
         "SecDateTEdit" as _updated_at,
         
         -- Legacy metadata (for compatibility)
