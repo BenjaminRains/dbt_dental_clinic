@@ -87,9 +87,10 @@ renamed as (
         "BillingType" as billing_type,
         "ExclusionFeeRule" as exclusion_fee_rule,
         
-        -- Meta Fields
-        "SecDateEntry" as created_at,
-        "SecDateTEdit" as updated_at
+        -- Required Metadata Columns
+        current_timestamp as _loaded_at,
+        "SecDateEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
 
     from source
 )

@@ -3,65 +3,203 @@ version: 2
 models:
   - name: stg_opendental__insplan
     description: >
-      Staging model for insurance plans. Contains all insurance plans from the source system,
-      including historical and inactive plans. This ensures we have access to all plans that
-      might be referenced by other models, even if they are no longer active.
-      
-      Plan status is tracked through several flags:
-      - is_hidden: Administrative visibility flag
-      - hide_from_verify_list: Controls whether the plan appears in verification lists
-      
-      For filtering active plans in downstream models, consider:
-      - Using is_hidden = FALSE to exclude administratively hidden plans
-      - Using hide_from_verify_list = FALSE to exclude plans not meant for verification
-      - Combining with other status indicators as needed
-      
-      Note: Group numbers can have legitimate duplicates across different scenarios:
-      - Federal agency programs (e.g., 104, 105)
-      - Corporate plans across multiple carriers
-      - Medicare/program-specific numbers
-      - Industry-specific group numbers
+      Staging model for insurance plans. Contains all insurance plan information including
+      fee schedules, plan details, and settings. This model includes all plans regardless
+      of status, with status tracked via is_hidden and hide_from_verify_list flags.
     columns:
       - name: insurance_plan_id
-        description: "Primary key for insurance plans"
+        description: Primary key for the insurance plan
         tests:
           - unique
           - not_null
-          
+
+      # Foreign Keys
       - name: employer_id
-        description: "Reference to employer associated with the plan"
-        
+        description: Foreign key to employers table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__employer')
+              field: employer_id
+
       - name: carrier_id
-        description: "Reference to insurance carrier/provider"
-        
-      - name: group_number
-        description: >
-          Insurance group identifier. Can be legitimately duplicated in several cases:
-          - Federal agency programs (e.g., 104, 105)
-          - Corporate plans across multiple carriers
-          - Medicare/program-specific numbers
-          - Industry-specific group numbers
-          
-      - name: group_name
-        description: "Name of the insurance group, may vary slightly for same group across carriers"
-        
+        description: Foreign key to insurance carriers table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__carrier')
+              field: carrier_id
+
+      - name: user_entry_id
+        description: Foreign key to users table for the user who created the plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+
+      # Fee Schedule Related
       - name: fee_schedule_id
-        description: "Reference to the primary fee schedule for the plan"
-        
+        description: Foreign key to fee schedules table for the plan's primary fee schedule
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+
+      - name: copay_fee_schedule_id
+        description: Foreign key to fee schedules table for copay procedures
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+
+      - name: allowed_fee_schedule_id
+        description: Foreign key to fee schedules table for allowed fees
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+
+      - name: manual_fee_schedule_id
+        description: Foreign key to fee schedules table for manual fee schedule
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+
+      # Plan Details
+      - name: group_name
+        description: Name of the insurance group
+
+      - name: group_number
+        description: Insurance group number
+
+      - name: plan_note
+        description: Additional notes about the plan
+
+      - name: plan_type
+        description: Type of insurance plan
+
+      - name: division_number
+        description: Division number for the plan
+
+      - name: trojan_id
+        description: Trojan ID for the plan
+
+      # Flags and Settings
       - name: is_medical
-        description: "Flag indicating medical vs dental insurance"
-        
+        description: Flag indicating if this is a medical insurance plan
+        tests:
+          - not_null
+
       - name: is_hidden
-        description: "Administrative visibility flag. TRUE means the plan is hidden from normal views"
-        
+        description: Flag indicating if the plan is hidden from the main interface
+        tests:
+          - not_null
+
+      - name: show_base_units
+        description: Flag indicating if base units should be shown
+        tests:
+          - not_null
+
+      - name: code_subst_none
+        description: Flag indicating if code substitution should be disabled
+        tests:
+          - not_null
+
       - name: hide_from_verify_list
-        description: "Flag controlling whether the plan appears in verification lists"
-        
-      - name: created_at
-        description: "Date when the plan was created"
-        
-      - name: updated_at
-        description: "Timestamp of last update to the plan"
+        description: Flag indicating if the plan should be hidden from the verify list
+        tests:
+          - not_null
+
+      - name: has_ppo_subst_writeoffs
+        description: Flag indicating if the plan has PPO substitution writeoffs
+        tests:
+          - not_null
+
+      - name: is_blue_book_enabled
+        description: Flag indicating if the plan uses the blue book feature
+        tests:
+          - not_null
+
+      # Ortho Related
+      - name: ortho_type
+        description: Type of orthodontic coverage
+
+      - name: ortho_auto_proc_freq
+        description: Frequency of automatic orthodontic procedures
+
+      - name: ortho_auto_proc_code_num_override
+        description: Override procedure code for automatic orthodontic procedures
+
+      - name: ortho_auto_fee_billed
+        description: Fee amount to bill for automatic orthodontic procedures
+
+      - name: ortho_auto_claim_days_wait
+        description: Number of days to wait before submitting automatic orthodontic claims
+
+      # Financial
+      - name: per_visit_patient_amount
+        description: Patient amount per visit
+
+      - name: per_visit_insurance_amount
+        description: Insurance amount per visit
+
+      # Other Fields
+      - name: claim_form_id
+        description: Foreign key to claim forms table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claimform')
+              field: claim_form_id
+
+      - name: use_alt_code
+        description: Flag indicating if alternative codes should be used
+        tests:
+          - not_null
+
+      - name: claims_use_ucr
+        description: Flag indicating if claims should use UCR fees
+        tests:
+          - not_null
+
+      - name: filing_code
+        description: Insurance filing code
+
+      - name: filing_code_subtype
+        description: Insurance filing code subtype
+
+      - name: month_renew
+        description: Month when the plan renews
+
+      - name: rx_bin
+        description: Prescription BIN number
+
+      - name: cob_rule
+        description: Coordination of benefits rule
+
+      - name: sop_code
+        description: Standard operating procedure code
+
+      - name: billing_type
+        description: Type of billing used for the plan
+
+      - name: exclusion_fee_rule
+        description: Rule for handling excluded fees
+
+      # Metadata Columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+        tests:
+          - not_null
 
     tests:
       - dbt_expectations.expect_compound_columns_to_be_unique:
