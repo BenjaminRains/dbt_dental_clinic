@@ -154,7 +154,7 @@ models:
         description: "Amount of deductible applied to this claim"
         tests:
           - dbt_utils.expression_is_true:
-              expression: "deductible_applied is null or deductible_applied >= 0"
+              expression: "is null or deductible_applied >= 0"
       - name: write_off
         description: "Amount written off by the provider"
         tests:
