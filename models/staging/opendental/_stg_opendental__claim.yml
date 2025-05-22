@@ -208,7 +208,7 @@ models:
         description: "Number of images attached to claim"
         tests:
           - dbt_utils.expression_is_true:
-              expression: "attached_images is null or (attached_images >= 0 and attached_images <= 50)"
+              expression: "is null or (attached_images >= 0 and attached_images <= 50)"
       - name: attached_models
         description: "Number of models attached to claim"
       - name: special_program_code
@@ -292,10 +292,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "_created_at >= '2000-01-01'"
+              expression: ">= '2000-01-01'"
       - name: _updated_at
         description: "Timestamp when the record was last updated in the source system"
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "_updated_at >= _created_at"
+              expression: ">= _created_at"
