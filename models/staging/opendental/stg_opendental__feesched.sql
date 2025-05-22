@@ -1,6 +1,5 @@
 {{ config(
-    materialized='incremental',
-    unique_key='fee_schedule_id',
+    materialized='view',
     schema='staging'
 ) }}
 
@@ -10,9 +9,6 @@ with source as (
     where "SecDateEntry" >= '2023-01-01'::date
         and "SecDateEntry" <= current_date
         and "SecDateEntry" > '2000-01-01'::date
-    {% if is_incremental() %}
-        and "SecDateEntry" > (select max(_created_at) from {{ this }})
-    {% endif %}
 ),
 
 renamed as (
@@ -25,8 +21,8 @@ renamed as (
         "FeeSchedType" as fee_schedule_type_id,
         "ItemOrder" as display_order,
         CASE 
-            WHEN "IsHidden" = 1 THEN true
-            WHEN "IsHidden" = 0 THEN false
+            WHEN "IsHidden"::integer = 1 THEN true
+            WHEN "IsHidden"::integer = 0 THEN false
             ELSE null 
         END as is_hidden,
         "IsGlobal"::smallint as is_global_flag,
