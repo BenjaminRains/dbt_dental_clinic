@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
--
+- ETL orchestration DAGs for MariaDB to PostgreSQL sync
+- Incremental ETL script for MariaDB to PostgreSQL sync
+- New patient rate metric to appointment metrics
+- 'None' appointment type (id 0) to stg_opendental__appointmenttype
+
+### Changed
+- Moved DAG file to standard Airflow directory structure
+- Removed clinic_id from appointment metrics
+- Updated intermediate layer completion status (staging models complete)
+
+### Fixed
+- System logging model alignment with actual data structure
+- User group ID null handling in system logs
+- Date validation tests in int_opendental_system_logs
+- Column names and test conditions in int_opendental_system_logs
+- Type casting and join issues in int_opendental_system_logs
+- Appointment view clinic_id and view_updated_at test expressions
+- User preferences model tests and column references
+- Task management model uniqueness and timestamp validations
+- Provider availability tests and schedule date range handling
+- Appointment schedule utilization calculations and tests
+- Appointment metrics handling for null values and future dates
+- Actual length calculation and time calculations in appointment details
+- Duplicate schedule_id and missing clinic_id issues
+
+### Docs
+- Added comprehensive ETL and data refresh strategy
+- Added mart layer implementation plan
+- Added comprehensive Airflow setup and usage guide
+- Updated intermediate models documentation
+- Updated task management documentation and tests
+- Clarified appointment_type_id = 0 meaning in _int_appointment_details.yml
 
 ## [2025-05-20]
 ### Added
