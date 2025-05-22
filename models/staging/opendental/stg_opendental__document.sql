@@ -1,4 +1,7 @@
-{{ config(materialized='view') }}
+{{ config(
+    materialized='incremental',
+    unique_key='document_id'
+) }}
 
 with source as (
 
@@ -46,8 +49,11 @@ renamed as (
         "PrintHeading" as print_heading,
         
         -- Timestamps
-        "DateCreated" as created_at,
-        "DateTStamp" as updated_at
+        "DateCreated" as _created_at,
+        "DateTStamp" as _updated_at,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at
 
     from source
 
