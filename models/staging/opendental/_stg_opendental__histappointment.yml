@@ -241,12 +241,15 @@ models:
           Note: insurance_plan_2_id = 0 is a valid value indicating "No Secondary Insurance".
           Data analysis shows:
           - 237,666 records have insurance_plan_2_id = 0 (no secondary insurance)
-          - Only 12 records reference actual missing insurance plans
-          - This affects 4,514 unique patients and 22,267 unique appointments
+          - 12 records reference actual missing insurance plans (IDs: 11200, 12566, 12746, 14152)
+          - These 12 records affect 4 unique patients and 5 unique appointments
+          - Most of these records are from 2023, with one from 2024
           
           Business Context: This field tracks secondary insurance coverage over time.
           The high number of records with insurance_plan_2_id = 0 reflects that many
           patients don't have secondary insurance, which is normal in dental practices.
+          The 12 records with missing references may indicate data entry errors or
+          insurance plan deletions that should be investigated.
         tests:
           - relationships:
               to: ref('stg_opendental__insplan')
