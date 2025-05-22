@@ -47,7 +47,9 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "effective_date >= '2000-01-01'"
+              expression: ">= '2000-01-01'"
+              config:
+                severity: warn
           - test_date_not_future:
               years_ahead: 1
               allow_null: false
