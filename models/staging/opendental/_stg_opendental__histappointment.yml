@@ -207,12 +207,17 @@ models:
           appointments don't require an assistant, which is normal in dental
           practices. This is similar to how we handle hygienist_id = 0 for
           appointments without a hygienist.
+          
+          Note: There are 5 records with assistant_id = 9280 from Jan 24, 2025,
+          affecting one patient and one appointment. These records are future-dated
+          and reference a non-existent assistant, suggesting a data entry error
+          or system issue that should be investigated.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
               where: "assistant_id != 0"  # Exclude records with no assistant
-              severity: error  # Now we can use error since we're excluding the valid 0 values
+              severity: error  # Keep as error since these are future-dated records
       
       - name: clinic_id
         description: Foreign key to the clinic where this appointment was scheduled
