@@ -124,13 +124,29 @@ models:
 
       - name: is_sent
         description: >
-          Flag indicating the direction of communication:
-          - 1: Communication was sent from the practice to the patient
-          - 0: Communication was received from the patient to the practice
+          Flag indicating the direction and status of communication, ordered by frequency:
+          
+          - 2: System-processed communications (57.90% of records)
+            * Used for automated communications and system notifications
+            * Spans all communication types (17 distinct types)
+            * Used with all standard modes (0-5)
+            * Earliest records from 2023-01-01
+          
+          - 1: Practice-to-patient communications (38.25% of records)
+            * Communications sent from the practice to patients
+            * Used with all communication types (16 distinct types)
+            * Used with all modes including rare modes 6 and 8
+            * Earliest records from 2023-01-02
+          
+          - 0: Patient-to-practice communications (3.86% of records)
+            * Communications received from patients
+            * Used with 13 distinct communication types
+            * Used with all standard modes (0-5)
+            * Earliest records from 2023-01-02
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1]
+              values: [0, 1, 2]
 
       - name: communication_source
         description: >
