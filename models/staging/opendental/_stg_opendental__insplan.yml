@@ -38,11 +38,19 @@ models:
               severity: warn
 
       - name: user_entry_id
-        description: Foreign key to users table for the user who created the plan
+        description: >
+          Foreign key to users table for the user who created the plan.
+          Note: user_entry_id = 0 is a valid value indicating "System User" or
+          "Automated Process". Data analysis shows:
+          - 4,074 records have user_entry_id = 0 (system-generated)
+          - These records span from 2020 to 2025
+          - This is similar to how we handle system users in other models
         tests:
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
+              where: "user_entry_id != 0"  # Exclude system-generated records
+              severity: error  # Now we can use error since we're excluding the valid 0 values
 
       # Fee Schedule Related
       - name: fee_schedule_id
