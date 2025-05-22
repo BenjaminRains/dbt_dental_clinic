@@ -25,6 +25,11 @@ models:
           Special cases:
           - user_id = 0: System-generated communications (no specific user)
             Represents approximately 54,578 records from 2023-01-01 to 2025-02-17
+            These are automated communications from the system for:
+            * Appointment notifications (type 224)
+            * General patient communications (type 228)
+            * Clinical communications (type 603)
+            * Legacy system communications (type 0)
           - Excluded inactive users: 20, 36, 43, 45, 51, 54, 9280, 9281
             * Jennifer Berg (20) - Active provider, no commlog entries
             * Becky Solomey (36) - Hidden provider
@@ -36,13 +41,11 @@ models:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
-              where: "user_id NOT IN (20, 36, 43, 45, 51, 54, 9280, 9281)"  # Exclude known inactive users
-              severity: warn
+              where: "user_id != 0 AND user_id NOT IN (20, 36, 43, 45, 51, 54, 9280, 9281)"  # Exclude system and inactive users
               config:
                 description: >
-                  Warning expected for user_id = 0 (system-generated communications) 
-                  and excluded inactive/system users.
-                  Approximately 54,578 records are system-generated (user_id = 0).
+                  This test excludes system-generated communications (user_id = 0) and known inactive users.
+                  System communications represent automated messages for appointments, notifications, and clinical updates.
 
       - name: program_id
         description: >
@@ -72,16 +75,58 @@ models:
         description: Date and time when the communication occurred
 
       - name: communication_type
-        description: Type of communication
+        description: >
+          The type of communication in the system. Main types:
+          - 0: Legacy system communications (mode 5) - General automated communications
+          - 224: Primary appointment notification system (mode 1,4) - Appointment-related communications
+          - 228: Secondary automated communication system (mode 4) - General patient communications
+          - 603: Tertiary communication system (mode 5) - Clinical communications
+          - 226: Billing and financial communications
+          - 225: Insurance and claims communications
+          - 571: Insurance narratives and documentation
+          - 432: Medical clearances and prescriptions
+          - 509/510: Surgical procedures and clearances
+          - 614/615: Referrals and specialist communications
+          - 636: Treatment plans and financial arrangements
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
 
       - name: mode
-        description: Mode of communication
+        description: >
+          The mode or channel used for communication:
+          - 0: Unknown/Unspecified mode
+          - 1: Email communications
+          - 2: Phone call communications
+          - 3: Letter communications
+          - 4: In-person communications
+          - 5: SMS/text message communications
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5]
 
       - name: is_sent
-        description: Flag indicating if the communication was sent (1) or received (0)
+        description: >
+          Flag indicating the direction of communication:
+          - 1: Communication was sent from the practice to the patient
+          - 0: Communication was received from the patient to the practice
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
 
       - name: communication_source
-        description: Source of the communication
+        description: >
+          Source of the communication:
+          - 1: Sent
+          - 2: Received
+          - 3: Failed
+          - NULL: Unknown/Not specified
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, null]
 
       # Metadata columns
       - name: _loaded_at
