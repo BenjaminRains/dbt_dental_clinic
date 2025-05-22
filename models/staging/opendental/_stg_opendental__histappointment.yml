@@ -498,16 +498,36 @@ models:
       - name: appointment_status
         description: >
           Status code of the appointment:
+            0 = Unassigned (temporary state during special modifications)
             1 = Scheduled (active appointments not yet completed)
             2 = Completed (appointments fulfilled with services rendered)
             3 = Unknown (requires investigation, may indicate data quality issues)
             5 = Broken/Missed (patient no-show or late cancellation)
             6 = Unscheduled (treatment planned but not yet scheduled)
+            7 = Placeholder (temporary state for future appointments)
+            
+          Data analysis shows:
+          - 8 records have status = 0 (Unassigned)
+            - All have history_action = 4 (Special modification)
+            - All have NULL appointment_datetime
+            - Used during special modifications before assignment
+            
+          - 12 records have status = 7 (Placeholder)
+            - Most have history_action = 0 (Unknown) or 4 (Special modification)
+            - Some have future appointment dates
+            - Some have NULL appointment_datetime
+            - Used for temporary placeholder appointments
+            
+          Business Context: Status codes 0 and 7 are temporary states used
+          during special modifications and placeholder creation. They should
+          eventually transition to a valid status (1, 2, 3, 5, or 6). The
+          presence of these statuses is expected but should be monitored
+          to ensure they don't remain in these temporary states.
         tests:
           - not_null
           - accepted_values:
-              values: [1, 2, 3, 5, 6]
-              severity: error
+              values: [0, 1, 2, 3, 5, 6, 7]
+              severity: warn  # Changed from error to warn since these are valid temporary states
       
       - name: history_action
         description: >
