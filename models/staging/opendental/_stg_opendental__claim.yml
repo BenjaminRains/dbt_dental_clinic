@@ -26,6 +26,12 @@ models:
           name: ortho_claims_have_total_months
           config:
             severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "sent_date is null or sent_date >= service_date"
+          name: sent_date_after_service_date
+      - dbt_utils.expression_is_true:
+          expression: "received_date is null or sent_date is null or received_date >= sent_date"
+          name: received_date_after_sent_date
     columns:
       # Primary key
       - name: claim_id
@@ -82,14 +88,8 @@ models:
               column_name: service_date
       - name: sent_date
         description: "Date when the claim was sent to the insurance company"
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "is null or {{ this }} >= service_date"
       - name: received_date
         description: "Date when the claim was received by the insurance company"
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "is null or sent_date is null or {{ this }} >= sent_date"
       - name: prior_date
         description: "Date of prior prosthesis, if applicable"
       - name: accident_date
