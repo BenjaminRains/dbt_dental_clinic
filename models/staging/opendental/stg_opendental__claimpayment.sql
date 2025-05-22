@@ -1,13 +1,13 @@
 {{ config(
     materialized='incremental',
-    unique_key='claim_payment_id'
+    unique_key=['claim_payment_id', '_updated_at']
 ) }}
 
 with source as (
     select * from {{ source('opendental', 'claimpayment') }}
     where "CheckDate" >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(last_modified_at) from {{ this }})
+        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
@@ -36,8 +36,9 @@ renamed as (
         
         -- Metadata fields
         "SecUserNumEntry" as created_by_user_id,
-        "SecDateEntry" as created_date,
-        "SecDateTEdit" as last_modified_at
+        "SecDateEntry" as _created_at,
+        "SecDateTEdit" as _updated_at,
+        current_timestamp as _loaded_at
     
     from source
 )
