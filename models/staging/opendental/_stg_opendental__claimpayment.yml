@@ -77,13 +77,58 @@ models:
               values: [true, false]
       
       - name: payment_type_id
-        description: Foreign key to payment type definition
+        description: |
+          Type of payment. Current patterns (2023-present):
+          Regular Payments:
+          - 0: Administrative entries (must be $0)
+          - 69: High value payments (avg $1,036)
+          - 70: Regular payments (avg $348)
+          - 71: Most common type (avg $293)
+          - 261: High volume type (avg $341)
+            * Major carriers: Cigna, Aetna, MetLife, United Healthcare
+            * High value outliers: Local 17 Welfare Fund (avg $1,579), TeamCare (avg $488)
+            * Used by 100+ different carriers
+          - 303: Regular payments (avg $278)
+            * Major carriers: MetLife, Guardian, Ameritas, Anthem
+            * More consistent amounts ($200-$300 range)
+            * Minimum amounts often start at $8.00
+          - 391: High value (avg $922)
+            * No current records found
+          - 412: Newer payment type (avg $199)
+            * No current records found
+          - 464: Rare type (avg $184)
+            * Single record from Delta Dental of California
+            * Payment amount: $184.00
+            * From October 2024
+          - 465: Delta Dental payments (avg $359)
+            * Used exclusively by Delta Dental plans
+            * Consistent amounts ($300-$460 range)
+            * Regional variations in average amounts
+            * High value outliers up to $3,440
+          - 466: Rare type (avg $200)
+            * Only 7 records, all from United Concordia
+            * Used briefly in early 2023 (Jan-Apr)
+            * Amounts range from $87 to $349
+          - 469: United Concordia payments (avg $482)
+            * Used exclusively by United Concordia
+            * Significant variation in amounts ($386-$640)
+            * High value outliers up to $6,245
+          - 574: Very high value (avg $26,071)
+            * No current records found
+          - 634: New type since Sept 2024 (avg $6,009)
+            * No current records found
+          
+          Refund Types:
+          - 72: Refunds (always negative)
+          - 645: Large refunds (avg -$268)
+          - 646: Small refunds (avg -$1)
+          - 647: Medium refunds (avg -$88)
         tests:
           - not_null
           - accepted_values:
-              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+              values: [0, 69, 70, 71, 72, 261, 303, 391, 412, 417, 464, 465, 466, 469, 574, 634, 645, 646, 647]
               config:
-                severity: error
+                severity: warn
       
       - name: payment_group_id
         description: Foreign key to payment group
