@@ -20,7 +20,12 @@ renamed as (
         
         -- Attributes
         "LogSource" as log_source,
-        "EntryDateTime" as entry_datetime
+        "EntryDateTime" as entry_datetime,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "EntryDateTime" as _created_at,  -- Entry logs are created when they're written
+        "EntryDateTime" as _updated_at   -- Entry logs are immutable, so creation = update
 
     from source
 )

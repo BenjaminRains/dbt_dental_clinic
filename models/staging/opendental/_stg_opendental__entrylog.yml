@@ -61,3 +61,19 @@ models:
         description: "Timestamp when the log entry was created"
         tests:
           - not_null
+
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: >
+          Timestamp when the log entry was created in the source system (OpenDental).
+          For entry logs, this is the same as entry_datetime since logs are created
+          when they are written.
+
+      - name: _updated_at
+        description: >
+          Timestamp when the log entry was last updated in the source system (OpenDental).
+          For entry logs, this is the same as entry_datetime since logs are immutable
+          and don't get updated after creation.
