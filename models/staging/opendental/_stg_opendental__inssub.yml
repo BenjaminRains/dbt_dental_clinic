@@ -10,8 +10,8 @@ models:
         tests:
           - unique
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "inssub_id > 0"
+          - test_column_greater_than:
+              value: 0
 
       - name: insurance_plan_id
         description: Foreign key to stg_opendental__insplan. Links to the insurance plan details.
@@ -20,8 +20,8 @@ models:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-          - dbt_utils.expression_is_true:
-              expression: "insurance_plan_id > 0"
+          - test_column_greater_than:
+              value: 0
 
       - name: subscriber_id
         description: Foreign key to the subscriber (patient) record
@@ -30,8 +30,8 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
-          - dbt_utils.expression_is_true:
-              expression: "subscriber_id > 0"
+          - test_column_greater_than:
+              value: 0
 
       - name: user_entry_id
         description: Foreign key - ID of the user who created the record
@@ -39,8 +39,8 @@ models:
           - relationships:
               to: ref('stg_opendental__user')
               field: user_id
-          - dbt_utils.expression_is_true:
-              expression: "user_entry_id > 0"
+          - test_column_greater_than:
+              value: 0
 
       - name: effective_date
         description: Date when the insurance subscription becomes effective
@@ -54,8 +54,9 @@ models:
       - name: termination_date
         description: Date when the insurance subscription terminates
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "termination_date is null or termination_date >= effective_date"
+          - test_date_after:
+              compare_column: effective_date
+              allow_null: true
           - dbt_utils.expression_is_true:
               expression: "termination_date is null or termination_date <= current_date + interval '5 years'"
 
@@ -104,8 +105,9 @@ models:
         description: Timestamp of the last modification to the record
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "last_modified_at >= entry_date"
+          - test_date_after:
+              compare_column: entry_date
+              allow_null: false
           - dbt_utils.expression_is_true:
               expression: "last_modified_at <= current_timestamp"
 
@@ -132,8 +134,9 @@ models:
         description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "_loaded_at >= _created_at"
+          - test_date_after:
+              compare_column: _created_at
+              allow_null: false
           - dbt_utils.expression_is_true:
               expression: "_loaded_at <= current_timestamp"
 
@@ -141,8 +144,9 @@ models:
         description: Timestamp when the record was created in the source system (OpenDental)
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "_created_at >= entry_date"
+          - test_date_after:
+              compare_column: entry_date
+              allow_null: false
           - dbt_utils.expression_is_true:
               expression: "_created_at <= current_timestamp"
 
@@ -150,8 +154,9 @@ models:
         description: Timestamp when the record was last updated in the source system (OpenDental)
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "_updated_at >= _created_at"
+          - test_date_after:
+              compare_column: _created_at
+              allow_null: false
           - dbt_utils.expression_is_true:
               expression: "_updated_at <= current_timestamp"
 
