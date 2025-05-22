@@ -115,12 +115,18 @@ models:
           - not_null
           - accepted_values:
               values: ['ACTIVE', 'TERMINATED', 'FUTURE_TERMINATED']
-          - dbt_utils.expression_is_true:
-              expression: "(termination_date is null and subscriber_status = 'ACTIVE') or (termination_date is not null and subscriber_status != 'ACTIVE')"
-          - dbt_utils.expression_is_true:
-              expression: "(termination_date < current_date and subscriber_status = 'TERMINATED') or (termination_date >= current_date and subscriber_status != 'TERMINATED')"
-          - dbt_utils.expression_is_true:
-              expression: "(termination_date >= current_date and subscriber_status = 'FUTURE_TERMINATED') or (termination_date < current_date and subscriber_status != 'FUTURE_TERMINATED')"
+          - test_status_with_date:
+              date_column: termination_date
+              status_value: ACTIVE
+              date_condition: termination_date is null
+          - test_status_with_date:
+              date_column: termination_date
+              status_value: TERMINATED
+              date_condition: termination_date < current_date
+          - test_status_with_date:
+              date_column: termination_date
+              status_value: FUTURE_TERMINATED
+              date_condition: termination_date >= current_date
 
       - name: _loaded_at
         description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
