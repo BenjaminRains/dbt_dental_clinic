@@ -34,7 +34,7 @@ renamed as (
         -- Required Metadata Columns
         current_timestamp as _loaded_at,
         "DateTEntry" as _created_at,
-        coalesce("DateTStamp", "DateTEntry") as _updated_at
+        "DateTEntry" as _updated_at
     
     from source
 )
