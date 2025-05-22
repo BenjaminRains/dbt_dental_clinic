@@ -189,7 +189,7 @@ models:
         description: "Number of months remaining in orthodontic treatment"
         tests:
           - dbt_utils.expression_is_true:
-              expression: "ortho_remaining_months is null or (ortho_remaining_months >= 0 and ortho_remaining_months <= 60)"
+              expression: "is null or (ortho_remaining_months >= 0 and ortho_remaining_months <= 60)"
       - name: patient_relation
         description: "Code for patient's relationship to primary subscriber"
         tests:
