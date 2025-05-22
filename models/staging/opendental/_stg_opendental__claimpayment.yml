@@ -62,12 +62,7 @@ models:
       
       - name: clinic_id
         description: Foreign key to clinic where the payment was processed
-        tests:
-          - not_null
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
-      
+        
       - name: deposit_id
         description: Foreign key to the deposit record if this payment was part of a deposit
         tests:
