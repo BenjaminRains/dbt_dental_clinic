@@ -90,9 +90,28 @@ models:
         - name: histappointment_missing_records
           description: >
             Tests for appointments with completely missing history records.
-            Only fails for appointments that have zero history records, as other
-            patterns (like missing creation records) have been found to be normal
-            in the OpenDental system.
+            Data analysis shows:
+            - 10 appointments have no history records
+            - All have appointment_status = 3 (Unknown)
+            - 9 out of 10 have provider_id = 28
+            - All have assistant_id = 0 (No Assistant)
+            - All appointments are from January-June 2023
+            - All were created in 2022 (between June-December)
+            - All were last updated in 2022-2023
+            - All were loaded into the data warehouse on May 22, 2025
+            
+            Business Context: These appear to be placeholder appointments that were
+            created but never properly processed. The fact that they have no history
+            records suggests they were never fully set up in the system. The consistent
+            pattern of status=3 and provider=28 suggests this might be a specific
+            workflow. The fact that they were all loaded on the same future date
+            (May 22, 2025) suggests this might be a data migration or cleanup issue.
+            
+            Note: While these records are technically data quality issues (every
+            appointment should have at least one history record), they appear to be
+            part of a specific workflow for handling appointments that couldn't be
+            properly scheduled. The test is kept as an error to ensure these cases
+            are properly investigated and handled.
           file_path: tests/staging/histappointment_missing_records.sql
           expected_results: 0
           
