@@ -105,9 +105,9 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "entry_date >= '2000-01-01'"
+              expression: ">= '2000-01-01'"
           - dbt_utils.expression_is_true:
-              expression: "entry_date <= current_date"
+              expression: "<= current_date"
 
       - name: last_modified_at
         description: Timestamp of the last modification to the record
@@ -116,8 +116,10 @@ models:
           - test_date_after:
               compare_column: entry_date
               allow_null: false
-          - test_timestamp_not_future:
-              allow_null: false
+          - dbt_utils.expression_is_true:
+              expression: "<= current_timestamp"
+              config:
+                severity: error
 
       - name: subscriber_status
         description: Current status of the subscriber (ACTIVE, TERMINATED, or FUTURE_TERMINATED)
