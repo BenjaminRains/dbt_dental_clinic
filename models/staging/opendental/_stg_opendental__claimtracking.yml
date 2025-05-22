@@ -3,9 +3,9 @@ version: 2
 models:
   - name: stg_opendental__claimtracking
     description: >
-      Standardized staging model for insurance claim tracking from OpenDental.
-      This model represents tracking events and status updates for insurance claims,
-      providing a history of claim processing activities and communications.
+      Standardized staging model for claim tracking events from OpenDental.
+      This model represents the audit trail of events and status changes for insurance claims,
+      providing a historical record of claim processing activities.
     
     columns:
       - name: claim_tracking_id
@@ -16,24 +16,45 @@ models:
       
       - name: claim_id
         description: Foreign key to the insurance claim (ClaimNum)
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
       
       - name: user_id
-        description: Foreign key to the user who created the tracking entry
+        description: Foreign key to the user who created this tracking entry (UserNum)
       
       - name: tracking_definition_id
-        description: Foreign key to tracking definition record
+        description: Foreign key to the tracking definition (TrackingDefNum)
       
       - name: tracking_error_definition_id
-        description: Foreign key to tracking error definition record
+        description: Foreign key to the tracking error definition (TrackingErrorDefNum)
       
       - name: entry_timestamp
-        description: Timestamp when the tracking entry was created
+        description: Timestamp when this tracking entry was created
+        tests:
+          - not_null
       
       - name: tracking_type
-        description: Type of tracking event or activity
+        description: Type of tracking event (e.g., status change, error, note)
       
       - name: note
-        description: Detailed notes about the tracking event
+        description: Additional notes or details about the tracking event
+
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the tracking entry was created in OpenDental (from DateTimeEntry)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the tracking entry was last updated in OpenDental (from DateTimeEntry)
+        tests:
+          - not_null
 
     tests:
       - relationships_with_third_table:

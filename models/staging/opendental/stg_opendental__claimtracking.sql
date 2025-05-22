@@ -27,7 +27,12 @@ renamed as (
         
         -- Text fields
         "TrackingType" as tracking_type,
-        "Note" as note
+        "Note" as note,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTimeEntry" as _created_at,
+        "DateTimeEntry" as _updated_at  -- Using DateTimeEntry since this is a tracking/audit table
         
     from source
 )
