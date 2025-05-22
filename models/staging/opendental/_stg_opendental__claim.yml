@@ -295,12 +295,25 @@ models:
       - name: claim_note
         description: "Notes related to the claim"
       - name: claim_type
-        description: "Type of claim (e.g., primary, secondary)"
+        description: >
+          Type of claim:
+          - P: Primary insurance claim (91.69% of claims)
+            Standard claims submitted to a patient's primary insurance.
+          - S: Secondary insurance claim (8.12% of claims)
+            Claims submitted to a patient's secondary insurance after primary insurance processing.
+          - Other: Special case claims (0.19% of claims)
+            Claims that follow primary insurance patterns but were marked as "Other".
+            These claims:
+            - Have primary plan IDs (10797, 10799, or 11050)
+            - Have no secondary insurance (secondary_plan_id = 0)
+            - Follow standard claim processing (sent/received dates)
+            - Have typical insurance payment patterns (50-60% of claim fee)
+            - Range from $88 to $1,632 in value
         tests:
           - accepted_values:
-              values: ['P', 'S', 'PreAuth', 'Other', 'Cap', 'Capitation']
+              values: ['P', 'S', 'Other']
               config:
-                severity: warn
+                severity: error
       - name: reference_number_string
         description: "Reference number for the claim"
       - name: accident_related
