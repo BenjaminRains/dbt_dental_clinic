@@ -2,45 +2,58 @@ version: 2
 
 models:
   - name: stg_opendental__allergy
-    description: Staging model for allergy records from OpenDental. Contains patient allergy information including reactions and status.
+    description: Staging model for patient allergies. Contains information about patient allergies, their definitions, and reactions.
     columns:
       - name: allergy_id
-        description: Primary key - Unique identifier for each allergy record
+        description: Unique identifier for the allergy record
         tests:
           - unique
           - not_null
 
       - name: allergy_def_id
-        description: Foreign key to allergy definitions table. References the specific type of allergy
+        description: Foreign key to the allergy definition table
         tests:
           - not_null
-        # Relationship can be added once stg_opendental__allergydef is created
-        # relationships:
-        #   - to: ref('stg_opendental__allergydef')
-        #     field: allergy_def_id
+          - relationships:
+              to: ref('stg_opendental__allergy_def')
+              field: allergy_def_id
 
       - name: patient_id
-        description: Foreign key to patient table. Identifies the patient who has the allergy
+        description: Foreign key to the patient table
         tests:
           - not_null
-        relationships:
-          - to: ref('stg_opendental__patient')
-            field: patient_id
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
 
       - name: reaction
-        description: Text description of the allergic reaction
+        description: Description of the allergic reaction
 
       - name: is_active
-        description: Flag indicating if the allergy is currently active (1) or inactive (0)
+        description: Boolean flag indicating if the allergy is currently active
         tests:
-          - accepted_values:
-              values: [0, 1]
+          - not_null
 
       - name: date_timestamp
-        description: Timestamp when the allergy record was last modified
+        description: Timestamp of the allergy record
 
       - name: adverse_reaction_date
         description: Date when the adverse reaction occurred
 
       - name: snomed_reaction
         description: SNOMED CT code for the allergic reaction
+
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system
+        tests:
+          - not_null
