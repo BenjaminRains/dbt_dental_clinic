@@ -5,6 +5,24 @@ models:
     description: >
       Standardized view of dental insurance claims from the OpenDental system.
       Contains information about claim status, payments, providers, and related details.
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "insurance_payment_amount <= claim_fee"
+          condition: "insurance_payment_amount is not null and claim_fee is not null"
+          name: insurance_payment_not_greater_than_claim_fee
+      - dbt_utils.expression_is_true:
+          expression: "deductible_applied + insurance_payment_amount + write_off <= claim_fee"
+          condition: "deductible_applied is not null and insurance_payment_amount is not null and write_off is not null and claim_fee is not null"
+          name: total_payments_not_greater_than_claim_fee
+          severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "ortho_remaining_months <= ortho_total_months"
+          condition: "ortho_remaining_months is not null and ortho_total_months is not null"
+          name: ortho_remaining_not_greater_than_total
+      - dbt_utils.expression_is_true:
+          expression: "case when is_ortho = 1 then ortho_total_months is not null else true end"
+          name: ortho_claims_have_total_months
+          severity: warn
     columns:
       # Primary key
       - name: claim_id
@@ -16,6 +34,11 @@ models:
       # Foreign keys
       - name: patient_id
         description: "Foreign key to the patient associated with this claim"
+        tests:
+          - not_null
+          - relationships:
+              to: source('opendental', 'patient')
+              field: "PatNum"
       - name: plan_id
         description: "Foreign key to the primary insurance plan for this claim"
       - name: secondary_plan_id
@@ -46,10 +69,24 @@ models:
       # Date fields
       - name: service_date
         description: "Date when the dental service was performed"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "service_date >= '2000-01-01'"
+          - dbt_utils.expression_is_true:
+              expression: "service_date <= current_date + interval '1 year'"
       - name: sent_date
         description: "Date when the claim was sent to the insurance company"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "sent_date >= service_date"
+              condition: "sent_date is not null"
       - name: received_date
         description: "Date when the claim was received by the insurance company"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "received_date >= sent_date"
+              condition: "received_date is not null and sent_date is not null"
       - name: prior_date
         description: "Date of prior prosthesis, if applicable"
       - name: accident_date
@@ -72,34 +109,84 @@ models:
       # Numerical values
       - name: claim_fee
         description: "Total fee amount for the claim"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 50000"
+              severity: warn
       - name: insurance_payment_estimate
         description: "Estimated payment amount from insurance"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              condition: "insurance_payment_estimate is not null"
       - name: insurance_payment_amount
         description: "Actual payment amount received from insurance"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              condition: "insurance_payment_amount is not null"
       - name: deductible_applied
         description: "Amount of deductible applied to this claim"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              condition: "deductible_applied is not null"
       - name: write_off
         description: "Amount written off by the provider"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              condition: "write_off is not null"
       - name: share_of_cost
         description: "Patient's share of cost for the claim"
 
       # Integer/status fields
       - name: place_of_service
         description: "Code indicating where services were performed (office, hospital, etc.)"
+        tests:
+          - accepted_values:
+              values: [11, 12, 21, 22, 23, 24, 25, 26, 31, 32, 33, 34, 41, 42, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 60, 61, 62, 65, 71, 72, 81, 99]
+              severity: warn
       - name: is_employment_related
         description: "Flag indicating if claim is related to employment (0=No, 1=Yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              condition: "is_employment_related is not null"
       - name: is_ortho
         description: "Flag indicating if claim is for orthodontic treatment (0=No, 1=Yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              condition: "is_ortho is not null"
       - name: ortho_remaining_months
         description: "Number of months remaining in orthodontic treatment"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 and <= 60"
+              condition: "ortho_remaining_months is not null"
       - name: patient_relation
         description: "Code for patient's relationship to primary subscriber"
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+              severity: warn
       - name: secondary_patient_relation
         description: "Code for patient's relationship to secondary subscriber"
       - name: radiographs
         description: "Number of radiographs attached to claim"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 and <= 50"
+              condition: "radiographs is not null"
       - name: attached_images
         description: "Number of images attached to claim"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 and <= 50"
+              condition: "attached_images is not null"
       - name: attached_models
         description: "Number of models attached to claim"
       - name: special_program_code
@@ -116,10 +203,19 @@ models:
         description: "Qualifier for the other date field"
       - name: is_outside_lab
         description: "Flag indicating if outside lab was used (0=No, 1=Yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              condition: "is_outside_lab is not null"
 
       # Character fields
       - name: claim_status
         description: "Single character status code for the claim"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['U', 'H', 'W', 'S', 'R', 'I', 'P', 'C', 'A']
+              severity: warn
       - name: pre_auth_string
         description: "Pre-authorization string or number"
       - name: is_prosthesis
@@ -130,6 +226,10 @@ models:
         description: "Notes related to the claim"
       - name: claim_type
         description: "Type of claim (e.g., primary, secondary)"
+        tests:
+          - accepted_values:
+              values: ['P', 'S', 'PreAuth', 'Other', 'Cap', 'Capitation']
+              severity: warn
       - name: reference_number_string
         description: "Reference number for the claim"
       - name: accident_related
@@ -162,7 +262,17 @@ models:
       # Required metadata columns
       - name: _loaded_at
         description: "Timestamp when the record was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
       - name: _created_at
         description: "Timestamp when the record was created in the source system (OpenDental)"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "_created_at >= '2000-01-01'"
       - name: _updated_at
         description: "Timestamp when the record was last updated in the source system"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "_updated_at >= _created_at"
