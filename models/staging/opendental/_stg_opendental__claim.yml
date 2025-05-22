@@ -40,8 +40,8 @@ models:
         tests:
           - not_null
           - relationships:
-              to: source('opendental', 'patient')
-              field: "PatNum"
+              to: ref('stg_opendental__patient')
+              field: patient_id
       - name: plan_id
         description: "Foreign key to the primary insurance plan for this claim"
       - name: secondary_plan_id
