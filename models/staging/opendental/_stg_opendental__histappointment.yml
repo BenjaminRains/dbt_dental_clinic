@@ -35,23 +35,14 @@ models:
           severity: error
       - dbt_utils.expression_is_true:
           expression: "appointment_status in (1,2,3,5,6)"
-          severity: warn
+          severity: error  # This must pass
       - dbt_utils.expression_is_true:
           expression: "history_timestamp <= current_timestamp"
           severity: error
       - dbt_utils.expression_is_true:
           expression: "appointment_status != 2 OR appointment_datetime <= history_timestamp"
           severity: error
-      # High-level model tests
-      - dbt_utils.expression_is_true:
-          expression: "appointment_status in (1,2,3,5,6)"
-          severity: error  # This must pass
       
-      # Future appointments check - update to allow future dates
-      - dbt_utils.expression_is_true:
-          expression: "appointment_status != 2 OR appointment_datetime <= current_date"
-          severity: error  # Completed appointments cannot be in the future
-          
       # Custom test to monitor missing appointments pattern
       - histappointment_missing_appointments:
           description: >
