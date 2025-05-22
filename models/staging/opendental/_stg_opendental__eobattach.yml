@@ -39,26 +39,6 @@ models:
       
       - name: raw_base64
         description: Base64 encoded content of the attached file
-      
-      - name: _airbyte_ab_id
-        description: Unique identifier for the Airbyte record
-        tests:
-          - not_null
-      
-      - name: _airbyte_emitted_at
-        description: Timestamp when the record was emitted by Airbyte
-        tests:
-          - not_null
-      
-      - name: _airbyte_normalized_at
-        description: Timestamp when the record was normalized
-        tests:
-          - not_null
-      
-      - name: _airbyte_eobattach_hashid
-        description: Hash identifier for the EOB attachment record
-        tests:
-          - not_null
 
       # Metadata columns
       - name: _loaded_at
