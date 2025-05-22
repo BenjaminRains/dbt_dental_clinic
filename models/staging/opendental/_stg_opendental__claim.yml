@@ -240,9 +240,9 @@ models:
         description: >
           Single character status code for the claim:
           - R: Received - Claim has been received from insurance with payment or denial
-          - S: Sent - Verified - Claim has been sent or printed and is being tracked
+          - S: Sent - Claim has been sent to insurance and is being tracked
           - H: Hold until Pri received - Secondary claim waiting for primary insurance
-          - W: Waiting to Send - Claim is ready to be printed or sent electronically
+          - W: Waiting - Special status for claims in transition
         tests:
           - not_null
           - accepted_values:
@@ -250,33 +250,26 @@ models:
               config:
                 severity: warn
           - dbt_utils.expression_is_true:
-              expression: "= 'W' and sent_date is not null"
-              column_name: claim_status
-              name: waiting_claims_have_no_sent_date
-              config:
-                severity: warn
-                description: "Claims marked as waiting should not have a sent date"
-          - dbt_utils.expression_is_true:
               expression: "= 'S' and sent_date is null"
               column_name: claim_status
-              name: sent_claims_have_sent_date
+              name: sent_claims_missing_sent_date
               config:
-                severity: warn
-                description: "Claims marked as sent should have a sent date"
+                severity: error
+                description: "Claims marked as sent must have a sent date"
           - dbt_utils.expression_is_true:
               expression: "= 'R' and received_date is null"
               column_name: claim_status
-              name: received_claims_have_received_date
+              name: received_claims_missing_received_date
               config:
-                severity: warn
-                description: "Claims marked as received should have a received date"
+                severity: error
+                description: "Claims marked as received must have a received date"
           - dbt_utils.expression_is_true:
               expression: "= 'H' and plan_id is null"
               column_name: claim_status
-              name: hold_claims_have_plan_id
+              name: hold_claims_missing_plan_id
               config:
-                severity: warn
-                description: "Claims marked as hold should have a plan ID"
+                severity: error
+                description: "Claims marked as hold must have a plan ID for tracking secondary insurance"
       - name: pre_auth_string
         description: "Pre-authorization string or number"
       - name: is_prosthesis
