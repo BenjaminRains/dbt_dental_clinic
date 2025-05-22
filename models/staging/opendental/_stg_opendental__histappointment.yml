@@ -120,6 +120,7 @@ models:
           Foreign key to the appointment this history record relates to.
           Note: Some historical appointments may reference appointments that have been deleted.
         tests:
+          - not_null
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
@@ -130,43 +131,80 @@ models:
           Foreign key to the patient associated with this appointment.
           Note: Some historical records may reference patients that have been deleted or merged.
         tests:
+          - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
               severity: warn
       
       - name: provider_id
-        description: Foreign key to the primary provider assigned to this appointment
+        description: Foreign key to the provider table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
       
       - name: hygienist_id
-        description: Foreign key to the hygienist assigned to this appointment
+        description: Foreign key to the provider table for the hygienist
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
       
       - name: assistant_id
-        description: Foreign key to the assistant assigned to this appointment
+        description: Foreign key to the provider table for the assistant
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
       
       - name: clinic_id
         description: Foreign key to the clinic where this appointment was scheduled
       
       - name: next_appointment_id
-        description: Foreign key to the next appointment in a series if applicable
+        description: Foreign key to the appointment table for the next scheduled appointment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
       
       - name: appointment_type_id
-        description: Foreign key to appointment type defining category and default duration
+        description: Foreign key to the appointment type table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointmenttype')
+              field: appointment_type_id
       
       - name: operatory_id
         description: Foreign key to the operatory (chair/room) for this appointment
       
       - name: history_user_id
-        description: Foreign key to the user who made the change that created this history record
+        description: Foreign key to the user table for the user who made the change
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
       
       - name: entry_user_id
-        description: Foreign key to the user who originally created the appointment
+        description: Foreign key to the user table for the user who entered the record
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
       
       - name: insurance_plan_1_id
-        description: Foreign key to the primary insurance plan for this appointment
+        description: Foreign key to the insurance plan table for primary insurance
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
       
       - name: insurance_plan_2_id
-        description: Foreign key to the secondary insurance plan for this appointment
+        description: Foreign key to the insurance plan table for secondary insurance
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
       
       - name: unscheduled_status_id
         description: Status identifier for unscheduled appointments
@@ -176,21 +214,19 @@ models:
       
       # Timestamps
       - name: history_timestamp
-        description: >
-          Timestamp when this history record was created.
-          All timestamps are stored with timezone information to ensure proper chronological ordering.
+        description: Timestamp when the history record was created
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "{{ column_name }} <= current_timestamp"
       
       - name: created_timestamp
-        description: >
-          Original timestamp when the appointment record was created.
-          All timestamps are now handled with timezone information to ensure proper comparison.
+        description: Timestamp when the appointment was created
+        tests:
+          - not_null
       
       - name: appointment_datetime
-        description: Scheduled date and time for this appointment
+        description: Scheduled date and time of the appointment
+        tests:
+          - not_null
       
       - name: arrived_datetime
         description: Timestamp when the patient arrived for the appointment
@@ -202,10 +238,12 @@ models:
         description: Timestamp when the patient was dismissed after the appointment
       
       - name: asked_to_arrive_datetime
-        description: Timestamp when the patient was asked to arrive (may differ from scheduled time)
+        description: Timestamp when the patient was asked to arrive for the appointment
       
       - name: entry_datetime
-        description: Timestamp when the appointment was initially entered into the system
+        description: Timestamp when the record was entered into the system
+        tests:
+          - not_null
       
       # Flags and status indicators
       - name: appointment_status
@@ -217,9 +255,10 @@ models:
             5 = Broken/Missed (patient no-show or late cancellation)
             6 = Unscheduled (treatment planned but not yet scheduled)
         tests:
+          - not_null
           - accepted_values:
               values: [1, 2, 3, 5, 6]
-              severity: warn
+              severity: error
       
       - name: history_action
         description: >
@@ -233,54 +272,79 @@ models:
           Data analysis shows that history_action=1 is used for most history records
           regardless of sequence, representing ongoing changes rather than just initial creation.
         tests:
+          - not_null
           - accepted_values:
               values: [0, 1, 2, 3, 4]
               severity: error
       
       - name: appointment_source
-        description: Code indicating the source/method by which this appointment was created
+        description: Source of the appointment (e.g., phone, online, walk-in)
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       
       - name: is_time_locked
-        description: Flag indicating if the appointment time is locked from changes
-        meta:
-          source_column: "TimeLocked"
-          source_data_type: "smallint"
-          notes: "Converted from smallint (0/1) to boolean in the staging model"
+        description: Boolean flag indicating if the appointment time is locked
+        tests:
+          - not_null
       
       - name: is_new_patient
-        description: Flag indicating if this is a new patient appointment
+        description: Boolean flag indicating if this is a new patient appointment
+        tests:
+          - not_null
       
       - name: is_hygiene
-        description: Flag indicating if this is a hygiene appointment
+        description: Boolean flag indicating if this is a hygiene appointment
+        tests:
+          - not_null
       
       - name: priority
-        description: Priority level assigned to this appointment
+        description: Priority level of the appointment
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5]
       
       # Text fields and descriptors
       - name: pattern
         description: Pattern string defining the graphical representation and time slots
       
       - name: pattern_secondary
-        description: Secondary pattern information for extended representation
+        description: Secondary pattern of the appointment
       
       - name: note
-        description: Text notes for this appointment
+        description: Notes about the appointment
       
       - name: procedure_description
-        description: Description of procedures to be performed
+        description: Description of the procedures scheduled for the appointment
       
       - name: procedures_colored
-        description: Information about procedures with color coding for display
+        description: Colored procedures for the appointment
       
       - name: provider_bar_text
-        description: Text displayed in provider schedule bars for this appointment
+        description: Text displayed in the provider bar for this appointment
       
       # Other attributes
       - name: color_override
-        description: Manual color override value for this appointment's display
+        description: Override color for the appointment in the schedule
       
       - name: security_hash
-        description: Security hash for record integrity verification
+        description: Security hash for the appointment
       
       - name: item_order_planned
-        description: Ordering value for planned appointments
+        description: Planned order of items for the appointment
+      
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: Timestamp when the historical appointment record was created in the source system (OpenDental)
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: Timestamp when the historical appointment record was last updated in the source system (OpenDental)
+        tests:
+          - not_null

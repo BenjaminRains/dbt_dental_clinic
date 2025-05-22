@@ -10,7 +10,7 @@ with source as (
     where "HistDateTStamp" >= '2023-01-01'::timestamp
         AND "HistDateTStamp" <= CURRENT_TIMESTAMP
     {% if is_incremental() %}
-        AND "HistDateTStamp" > (SELECT max(history_timestamp) FROM {{ this }})
+        AND "HistDateTStamp" > (SELECT max(_created_at) FROM {{ this }})
     {% endif %}
 ),
 
@@ -68,8 +68,11 @@ renamed as (
         NULLIF(TRIM("SecurityHash"), '') as security_hash,
         "ItemOrderPlanned"::integer as item_order_planned,
         
-        -- Metadata
-        current_timestamp as _loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "HistDateTStamp"::timestamp as _created_at,
+        coalesce("DateTStamp", "HistDateTStamp")::timestamp as _updated_at
+
     from source
 )
 
