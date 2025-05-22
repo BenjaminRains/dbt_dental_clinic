@@ -179,12 +179,16 @@ models:
         description: "Flag indicating if claim is related to employment (0=No, 1=Yes)"
         tests:
           - accepted_values:
-              values: [0, 1, null]
+              values: [0, 1]
+          - dbt_utils.expression_is_true:
+              expression: "is null or is_employment_related in (0, 1)"
       - name: is_ortho
         description: "Flag indicating if claim is for orthodontic treatment (0=No, 1=Yes)"
         tests:
           - accepted_values:
-              values: [0, 1, null]
+              values: [0, 1]
+          - dbt_utils.expression_is_true:
+              expression: "is null or is_ortho in (0, 1)"
       - name: ortho_remaining_months
         description: "Number of months remaining in orthodontic treatment"
         tests:
@@ -227,7 +231,9 @@ models:
         description: "Flag indicating if outside lab was used (0=No, 1=Yes)"
         tests:
           - accepted_values:
-              values: [0, 1, null]
+              values: [0, 1]
+          - dbt_utils.expression_is_true:
+              expression: "is null or is_outside_lab in (0, 1)"
 
       # Character fields
       - name: claim_status
