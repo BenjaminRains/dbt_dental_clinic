@@ -250,25 +250,29 @@ models:
               config:
                 severity: warn
           - dbt_utils.expression_is_true:
-              expression: "not (claim_status = 'W' and sent_date is not null)"
+              expression: "= 'W' and sent_date is not null"
+              column_name: claim_status
               name: waiting_claims_have_no_sent_date
               config:
                 severity: warn
                 description: "Claims marked as waiting should not have a sent date"
           - dbt_utils.expression_is_true:
-              expression: "not (claim_status = 'S' and sent_date is null)"
+              expression: "= 'S' and sent_date is null"
+              column_name: claim_status
               name: sent_claims_have_sent_date
               config:
                 severity: warn
                 description: "Claims marked as sent should have a sent date"
           - dbt_utils.expression_is_true:
-              expression: "not (claim_status = 'R' and received_date is null)"
+              expression: "= 'R' and received_date is null"
+              column_name: claim_status
               name: received_claims_have_received_date
               config:
                 severity: warn
                 description: "Claims marked as received should have a received date"
           - dbt_utils.expression_is_true:
-              expression: "not (claim_status = 'H' and plan_id is null)"
+              expression: "= 'H' and plan_id is null"
+              column_name: claim_status
               name: hold_claims_have_plan_id
               config:
                 severity: warn
