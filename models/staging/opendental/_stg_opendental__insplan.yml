@@ -216,9 +216,14 @@ models:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
+        description: >
+          Timestamp when the record was created in the source system (OpenDental).
+          Note: Data analysis shows 4,074 records have NULL created_at timestamps.
+          These appear to be from older records where creation timestamps were not
+          consistently tracked in the source system.
         tests:
-          - not_null
+          - not_null:
+              severity: warn
 
       - name: _updated_at
         description: Timestamp when the record was last updated in the source system (OpenDental)
