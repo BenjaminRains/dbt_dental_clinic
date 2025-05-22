@@ -46,7 +46,12 @@ renamed as (
             WHEN "DateTerm" < CURRENT_DATE THEN 'TERMINATED'
             WHEN "DateTerm" IS NULL THEN 'ACTIVE'
             ELSE 'FUTURE_TERMINATED'
-        END as subscriber_status
+        END as subscriber_status,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "SecDateEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
 
     from source
 )
