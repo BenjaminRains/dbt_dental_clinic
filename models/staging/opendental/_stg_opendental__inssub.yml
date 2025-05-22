@@ -48,8 +48,9 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "effective_date >= '2000-01-01'"
-          - dbt_utils.expression_is_true:
-              expression: "effective_date <= current_date + interval '1 year'"
+          - test_date_not_future:
+              years_ahead: 1
+              allow_null: false
 
       - name: termination_date
         description: Date when the insurance subscription terminates
@@ -57,8 +58,9 @@ models:
           - test_date_after:
               compare_column: effective_date
               allow_null: true
-          - dbt_utils.expression_is_true:
-              expression: "termination_date is null or termination_date <= current_date + interval '5 years'"
+          - test_date_not_future:
+              years_ahead: 5
+              allow_null: true
 
       - name: is_release_info
         description: Flag indicating if information release is authorized
