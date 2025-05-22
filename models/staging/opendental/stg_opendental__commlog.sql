@@ -41,7 +41,12 @@ renamed as (
         "Signature" as signature,
         "SigIsTopaz" as is_topaz_signature,
         "CommSource" as communication_source,
-        "CommReferralBehavior" as referral_behavior
+        "CommReferralBehavior" as referral_behavior,
+        
+        -- Metadata
+        current_timestamp as _loaded_at,
+        "DateTEntry" as _created_at,
+        "DateTStamp" as _updated_at
 
     from source
 )
