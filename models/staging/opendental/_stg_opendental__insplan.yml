@@ -59,11 +59,15 @@ models:
               field: fee_schedule_id
 
       - name: manual_fee_schedule_id
-        description: Foreign key to fee schedules table for manual fee schedule
+        description: >
+          Foreign key to fee schedules table for manual fee schedule.
+          Note: This field can be null or 0 when no manual fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              where: "manual_fee_schedule_id is not null and manual_fee_schedule_id != 0"
+              severity: warn
 
       # Plan Details
       - name: group_name
