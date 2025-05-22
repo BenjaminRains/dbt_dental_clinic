@@ -2,6 +2,15 @@ with source as (
     select * from {{ source('opendental', 'employee') }}
 ),
 
+entry_logs as (
+    select 
+        "FKey" as employee_id,
+        min("EntryDateTime") as first_entry_datetime
+    from {{ source('opendental', 'entrylog') }}
+    where "FKeyType" = 0  -- Assuming 0 is the type for employee records
+    group by "FKey"
+),
+
 renamed as (
     select
         -- Primary Key
@@ -32,8 +41,16 @@ renamed as (
             WHEN "IsWorkingHome" = 0 THEN false
             ELSE null 
         END as is_working_home,
-        "ReportsTo" as reports_to_employee_id
-    from source
+        "ReportsTo" as reports_to_employee_id,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        el.first_entry_datetime as _created_at,
+        current_timestamp as _updated_at
+
+    from source s
+    left join entry_logs el
+        on s."EmployeeNum" = el.employee_id
 )
 
 select * from renamed
