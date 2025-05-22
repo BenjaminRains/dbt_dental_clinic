@@ -192,11 +192,27 @@ models:
               severity: error  # Now we can use error since we're excluding the valid 0 values
       
       - name: assistant_id
-        description: Foreign key to the provider table for the assistant
+        description: >
+          Foreign key to the provider table for the assistant.
+          Note: assistant_id = 0 is a valid value indicating "No Assistant".
+          Data analysis shows:
+          - 253,756 records have assistant_id = 0 (no assistant)
+          - These affect 4,561 unique patients and 23,487 unique appointments
+          - Spans from Jan 2023 to Feb 2025
+          - Has all possible appointment statuses and history actions
+          - Associated with multiple providers and hygienists
+          
+          Business Context: This field tracks assistant assignments over time.
+          The high number of records with assistant_id = 0 reflects that many
+          appointments don't require an assistant, which is normal in dental
+          practices. This is similar to how we handle hygienist_id = 0 for
+          appointments without a hygienist.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              where: "assistant_id != 0"  # Exclude records with no assistant
+              severity: error  # Now we can use error since we're excluding the valid 0 values
       
       - name: clinic_id
         description: Foreign key to the clinic where this appointment was scheduled
