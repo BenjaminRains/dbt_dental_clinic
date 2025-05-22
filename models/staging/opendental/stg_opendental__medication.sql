@@ -1,19 +1,17 @@
 with source as (
-    select * from {{ source('opendental', 'allergydef') }}
+    select * from {{ source('opendental', 'medication') }}
 ),
 
 renamed as (
     select
         -- Primary Key
-        "AllergyDefNum" as allergydef_id,
+        "MedicationNum" as medication_id,
         
         -- Attributes
-        "Description" as allergydef_description,
-        "IsHidden" as is_hidden,
-        "DateTStamp" as date_timestamp,
-        "SnomedType" as snomed_type,
-        "MedicationNum" as medication_id,
-        "UniiCode" as unii_code,
+        "MedName" as medication_name,
+        "GenericNum" as generic_id,
+        "Notes" as notes,
+        "RxCui" as rxcui,
         
         -- Required metadata columns
         current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data

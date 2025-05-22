@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_opendental__medication
+    description: >
+      Staging model for medications. Contains information about medications, including 
+      their names, generic equivalents, and RxNorm codes.
+      
+      Note: This table does not include medication_id = 0, which is used in allergydef 
+      for non-medication allergies (environmental, material, drug classes like latex, 
+      acrylic, food, etc.).
+    columns:
+      - name: medication_id
+        description: Unique identifier for the medication
+        tests:
+          - unique
+          - not_null
+
+      - name: medication_name
+        description: Name of the medication
+        tests:
+          - not_null
+
+      - name: generic_id
+        description: Foreign key to the generic medication table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__medication')
+              field: medication_id
+
+      - name: notes
+        description: Additional notes or information about the medication
+
+      - name: rxcui
+        description: RxNorm Concept Unique Identifier (RxCUI) for the medication
+        tests:
+          - not_null
+
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system
+        tests:
+          - not_null

@@ -118,6 +118,31 @@ sources:
           - name: icd10_code
             description: "International Classification of Diseases, 10th Revision (ICD-10) code for the disease"
 
+      - name: medication
+        description: "Medication definitions containing information about medications including their names, generic equivalents, and RxNorm codes"
+        columns:
+          - name: MedicationNum
+            description: "Primary key - Unique identifier for each medication"
+            tests:
+              - unique
+              - not_null
+          - name: MedName
+            description: "Name of the medication"
+            tests:
+              - not_null
+          - name: GenericNum
+            description: "Foreign key to the generic medication table"
+          - name: Notes
+            description: "Additional notes or information about the medication"
+          - name: DateTStamp
+            description: "Timestamp when the record was last modified"
+            tests:
+              - not_null
+          - name: RxCui
+            description: "RxNorm Concept Unique Identifier (RxCUI) for the medication"
+            tests:
+              - not_null
+
       - name: pharmclinic
         description: "Pharmacy-clinic relationships that map the associations between pharmacies and clinics"
         columns:
