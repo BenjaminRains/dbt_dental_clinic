@@ -11,7 +11,7 @@ with source as (
         and "SecDateEntry" <= current_date
         and "SecDateEntry" > '2000-01-01'::date
     {% if is_incremental() %}
-        and "SecDateEntry" > (select max(created_at) from {{ this }})
+        and "SecDateEntry" > (select max(_created_at) from {{ this }})
     {% endif %}
 ),
 
@@ -65,9 +65,11 @@ renamed as (
             else false 
         end as has_missing_fee_schedule,
         
-        -- Metadata
-        current_timestamp as _loaded_at
-        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "SecDateEntry"::timestamp as _created_at,
+        coalesce("SecDateTEdit", "SecDateEntry")::timestamp as _updated_at
+
     from source
     left join FeeStats fs on fs.procedure_code_id = source."CodeNum"
     left join ValidFeeSchedules vfs on vfs.fee_schedule_id = source."FeeSched"
