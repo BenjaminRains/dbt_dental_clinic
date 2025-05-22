@@ -88,15 +88,17 @@ models:
             - 2 appointments have insufficient history tracking
             - Both have appointment_status = 2 (Completed)
             - Both are from April-May 2024 (future dates)
-            - Both have only 1 history record when they should have at least 2
-            - They're missing the history record showing when they were marked as completed
+            - Both have only 1 history record with history_action = 0 (Unknown)
+            - Both history timestamps are after the appointment times
+            - Both are missing the initial creation record (history_action = 1)
             
             Business Context: This test verifies that significant status changes
             (like completing an appointment) are properly tracked in the history.
             The two failing records appear to be data entry errors where future
             appointments were incorrectly marked as completed without proper
-            history tracking. This is a data quality issue that should be
-            investigated and corrected.
+            history tracking. The use of history_action = 0 (Unknown) and the
+            missing creation records suggest these may be system-generated records
+            that weren't properly initialized.
           file_path: tests/staging/histappointment_appt_coverage.sql
           type: "data_quality"
           

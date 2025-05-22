@@ -16,6 +16,18 @@ WITH current_appointments AS (
         AND appointment_datetime >= '2023-01-01'
 ),
 
+-- Add a CTE to investigate invalid status codes
+invalid_status_codes AS (
+    SELECT
+        appointment_id,
+        appointment_status,
+        appointment_datetime,
+        patient_id,
+        'Invalid appointment status code: ' || appointment_status::text AS issue_type
+    FROM {{ ref('stg_opendental__appointment') }}
+    WHERE appointment_status NOT IN (1, 2, 3, 5, 6)
+),
+
 last_history_per_appointment AS (
     -- Get the most recent history record for each appointment
     SELECT DISTINCT ON (appointment_id)
@@ -106,5 +118,15 @@ SELECT
     appointment_datetime,
     issue_type
 FROM status_change_without_history
+
+UNION ALL
+
+-- Add invalid status codes to the results
+SELECT 
+    appointment_id,
+    appointment_status,
+    appointment_datetime,
+    issue_type
+FROM invalid_status_codes
 
 ORDER BY appointment_id
