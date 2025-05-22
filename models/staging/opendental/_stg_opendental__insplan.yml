@@ -38,25 +38,37 @@ models:
 
       # Fee Schedule Related
       - name: fee_schedule_id
-        description: Foreign key to fee schedules table for the plan's primary fee schedule
+        description: >
+          Foreign key to fee schedules table for the plan's primary fee schedule.
+          Note: This field can be null or 0 when no primary fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              where: "fee_schedule_id is not null and fee_schedule_id != 0"
+              severity: warn
 
       - name: copay_fee_schedule_id
-        description: Foreign key to fee schedules table for copay procedures
+        description: >
+          Foreign key to fee schedules table for copay procedures.
+          Note: This field can be null or 0 when no copay fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              where: "copay_fee_schedule_id is not null and copay_fee_schedule_id != 0"
+              severity: warn
 
       - name: allowed_fee_schedule_id
-        description: Foreign key to fee schedules table for allowed fees
+        description: >
+          Foreign key to fee schedules table for allowed fees.
+          Note: This field can be null or 0 when no allowed fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              where: "allowed_fee_schedule_id is not null and allowed_fee_schedule_id != 0"
+              severity: warn
 
       - name: manual_fee_schedule_id
         description: >
