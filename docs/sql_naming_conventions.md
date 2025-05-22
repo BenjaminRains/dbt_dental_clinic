@@ -183,18 +183,6 @@ PaymentSummary as (
 )
 ```
 
-## Implementation Notes
-
-- When refactoring existing code, prioritize consistency within individual queries over immediate 
-full compliance
-- New code should adhere to these conventions from the start
-- Comments should be used to clarify naming in complex cases
-
-## Exceptions
-
-In some special cases where direct SQL compatibility with external systems is required, these 
-conventions may be modified. Such exceptions should be documented in the code.
-
 ## Data Type Conversions
 
 ### Boolean Conversions
@@ -228,6 +216,68 @@ explicitly handles the conversion and also provides clarity about the meaning of
 - `IsSigned` → `is_signed`
 
 This pattern should be used consistently across all staging models where boolean flags are stored as smallint in the source data.
+
+## Metadata Columns
+
+**Rule**: All staging models should include the following standardized metadata columns for traceability and model freshness:
+
+### Required Metadata Columns
+- `_loaded_at`: Timestamp when the data was loaded into the data warehouse by the ETL pipeline (use `current_timestamp`)
+- `_created_at`: Timestamp when the record was created in the source system (e.g., OpenDental). Rename an existing source column like `DateEntry`, `SecDateTEntry`, or similar creation timestamp to `_created_at`. Never use `current_timestamp` for this field.
+- `_updated_at`: Timestamp when the record was last updated in the source system. Rename an existing source column like `DateTStamp`, `SecDateTEdit`, or similar update timestamp to `_updated_at`.
+
+### Optional Metadata Columns
+- `_source_system`: Name of the source system (e.g., 'opendental')
+- `_extract_timestamp`: Timestamp when the data was extracted from the source system
+- `_pipeline_id`: Unique identifier for the data pipeline run (e.g., dbt invocation_id)
+
+### Implementation Example
+```sql
+select
+    -- Source columns
+    "PatNum" as patient_id,
+    "DateEntry" as entry_date,
+    
+    -- Required metadata columns
+    current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+    "DateEntry" as _created_at,      -- Rename source creation timestamp
+    coalesce("DateTStamp", "DateEntry") as _updated_at  -- Rename source update timestamp
+
+from {{ source('opendental', 'patient') }}
+```
+
+### Rationale
+- Underscore prefix (`_`) distinguishes metadata columns from business data
+- `_loaded_at` tracks when data was last refreshed in our data warehouse by the ETL pipeline
+- `_created_at` and `_updated_at` track record history in the source system
+- Consistent naming enables standardized freshness checks and data lineage
+
+### Notes
+- `_created_at` must be renamed from an existing source system column that indicates when the record was created
+- Common source columns to rename to `_created_at` include:
+  - `DateEntry` → `_created_at` - When the record was entered
+  - `SecDateTEntry` → `_created_at` - Security timestamp of entry
+  - `CreatedDate` → `_created_at` - Explicit creation date
+  - `InsertDate` → `_created_at` - Date of insertion
+- Common source columns to rename to `_updated_at` include:
+  - `DateTStamp` → `_updated_at` - Last update timestamp
+  - `SecDateTEdit` → `_updated_at` - Security timestamp of last edit
+  - `ModifiedDate` → `_updated_at` - Last modification date
+- When source systems don't provide creation/update timestamps, use the most appropriate available date fields
+- For incremental models, ensure `_updated_at` is included in the unique_key configuration
+- All metadata columns should be documented in the model's YAML file
+
+## Implementation Notes
+
+- When refactoring existing code, prioritize consistency within individual queries over immediate 
+full compliance
+- New code should adhere to these conventions from the start
+- Comments should be used to clarify naming in complex cases
+
+## Exceptions
+
+In some special cases where direct SQL compatibility with external systems is required, these 
+conventions may be modified. Such exceptions should be documented in the code.
 
 ---
 

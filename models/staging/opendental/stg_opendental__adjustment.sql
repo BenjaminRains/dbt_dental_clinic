@@ -167,8 +167,13 @@ renamed as (
             ELSE "SecDateTEdit"
         END::timestamp without time zone as last_modified_at,
         
-        -- Added _loaded_at timestamp
-        current_timestamp as _loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data into data warehouse
+        "DateEntry"::timestamp without time zone as _created_at,  -- Rename source creation timestamp
+        CASE 
+            WHEN "SecDateTEdit" > current_timestamp THEN "DateEntry"
+            ELSE "SecDateTEdit"
+        END::timestamp without time zone as _updated_at  -- Rename source update timestamp
 
     from source
 )
