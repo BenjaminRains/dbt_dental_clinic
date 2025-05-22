@@ -31,9 +31,10 @@ renamed as (
         "CoverageLevel" as coverage_level,
         "TreatArea" as treatment_area,
         
-        -- Meta Fields
-        "SecDateTEntry" as created_at,
-        "SecDateTEdit" as updated_at
+        -- Metadata columns
+        current_timestamp as _loaded_at,
+        "SecDateTEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
 
     from source
 )
