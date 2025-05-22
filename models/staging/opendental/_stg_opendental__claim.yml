@@ -203,7 +203,7 @@ models:
         description: "Number of radiographs attached to claim"
         tests:
           - dbt_utils.expression_is_true:
-              expression: "radiographs is null or (radiographs >= 0 and radiographs <= 50)"
+              expression: "is null or (radiographs >= 0 and radiographs <= 50)"
       - name: attached_images
         description: "Number of images attached to claim"
         tests:
