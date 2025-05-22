@@ -77,18 +77,19 @@ models:
               field: user_id
               severity: warn
 
-      - name: created_at_date
-        description: Date when the fee schedule was created
-        tests:
-          - not_null
-
-      - name: updated_at
-        description: Timestamp of the last update
-        tests:
-          - not_null
-
+      # Metadata columns
       - name: _loaded_at
-        description: Timestamp when the record was loaded
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the fee schedule was created in the source system (OpenDental)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the fee schedule was last updated in the source system (OpenDental)
         tests:
           - not_null
 

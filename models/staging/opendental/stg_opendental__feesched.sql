@@ -11,7 +11,7 @@ with source as (
         and "SecDateEntry" <= current_date
         and "SecDateEntry" > '2000-01-01'::date
     {% if is_incremental() %}
-        and "SecDateEntry" > (select max(created_at_date) from {{ this }})
+        and "SecDateEntry" > (select max(_created_at) from {{ this }})
     {% endif %}
 ),
 
@@ -24,16 +24,20 @@ renamed as (
         "Description" as fee_schedule_description,
         "FeeSchedType" as fee_schedule_type_id,
         "ItemOrder" as display_order,
-        "IsHidden"::boolean as is_hidden,
+        CASE 
+            WHEN "IsHidden" = 1 THEN true
+            WHEN "IsHidden" = 0 THEN false
+            ELSE null 
+        END as is_hidden,
         "IsGlobal"::smallint as is_global_flag,
         
         -- Meta fields
         "SecUserNumEntry" as created_by_user_id,
-        "SecDateEntry"::date as created_at_date,
-        "SecDateTEdit"::timestamp as updated_at,
         
-        -- Metadata
-        current_timestamp as _loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "SecDateEntry"::timestamp as _created_at,
+        coalesce("SecDateTEdit", "SecDateEntry")::timestamp as _updated_at
 
     from source
 )
