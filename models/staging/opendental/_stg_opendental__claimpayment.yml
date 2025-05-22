@@ -36,10 +36,17 @@ models:
           - dbt_utils.positive_value
       
       - name: check_number
-        description: Check number or payment reference from the insurance carrier
+        description: |
+          Check number or payment reference from the insurance carrier.
+          Note: Empty check numbers are used as a valid value in the system (2,425 records).
+          Some carriers (Aetna, United Healthcare, Cigna) may use the same check number
+          for multiple payments on the same day, particularly with payment type 261.
         tests:
           - not_null
-          - unique
+          - unique:
+              config:
+                severity: warn
+                where: "check_number is not null"  # Only test uniqueness for non-null values
       
       - name: bank_branch
         description: Bank branch information for the payment
