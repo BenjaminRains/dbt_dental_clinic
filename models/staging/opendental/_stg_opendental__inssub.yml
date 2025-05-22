@@ -79,20 +79,22 @@ models:
       - name: subscriber_external_id
         description: External identifier for the subscriber (often used for insurance claims)
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "subscriber_external_id is null or length(trim(subscriber_external_id)) > 0"
+          - test_string_not_empty:
+              allow_null: true
 
       - name: benefit_notes
         description: Notes regarding the benefits
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "benefit_notes is null or length(trim(benefit_notes)) <= 1000"
+          - test_string_length:
+              max_length: 1000
+              allow_null: true
 
       - name: subscriber_notes
         description: Notes about the subscriber
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "subscriber_notes is null or length(trim(subscriber_notes)) <= 1000"
+          - test_string_length:
+              max_length: 1000
+              allow_null: true
 
       - name: entry_date
         description: Date when the record was created
