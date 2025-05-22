@@ -12,6 +12,7 @@ models:
       - These general adjustments affect the overall patient balance
       - Both procedure-specific and general adjustments are included
       - General adjustments (procedure_id = 0) are valid and important for AR analysis
+      - Note: Some small reallocations (type 235) and insurance writeoffs (type 188) are missing documentation but are valid business transactions
 
     columns:
       - name: adjustment_id
