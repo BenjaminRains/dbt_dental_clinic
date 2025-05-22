@@ -94,12 +94,12 @@ models:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system
+        description: Timestamp when the record was created in the source system. For legacy records where SecDateEntry is NULL, this defaults to SecDateTEdit (last update timestamp)
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+        description: Timestamp when the record was last updated in the source system (SecDateTEdit)
 
       # Legacy metadata (for compatibility)
       - name: user_entry_id
