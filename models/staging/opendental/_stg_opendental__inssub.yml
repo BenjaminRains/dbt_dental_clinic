@@ -112,8 +112,8 @@ models:
           - test_date_after:
               compare_column: entry_date
               allow_null: false
-          - dbt_utils.expression_is_true:
-              expression: "last_modified_at <= current_timestamp"
+          - test_timestamp_not_future:
+              allow_null: false
 
       - name: subscriber_status
         description: Current status of the subscriber (ACTIVE, TERMINATED, or FUTURE_TERMINATED)
