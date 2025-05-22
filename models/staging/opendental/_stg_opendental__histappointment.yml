@@ -84,8 +84,21 @@ models:
           description: >
             Informational analysis that examines whether appointments with significant 
             status changes have corresponding history records tracking those changes.
+            Data analysis shows:
+            - 2 appointments have insufficient history tracking
+            - Both have appointment_status = 2 (Completed)
+            - Both are from April-May 2024 (future dates)
+            - Both have only 1 history record when they should have at least 2
+            - They're missing the history record showing when they were marked as completed
+            
+            Business Context: This test verifies that significant status changes
+            (like completing an appointment) are properly tracked in the history.
+            The two failing records appear to be data entry errors where future
+            appointments were incorrectly marked as completed without proper
+            history tracking. This is a data quality issue that should be
+            investigated and corrected.
           file_path: tests/staging/histappointment_appt_coverage.sql
-          type: "informational"
+          type: "data_quality"
           
         - name: histappointment_missing_records
           description: >
