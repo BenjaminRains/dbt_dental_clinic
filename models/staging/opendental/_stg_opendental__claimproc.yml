@@ -178,6 +178,21 @@ models:
       - name: security_hash
         description: Security hash for the record
 
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in OpenDental (from DateEntry)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in OpenDental (from SecDateTEdit)
+        tests:
+          - not_null
+
     tests:
       - dbt_utils.relationships_where:
           to: ref('stg_opendental__claim')

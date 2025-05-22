@@ -72,7 +72,15 @@ renamed as (
         "CodeSent" as code_sent,
         "EstimateNote" as estimate_note,
         "ClaimAdjReasonCodes" as claim_adjustment_reason_codes,
-        "SecurityHash" as security_hash
+        "SecurityHash" as security_hash,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        case 
+            when "DateEntry" is null or "DateEntry" = '0001-01-01' then "SecDateEntry"
+            else "DateEntry"
+        end as _created_at,
+        "SecDateTEdit" as _updated_at
         
     from source
 )
