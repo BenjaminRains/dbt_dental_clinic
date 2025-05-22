@@ -176,12 +176,12 @@ models:
               config:
                 severity: error
       - name: is_employment_related
-        description: "Flag indicating if claim is related to employment (0=No, 1=Yes)"
+        description: "Flag indicating if claim is related to employment (2=No, other values not used)"
         tests:
           - accepted_values:
-              values: [0, 1]
+              values: [2]
           - dbt_utils.expression_is_true:
-              expression: "is null or is_employment_related in (0, 1)"
+              expression: "is null or is_employment_related = 2"
       - name: is_ortho
         description: "Flag indicating if claim is for orthodontic treatment (0=No, 1=Yes)"
         tests:
