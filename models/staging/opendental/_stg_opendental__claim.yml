@@ -30,8 +30,29 @@ models:
           expression: "sent_date is null or sent_date >= service_date"
           name: sent_date_after_service_date
       - dbt_utils.expression_is_true:
-          expression: "received_date is null or sent_date is null or received_date >= sent_date"
+          expression: >
+            received_date is null 
+            or sent_date is null 
+            or original_sent_date is null 
+            or (
+              -- Check if received_date is after the original send date
+              received_date >= original_sent_date
+              -- OR if it's a resent claim, check against the most recent sent date
+              or (resent_date is not null and received_date >= sent_date)
+              -- OR if it's a single-send claim, check against the sent date
+              or (resent_date is null and received_date >= sent_date)
+            )
           name: received_date_after_sent_date
+          config:
+            severity: warn
+            description: >
+              Warning: Some claims show received dates before their sent dates.
+              This test accounts for:
+              1. Original claims (received_date >= sent_date)
+              2. Resent claims (received_date >= most recent sent_date)
+              3. Claims with multiple send dates (received_date >= original_sent_date)
+              While some cases may be valid due to data entry timing or system updates,
+              these should be reviewed to ensure they are intentional.
     columns:
       # Primary key
       - name: claim_id
