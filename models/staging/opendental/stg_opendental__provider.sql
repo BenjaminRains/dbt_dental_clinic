@@ -72,11 +72,10 @@ staged as (
         -- Relations
         "EmailAddressNum" as email_address_id,
         
-        -- Metadata
-        current_timestamp as dbt_created_at,
-        '{{ invocation_id }}' as dbt_pipeline_id,
-        '{{ this.name }}' as dbt_model,
-        '{{ this.schema }}' as dbt_schema
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateEntry" as _created_at,
+        coalesce("DateTStamp", "DateEntry") as _updated_at
 
     from source
 )
