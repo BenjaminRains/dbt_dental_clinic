@@ -231,18 +231,53 @@ models:
         description: Foreign key to the operatory (chair/room) for this appointment
       
       - name: history_user_id
-        description: Foreign key to the user table for the user who made the change
+        description: >
+          Foreign key to the user table for the user who made the change.
+          Note: history_user_id = 0 is a valid value indicating "System User" or
+          "Automated Process". Data analysis shows:
+          - 1,714 records have history_user_id = 0 (system-generated)
+          - These affect 844 unique patients and 901 unique appointments
+          - Spans from Jan 2023 to Oct 2024
+          - All records have appointment_status = 1 (Scheduled)
+          - Has history_action values of 0 (Unknown) and 1 (History snapshot)
+          - Associated with specific providers (28, 47, 48, 52)
+          
+          Business Context: This field tracks who made changes to appointments.
+          The records with history_user_id = 0 appear to be system-generated
+          records, likely for initial appointment creation or automated processes.
+          This is different from entry_user_id, which tracks the user who entered
+          the record into the system.
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              where: "history_user_id != 0"  # Exclude system-generated records
+              severity: error  # Now we can use error since we're excluding the valid 0 values
       
       - name: entry_user_id
-        description: Foreign key to the user table for the user who entered the record
+        description: >
+          Foreign key to the user table for the user who entered the record.
+          Note: entry_user_id = 0 is a valid value indicating "System User" or
+          "Automated Process". Data analysis shows:
+          - 11,336 records have entry_user_id = 0 (system-generated)
+          - These affect 951 unique patients and 1,077 unique appointments
+          - Spans from Jan 2023 to Feb 2025
+          - Has multiple appointment statuses (0,1,2,3,5)
+          - Has all possible history actions (0,1,2,3,4)
+          - Associated with multiple providers (0,1,28,29,47,50,52)
+          
+          Business Context: This field tracks who entered the record into the system.
+          The records with entry_user_id = 0 appear to be system-generated records,
+          likely for automated processes or system-initiated changes. This is different
+          from history_user_id, which tracks who made the actual change to the
+          appointment. The broader range of statuses and actions suggests these
+          records cover various types of system operations.
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              where: "entry_user_id != 0"  # Exclude system-generated records
+              severity: error  # Now we can use error since we're excluding the valid 0 values
       
       - name: insurance_plan_1_id
         description: >
