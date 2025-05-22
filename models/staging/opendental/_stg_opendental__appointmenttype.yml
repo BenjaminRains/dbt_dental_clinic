@@ -41,7 +41,7 @@ models:
         description: Numeric value determining the display order of appointment types
       
       - name: is_hidden
-        description: Flag indicating if the appointment type is hidden from view (1 for hidden, 0 for visible)
+        description: Boolean flag indicating if the appointment type is hidden from view (true for hidden, false for visible)
       
       - name: pattern
         description: Pattern associated with this appointment type
@@ -57,3 +57,13 @@ models:
       
       - name: blockout_types
         description: Types of blockouts associated with this appointment type
+      
+      # Metadata columns
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      
+      - name: _created_at
+        description: Timestamp when the record was created in the source system
+      
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system

@@ -11,12 +11,21 @@ renamed as (
         "AppointmentTypeName" as appointment_type_name,
         "AppointmentTypeColor" as appointment_type_color,
         "ItemOrder" as item_order,
-        "IsHidden" as is_hidden,
+        CASE 
+            WHEN "IsHidden" = 1 THEN true
+            WHEN "IsHidden" = 0 THEN false
+            ELSE null 
+        END as is_hidden,
         "Pattern" as pattern,
         "CodeStr" as code_str,
         "CodeStrRequired" as code_str_required,
         "RequiredProcCodesNeeded" as required_proc_codes_needed,
-        "BlockoutTypes" as blockout_types
+        "BlockoutTypes" as blockout_types,
+        
+        -- metadata columns
+        current_timestamp as _loaded_at,
+        current_timestamp as _created_at,
+        current_timestamp as _updated_at
     from source
 )
 
@@ -34,4 +43,9 @@ select
     null as code_str,
     null as code_str_required,
     null as required_proc_codes_needed,
-    null as blockout_types
+    null as blockout_types,
+    
+    -- metadata columns
+    current_timestamp as _loaded_at,
+    current_timestamp as _created_at,
+    current_timestamp as _updated_at
