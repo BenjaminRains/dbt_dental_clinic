@@ -141,8 +141,8 @@ models:
           - test_date_after:
               compare_column: _created_at
               allow_null: false
-          - dbt_utils.expression_is_true:
-              expression: "_loaded_at <= current_timestamp"
+          - test_timestamp_not_future:
+              allow_null: false
 
       - name: _created_at
         description: Timestamp when the record was created in the source system (OpenDental)
