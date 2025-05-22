@@ -66,8 +66,10 @@ renamed as (
         "ItemOrderPlanned"::integer as item_order_planned,
         "SecurityHash"::varchar as security_hash,
         
-        -- Metadata
-        current_timestamp as _loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "SecDateTEntry" as _created_at,   -- Rename source creation timestamp
+        "DateTStamp" as _updated_at       -- Rename source update timestamp
 
     from source
 
