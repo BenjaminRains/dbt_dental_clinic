@@ -169,11 +169,27 @@ models:
               severity: error
       
       - name: hygienist_id
-        description: Foreign key to the provider table for the hygienist
+        description: >
+          Foreign key to the provider table for the hygienist.
+          Note: hygienist_id = 0 is a valid value indicating "No Hygienist".
+          Data analysis shows:
+          - 82,213 records have hygienist_id = 0 (no hygienist)
+          - These affect 2,952 unique patients and 9,941 unique appointments
+          - Spans from Jan 2023 to Feb 2025
+          - Associated with multiple appointment types and providers
+          - Has all possible appointment statuses and history actions
+          
+          Business Context: This field tracks hygienist assignments over time.
+          The high number of records with hygienist_id = 0 reflects that many
+          appointments don't require a hygienist, which is normal in dental
+          practices. This is similar to how we handle provider_id = 0 for
+          unassigned providers.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              where: "hygienist_id != 0"  # Exclude records with no hygienist
+              severity: error  # Now we can use error since we're excluding the valid 0 values
       
       - name: assistant_id
         description: Foreign key to the provider table for the assistant
