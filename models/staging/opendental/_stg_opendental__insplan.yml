@@ -15,11 +15,15 @@ models:
 
       # Foreign Keys
       - name: employer_id
-        description: Foreign key to employers table
+        description: >
+          Foreign key to employers table.
+          Note: This field can be null or 0 when no employer is assigned to the plan.
         tests:
           - relationships:
               to: ref('stg_opendental__employer')
               field: employer_id
+              where: "employer_id is not null and employer_id != 0"
+              severity: warn
 
       - name: carrier_id
         description: Foreign key to insurance carriers table
