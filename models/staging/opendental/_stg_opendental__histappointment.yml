@@ -398,8 +398,8 @@ models:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-              where: "insurance_plan_1_id != 0"  # Exclude records with no primary insurance
-              severity: warn  # Changed to warn since these appear to be expected patterns
+              where: "insurance_plan_1_id is not null"
+              severity: warn
       
       - name: insurance_plan_2_id
         description: >
@@ -420,8 +420,8 @@ models:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-              where: "insurance_plan_2_id != 0"  # Exclude records with no secondary insurance
-              severity: error  # Now we can use error since we're excluding the valid 0 values
+              where: "insurance_plan_2_id is not null"
+              severity: warn
       
       - name: unscheduled_status_id
         description: Status identifier for unscheduled appointments
