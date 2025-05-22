@@ -29,7 +29,12 @@ renamed as (
         
         -- Timestamps and Dates
         "DateTEntry" as created_at,
-        "ProcDate" as procedure_date
+        "ProcDate" as procedure_date,
+        
+        -- Required Metadata Columns
+        current_timestamp as _loaded_at,
+        "DateTEntry" as _created_at,
+        coalesce("DateTStamp", "DateTEntry") as _updated_at
     
     from source
 )
