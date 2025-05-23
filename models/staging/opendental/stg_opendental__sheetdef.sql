@@ -19,11 +19,15 @@ renamed as (
         "IsMultiPage" as is_multi_page,
         "BypassGlobalLock" as bypass_global_lock,
         "HasMobileLayout" as has_mobile_layout,
-        "DateTCreated" as created_at,
         "RevID" as rev_id,
         "AutoCheckSaveImage" as auto_check_save_image,
-        "AutoCheckSaveImageDocCategory" as auto_check_save_image_doc_category
-    
+        "AutoCheckSaveImageDocCategory" as auto_check_save_image_doc_category,
+        
+        -- Metadata
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "DateTCreated" as _created_at,   -- When the record was created in source
+        "DateTCreated" as _updated_at    -- Last update timestamp (using creation date since no update timestamp available)
+
     from source
 )
 
