@@ -102,9 +102,14 @@ renamed as (
         "TaxAmt" as tax_amount,
         "DiscountPlanAmt" as discount_plan_amount,
         
-        -- Metadata
-        '{{ invocation_id }}' as _airbyte_ab_id,
-        current_timestamp as _airbyte_loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,                    -- When ETL pipeline loaded the data
+        "DateEntryC" as _created_at,                       -- When record was created in source system
+        coalesce("DateTStamp", "DateEntryC") as _updated_at, -- When record was last updated
+        
+        -- Optional metadata
+        '{{ invocation_id }}' as _invocation_id,           -- dbt invocation ID for lineage tracking
+        current_timestamp as _extract_timestamp            -- When data was extracted from source
     from source
 )
 

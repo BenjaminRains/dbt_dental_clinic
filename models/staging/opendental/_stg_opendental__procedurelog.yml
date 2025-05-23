@@ -362,9 +362,35 @@ models:
         tests:
           - is_boolean_or_null
       
-      # Metadata columns
-      - name: _airbyte_ab_id
-        description: Airbyte unique identifier
+      # Required metadata columns
+      - name: _loaded_at
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL pipeline.
+          This is automatically set to current_timestamp when the model runs.
+        tests:
+          - not_null
       
-      - name: _airbyte_loaded_at
-        description: Timestamp when the record was loaded
+      - name: _created_at
+        description: >
+          Timestamp when the record was created in the source system.
+          This is mapped from the DateEntryC field in OpenDental.
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: >
+          Timestamp when the record was last updated in the source system.
+          This is mapped from DateTStamp, falling back to DateEntryC if DateTStamp is null.
+        tests:
+          - not_null
+      
+      # Optional metadata columns
+      - name: _invocation_id
+        description: >
+          Unique identifier for the dbt run that processed this record.
+          Used for data lineage tracking and debugging pipeline issues.
+      
+      - name: _extract_timestamp
+        description: >
+          Timestamp when the data was extracted from the source system.
+          This is automatically set to current_timestamp when the model runs.
