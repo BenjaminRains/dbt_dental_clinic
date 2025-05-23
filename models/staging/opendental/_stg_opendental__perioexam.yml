@@ -27,5 +27,20 @@ models:
       - name: note
         description: Text notes associated with the periodontal examination
 
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (using ExamDate)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (using DateTMeasureEdit)
+        tests:
+          - not_null
+
     config:
       tags: ['staging', 'opendental', 'periodontal']
