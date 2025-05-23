@@ -6,6 +6,13 @@ models:
       Staging model for task subscriptions from OpenDental. Contains information about which
       users are subscribed to receive notifications for specific tasks or task lists. This model
       supports the task notification and alert system in the dental clinic.
+
+      Known Data Quality Issues:
+      - 52 task subscriptions reference tasks that don't exist in the source system
+      - 6 task subscriptions reference task lists that don't exist in the source system
+      - These orphaned references are likely due to deleted tasks/lists or data migration issues
+      - The relationship tests are configured as warnings to allow the pipeline to continue
+      - These subscriptions should be reviewed and either reassigned to valid tasks/lists or removed
     columns:
       # Primary Key
       - name: task_subscription_id
