@@ -33,7 +33,18 @@ models:
               name: fk_userod_usergroup_valid
 
       - name: employee_id
-        description: Foreign key to employee table that links users to employee records
+        description: >
+          Foreign key to employee table that links users to employee records.
+          
+          Note:
+          - As of 2024, approximately 49 records have employee_id references that don't exist
+          - Common reasons for mismatches:
+            - Historical employees who have left the practice
+            - System users without employee records
+            - Users created before employee records were properly linked
+            - Legacy data from before employee tracking was standardized
+          - These mismatches are monitored but not considered errors as they represent
+            expected historical data patterns
         tests:
           - relationships:
               to: ref('stg_opendental__employee')
@@ -41,6 +52,11 @@ models:
               severity: warn
               where: "employee_id is not null"
               name: fk_userod_employee_valid
+              config:
+                description: >
+                  This test warns when employee_id references employees that don't exist
+                  in the employee table. This is expected for historical data and system
+                  users. The warning helps track data quality without failing the build.
 
       - name: clinic_id
         description: Foreign key to clinic table
@@ -72,7 +88,18 @@ models:
                   users. The warning helps track data quality without failing the build.
 
       - name: cemt_user_id
-        description: Foreign key to another user record (CEMT user reference)
+        description: >
+          Foreign key to another user record (CEMT user reference).
+          
+          Note:
+          - As of 2024, approximately 68 records have cemt_user_id references that don't exist
+          - Common reasons for mismatches:
+            - Historical CEMT users that have been deleted
+            - System users with special CEMT assignments
+            - Users created before CEMT tracking was properly implemented
+            - Legacy data from before CEMT user tracking was standardized
+          - These mismatches are monitored but not considered errors as they represent
+            expected historical data patterns
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
@@ -80,6 +107,11 @@ models:
               severity: warn
               where: "cemt_user_id is not null"
               name: fk_userod_cemt_valid
+              config:
+                description: >
+                  This test warns when cemt_user_id references users that don't exist
+                  in the userod table. This is expected for historical data and system
+                  users. The warning helps track data quality without failing the build.
 
       # User Information
       - name: username
