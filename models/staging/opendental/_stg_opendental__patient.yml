@@ -142,12 +142,22 @@ models:
       
       # Dates
       - name: birth_date
-        description: "Patient's date of birth"
+        description: >
+          Patient's date of birth.
+          
+          Note: 
+          - NULL values are allowed for non-active patients (patient_status != 0)
+          - As of 2025, approximately 2,614 patients have NULL birth dates
+          - Most of these patients have first visits from the 1990s or 2006
+          - Stakeholders should collect birth date information when these patients visit
         tests:
           - dbt_utils.expression_is_true:
               expression: "IS NOT NULL OR patient_status != 0"
               column_name: birth_date
               name: birth_date_required_for_active_patients
+              config:
+                severity: warn
+                description: "Active patients should have birth dates, but some historical records may be missing this information"
           - dbt_utils.expression_is_true:
               expression: "< current_date"
               column_name: birth_date
