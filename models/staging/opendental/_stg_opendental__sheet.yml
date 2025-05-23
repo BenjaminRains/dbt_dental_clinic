@@ -2,34 +2,91 @@ version: 2
 
 models:
   - name: stg_opendental__sheet
-    description: Staging model for OpenDental sheets. Sheets are forms or documents that can be associated with patients, containing various types of clinical information.
+    description: Staging model for sheet records from OpenDental. Contains information about forms, documents, and other sheet-based records in the system.
     columns:
       - name: sheet_id
-        description: Primary key of the sheet table
+        description: Primary key - unique identifier for each sheet record
         tests:
           - unique
           - not_null
 
       # Foreign Keys
       - name: patient_id
-        description: Foreign key to the patient table. References patient_id in stg_opendental__patient
+        description: Foreign key to patient table
         tests:
-          - not_null:
-              severity: warn
+          - not_null
       
       - name: sheet_def_id
-        description: Foreign key to the definition table which contains the template information. References definition_id in stg_opendental__definition
+        description: Foreign key to sheet definition table
       
       - name: doc_id
-        description: Foreign key to the document table. References document_id in stg_opendental__document
+        description: Foreign key to document table
       
       - name: clinic_id
-        description: Legacy clinic identifier (not actively used - single clinic system)
+        description: Foreign key to clinic table
       
       - name: web_form_sheet_id
-        description: Identifier for web-based forms
+        description: Unique identifier for web-based forms
 
-      # [Rest of the columns remain the same...]
+      # Sheet Properties
+      - name: sheet_type
+        description: Type of sheet (e.g., form, document, report)
+      
+      - name: font_size
+        description: Font size used in the sheet
+      
+      - name: font_name
+        description: Name of the font used in the sheet
+      
+      - name: width
+        description: Width of the sheet
+      
+      - name: height
+        description: Height of the sheet
+
+      # Flags
+      - name: is_landscape
+        description: Boolean flag indicating if sheet is in landscape orientation
+      
+      - name: show_in_terminal
+        description: Boolean flag indicating if sheet should be shown in terminal
+      
+      - name: is_web_form
+        description: Boolean flag indicating if sheet is a web form
+      
+      - name: is_multi_page
+        description: Boolean flag indicating if sheet spans multiple pages
+      
+      - name: is_deleted
+        description: Boolean flag indicating if sheet has been deleted
+      
+      - name: has_mobile_layout
+        description: Boolean flag indicating if sheet has a mobile-specific layout
+
+      # Additional Fields
+      - name: internal_note
+        description: Internal notes about the sheet
+      
+      - name: description
+        description: Description of the sheet's purpose or content
+      
+      - name: revision_id
+        description: Version/revision identifier for the sheet
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - sheet_id
 
     # Updated Table relationships
     meta:

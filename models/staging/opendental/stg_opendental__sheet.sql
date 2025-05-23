@@ -14,10 +14,6 @@ renamed as (
         "ClinicNum" as clinic_id,
         "WebFormSheetID" as web_form_sheet_id,
         
-        -- Timestamps
-        "DateTimeSheet" as sheet_datetime,
-        "DateTSheetEdited" as sheet_edited_datetime,
-        
         -- Sheet Properties
         "SheetType" as sheet_type,
         "FontSize" as font_size,
@@ -36,7 +32,12 @@ renamed as (
         -- Additional Fields
         "InternalNote" as internal_note,
         "Description" as description,
-        "RevID" as revision_id
+        "RevID" as revision_id,
+        
+        -- Metadata
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "DateTimeSheet" as _created_at,   -- When the record was created in source
+        "DateTSheetEdited" as _updated_at -- Last update timestamp
 
     from source
     where "DateTimeSheet" >= '2023-01-01'
