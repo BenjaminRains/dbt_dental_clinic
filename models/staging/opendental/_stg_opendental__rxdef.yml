@@ -44,3 +44,12 @@ models:
 
       - name: patient_instruction
         description: Detailed instructions for the patient
+
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Creation timestamp is not available in the source system (OpenDental)
+
+      - name: _updated_at
+        description: Timestamp when the data was last loaded by the ETL pipeline
