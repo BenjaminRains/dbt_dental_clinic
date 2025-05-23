@@ -22,3 +22,21 @@ models:
         description: Foreign key to the clinic table
         tests:
           - not_null
+
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the data warehouse (using current_timestamp as no source timestamp available)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the data warehouse (using current_timestamp as no source timestamp available)
+        tests:
+          - not_null
+
+    config:
+      tags: ['staging', 'opendental', 'pharmacy']
