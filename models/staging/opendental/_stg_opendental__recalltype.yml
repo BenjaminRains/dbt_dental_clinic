@@ -6,6 +6,10 @@ models:
       Staging model for OpenDental recall types.
       Recall types define different kinds of patient recalls
       with their associated intervals and procedures.
+    config:
+      materialized: incremental
+      unique_key: recall_type_id
+      schema: staging
     columns:
       - name: recall_type_id
         description: "Primary key - Unique identifier for each recall type"
@@ -28,5 +32,17 @@ models:
       - name: append_to_special
         description: "Flag indicating whether to append notes to the special field (0=No, 1=Yes)"
 
-      - name: loaded_at
-        description: "Timestamp when this record was loaded into the warehouse"
+      - name: _loaded_at
+        description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when this record was created in the source system"
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when this record was last updated in the source system"
+        tests:
+          - not_null
