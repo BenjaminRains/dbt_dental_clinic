@@ -10,6 +10,12 @@ models:
         tests:
           - unique
           - not_null
+          # This test verifies that every verification record has at least one corresponding history record.
+          # Note: The reverse relationship (history to verification) has 1,987 mismatches as documented in
+          # docs/data_quality/insurance_verification_orphaned_records.md.
+          - relationships:
+              to: ref('stg_opendental__insverifyhist')
+              field: insurance_verify_id
 
       - name: user_id
         description: Foreign key - ID of the user who created the verification record
@@ -81,11 +87,6 @@ models:
           field: inssub_id
           from_condition: "verify_type = 1"
           to_condition: "inssub_id is not null"
-
-      # Test that each record has a corresponding history record
-      - relationships:
-          to: ref('stg_opendental__insverifyhist')
-          field: insurance_verify_id
 
     config:
       tags: ['staging', 'insurance', 'daily']
