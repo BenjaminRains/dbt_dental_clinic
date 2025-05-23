@@ -15,8 +15,8 @@ renamed as (
         
         -- Required metadata columns
         current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTStamp" as _created_at,     -- Rename source creation timestamp
-        "DateTStamp" as _updated_at      -- Rename source update timestamp
+        "DateTStamp" as _created_at,     -- When the record was created in source
+        "DateTStamp" as _updated_at      -- Last update timestamp
 
     from source
 )

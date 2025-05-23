@@ -36,17 +36,18 @@ models:
         tests:
           - not_null
 
+      # Metadata columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system
+        description: Timestamp when the record was created in the source system (OpenDental), sourced from DateTStamp
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+        description: Timestamp when the record was last updated in the source system (OpenDental), sourced from DateTStamp
         tests:
           - not_null
