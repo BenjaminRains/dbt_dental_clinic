@@ -12,7 +12,7 @@ models:
        See docs/data_quality/insurance_verification_orphaned_records.md for analysis.
 
     columns:
-      - name: insurance_verifyhist_id
+      - name: insurance_verify_history_id
         description: Primary key for the insurance verification history record
         tests:
           - unique
@@ -99,35 +99,30 @@ models:
               to: ref('stg_opendental__user')
               field: user_id
 
+      - name: verify_user_id
+        description: ID of the user who verified the record
+        tests:
+          - not_null
+
       - name: note
         description: Additional notes about the verification
 
-      - name: next_history_id
-        description: ID of the next history record in the verification chain
-        tests:
-          - relationships:
-              to: ref('stg_opendental__insverifyhist')
-              field: insurance_verifyhist_id
+      - name: hours_available_for_verification
+        description: Number of hours available for verification activity
 
-      - name: prev_history_id
-        description: ID of the previous history record in the verification chain
-        tests:
-          - relationships:
-              to: ref('stg_opendental__insverifyhist')
-              field: insurance_verifyhist_id
-
+      # Metadata columns
       - name: _loaded_at
-        description: Timestamp when the record was loaded into the data warehouse
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system
+        description: Timestamp when the record was created in the source system (OpenDental)
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+        description: Timestamp when the record was last updated in the source system (OpenDental)
         tests:
           - not_null
 

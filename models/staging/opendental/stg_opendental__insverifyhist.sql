@@ -29,7 +29,12 @@ renamed as (
         -- Attributes
         "VerifyType" as verify_type,
         "Note" as note,
-        "HoursAvailableForVerification" as hours_available_for_verification
+        "HoursAvailableForVerification" as hours_available_for_verification,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTimeEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
 
     from source
 )
