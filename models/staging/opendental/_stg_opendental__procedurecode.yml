@@ -197,12 +197,26 @@ models:
         description: Default revenue code for billing
       
       - name: default_provider_id
-        description: ID of the default provider for this procedure
+        description: >
+          ID of the default provider for this procedure. This field may contain references to
+          providers that no longer exist in the system (historical providers) or special system
+          provider IDs (e.g., provider_id = 0 for system-generated procedures). The relationship
+          test is set to 'warn' severity to monitor these expected mismatches without failing
+          the build. Common reasons for mismatches:
+          - Historical providers who have left the practice
+          - System-generated procedures (provider_id = 0)
+          - Procedures that were created before provider records were properly linked
+          - Legacy data from before provider tracking was implemented
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
               severity: warn
+              config:
+                description: >
+                  This test warns when default_provider_id references providers that don't exist
+                  in the provider table. This is expected for historical data and system-generated
+                  procedures. The warning helps track data quality without failing the build.
       
       - name: canada_time_units
         description: Time units specific to Canadian dental coding
