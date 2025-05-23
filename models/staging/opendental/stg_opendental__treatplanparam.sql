@@ -29,7 +29,12 @@ renamed as (
         "ShowTotals" as show_totals,
         "ShowCompleted" as show_completed,
         "ShowFees" as show_fees,
-        "ShowIns" as show_insurance
+        "ShowIns" as show_insurance,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        current_timestamp as _created_at, -- Since no creation timestamp exists in source
+        current_timestamp as _updated_at  -- Since no update timestamp exists in source
     from source
 )
 

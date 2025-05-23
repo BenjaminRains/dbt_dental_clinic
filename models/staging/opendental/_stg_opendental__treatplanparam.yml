@@ -7,12 +7,14 @@ models:
       for treatment plans. Each record contains configuration options for how a treatment plan
       should be displayed and what information should be shown.
     columns:
+      # Primary Key
       - name: treatplan_param_id
         description: Unique identifier for the treatment plan parameters
         tests:
           - unique
           - not_null
       
+      # Foreign Keys
       - name: patient_id
         description: Foreign key to the patient
         tests:
@@ -26,6 +28,7 @@ models:
               to: ref('stg_opendental__treatplan')
               field: treatment_plan_id
       
+      # Display Parameters
       - name: show_discount
         description: Flag indicating whether discounts should be shown (0=No, 1=Yes)
       
@@ -46,6 +49,14 @@ models:
       
       - name: show_insurance
         description: Flag indicating whether insurance information should be shown (0=No, 1=Yes)
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: Timestamp when the ETL pipeline loaded the data
+      - name: _created_at
+        description: Timestamp when the parameters were created (using current_timestamp since source lacks creation timestamp)
+      - name: _updated_at
+        description: Timestamp when the parameters were last updated (using current_timestamp since source lacks update timestamp)
 
     # Relationships with other models
     meta:
