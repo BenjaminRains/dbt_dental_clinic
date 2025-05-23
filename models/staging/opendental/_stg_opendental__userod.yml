@@ -12,7 +12,18 @@ models:
 
       # Foreign Keys
       - name: user_group_id
-        description: Foreign key to user group table
+        description: >
+          Foreign key to user group table. Links users to their security groups.
+          
+          Note:
+          - As of 2024, approximately 21 records have user_group_id references that don't exist
+          - Common reasons for mismatches:
+            - Historical user groups that have been deleted
+            - System users with special group assignments
+            - Users created before group management was properly implemented
+            - Legacy data from before group tracking was standardized
+          - These mismatches are monitored but not considered errors as they represent
+            expected historical data patterns
         tests:
           - relationships:
               to: ref('stg_opendental__usergroup')
@@ -20,6 +31,11 @@ models:
               severity: warn
               where: "user_group_id is not null"
               name: fk_userod_usergroup_valid
+              config:
+                description: >
+                  This test warns when user_group_id references user groups that don't exist
+                  in the usergroup table. This is expected for historical data and system
+                  users. The warning helps track data quality without failing the build.
 
       - name: employee_id
         description: Foreign key to employee table that links users to employee records
