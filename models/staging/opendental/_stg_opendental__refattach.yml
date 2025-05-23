@@ -24,7 +24,7 @@ models:
               severity: warn
               config:
                 description: >
-                  487 orphaned referral attachments found.
+                  497 orphaned referral attachments found.
                   Most are single occurrences per patient,
                   suggesting these might be historical or deleted referrals.
 
