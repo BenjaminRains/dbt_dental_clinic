@@ -2,63 +2,83 @@ version: 2
 
 models:
   - name: stg_opendental__task
-    description: Staging model for OpenDental tasks. Contains records of tasks created on or after January 1st, 2023.
+    description: >
+      Staging model for task records from OpenDental. Contains information about tasks, reminders, and to-do items
+      associated with patients, procedures, and other entities in the system.
     columns:
       # Primary Key
       - name: task_id
-        description: Unique identifier for the task
+        description: Primary key - unique identifier for each task
         tests:
           - unique
           - not_null
 
       # Foreign Keys
       - name: task_list_id
-        description: Foreign key to the task list this task belongs to
+        description: Foreign key to the task list table
       - name: key_id
-        description: Related identifier depending on the object type
+        description: Foreign key to the related entity (varies based on object_type)
       - name: from_id
-        description: Identifier for the entity that created the task
+        description: Foreign key to the task creator
       - name: user_id
-        description: Identifier of the user assigned to the task
+        description: Foreign key to the user assigned to the task
       - name: priority_def_id
-        description: Identifier for the task's priority definition
+        description: Foreign key to the priority definition table
       - name: triage_category_id
-        description: Identifier for the task's triage category
+        description: Foreign key to the triage category table
 
       # Date and Timestamps
       - name: task_date
-        description: The date associated with the task
+        description: Date when the task is due or scheduled
       - name: entry_timestamp
-        description: Timestamp when the task was entered into the system
+        description: Timestamp when the task was created
       - name: finished_timestamp
-        description: Timestamp when the task was marked as finished
+        description: Timestamp when the task was completed
       - name: original_timestamp
-        description: Timestamp when the task was originally created
+        description: Original creation timestamp of the task
       - name: last_edit_timestamp
-        description: Timestamp of the last edit to the task
+        description: Timestamp of the last modification to the task
 
       # Attributes
       - name: description
         description: Main description of the task
       - name: task_status
-        description: Status code of the task (e.g., pending, completed, etc.)
+        description: Current status of the task
       - name: is_repeating
-        description: Flag indicating if this is a repeating task
+        description: Flag indicating if the task repeats
       - name: date_type
-        description: Code indicating the type of date being used
+        description: Type of date associated with the task
       - name: object_type
-        description: Code indicating the type of object this task is associated with
+        description: Type of object the task is associated with
       - name: reminder_group_id
         description: Identifier for the reminder group
       - name: reminder_type
-        description: Code indicating the type of reminder
+        description: Type of reminder
       - name: reminder_frequency
-        description: Frequency of reminders for this task
+        description: Frequency of the reminder
       - name: description_override
-        description: Override text for the description
+        description: Override text for the task description
       - name: is_readonly
         description: Flag indicating if the task is read-only
 
       # Metadata
-      - name: dbt_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - task_id
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: task_list_id
+          related_to: stg_opendental__tasklist.task_list_id
+        - relationship: many_to_one
+          field: user_id
+          related_to: stg_opendental__user.user_id

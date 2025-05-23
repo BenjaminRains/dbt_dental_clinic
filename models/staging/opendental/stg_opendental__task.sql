@@ -35,8 +35,10 @@ renamed as (
         "DescriptOverride" as description_override,
         "IsReadOnly" as is_readonly,
         
-        -- Metadata
-        current_timestamp as dbt_updated_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTimeEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
     from source
 )
 
