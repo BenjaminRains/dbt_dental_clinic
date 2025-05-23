@@ -2,25 +2,52 @@ version: 2
 
 models:
   - name: stg_opendental__tasksubscription
-    description: Staging model for task subscriptions. This model transforms the raw task subscription data from OpenDental, converting column names to snake_case and standardizing ID fields.
+    description: >
+      Staging model for task subscriptions from OpenDental. Contains information about which
+      users are subscribed to receive notifications for specific tasks or task lists. This model
+      supports the task notification and alert system in the dental clinic.
     columns:
+      # Primary Key
       - name: task_subscription_id
-        description: Primary key of the task subscription record
+        description: Primary key - unique identifier for each task subscription
         tests:
           - unique
           - not_null
 
+      # Foreign Keys
       - name: user_id
-        description: Foreign key to the user who is subscribed to the task
+        description: Foreign key to the subscribed user
         tests:
           - not_null
-
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
       - name: task_list_id
-        description: Foreign key to the task list that contains the task
+        description: Foreign key to the task list (if subscription is for a list)
         tests:
-          - not_null
-
+          - relationships:
+              to: ref('stg_opendental__tasklist')
+              field: task_list_id
+              config:
+                severity: warn
       - name: task_id
-        description: Foreign key to the specific task being subscribed to
+        description: Foreign key to the specific task (if subscription is for a task)
         tests:
-          - not_null
+          - relationships:
+              to: ref('stg_opendental__task')
+              field: task_id
+              config:
+                severity: warn
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - task_subscription_id
