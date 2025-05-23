@@ -56,9 +56,9 @@ models:
           - not_null
 
       - name: value_string
-        description: The actual preference value stored as a string
-        tests:
-          - not_null
+        description: >
+          The actual preference value stored as a string. Can be NULL if no value has been set
+          for this preference yet.
 
       # Required Metadata Columns
       - name: _loaded_at
