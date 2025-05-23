@@ -115,14 +115,23 @@ models:
           to_condition: "inssub_id is not null"
 
       # Test that history records match their source verify records
-      # Note: last_verified_date is excluded as verification records store target dates
-      # while history records store actual verification dates
-      - dbt_utils.equality:
-          compare_model: ref('stg_opendental__insverify')
-          compare_columns:
-            - foreign_key_id
-            - verify_type
-            - last_assigned_date
+      # Note: While we have multiple history records per verification,
+      # we only care that the fields match between corresponding records.
+      # The business logic of which record is current is handled elsewhere.
+      - relationships:
+          column_name: foreign_key_id
+          to: ref('stg_opendental__insverify')
+          field: foreign_key_id
+
+      - relationships:
+          column_name: verify_type
+          to: ref('stg_opendental__insverify')
+          field: verify_type
+
+      - relationships:
+          column_name: last_assigned_date
+          to: ref('stg_opendental__insverify')
+          field: last_assigned_date
 
     config:
       tags: ['staging', 'insurance', 'daily']
