@@ -148,7 +148,8 @@ models:
         description: Foreign key to the provider associated with this payment split
         tests:
           - dbt_utils.expression_is_true:
-              expression: "provider_id = 0 OR provider_id IN (SELECT provider_id FROM {{ ref('stg_opendental__provider') }})"
+              expression: "= 0 OR provider_id IN (SELECT provider_id FROM {{ ref('stg_opendental__provider') }})"
+              column_name: provider_id
               config:
                 severity: warn
                 description: "Provider ID should either be 0 (for prepayment transfers) or exist in the provider table"
