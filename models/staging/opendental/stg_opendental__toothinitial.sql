@@ -11,9 +11,10 @@ renamed as (
         "Movement" as movement,
         "DrawingSegment" as drawing_segment,
         "ColorDraw" as color_draw,
-        "SecDateTEntry" as created_at,
-        "SecDateTEdit" as updated_at,
-        "DrawText" as draw_text
+        "DrawText" as draw_text,
+        current_timestamp as _loaded_at,
+        "SecDateTEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
     from source
 )
 
