@@ -26,8 +26,10 @@ renamed as (
         "IsUnpaidProtectedLeave" as is_unpaid_protected_leave,
         "Note" as note,
         
-        -- Metadata
-        {{ current_timestamp() }} as loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "TimeEntry" as _created_at,      -- When the time adjustment was created
+        "TimeEntry" as _updated_at       -- When the time adjustment was last updated
     from source
 )
 

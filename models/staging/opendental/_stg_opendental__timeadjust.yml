@@ -2,50 +2,78 @@ version: 2
 
 models:
   - name: stg_opendental__timeadjust
-    description: Staging model for time adjustments data from OpenDental. Filtered to include only records from 2023-01-01 onwards.
+    description: >
+      Staging model for time adjustments from OpenDental. Tracks employee time entries including
+      regular hours, overtime, and PTO. This model supports time tracking, payroll processing,
+      and workforce management by maintaining a record of all time-related adjustments.
     columns:
+      # Primary Key
       - name: time_adjust_id
-        description: Primary key - unique identifier for time adjustment records
+        description: Primary key - unique identifier for each time adjustment record
         tests:
           - unique
           - not_null
-      
+
+      # Foreign Keys
       - name: employee_id
-        description: Foreign key to the employee table
+        description: Foreign key to the employee who the time adjustment applies to
         tests:
           - not_null
-      
+          - relationships:
+              to: ref('stg_opendental__employee')
+              field: employee_id
       - name: clinic_id
-        description: Foreign key to the clinic table
-      
-      - name: pto_def_id
-        description: Foreign key to the paid time off definition table
-      
-      - name: secu_user_entry_id
-        description: Foreign key to the security user who created the entry
-      
-      - name: time_entry_ts
-        description: Timestamp when the time adjustment was recorded
+        description: Foreign key to the clinic where the time adjustment was recorded
         tests:
           - not_null
-      
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+      - name: pto_def_id
+        description: Foreign key to the PTO definition if this adjustment is for paid time off
+        tests:
+          - relationships:
+              to: ref('stg_opendental__ptodef')
+              field: pto_def_id
+      - name: secu_user_entry_id
+        description: Foreign key to the user who entered the time adjustment
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+
+      # Timestamps
+      - name: time_entry_ts
+        description: Timestamp when the time adjustment was entered
+        tests:
+          - not_null
+
+      # Time Durations
       - name: regular_hours
-        description: Regular working hours adjusted
-      
+        description: Number of regular hours in the time adjustment
       - name: overtime_hours
-        description: Overtime hours adjusted
-      
+        description: Number of overtime hours in the time adjustment
       - name: pto_hours
-        description: Paid time off hours adjusted
-      
+        description: Number of paid time off hours in the time adjustment
+
+      # Flags and Attributes
       - name: is_auto
-        description: Flag indicating if the adjustment was automatically generated
-      
+        description: Flag indicating if the time adjustment was automatically generated
       - name: is_unpaid_protected_leave
         description: Flag indicating if the time adjustment is for unpaid protected leave
-      
       - name: note
-        description: Additional notes about the time adjustment
-      
-      - name: loaded_at
-        description: Timestamp when the record was loaded into the staging model
+        description: Additional notes or comments about the time adjustment
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp from TimeEntry field indicating when the time adjustment was created
+      - name: _updated_at
+        description: Timestamp from TimeEntry field indicating when the time adjustment was last updated
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - time_adjust_id
