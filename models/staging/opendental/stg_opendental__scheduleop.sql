@@ -11,7 +11,7 @@ with source as (
         where "ScheduleNum" in (
             select "ScheduleNum" 
             from {{ source('opendental', 'schedule') }}
-            where "DateTStamp" > (select max(created_at) from {{ ref('stg_opendental__schedule') }})
+            where "DateTStamp" > (select max(_updated_at) from {{ ref('stg_opendental__schedule') }})
         )
     {% endif %}
 ),
@@ -19,11 +19,19 @@ with source as (
 renamed as (
     select
         -- Primary key
-        "ScheduleOpNum" as schedule_op_id,
+        sop."ScheduleOpNum" as schedule_op_id,
+        
         -- Foreign keys
-        "ScheduleNum" as schedule_id,
-        "OperatoryNum" as operatory_id
-    from source
+        sop."ScheduleNum" as schedule_id,
+        sop."OperatoryNum" as operatory_id,
+        
+        -- Metadata
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        s."DateTStamp" as _created_at,   -- When the record was created in source
+        s."DateTStamp" as _updated_at    -- Last update timestamp
+    from source sop
+    left join {{ source('opendental', 'schedule') }} s
+        on sop."ScheduleNum" = s."ScheduleNum"
 )
 
 select * from renamed

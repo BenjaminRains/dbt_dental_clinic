@@ -37,3 +37,18 @@ models:
           is associated with this schedule entry.
         tests:
           - not_null
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental), inherited from the related schedule record
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental), inherited from the related schedule record
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - schedule_op_id
