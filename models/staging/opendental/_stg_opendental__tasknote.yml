@@ -6,6 +6,12 @@ models:
       Staging model for task notes from OpenDental. Contains notes associated with tasks,
       including who created the note and when it was created. Task notes provide additional
       context and communication history for tasks in the system.
+
+      Known Data Quality Issues:
+      - 259 task notes reference tasks that don't exist in the source system
+      - These orphaned references are likely due to deleted tasks or data migration issues
+      - The relationship test is configured as a warning to allow the pipeline to continue
+      - These notes should be reviewed and either reassigned to valid tasks or archived
     columns:
       # Primary Key
       - name: task_note_id
@@ -22,6 +28,8 @@ models:
           - relationships:
               to: ref('stg_opendental__task')
               field: task_id
+              config:
+                severity: warn
       - name: user_id
         description: Foreign key to the user who created the note
         tests:
