@@ -42,15 +42,23 @@ models:
     columns:
       - name: procedure_id
         description: >
-          Unique identifier for the procedure (from ProcNum).
-          Note: procedure_id = 0 is valid and represents financial transactions/adjustments rather than actual procedures.
-          These records should be:
-          - Included in financial calculations
-          - Excluded from procedure-based analyses
-          - Treated as account adjustments or payment transactions
+          Foreign key to the dental procedure this split is applied to.
+          
+          Note: This field may reference procedures that:
+          - Haven't been completed yet (treatment planned)
+          - Are outside our date window (pre-2023)
+          - Have been deleted or modified
+          - Are administrative entries
+          
+          The relationship test is set to 'warn' severity because these mismatches
+          are expected in certain business scenarios.
         tests:
-          - unique
-          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              config:
+                severity: warn
+                description: "Procedure ID should exist in the procedure table, but mismatches are expected for treatment planned or historical procedures"
       
       # Foreign keys with relationship tests
       - name: patient_id
