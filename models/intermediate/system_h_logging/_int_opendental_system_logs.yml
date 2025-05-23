@@ -91,7 +91,10 @@ models:
               field: user_id
               where: "user_id NOT IN (0, 20, 36, 43, 45, 51, 54, 9280, 9281)"
               severity: warn
+              name: fk_system_logs_user_valid
               config:
+                database: opendental_analytics
+                schema: intermediate
                 description: >
                   Warning expected for user_id = 0 (system-generated entries) 
                   and excluded inactive/system users.

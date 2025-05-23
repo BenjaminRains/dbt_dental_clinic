@@ -1,8 +1,9 @@
 {{
     config(
-        materialized='view',
+        materialized='table',
         database='opendental_analytics',
-        schema='intermediate'
+        schema='intermediate',
+        tags=['intermediate', 'system_logging']
     )
 }}
 
