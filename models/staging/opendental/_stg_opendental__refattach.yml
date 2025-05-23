@@ -3,6 +3,10 @@ version: 2
 models:
   - name: stg_opendental__refattach
     description: Staging model for referral attachments. This table contains information about referrals linked to patients, procedures, and providers.
+    config:
+      materialized: incremental
+      unique_key: ref_attach_id
+      schema: staging
     columns:
       - name: ref_attach_id
         description: Primary key of the referral attachment
@@ -96,6 +100,18 @@ models:
       - name: procedure_completion_date
         description: Date when the associated procedure was completed
 
-      # Meta columns
-      - name: created_at
-        description: Timestamp when the record was created
+      # Required metadata columns
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when this record was created in the source system
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when this record was last updated in the source system
+        tests:
+          - not_null

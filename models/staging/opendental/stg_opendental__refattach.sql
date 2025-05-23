@@ -1,7 +1,16 @@
+{{ config(
+    materialized='incremental',
+    unique_key='ref_attach_id',
+    schema='staging'
+) }}
+
 with Source as (
     select * 
     from {{ source('opendental', 'refattach') }}
     where "RefDate" >= '2023-01-01'
+    {% if is_incremental() %}
+        AND "DateTStamp" > (select max(_updated_at) from {{ this }})
+    {% endif %}
 ),
 
 Renamed as (
@@ -24,8 +33,10 @@ Renamed as (
         "IsTransitionOfCare" as is_transition_of_care,
         "DateProcComplete" as procedure_completion_date,
         
-        -- Meta columns
-        "DateTStamp" as created_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTStamp" as _created_at,
+        "DateTStamp" as _updated_at
 
     from Source
 )
