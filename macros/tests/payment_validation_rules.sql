@@ -5,7 +5,7 @@
         where 1=0  -- Start with no errors
         
         -- Payment amount validation
-        or payment_amount <= 0  -- Payments should be positive
+        or (payment_amount <= 0 and payment_type_id != 72)  -- Only refunds can be negative
         
         -- Payment type validation
         or payment_type_id not in (0, 69, 70, 71, 72, 391, 412, 417, 574, 634)
@@ -20,6 +20,11 @@
         or payment_amount is null
         or payment_date is null
         or payment_type_id is null
+        
+        -- Status validation
+        or payment_status < 0
+        or process_status < 0
+        or payment_source < 0
     )
     
     select * from validation_errors

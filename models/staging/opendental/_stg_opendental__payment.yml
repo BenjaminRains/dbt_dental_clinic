@@ -9,6 +9,13 @@ models:
       - payment_validation_rules:
           config:
             severity: warn  # Changed from error to warn
+          description: >
+            Validates payment data against business rules:
+            - Payment amounts must be positive except for refunds (type 72)
+            - Payment types must be one of: 0, 69, 70, 71, 72, 391, 412, 417, 574, 634
+            - Payment dates must be between 2000-01-01 and current date
+            - Required fields: payment_id, patient_id, payment_amount, payment_date, payment_type_id
+            - Status fields (payment_status, process_status, payment_source) must be non-negative
       - dbt_utils.expression_is_true:
           expression: "payment_date >= '2023-01-01'"
       - dbt_utils.expression_is_true:
