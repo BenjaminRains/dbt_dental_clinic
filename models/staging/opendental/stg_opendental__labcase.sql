@@ -36,7 +36,12 @@ renamed as (
         -- Additional attributes
         "Instructions" as instructions,
         "LabFee" as lab_fee,
-        "InvoiceNum" as invoice_number
+        "InvoiceNum" as invoice_number,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTimeCreated" as _created_at,
+        coalesce("DateTStamp", "DateTimeCreated") as _updated_at
     from source
 )
 
