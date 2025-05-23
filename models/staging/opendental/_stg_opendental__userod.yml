@@ -16,7 +16,7 @@ models:
         tests:
           - relationships:
               to: ref('stg_opendental__usergroup')
-              field: usergroup_num
+              field: usergroup_id
               severity: warn
               where: "user_group_id is not null"
               name: fk_userod_usergroup_valid
