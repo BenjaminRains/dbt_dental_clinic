@@ -3,11 +3,16 @@ version: 2
 models:
   - name: stg_opendental__insverifyhist
     description: >
-      Staging model for insurance verification history records. This model tracks the history of insurance verification activities.
+      Staging model for insurance verification history records. This model tracks the history
+      of insurance verification activities.
       
-      Data Quality Note: There are 1,987 history records without corresponding verification records. See docs/data_quality/insurance_verification_orphaned_records.md for analysis.
+      Data Quality Note: There are 1,987 history records without corresponding verification records.
+       See docs/data_quality/insurance_verification_orphaned_records.md for analysis.
       
-      Data Quality Note: The equality test comparing verification and history records is failing with 29,708 mismatches. This is expected behavior as verification records store target dates while history records track actual verification dates. See docs/data_quality/insurance_verification_orphaned_verification_records.md for analysis.
+      Data Quality Note: The equality test comparing verification and history records is failing
+       with 29,708 mismatches. This is expected behavior as verification records store target dates
+        while history records track actual verification dates. 
+        See docs/data_quality/insurance_verification_orphaned_verification_records.md for analysis.
 
     columns:
       - name: insurance_verifyhist_id
@@ -17,7 +22,13 @@ models:
           - not_null
 
       - name: insurance_verify_id
-        description: Foreign key to the insurance verification record
+        description: >
+          Foreign key to the insurance verification record.
+          
+          Data Quality Note: The relationships test is failing with 1,987 history records that do
+           not have corresponding verification records. These records show patterns of sequential
+            verification activities and are primarily created by users 57 and 9282. 
+            See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
         tests:
           - not_null
           - relationships:
@@ -37,7 +48,13 @@ models:
               values: [1, 2]
 
       - name: foreign_key_id
-        description: Foreign key to the related record (subscriber or plan)
+        description: >
+          Foreign key to the related record (subscriber or plan).
+          
+          Data Quality Note: The relationships test is failing with 1,946 history records that do
+           not have corresponding verification records. These records show patterns of sequential
+            verification activities and are primarily created by users 57 and 9282. 
+            See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
         tests:
           - not_null
           - relationships_where:
@@ -56,7 +73,12 @@ models:
           - not_null
 
       - name: last_assigned_date
-        description: Date when the verification was last assigned
+        description: >
+          Date when the verification was last assigned.
+          
+          Data Quality Note: The relationships test is failing with 17 history records where the
+           last_assigned_date does not match the corresponding verification record. This is under
+            investigation to determine if this is expected behavior or a data quality issue.
         tests:
           - not_null
 
