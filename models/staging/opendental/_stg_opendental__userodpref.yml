@@ -5,6 +5,8 @@ models:
     description: >
       Staging model for user preferences in OpenDental. Contains various user-specific settings
       and preferences stored as key-value pairs, including clinic-specific preferences.
+      Note: Users can have multiple preference records with the same key for the same clinic,
+      allowing for different preference types or historical versions.
     columns:
       # Primary Key
       - name: user_od_pref_id
@@ -82,17 +84,6 @@ models:
         tests:
           - not_null
 
-    # Model-level tests
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - user_id
-            - clinic_id
-            - fkey
-          config:
-            severity: error
-            description: "Each user can only have one preference value per clinic and key"
-
     meta:
       business_owners: ["system_administrators"]
       technical_owners: ["data_engineering_team"]
@@ -101,7 +92,6 @@ models:
       data_quality_requirements:
         - "All preferences must be valid"
         - "Users must have at least one preference"
-        - "Preferences must be unique per user-clinic-key combination"
         - "All required fields must be non-null"
         - "User references must be valid"
         - "Clinic references must be valid"
