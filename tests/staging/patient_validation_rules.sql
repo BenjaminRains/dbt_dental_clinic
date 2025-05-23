@@ -48,9 +48,9 @@ validation_errors as (
             when billing_cycle_day not between 1 and 31 then 'Invalid billing cycle day'
             
             -- Date validations
-            when created_at > current_timestamp then 'Creation date cannot be in future'
-            when updated_at > current_timestamp then 'Update date cannot be in future'
-            when created_at is not null and updated_at < created_at 
+            when _created_at > current_timestamp then 'Creation date cannot be in future'
+            when _updated_at > current_timestamp then 'Update date cannot be in future'
+            when _created_at is not null and _updated_at < _created_at 
                 then 'Update date cannot be before creation date'
             when deceased_datetime is not null and deceased_datetime > current_timestamp 
                 then 'Deceased date cannot be in future'

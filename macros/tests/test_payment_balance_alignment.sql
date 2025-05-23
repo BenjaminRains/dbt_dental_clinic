@@ -62,7 +62,7 @@ patient_balances as (
             WHEN balance_0_30_days > 0 THEN '0-30 only'
             ELSE 'No balance'
         END as balance_aging_pattern,
-        updated_at as balance_update_date
+        _updated_at as balance_update_date
     from {{ ref('stg_opendental__patient') }}
 )
 

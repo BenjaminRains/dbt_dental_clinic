@@ -63,11 +63,14 @@ staged as (
         "SchedDayOfWeek" as preferred_day_of_week,
         "AskToArriveEarly" as ask_to_arrive_early_minutes,
         
-        -- Metadata
-        "SecDateEntry" as created_at,
-        "DateTStamp" as updated_at,
-        "SecUserNumEntry" as created_by_user_id,
-        "PlannedIsDone" as planned_treatment_complete
+        -- Business Logic
+        "PlannedIsDone" as planned_treatment_complete,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "SecDateEntry" as _created_at,   -- When the record was created in source
+        "DateTStamp" as _updated_at,     -- Last update timestamp
+        "SecUserNumEntry" as _created_by_user_id  -- User who created the record
 
     from source
 )

@@ -42,7 +42,7 @@ models:
       Date Handling and COALESCE Logic:
       - Patient Payment Dates:
         * Primary: payment_date from payment
-        * Used for: payment_date, entry_date, updated_at
+        * Used for: payment_date, entry_date, _updated_at
       - Procedure Dates:
         * Primary: procedure_date from paysplit
         * Used for: procedure_date
@@ -248,9 +248,6 @@ models:
               to: ref('stg_opendental__definition')
               field: definition_id
               where: "payment_status != 0"
-              config:
-                severity: error
-                description: "Payment status must exist in stg_opendental__definition, except for status 0 (default/administrative)"
 
       - name: process_status
         description: Foreign key to the process status definition (currently unused, always 0)
@@ -286,7 +283,7 @@ models:
               min_value: "'2023-01-01'::timestamp"
               max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
 
-      - name: updated_at
+      - name: _updated_at
         description: Timestamp when the record was last updated
         tests:
           - not_null

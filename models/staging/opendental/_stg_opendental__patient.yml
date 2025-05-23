@@ -20,7 +20,7 @@ models:
           severity: warn
       - dbt_utils.expression_is_true:
           name: valid_date_sequence
-          expression: "(updated_at >= created_at) OR created_at IS NULL"
+          expression: "(_updated_at >= _created_at) OR _created_at IS NULL"
           severity: warn
     columns:
       - name: patient_id
@@ -176,14 +176,27 @@ models:
       - name: ask_to_arrive_early_minutes
         description: "Minutes patient should arrive before appointment"
       
-      # Metadata
-      - name: created_at
-        description: "When the patient record was created (can be null)"
-      - name: updated_at
-        description: "When the patient record was last updated"
-        tests:
-          - not_null
-      - name: created_by_user_id
-        description: "User who created the patient record"
+      # Business Logic
       - name: planned_treatment_complete
         description: "Indicates if planned treatment is complete"
+
+      # Required metadata columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental), sourced from SecDateEntry"
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental), sourced from DateTStamp"
+        tests:
+          - not_null
+      
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental), sourced from SecUserNumEntry"
+        tests:
+          - not_null
