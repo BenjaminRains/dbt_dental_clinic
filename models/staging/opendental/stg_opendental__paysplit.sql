@@ -48,6 +48,10 @@ Renamed AS (
         -- Dates and metadata
         "DateEntry" AS entry_date,
         "SecDateTEdit" AS updated_at,
+        
+        -- Required metadata columns
+        "DateEntry" AS _created_at,
+        "SecDateTEdit" AS _updated_at,
         current_timestamp AS _loaded_at
     FROM Source
 )

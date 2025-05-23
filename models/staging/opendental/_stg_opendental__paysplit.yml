@@ -90,6 +90,22 @@ models:
       - dbt_utils.expression_is_true:
           expression: "NOT (unearned_type IN (288, 439) AND provider_id IS NULL)"
 
+      # Test: Cannot allocate to both procedure and adjustment
+      - dbt_utils.expression_is_true:
+          expression: "NOT (procedure_id != 0 AND adjustment_id != 0)"
+
+      # Test: Cannot allocate to both adjustment and payment plan charge
+      - dbt_utils.expression_is_true:
+          expression: "NOT (adjustment_id != 0 AND payplan_charge_id != 0)"
+
+      # Test: If payplan_id exists, payplan_charge_id must exist
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payplan_id != 0 AND payplan_charge_id = 0)"
+
+      # Test: Cannot allocate to both payment plan charge and procedure
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payplan_charge_id != 0 AND procedure_id != 0)"
+
       # Simple test for forward_split_id
       - dbt_utils.expression_is_true:
           expression: "forward_split_id = 0"
@@ -111,23 +127,56 @@ models:
           Note: Some administrative payments (type 0) can have hundreds of splits.
         tests:
           - not_null
+          - relationships:
+              to: ref('stg_opendental__payment')
+              field: payment_id
+              config:
+                severity: error
+                description: "Payment ID must exist in the payment table"
 
       - name: patient_id
         description: Foreign key to the patient associated with this payment split
         tests:
           - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              config:
+                severity: error
+                description: "Patient ID must exist in the patient table"
 
       - name: clinic_id
         description: Foreign key to the clinic where the payment split was recorded
 
       - name: provider_id
         description: Foreign key to the provider associated with this payment split
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                severity: warn
+                description: "Provider ID should exist in the provider table"
 
       - name: procedure_id
         description: Foreign key to the dental procedure this split is applied to
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              config:
+                severity: warn
+                description: "Procedure ID should exist in the procedure table"
 
       - name: adjustment_id
         description: Foreign key to any related adjustment record
+        tests:
+          - relationships:
+              to: ref('stg_opendental__adjustment')
+              field: adjustment_id
+              config:
+                severity: warn
+                description: "Adjustment ID should exist in the adjustment table"
 
       - name: payplan_id
         description: Foreign key to the associated payment plan, if applicable
@@ -264,14 +313,20 @@ models:
         description: Type of debit if associated with a payment plan
 
       # Metadata columns
-      - name: entry_date
-        description: Date when this split record was entered into the system
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+        tests:
+          - not_null
 
-      - name: updated_at
-        description: Timestamp of the last update to this record
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+        tests:
+          - not_null
 
       - name: _loaded_at
-        description: Timestamp when this record was loaded into the warehouse
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
 
     meta:
       contains_pii: true
