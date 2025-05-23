@@ -57,8 +57,10 @@ renamed as (
         "AreaAlsoToothRange"::smallint as area_also_tooth_range_flag,
         "DiagnosticCodes"::varchar as diagnostic_codes,
         
-        -- Metadata
-        current_timestamp as _loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTStamp"::timestamp as _created_at,  -- Using DateTStamp as creation timestamp
+        "DateTStamp"::timestamp as _updated_at   -- Using DateTStamp as update timestamp
     from source
 )
 

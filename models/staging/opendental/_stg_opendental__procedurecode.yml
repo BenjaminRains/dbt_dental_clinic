@@ -199,6 +199,21 @@ models:
           - accepted_values:
               values: [0, 1]
       
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (using DateTStamp)
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (using DateTStamp)
+        tests:
+          - not_null
+
       - name: default_claim_note
         description: Default note to appear on insurance claims
       
@@ -225,3 +240,6 @@ models:
       
       - name: _extract_timestamp
         description: Metadata - timestamp when this record was extracted
+
+    config:
+      tags: ['staging', 'opendental', 'procedure']
