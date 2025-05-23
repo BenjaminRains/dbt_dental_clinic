@@ -2,14 +2,19 @@ version: 2
 
 models:
   - name: stg_opendental__tasknote
-    description: Staging model for task notes from OpenDental. Contains notes associated with tasks in the system.
+    description: >
+      Staging model for task notes from OpenDental. Contains notes associated with tasks,
+      including who created the note and when it was created. Task notes provide additional
+      context and communication history for tasks in the system.
     columns:
+      # Primary Key
       - name: task_note_id
-        description: Primary key for the task note record
+        description: Primary key - unique identifier for each task note
         tests:
           - unique
           - not_null
 
+      # Foreign Keys
       - name: task_id
         description: Foreign key to the associated task
         tests:
@@ -17,9 +22,6 @@ models:
           - relationships:
               to: ref('stg_opendental__task')
               field: task_id
-              config:
-                where: "note_datetime >= '2023-01-01'"
-
       - name: user_id
         description: Foreign key to the user who created the note
         tests:
@@ -28,10 +30,25 @@ models:
               to: ref('stg_opendental__user')
               field: user_id
 
+      # Timestamps
       - name: note_datetime
         description: Timestamp when the note was created
         tests:
           - not_null
 
+      # Content
       - name: note
-        description: The content of the task note
+        description: Content of the task note
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - task_note_id
