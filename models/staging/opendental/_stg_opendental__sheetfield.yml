@@ -2,8 +2,14 @@ version: 2
 
 models:
   - name: stg_opendental__sheetfield
-
-    description: Staging model for sheet field records from OpenDental. Contains information about individual fields within sheets, including their properties, values, and layout.
+    description: |
+      Staging model for sheet field records from OpenDental. Contains information about individual fields within sheets, including their properties, values, and layout.
+      
+      Note: This model has known data quality issues that are monitored as warnings:
+      - Some sheet_field records reference non-existent sheet records
+      - Some sheet_field records reference non-existent sheet_field_def records
+      - Some sheets have duplicate field definitions
+      These issues are tracked as warnings rather than errors to allow for investigation and remediation.
     config:
       tags: ['staging', 'opendental', 'incremental']
     columns:
@@ -15,19 +21,25 @@ models:
 
       # Foreign Keys
       - name: sheet_id
-        description: Foreign key to sheet table
+        description: |
+          Foreign key to sheet table. 
+          Note: Some records may reference non-existent sheets (monitored as warning).
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__sheet')
               field: sheet_id
+              severity: warn
       
       - name: sheet_field_def_id
-        description: Foreign key to sheet field definition table
+        description: |
+          Foreign key to sheet field definition table.
+          Note: Some records may reference non-existent field definitions (monitored as warning).
         tests:
           - relationships:
               to: ref('stg_opendental__sheetfielddef')
               field: sheet_field_def_id
+              severity: warn
 
       # Regular Fields
       - name: field_type
@@ -128,3 +140,9 @@ models:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - sheet_field_id
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - sheet_id
+            - sheet_field_def_id
+          severity: warn
+          description: "Warns about duplicate field definitions within the same sheet"

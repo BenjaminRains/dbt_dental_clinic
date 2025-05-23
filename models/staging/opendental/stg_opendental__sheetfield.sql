@@ -6,9 +6,8 @@
 with source as (
     select sf.*, s."DateTimeSheet", s."DateTSheetEdited"
     from {{ source('opendental', 'sheetfield') }} sf
-    inner join {{ source('opendental', 'sheet') }} s 
+    left join {{ source('opendental', 'sheet') }} s 
         on sf."SheetNum" = s."SheetNum"
-    where s."DateTimeSheet" >= '2023-01-01'
     {% if is_incremental() %}
         and s."DateTimeSheet" > (select max(_updated_at) from {{ this }})
     {% endif %}
@@ -52,8 +51,8 @@ renamed as (
         
         -- Metadata
         current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTimeSheet" as _created_at,   -- When the record was created in source
-        "DateTSheetEdited" as _updated_at -- Last update timestamp
+        coalesce("DateTimeSheet", "DateTimeSig") as _created_at,   -- When the record was created in source
+        coalesce("DateTSheetEdited", "DateTimeSig") as _updated_at -- Last update timestamp
 
     from source
 )
