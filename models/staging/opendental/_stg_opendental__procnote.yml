@@ -30,11 +30,7 @@ models:
               field: procedure_id
       
       - name: user_id
-        description: ID of the user who created the procedure note
-        tests:
-          - relationships:
-              to: ref('stg_opendental__userod')
-              field: user_id
+        description: ID of the user who created the procedure note. May reference historical users no longer in the system.
       
       - name: entry_timestamp
         description: Date and time when the note was entered
@@ -50,7 +46,17 @@ models:
       - name: signature
         description: Digital signature data associated with the note
       
-      - name: _data_loaded_at
-        description: Timestamp indicating when this record was loaded into the warehouse
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
         tests:
           - not_null
