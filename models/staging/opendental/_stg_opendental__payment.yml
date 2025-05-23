@@ -73,20 +73,23 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "payment_date >= '2023-01-01'"
+              expression: ">= '2023-01-01'"
+              column_name: payment_date
           - dbt_utils.expression_is_true:
-              expression: "payment_date <= current_date"
+              expression: "<= current_date"
       - name: payment_amount
         description: Amount of the payment
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "payment_amount >= 0"
+              expression: ">= 0"
+              column_name: payment_amount
       - name: merchant_fee
         description: Fee charged by the merchant for processing the payment
         tests:
           - dbt_utils.expression_is_true:
-              expression: "merchant_fee >= 0"
+              expression: ">= 0"
+              column_name: merchant_fee
       - name: check_number
         description: Check number for check payments
         tests:
@@ -119,30 +122,35 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "payment_status >= 0"
+              expression: ">= 0"
+              column_name: payment_status
       - name: process_status
         description: Processing status of the payment
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "process_status >= 0"
+              expression: ">= 0"
+              column_name: process_status
       - name: payment_source
         description: Source of the payment
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "payment_source >= 0"
+              expression: ">= 0"
+              column_name: payment_source
       - name: recurring_charge_date
         description: Date when a recurring payment will be charged
         tests:
           - dbt_utils.expression_is_true:
-              expression: "recurring_charge_date > '2000-01-01'"
+              expression: "> '2000-01-01'"
+              column_name: recurring_charge_date
       - name: entry_date
         description: Date when the payment was entered into the system
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "entry_date > '2000-01-01'"
+              expression: "> '2000-01-01'"
+              column_name: entry_date
       - name: payment_notes
         description: Additional notes about the payment
       - name: receipt_text
@@ -153,17 +161,20 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "<= current_timestamp"
+              column_name: _loaded_at
       - name: _created_at
         description: Timestamp when the record was created in the source system
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "<= current_timestamp"
+              column_name: _created_at
       - name: _updated_at
         description: Timestamp when the record was last updated in the source system
         tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "<= current_timestamp"
+              column_name: _updated_at
           - dbt_utils.expression_is_true:
-              expression: "_updated_at >= _created_at"
+              expression: ">= _created_at"
