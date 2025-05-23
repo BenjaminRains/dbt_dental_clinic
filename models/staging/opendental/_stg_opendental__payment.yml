@@ -106,17 +106,20 @@ models:
         description: Check number for check payments
         tests:
           - dbt_utils.expression_is_true:
-              expression: "length(check_number) <= 25"
+              expression: "char_length(check_number) <= 25"
+              column_name: check_number
       - name: bank_branch
         description: Bank branch information for check payments
         tests:
           - dbt_utils.expression_is_true:
-              expression: "length(bank_branch) <= 25"
+              expression: "char_length(bank_branch) <= 25"
+              column_name: bank_branch
       - name: external_id
         description: External reference ID for the payment
         tests:
           - dbt_utils.expression_is_true:
-              expression: "length(external_id) <= 255"
+              expression: "char_length(external_id) <= 255"
+              column_name: external_id
       - name: is_split_flag
         description: Indicates if the payment is split across multiple procedures
         tests:
