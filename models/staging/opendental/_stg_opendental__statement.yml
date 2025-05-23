@@ -2,24 +2,18 @@ version: 2
 
 models:
   - name: stg_opendental__statement
-    description: >
-      Staging model for patient billing statements. This model standardizes and cleans raw statement data
-      from OpenDental, including payment history, balance tracking, and delivery status information.
+    description: Staging model for statement records from OpenDental. Contains information about patient statements, including their content, status, and delivery details.
     columns:
       # Primary Key
       - name: statement_id
-        description: Unique identifier for each statement
+        description: Primary key - unique identifier for each statement
         tests:
           - unique
           - not_null
 
       # Foreign Keys
       - name: patient_id
-        description: >
-          Foreign key reference to the patient table (stg_opendental__patient). 
-          Each statement must be associated with a patient record, representing the 
-          primary patient for whom the statement was generated. In cases where 
-          is_single_patient is false, this represents the main account holder.
+        description: Foreign key to patient table
         tests:
           - not_null
           - relationships:
@@ -28,13 +22,17 @@ models:
         meta:
           contains_pii: true
       - name: document_id
-        description: Reference to associated document record
+        description: Foreign key to document table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__document')
+              field: document_id
       - name: super_family_id
-        description: Reference to the super family grouping
+        description: Identifier for the super family group
 
       # Timestamps and Dates
       - name: date_sent
-        description: Date when the statement was sent to the patient
+        description: Date when the statement was sent
       - name: date_range_from
         description: Start date of the statement period
       - name: date_range_to
@@ -44,27 +42,27 @@ models:
 
       # Text Fields
       - name: note
-        description: General notes about the statement
+        description: General notes for the statement
       - name: note_bold
-        description: Emphasized notes to appear in bold on the statement
+        description: Bold-formatted notes for the statement
       - name: email_subject
-        description: Subject line when statement is sent via email
+        description: Subject line for email statements
       - name: email_body
-        description: Email body content for electronic statements
+        description: Body text for email statements
       - name: statement_type
-        description: Classification of statement type
+        description: Type of statement (e.g., regular, invoice, receipt)
       - name: short_guid
-        description: Short unique identifier for external reference
+        description: Short unique identifier for the statement
       - name: statement_short_url
-        description: Shortened URL for accessing statement online
+        description: Shortened URL for online statement access
       - name: statement_url
-        description: Full URL for accessing statement online
+        description: Full URL for online statement access
 
       # Numeric Fields
       - name: mode
-        description: Delivery mode indicator for the statement
+        description: Mode identifier for the statement
       - name: insurance_estimate
-        description: Estimated portion to be covered by insurance
+        description: Estimated insurance payment amount
         tests:
           - not_null:
               where: "insurance_estimate < 0"  # Will fail if any negative values exist
@@ -76,26 +74,44 @@ models:
 
       # Boolean/Status Fields
       - name: is_payment_hidden
-        description: Indicates if payment information is hidden on statement
+        description: Boolean flag indicating if payment information is hidden
       - name: is_single_patient
-        description: Indicates if statement is for single patient only
+        description: Boolean flag indicating if statement is for a single patient
       - name: is_intermingled
-        description: Indicates if statement combines multiple patients
+        description: Boolean flag indicating if statement includes multiple patients
       - name: is_sent
-        description: Indicates if statement has been sent
+        description: Boolean flag indicating if statement has been sent
       - name: is_receipt
-        description: Indicates if this is a receipt
+        description: Flag indicating if statement is a receipt
       - name: is_invoice
-        description: Indicates if this is an invoice
+        description: Flag indicating if statement is an invoice
       - name: is_invoice_copy
-        description: Indicates if this is a copy of an invoice
+        description: Flag indicating if statement is an invoice copy
       - name: is_balance_valid
-        description: Indicates if the balance calculation is valid
+        description: Flag indicating if the balance is valid
       - name: sms_send_status
-        description: Status of SMS delivery (0=Not Sent, 1=Sent, 2=Failed)
+        description: Status of SMS delivery if applicable
       - name: limited_custom_family
-        description: Indicator for custom family limitation settings
+        description: Flag indicating if statement is for a limited custom family
 
-      # Meta Fields
+      # Metadata
       - name: _loaded_at
-        description: Timestamp when this record was loaded into the warehouse
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - statement_id
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: patient_id
+          related_to: stg_opendental__patient.patient_id
+        - relationship: many_to_one
+          field: document_id
+          related_to: stg_opendental__document.document_id

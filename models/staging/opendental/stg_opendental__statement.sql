@@ -29,7 +29,6 @@ renamed as (
         "DateSent" as date_sent,
         "DateRangeFrom" as date_range_from,
         "DateRangeTo" as date_range_to,
-        "DateTStamp" as date_timestamp,
         
         -- Text Fields
         "Note" as note,
@@ -58,8 +57,10 @@ renamed as (
         "SmsSendStatus"::smallint as sms_send_status,
         "LimitedCustomFamily"::smallint as limited_custom_family,
         
-        -- Meta Fields
-        current_timestamp as _loaded_at
+        -- Metadata
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "DateTStamp" as _created_at,     -- When the record was created in source
+        "DateTStamp" as _updated_at      -- Last update timestamp
 
     from source
 )
