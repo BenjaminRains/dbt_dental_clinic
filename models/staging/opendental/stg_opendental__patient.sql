@@ -68,7 +68,10 @@ staged as (
         
         -- Required metadata columns
         current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "SecDateEntry" as _created_at,   -- When the record was created in source
+        case 
+            when "SecDateEntry" = '0001-01-01' then null
+            else "SecDateEntry"
+        end as _created_at,   -- When the record was created in source
         "DateTStamp" as _updated_at,     -- Last update timestamp
         "SecUserNumEntry" as _created_by_user_id  -- User who created the record
 
