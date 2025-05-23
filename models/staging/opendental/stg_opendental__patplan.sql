@@ -26,7 +26,7 @@ renamed as (
         
         -- Metadata
         current_timestamp as _loaded_at,
-        "SecDateTEntry" as _created_at,
+        COALESCE("SecDateTEntry", "SecDateTEdit") as _created_at,
         "SecDateTEdit" as _updated_at
 
     from source

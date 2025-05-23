@@ -22,6 +22,11 @@ models:
           - relationships:
               to: ref('stg_opendental__inssub')
               field: inssub_id
+              # Note: There are currently 2 records with invalid insurance_subscriber_id values
+              # that don't exist in the inssub table. These need to be investigated and either:
+              # 1. Add missing records to inssub table
+              # 2. Correct the insurance_subscriber_id values
+              # 3. Handle these records differently if they represent a valid business case
 
       - name: ordinal
         description: Order/priority of the insurance plan for the patient (primary, secondary, etc.)
