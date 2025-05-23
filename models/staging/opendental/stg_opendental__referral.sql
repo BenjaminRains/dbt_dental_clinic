@@ -46,7 +46,9 @@ renamed as (
         "Slip" as slip,
         
         -- Metadata
-        "DateTStamp" as date_timestamp
+        current_timestamp as _loaded_at,
+        "DateTStamp" as _created_at,
+        "DateTStamp" as _updated_at
     
     from Source
 )

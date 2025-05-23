@@ -102,8 +102,14 @@ models:
       - name: slip
         description: Identifier for associated slip record
 
-      - name: date_timestamp
-        description: Timestamp of when the record was last updated
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
 
       - name: referral_id
         description: >
