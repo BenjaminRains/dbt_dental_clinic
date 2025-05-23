@@ -24,9 +24,10 @@ renamed as (
         "OrthoAutoFeeBilledOverride" as ortho_auto_fee_billed_override,
         "OrthoAutoNextClaimDate" as ortho_auto_next_claim_date,
         
-        -- Meta Fields
-        "SecDateTEntry" as created_at,
-        "SecDateTEdit" as updated_at
+        -- Metadata
+        current_timestamp as _loaded_at,
+        "SecDateTEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
 
     from source
 )
