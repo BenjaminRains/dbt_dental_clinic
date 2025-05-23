@@ -28,7 +28,9 @@ renamed as (
         "CustErr" as custom_error,
 
         -- Metadata
-        current_timestamp as _loaded_at
+        current_timestamp as _loaded_at,
+        current_timestamp as _created_at,  -- Since this is a view of reference data, creation time is same as load time
+        current_timestamp as _updated_at   -- Since this is a view of reference data, update time is same as load time
 
     from source
 )
