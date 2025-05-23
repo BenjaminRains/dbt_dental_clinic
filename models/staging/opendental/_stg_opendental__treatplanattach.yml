@@ -9,12 +9,14 @@ models:
       only includes records from 2023-01-01 onwards. This results in expected orphaned attachments
       for older treatment plans.
     columns:
+      # Primary Key
       - name: treatplan_attach_id
         description: Unique identifier for the treatment plan attachment
         tests:
           - unique
           - not_null
       
+      # Foreign Keys
       - name: treatplan_id
         description: >
           Foreign key to the treatment plan (references stg_opendental__treatplan.treatment_plan_id).
@@ -36,8 +38,17 @@ models:
         tests:
           - not_null
       
+      # Other Fields
       - name: priority
         description: Priority assigned to this procedure within the treatment plan
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: Timestamp when the ETL pipeline loaded the data
+      - name: _created_at
+        description: Timestamp when the attachment was created (using current_timestamp since source lacks creation timestamp)
+      - name: _updated_at
+        description: Timestamp when the attachment was last updated (using current_timestamp since source lacks update timestamp)
 
     # Relationships with other models
     meta:
