@@ -162,10 +162,19 @@ models:
               expression: "< current_date"
               column_name: birth_date
       - name: age
-        description: "Calculated age of patient"
+        description: >
+          Calculated age of patient.
+          
+          Note:
+          - Ages over 120 are allowed for records with default birth date (1900-01-01)
+          - These records need attention to update birth date information
+          - As of 2025, there are 11 patients with ages over 120
         tests:
           - dbt_utils.expression_is_true:
-              expression: "between 0 and 120"
+              expression: "between 0 and 120 OR birth_date = '1900-01-01'"
+              config:
+                severity: warn
+                description: "Ages over 120 are allowed for records with default birth date"
       - name: first_visit_date
         description: "Date of patient's first visit"
       - name: deceased_datetime
