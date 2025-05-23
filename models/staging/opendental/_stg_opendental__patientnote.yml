@@ -4,12 +4,6 @@ models:
   - name: stg_opendental__patientnote
     description: "Standardized patient notes containing clinical and administrative information from OpenDental"
     columns:
-      - name: patient_note_id
-        description: "Surrogate key for the patient note"
-        tests:
-          - unique
-          - not_null
-
       - name: patient_id
         description: >
           Foreign key to patient record.
@@ -27,68 +21,59 @@ models:
                 severity: warn
                 description: "One historical note references a deleted patient"
 
-      - name: family_financial_notes
+      - name: family_financial
         description: "Notes regarding family financial circumstances (Optional field, often null)"
 
-      - name: appointment_phone_notes
+      - name: appointment_phone
         description: "Notes about patient's preferred phone contact for appointments (Optional field, often null)"
 
-      - name: medical_notes
+      - name: medical
         description: "Medical notes about the patient's health conditions (Optional field, often null)"
 
-      - name: service_notes
+      - name: service
         description: "Notes about patient services (Optional field, often null)"
 
-      - name: medical_compliance_notes
+      - name: medical_comp
         description: "Notes about patient's compliance with medical instructions (Optional field, often null)"
 
-      - name: treatment_notes
+      - name: treatment
         description: "Notes about patient's treatment plans and history (Optional field, often null)"
 
-      - name: emergency_contact_name
+      - name: ice_name
         description: "Name of emergency contact person (Optional field, often null)"
 
-      - name: emergency_contact_phone
+      - name: ice_phone
         description: "Phone number for emergency contact (Optional field, often null)"
 
-      - name: ortho_months_treatment_override
+      - name: ortho_months_treat_override
         description: "Override value for orthodontic treatment duration in months (Optional field, often null)"
 
-      - name: ortho_placement_date_override
+      - name: date_ortho_placement_override
         description: "Override date for orthodontic appliance placement (Optional field, often null)"
 
-      - name: created_timestamp
-        description: "Timestamp when the note was first created"
-        tests:
-          - not_null:
-              severity: warn
-
-      - name: updated_timestamp
-        description: "Timestamp when the note was last modified"
-        tests:
-          - not_null:
-              severity: warn
-          - dbt_utils.expression_is_true:
-              expression: ">= created_timestamp"
-              severity: warn
-
-      - name: consent_notes
+      - name: consent
         description: "Documentation of patient consent (Optional field, often null)"
 
-      - name: ortho_locked_user_id
+      - name: user_num_ortho_locked
         description: "User ID of person who locked orthodontic modifications (Optional field, often null)"
 
-      - name: preferred_pronoun
+      - name: pronoun
         description: "Patient's preferred pronoun (Optional field, often null)"
 
-      - name: source_system
-        description: "Name of the source system (OpenDental)"
+      - name: _loaded_at
+        description: "Timestamp when the record was loaded into the data warehouse by the ETL pipeline"
         tests:
-          - not_null:
-              severity: warn
+          - not_null
 
-      - name: source_loaded_at
-        description: "Timestamp when record was loaded from source"
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system"
         tests:
-          - not_null:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= _created_at"
               severity: warn
