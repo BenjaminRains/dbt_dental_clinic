@@ -29,32 +29,168 @@ class TableConfig:
     
     def __init__(self, 
                  table_name: str,
-                 change_column: str,
+                 created_at_column: str,
+                 updated_at_column: str,
                  batch_size: int = 10000,
                  max_retries: int = 3,
                  retry_delay: int = 300):
         self.table_name = table_name
-        self.change_column = change_column
+        self.created_at_column = created_at_column
+        self.updated_at_column = updated_at_column
         self.batch_size = batch_size
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-# Table configurations
-TABLE_CONFIGS = {
-    'appointment': TableConfig('appointment', 'AptDateTime'),
-    'procedurelog': TableConfig('procedurelog', 'ProcDate'),
-    'payment': TableConfig('payment', 'PayDate'),
-    'claim': TableConfig('claim', 'DateSent'),
-    'commlog': TableConfig('commlog', 'CommDateTime'),
-    'entrylog': TableConfig('entrylog', 'EntryDateTime'),
-    'patient': TableConfig('patient', 'DateFirstVisit'),
-    'insplan': TableConfig('insplan', 'DateEffective'),
-    'provider': TableConfig('provider', 'DateTerm'),
-    'feesched': TableConfig('feesched', 'DateStart'),
-    'definition': TableConfig('definition', 'DateTStamp'),
-    'preference': TableConfig('preference', 'DateTStamp'),
-    'securitylog': TableConfig('securitylog', 'LogDateTime')
-}
+def verify_table_access(table_name: str, conn) -> bool:
+    """Verify read-only access and connection for a table."""
+    try:
+        # Test read-only access with a simple SELECT
+        query = text(f"SELECT 1 FROM {table_name} LIMIT 1")
+        conn.execute(query)
+        
+        # Get connection user
+        user_query = text("SELECT CURRENT_USER()")
+        user = conn.execute(user_query).scalar()
+        
+        logger.info(f"Read-only access verified successfully")
+        logger.info(f"Connected as user: {user}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to verify access for table {table_name}: {str(e)}")
+        return False
+
+def get_metadata_columns(table_name: str, conn) -> Tuple[Optional[str], Optional[str]]:
+    """Get the appropriate created_at and updated_at columns for a table."""
+    try:
+        # Common patterns for created_at columns
+        created_at_patterns = [
+            'DateEntry', 'SecDateTEntry', 'CreatedDate', 'InsertDate'
+        ]
+        
+        # Common patterns for updated_at columns
+        updated_at_patterns = [
+            'DateTStamp', 'SecDateTEdit', 'ModifiedDate'
+        ]
+        
+        # Get all datetime columns for the table
+        query = text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'opendental' 
+            AND table_name = :table_name 
+            AND (data_type = 'datetime' OR data_type = 'timestamp')
+        """)
+        result = conn.execute(query.bindparams(table_name=table_name))
+        datetime_columns = [row[0] for row in result]
+        
+        # Find created_at column
+        created_at = None
+        for pattern in created_at_patterns:
+            if pattern in datetime_columns:
+                created_at = pattern
+                break
+        
+        # Find updated_at column
+        updated_at = None
+        for pattern in updated_at_patterns:
+            if pattern in datetime_columns:
+                updated_at = pattern
+                break
+        
+        # If no specific columns found, use the most recent datetime column for updated_at
+        if not updated_at and datetime_columns:
+            updated_at = datetime_columns[0]
+        
+        return created_at, updated_at
+    except Exception as e:
+        logger.error(f"Error getting metadata columns for {table_name}: {str(e)}")
+        return None, None
+
+def get_all_tables() -> Dict[str, TableConfig]:
+    """Fetch all tables from MySQL and create TableConfig objects."""
+    try:
+        with get_source_connection().connect() as conn:
+            # Get all tables from the database
+            query = text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'opendental'
+            """)
+            result = conn.execute(query)
+            tables = [row[0] for row in result]
+            
+            # Create TableConfig for each table
+            table_configs = {}
+            for table in tables:
+                try:
+                    # Phase 1: Initial discovery
+                    created_at, updated_at = get_metadata_columns(table, conn)
+                    
+                    if created_at or updated_at:
+                        table_configs[table] = TableConfig(
+                            table_name=table,
+                            created_at_column=created_at,
+                            updated_at_column=updated_at
+                        )
+                        logger.info(f"Added table {table} with created_at={created_at}, updated_at={updated_at}")
+                        
+                        # Phase 2: Verification
+                        logger.info(f"\nTable: {table}")
+                        logger.info(f"Created at column: {created_at}")
+                        logger.info(f"Updated at column: {updated_at}")
+                        
+                        if verify_table_access(table, conn):
+                            logger.info(f"Verified metadata columns - Created: {created_at}, Updated: {updated_at}")
+                        else:
+                            logger.warning(f"Skipping table {table} due to access verification failure")
+                            del table_configs[table]
+                            
+                except Exception as e:
+                    logger.error(f"Error configuring table {table}: {str(e)}")
+                    continue
+            
+            logger.info(f"Found {len(table_configs)} tables in the database")
+            return table_configs
+    except Exception as e:
+        logger.error(f"Error fetching tables: {str(e)}")
+        return {}
+
+def get_changed_records(table_config: TableConfig, last_sync: Optional[datetime]) -> pd.DataFrame:
+    """Get records that have changed since last sync."""
+    try:
+        # Build the WHERE clause based on available metadata columns
+        where_clauses = []
+        if table_config.updated_at_column:
+            where_clauses.append(f"{table_config.updated_at_column} > :last_sync")
+        if table_config.created_at_column:
+            where_clauses.append(f"{table_config.created_at_column} > :last_sync")
+        
+        where_clause = " OR ".join(where_clauses)
+        
+        query = f"""
+            SELECT 
+                *,
+                CURRENT_TIMESTAMP as _loaded_at,
+                {table_config.created_at_column or 'NULL'} as _created_at,
+                {table_config.updated_at_column or 'NULL'} as _updated_at
+            FROM {table_config.table_name}
+            WHERE {where_clause}
+            ORDER BY {table_config.updated_at_column or table_config.created_at_column}
+        """
+        
+        with get_source_connection().connect() as conn:
+            df = pd.read_sql(
+                query,
+                conn,
+                params={'last_sync': last_sync or '1970-01-01 00:00:00'}
+            )
+            return df
+    except Exception as e:
+        logger.error(f"Error getting changed records for {table_config.table_name}: {str(e)}")
+        raise
+
+# Initialize TABLE_CONFIGS with all tables from the database
+TABLE_CONFIGS = get_all_tables()
 
 def get_last_sync_time(table_name: str) -> Optional[datetime]:
     """Get the last successful sync time for a table."""
@@ -94,26 +230,6 @@ def update_sync_time(table_name: str, sync_time: datetime, rows_processed: int) 
     except Exception as e:
         logger.error(f"Error updating sync time for {table_name}: {str(e)}")
         return False
-
-def get_changed_records(table_config: TableConfig, last_sync: Optional[datetime]) -> pd.DataFrame:
-    """Get records that have changed since last sync."""
-    try:
-        query = f"""
-            SELECT * FROM {table_config.table_name}
-            WHERE {table_config.change_column} > :last_sync
-            ORDER BY {table_config.change_column}
-        """
-        
-        with get_source_connection().connect() as conn:
-            df = pd.read_sql(
-                query,
-                conn,
-                params={'last_sync': last_sync or '1970-01-01 00:00:00'}
-            )
-            return df
-    except Exception as e:
-        logger.error(f"Error getting changed records for {table_config.table_name}: {str(e)}")
-        raise
 
 def sync_table_incremental(table_name: str) -> bool:
     """Perform incremental sync for a specific table."""
