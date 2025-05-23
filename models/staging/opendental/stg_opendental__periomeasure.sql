@@ -30,7 +30,11 @@ renamed as (
         "Lvalue" as lingual_value,
         "DLvalue" as distal_lingual_value,
         "SecDateTEntry" as entry_timestamp,
-        "SecDateTEdit" as edit_timestamp
+        "SecDateTEdit" as edit_timestamp,
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "SecDateTEntry" as _created_at,  -- Using SecDateTEntry as creation timestamp
+        "SecDateTEdit" as _updated_at    -- Using SecDateTEdit as update timestamp
     from source
 )
 
