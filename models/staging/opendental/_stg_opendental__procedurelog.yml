@@ -184,10 +184,16 @@ models:
           - Should typically be on or after the procedure date
           - Some procedures may be marked complete slightly before their official procedure date
           - Historical procedures may have backdated procedure dates
+          - The date_complete_valid test checks for:
+            * Completion dates that are more than 7 days before procedure date
+            * Completion dates that are more than 30 days after procedure date
+            * Missing completion dates for completed procedures (status 2)
+          - The test is set to 'warn' severity as some variations are expected
         tests:
           - date_complete_valid:
               config:
                 severity: warn
+                description: "Validates completion dates are within reasonable ranges of procedure dates"
       
       - name: procedure_time
         description: Time when the procedure started
