@@ -11,10 +11,10 @@ renamed as (
         "Description" as description,
         "UserGroupNumCEMT" as usergroup_num_cemt,
         
-        -- Metadata
-        '{{ invocation_id }}' as _airbyte_ab_id,
-        '{{ run_started_at }}' as _airbyte_emitted_at,
-        current_timestamp as _airbyte_normalized_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        current_timestamp as _created_at, -- Since no creation timestamp exists in source
+        current_timestamp as _updated_at  -- Since no update timestamp exists in source
     from source
 )
 

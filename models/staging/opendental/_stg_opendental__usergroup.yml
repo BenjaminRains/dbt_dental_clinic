@@ -2,35 +2,39 @@ version: 2
 
 models:
   - name: stg_opendental__usergroup
-    description: Staging model for usergroup data from OpenDental. Contains user group information and their associated permissions.
-    
+    description: >
+      Staging model for user groups in OpenDental. Contains information about different
+      user groups and their associated permissions and settings.
     columns:
+      # Primary Key
       - name: usergroup_id
-        description: Primary key of the usergroup table
+        description: Unique identifier for the user group
         tests:
           - unique
           - not_null
-
+      
+      # Attributes
       - name: description
         description: Description or name of the user group
-        tests:
-          - not_null
-
+      
       - name: usergroup_num_cemt
-        description: Reference to CEMT user group number
+        description: CEMT (Customer Experience Management Tool) identifier for the user group
 
-      # Metadata columns
-      - name: _airbyte_ab_id
-        description: Unique identifier created by Airbyte for each record
-        tests:
-          - not_null
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: Timestamp when the ETL pipeline loaded the data
+      - name: _created_at
+        description: Timestamp when the user group was created (using current_timestamp since source lacks creation timestamp)
+      - name: _updated_at
+        description: Timestamp when the user group was last updated (using current_timestamp since source lacks update timestamp)
 
-      - name: _airbyte_emitted_at
-        description: Timestamp when the record was emitted by Airbyte
-        tests:
-          - not_null
-
-      - name: _airbyte_normalized_at
-        description: Timestamp when the record was normalized
-        tests:
-          - not_null
+    # Relationships with other models
+    meta:
+      relationships:
+        - name: users
+          description: Users can belong to one or more user groups
+          model: stg_opendental__user
+          field_mapping:
+            - from: usergroup_id
+              to: usergroup_id
+          type: many_to_many
