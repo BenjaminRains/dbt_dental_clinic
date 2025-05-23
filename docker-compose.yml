@@ -56,7 +56,7 @@ services:
       - .:/usr/app/dbt
       - ~/.dbt:/root/.dbt
     env_file:
-      - ./config/.env
+      - .env
     environment:
       - DBT_PROFILES_DIR=/usr/app/dbt
       - DBT_PROJECT_DIR=/usr/app/dbt
@@ -85,12 +85,12 @@ services:
     env_file:
       - .env
     ports:
-      - 3305:3306
+      - 3309:3306
     volumes:
       - mysql_data:/var/lib/mysql
-    command: --authentication-plugin=mysql_native_password
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_ROOT_USER=${MYSQL_ROOT_USER}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
 
   mariadb:
