@@ -56,6 +56,10 @@ models:
             verification activities and are primarily created by users 57 and 9282. 
             This is expected behavior for certain verification workflows.
             See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
+            
+            Additionally, the insurance verification test is warning with 2 records where
+            the foreign_key_id does not match the expected inssub_id pattern. These may be
+            edge cases in the verification workflow that require further investigation.
         tests:
           - not_null
 
