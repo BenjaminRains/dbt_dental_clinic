@@ -2,7 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__insverify
-    description: Staging model for insurance verification records. This table tracks verification activities for insurance-related entities.
+    description: >
+      Staging model for insurance verification records. This table tracks verification activities for insurance-related entities.
+      
+      **Data Quality Note**: The relationships test is currently failing with 218 records that exist in this table but do not have corresponding history records in insverifyhist. These records show patterns of automated verification creation (user_id = 0) with a 3-12 day gap before subscriber creation. See docs/data_quality/insurance_verification_orphaned_verification_records.md for detailed analysis. This is under investigation to determine if this is expected behavior or a data quality issue.
     
     columns:
       - name: insurance_verify_id
@@ -11,8 +14,8 @@ models:
           - unique
           - not_null
           # This test verifies that every verification record has at least one corresponding history record.
-          # Note: The reverse relationship (history to verification) has 1,987 mismatches as documented in
-          # docs/data_quality/insurance_verification_orphaned_records.md.
+          # Note: The test is currently failing with 218 records that show patterns of automated verification
+          # creation. See docs/data_quality/insurance_verification_orphaned_verification_records.md for analysis.
           - relationships:
               to: ref('stg_opendental__insverifyhist')
               field: insurance_verify_id
