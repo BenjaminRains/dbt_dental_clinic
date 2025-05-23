@@ -7,7 +7,7 @@ with source as (
     select * from {{ source('opendental', 'procnote') }}
     where "EntryDateTime" >= '2023-01-01'
     {% if is_incremental() %}
-        and "EntryDateTime" > (select max(entry_timestamp) from {{ this }})
+        and "EntryDateTime" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
@@ -27,8 +27,10 @@ renamed as (
         "SigIsTopaz" as is_topaz_signature,
         "Signature" as signature,
         
-        -- Meta fields
-        {{ current_timestamp() }} as _data_loaded_at
+        -- Metadata
+        current_timestamp as _loaded_at,
+        "EntryDateTime" as _created_at,
+        "EntryDateTime" as _updated_at
 
     from source
 )
