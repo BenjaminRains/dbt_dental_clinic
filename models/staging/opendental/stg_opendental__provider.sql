@@ -74,8 +74,8 @@ staged as (
         
         -- Required metadata columns
         current_timestamp as _loaded_at,
-        "DateEntry" as _created_at,
-        coalesce("DateTStamp", "DateEntry") as _updated_at
+        source."DateTStamp" as _created_at,
+        source."DateTStamp" as _updated_at
 
     from source
 )
