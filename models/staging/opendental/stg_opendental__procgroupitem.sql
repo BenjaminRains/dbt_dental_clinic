@@ -6,7 +6,7 @@
 with source as (
     select * from {{ source('opendental', 'procgroupitem') }}
     {% if is_incremental() %}
-        where "DateTStamp" > (select max(date_timestamp) from {{ this }})
+        where current_timestamp > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -19,9 +19,14 @@ renamed as (
         "ProcNum" as procedure_id,
         "GroupNum" as group_id,
         
-        -- Metadata
-        '{{ invocation_id }}' as _airbyte_ab_id,
-        current_timestamp as _airbyte_loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,                    -- When ETL pipeline loaded the data
+        current_timestamp as _created_at,                   -- When record was created in source system
+        current_timestamp as _updated_at,                   -- When record was last updated
+        
+        -- Optional metadata
+        '{{ invocation_id }}' as _invocation_id,           -- dbt invocation ID for lineage tracking
+        current_timestamp as _extract_timestamp            -- When data was extracted from source
     from source
 )
 
