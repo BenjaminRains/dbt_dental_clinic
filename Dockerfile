@@ -5,6 +5,9 @@ WORKDIR /usr/app/dbt
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    default-libmysqlclient-dev \
+    pkg-config \
     git \
     && rm -rf /var/lib/apt/lists/*
 
