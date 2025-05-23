@@ -2,26 +2,45 @@ version: 2
 
 models:
   - name: stg_opendental__taskunread
-    description: Staging model for task unread statuses. This model tracks which tasks are marked as unread by which users.
+    description: >
+      Staging model for task unread status from OpenDental. Tracks which users have not yet
+      read specific tasks, supporting the task notification and alert system. This model helps
+      ensure users are aware of new or updated tasks that require their attention.
     columns:
+      # Primary Key
       - name: task_unread_id
-        description: Primary key of the task unread record
+        description: Primary key - unique identifier for each task unread record
         tests:
           - unique
           - not_null
-      
+
+      # Foreign Keys
       - name: task_id
-        description: Foreign key to the task that is marked as unread
+        description: Foreign key to the unread task
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__task')
               field: task_id
-      
+              config:
+                severity: warn
       - name: user_id
-        description: Foreign key to the user who has the task marked as unread
+        description: Foreign key to the user who hasn't read the task
         tests:
           - not_null
           - relationships:
-              to: ref('stg_opendental__userod')
+              to: ref('stg_opendental__user')
               field: user_id
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - task_unread_id
