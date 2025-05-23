@@ -4,13 +4,13 @@
 ) }}
 
 with source as (
-    select sf.* 
+    select sf.*, s."DateTimeSheet", s."DateTSheetEdited"
     from {{ source('opendental', 'sheetfield') }} sf
     inner join {{ source('opendental', 'sheet') }} s 
         on sf."SheetNum" = s."SheetNum"
     where s."DateTimeSheet" >= '2023-01-01'
     {% if is_incremental() %}
-        and s."DateTimeSheet" > (select max(sheet_datetime) from {{ this }})
+        and s."DateTimeSheet" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
@@ -48,7 +48,12 @@ renamed as (
         "UiLabelMobile" as ui_label_mobile,
         "UiLabelMobileRadioButton" as ui_label_mobile_radio_button,
         "CanElectronicallySign" as can_electronically_sign,
-        "IsSigProvRestricted" as is_sig_prov_restricted
+        "IsSigProvRestricted" as is_sig_prov_restricted,
+        
+        -- Metadata
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "DateTimeSheet" as _created_at,   -- When the record was created in source
+        "DateTSheetEdited" as _updated_at -- Last update timestamp
 
     from source
 )

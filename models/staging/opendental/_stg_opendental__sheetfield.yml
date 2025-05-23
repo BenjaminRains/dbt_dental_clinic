@@ -2,51 +2,57 @@ version: 2
 
 models:
   - name: stg_opendental__sheetfield
-    description: Staging model for OpenDental sheet fields. Sheet fields represent individual elements within a sheet/form, such as text boxes, checkboxes, or signature fields.
+
+    description: Staging model for sheet field records from OpenDental. Contains information about individual fields within sheets, including their properties, values, and layout.
     config:
       tags: ['staging', 'opendental', 'incremental']
     columns:
       - name: sheet_field_id
-        description: Primary key of the sheet field table
+        description: Primary key - unique identifier for each sheet field
         tests:
           - unique
           - not_null
 
       # Foreign Keys
       - name: sheet_id
-        description: Foreign key to the sheet table. References sheet_id in stg_opendental__sheet
+        description: Foreign key to sheet table
         tests:
           - not_null
+          - relationships:
+              to: ref('stg_opendental__sheet')
+              field: sheet_id
       
       - name: sheet_field_def_id
-        description: Foreign key to the sheet field definition table. References sheet_field_def_id in stg_opendental__sheetfielddef
+        description: Foreign key to sheet field definition table
         tests:
-          - not_null
+          - relationships:
+              to: ref('stg_opendental__sheetfielddef')
+              field: sheet_field_def_id
 
       # Regular Fields
       - name: field_type
-        description: Type of field (e.g., text box, checkbox, signature field)
+        description: Type of field (e.g., text, checkbox, radio button)
       
       - name: field_name
-        description: Name identifier for the field
+        description: Name of the field
       
       - name: field_value
-        description: Content/value stored in the field
+        description: Value stored in the field
       
       - name: font_size
-        description: Size of the font used in the field
+        description: Font size used in the field
       
       - name: font_name
         description: Name of the font used in the field
       
       - name: is_font_bold
-        description: Boolean indicating if the font is bold
+        description: Boolean flag indicating if font is bold
       
       - name: x_position
-        description: Horizontal position of the field on the sheet
+        description: X-coordinate position of the field
       
       - name: y_position
-        description: Vertical position of the field on the sheet
+        description: Y-coordinate position of the field
       
       - name: width
         description: Width of the field
@@ -55,49 +61,59 @@ models:
         description: Height of the field
       
       - name: growth_behavior
-        description: Defines how the field grows when content is added
+        description: Behavior of the field when content grows
       
       - name: radio_button_value
-        description: Value associated with a radio button field
+        description: Value for radio button fields
       
       - name: radio_button_group
-        description: Group identifier for related radio buttons
+        description: Group identifier for radio button fields
       
       - name: is_required
-        description: Boolean indicating if the field is required
+        description: Boolean flag indicating if field is required
       
       - name: tab_order
-        description: Order of the field when using tab navigation
+        description: Order of the field in tab sequence
       
       - name: reportable_name
-        description: Name used for reporting purposes
+        description: Name used when reporting field data
       
       - name: text_align
         description: Text alignment within the field
       
       - name: item_color
-        description: Color of the field item
+        description: Color of the field
       
       - name: date_time_signature
-        description: Timestamp when the field was signed
+        description: Timestamp of electronic signature if applicable
       
       - name: is_locked
-        description: Boolean indicating if the field is locked for editing
+        description: Boolean flag indicating if field is locked from editing
       
       - name: tab_order_mobile
-        description: Tab order for mobile device display
+        description: Order of the field in mobile tab sequence
       
       - name: ui_label_mobile
-        description: Label displayed on mobile devices
+        description: Label text for mobile interface
       
       - name: ui_label_mobile_radio_button
-        description: Mobile-specific label for radio buttons
+        description: Label text for mobile radio button interface
       
       - name: can_electronically_sign
-        description: Boolean indicating if the field can be signed electronically
+        description: Boolean flag indicating if field can be electronically signed
       
       - name: is_sig_prov_restricted
-        description: Boolean indicating if signature is restricted to providers
+        description: Boolean flag indicating if signature is provider-restricted
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental), inherited from the related sheet record
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental), inherited from the related sheet record
 
     meta:
       relationships:
@@ -107,3 +123,8 @@ models:
         - relationship: many_to_one
           field: sheet_field_def_id
           related_to: stg_opendental__sheetfielddef.sheet_field_def_id
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - sheet_field_id
