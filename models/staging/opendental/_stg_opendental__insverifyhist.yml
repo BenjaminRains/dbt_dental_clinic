@@ -58,17 +58,6 @@ models:
             See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
         tests:
           - not_null
-          - relationships_where:
-              to: ref('stg_opendental__inssub')
-              field: inssub_id
-              config:
-                severity: warn
-                where: "verify_type = 1"
-                description: >
-                  This test verifies that every Type 1 history record has a corresponding subscriber record.
-                  Note: Some Type 1 history records may not have corresponding subscribers due to
-                  specific verification workflows. This is expected behavior.
-                  See docs/data_quality/insurance_verification_orphaned_verification_records.md for analysis.
 
       - name: last_verified_date
         description: Date when the verification was last performed
@@ -128,14 +117,13 @@ models:
 
     tests:
       # Test that verify_type=1 records have valid inssub references
-      - dbt_utils.relationships_where:
+      - relationships:
           column_name: foreign_key_id
           to: ref('stg_opendental__inssub')
           field: inssub_id
-          from_condition: "verify_type = 1"
-          to_condition: "inssub_id is not null"
           config:
             severity: warn
+            where: "verify_type = 1"
             description: >
               This test verifies that Type 1 history records have valid subscriber references.
               Note: Some Type 1 history records may not have corresponding subscribers due to
