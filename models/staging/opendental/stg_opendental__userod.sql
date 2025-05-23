@@ -41,7 +41,12 @@ renamed as (
         -- Security Tracking
         "DateTFail" as last_failed_login_at,
         "FailedAttempts" as failed_login_attempts,
-        "DateTLastLogin" as last_login_at
+        "DateTLastLogin" as last_login_at,
+
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data into our warehouse
+        current_timestamp as _created_at, -- When the user record was created (using current_timestamp as source has no creation date)
+        current_timestamp as _updated_at  -- When the user record was last updated (using current_timestamp as source has no update date)
 
     from source
 )
