@@ -3,43 +3,58 @@ version: 2
 models:
   - name: stg_opendental__tasklist
     description: >
-      Staging model for OpenDental tasklist table. Contains task information including descriptions, dates, and status.
-      Note: This model only includes task lists created on or after January 1st, 2023. Historical task lists (created before 2023)
-      are excluded, which may result in relationship test failures with taskhist records that reference older task lists.
-      This is expected behavior as we focus on recent task management data.
+      Staging model for task list records from OpenDental. Contains information about task lists,
+      which are collections of related tasks that can be assigned, tracked, and managed together.
+      Task lists can be hierarchical (with parent-child relationships) and can be associated with
+      various entity types in the system.
     columns:
-      - name: task_id
-        description: Primary key of the tasklist table
+      # Primary Key
+      - name: task_list_id
+        description: Primary key - unique identifier for each task list
         tests:
           - unique
           - not_null
 
+      # Attributes
       - name: description
-        description: Description of the task
-
+        description: Main description of the task list
       - name: parent_id
-        description: Reference to parent task if this is a subtask
-
+        description: Foreign key to parent task list (if this is a child list)
       - name: task_date
-        description: Date associated with the task
-
+        description: Date associated with the task list
       - name: is_repeating
-        description: Flag indicating if the task repeats
-
+        description: Flag indicating if the task list repeats
       - name: date_type
-        description: Type of date associated with the task
-
+        description: Type of date associated with the task list
       - name: from_id
-        description: Reference ID for the source of the task
-
+        description: Foreign key to the task list creator
       - name: object_type
-        description: Type of object associated with the task
-
+        description: Type of object the task list is associated with
       - name: entry_datetime
-        description: Timestamp when the task was entered
-
+        description: Timestamp when the task list was created
       - name: global_task_filter_type
-        description: Type of global task filter
-
+        description: Type of global filter applied to the task list
       - name: task_status
-        description: Current status of the task
+        description: Current status of the task list
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - task_list_id
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: parent_id
+          related_to: stg_opendental__tasklist.task_list_id
+        - relationship: many_to_one
+          field: from_id
+          related_to: stg_opendental__user.user_id

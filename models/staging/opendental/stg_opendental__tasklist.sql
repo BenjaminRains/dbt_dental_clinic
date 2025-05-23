@@ -5,7 +5,10 @@ with source as (
 
 renamed as (
     select
-        "TaskListNum" as task_id,
+        -- Primary Key
+        "TaskListNum" as task_list_id,
+        
+        -- Attributes
         "Descript" as description,
         "Parent" as parent_id,
         "DateTL" as task_date,
@@ -15,7 +18,12 @@ renamed as (
         "ObjectType" as object_type,
         "DateTimeEntry" as entry_datetime,
         "GlobalTaskFilterType" as global_task_filter_type,
-        "TaskListStatus" as task_status
+        "TaskListStatus" as task_status,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTimeEntry" as _created_at,
+        "DateTimeEntry" as _updated_at
     from source
 )
 
