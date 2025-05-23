@@ -42,10 +42,24 @@ models:
       - D0-D9 prefixes indicate procedure groups (diagnostic, preventive, etc.)
       - Flags like is_hygiene_flag and is_radiology_flag indicate special handling requirements.
       
+      Fee Schedule Context:
+      - Fee variations across different schedules are expected and normal
+      - Common variations include:
+        - Implant procedures (D6010): $818-$4,000 range
+        - Crown procedures (D2740): $126-$818 range
+        - Periodontal evaluations (D0180): $56-$116 range
+      - Some fee schedules are intentionally underutilized:
+        - Schedule 8277: Used for specific fluoride treatments
+        - Schedule 8285: Used for periodic evaluations
+        - Schedule 8290: Used for comprehensive evaluations
+      - These variations are monitored but not considered errors
+      
       Tests:
       - Custom test "validate_procedure_code_flag" checks that D6 codes have prosthodontic flags
       - Custom test "validate_procedure_code_prefixes" validates proper code prefixes
       - Custom test "warn_new_procedure_codes" alerts when new procedure codes are added to the system
+      - Fee variation tests are set to 'warn' severity as variations are expected
+      - Underutilized fee schedule tests are set to 'warn' severity as some schedules are intentionally small
     config:
       materialized: incremental
       unique_key: procedure_code_id
