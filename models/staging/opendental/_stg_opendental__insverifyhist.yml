@@ -2,7 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__insverifyhist
-    description: Staging model for insurance verification history records. This table maintains the historical record of verification activities and their changes.
+    description: >
+      Staging model for insurance verification history records. This table maintains the historical record of verification activities and their changes.
+      
+      **Data Quality Note**: As of [Current Date], there are 1,987 history records (55 Type 1, 1,932 Type 2) that exist in this table but do not have corresponding records in insverify. These records span from 2023-01-01 to 2025-02-15 and show patterns of sequential verification activities. See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
     
     columns:
       - name: insurance_verify_history_id
@@ -12,12 +15,19 @@ models:
           - not_null
 
       - name: insurance_verify_id
-        description: Foreign key - References the original verification record in insverify
+        description: >
+          Foreign key - References the original verification record in insverify.
+          
+          **Data Quality Note**: As of [Current Date], there are 1,987 records where this ID does not exist in insverify. These records show patterns of sequential verification activities and are primarily created by users 57 and 9282. See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__insverify')
               field: insurance_verify_id
+              description: >
+                This test is currently failing due to 1,987 history records that do not have corresponding verification records.
+                These records show patterns of sequential verification activities and are primarily created by users 57 and 9282.
+                See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
 
       - name: user_id
         description: Foreign key - ID of the user who created the original verification record
