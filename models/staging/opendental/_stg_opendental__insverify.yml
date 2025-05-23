@@ -73,7 +73,15 @@ models:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
+        description: >
+          Timestamp when the record was created in the source system (OpenDental).
+          
+          **Data Quality Note**: The not_null test is currently failing with 1,094 records. 
+          Analysis shows these are all system-generated records (user_id = 0) with 
+          last_verified_date populated but null entry_timestamp. 
+          See docs/data_quality/insurance_verification_orphaned_verification_records.md for 
+          detailed analysis. This is under investigation to determine if this is expected 
+          behavior or a data quality issue.
         tests:
           - not_null
 

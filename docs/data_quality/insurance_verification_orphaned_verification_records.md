@@ -3,8 +3,20 @@
 ## Overview
 This report documents the discovery of 218 verification records in `insverify` that do not have corresponding history records in `insverifyhist`. These records show distinct patterns that suggest they are part of an automated or semi-automated insurance verification workflow.
 
-## Test Failure
+## Test Failures
+
+### 1. Missing History Records
 The `relationships` test in `_stg_opendental__insverify.yml` is failing with 218 results, indicating that these verification records exist without corresponding history records.
+
+### 2. Null Created At Timestamps
+The `not_null` test on `_created_at` is failing with 1,094 results. Analysis shows:
+- 438 Type 1 records and 656 Type 2 records
+- All records have `user_id = 0` (system-generated)
+- All records have `last_verified_date` populated in 2023
+- All records have null `entry_timestamp` and `last_assigned_date`
+- All Type 1 records have matching subscribers (mostly ACTIVE, some TERMINATED)
+
+This suggests these records are part of the same automated process as the orphaned verification records, but with a different pattern of data population.
 
 ## Key Findings
 
@@ -47,20 +59,23 @@ The data suggests a two-step automated process:
    - Some records are abandoned or fail to complete
 
 ## Data Quality Impact
-1. **Test Failure**
-   - The `relationships` test is failing due to these records
-   - This indicates a potential data integrity issue in the verification process
+1. **Test Failures**
+   - The `relationships` test is failing due to orphaned verification records
+   - The `not_null` test on `_created_at` is failing due to system-generated records
+   - Both issues indicate potential data integrity issues in the verification process
 
 2. **Process Issues**
    - Some verification records never complete the subscriber creation step
    - The presence of old effective dates (2010, 2022) suggests possible data migration
    - No benefit notes or verification details are present
+   - System-generated records are missing critical timestamp data
 
 ## Next Steps
 1. Investigate the automated process creating these records
 2. Determine if the abandoned verification records should be cleaned up
-3. Consider modifying the test to account for this known pattern
+3. Consider modifying the tests to account for these known patterns
 4. Document the expected behavior of the verification workflow
+5. Investigate why system-generated records have null `entry_timestamp` values
 
 ## Related Documentation
 - See `docs/data_quality/insurance_verification_orphaned_records.md` for analysis of orphaned history records
