@@ -66,12 +66,17 @@ models:
       - name: time_pattern_override
         description: Override for the standard time pattern for this recall appointment
       
-      - name: date_tstamp
-        description: Timestamp from the source system indicating when the record was last updated
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the data warehouse by the ETL pipeline
         tests:
           - not_null
       
-      - name: _loaded_at
-        description: Timestamp when this record was loaded into the data warehouse
+      - name: _created_at
+        description: Timestamp when this record was created in the source system
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: Timestamp when this record was last updated in the source system
         tests:
           - not_null

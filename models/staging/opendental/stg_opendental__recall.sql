@@ -10,7 +10,7 @@ WITH Source AS (
     WHERE "DateDue" >= '2023-01-01'::date  
         AND "DateDue" <= CURRENT_DATE
     {% if is_incremental() %}
-        AND "DateTStamp" > (SELECT max(date_tstamp) FROM {{ this }})
+        AND "DateTStamp" > (SELECT max(_updated_at) FROM {{ this }})
     {% endif %}
 ),
 
@@ -41,9 +41,10 @@ Renamed AS (
         NULLIF(TRIM("Note"), '') AS note,
         NULLIF(TRIM("TimePatternOverride"), '') AS time_pattern_override,
         
-        -- Metadata
-        "DateTStamp" AS date_tstamp,
-        current_timestamp AS _loaded_at
+        -- Required metadata columns
+        current_timestamp AS _loaded_at,
+        "DateTStamp" AS _created_at,
+        "DateTStamp" AS _updated_at
     FROM Source
 )
 
