@@ -42,11 +42,10 @@ renamed as (
         "DescriptOverride" as description_override,
         "IsReadOnly" as is_read_only,
         
-        -- Metadata
-        "SecDateTEdit" as _airbyte_emitted_at,
-        '{{ invocation_id }}' as _airbyte_ab_id,
-        '{{ run_started_at }}' as _airbyte_normalized_at,
-        '{{ invocation_id }}' as _airbyte_taskhist_hashid
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        "DateTStamp" as _created_at,
+        "SecDateTEdit" as _updated_at
     from source
 )
 

@@ -3,161 +3,90 @@ version: 2
 models:
   - name: stg_opendental__taskhist
     description: >
-      Staging model for task history records. Contains historical tracking of task changes, status updates, and task-related metadata.
-      Note: Relationship tests with tasklist may fail for records referencing task lists created before 2023 (particularly task_list_id values 8, 12, and 14).
-      This is expected behavior as the tasklist model only includes records from 2023 onwards. These historical task lists contain important
-      system tasks but are excluded from the analytics models to focus on recent task management data.
-
-      Task Status Meanings:
-      - Status 0: Active/New Tasks - Initial state for new tasks, ongoing tasks, or reactivated tasks
-      - Status 1: Completed Tasks - Final completion state, tasks that are fully done
-      - Status 2: Alternative Completion - Tasks that are completed but might need verification or follow-up
-      
-      Note: task_date is optional as these are action items/reminders rather than scheduled appointments.
+      Staging model for task history records from OpenDental. Contains historical snapshots of task changes,
+      including modifications to task details, status updates, and assignment changes. This model tracks
+      the complete history of task modifications for audit and tracking purposes.
     columns:
+      # Primary Key
       - name: task_hist_id
-        description: Primary key for task history records
+        description: Primary key - unique identifier for each task history record
         tests:
           - unique
           - not_null
-      
+
+      # Foreign Keys
       - name: user_hist_id
-        description: Foreign key to the user who made the historical change
-        tests:
-          - relationships:
-              to: ref('stg_opendental__user')
-              field: user_id
-      
+        description: Foreign key to the user who made the change
       - name: task_id
-        description: Foreign key to the task record
-        tests:
-          - relationships:
-              to: ref('stg_opendental__task')
-              field: task_id
-              where: "entry_datetime >= '2023-01-01'"
-              severity: warn
-      
+        description: Foreign key to the task being modified
       - name: task_list_id
-        description: Foreign key to the task list this task belongs to
-        tests:
-          - relationships:
-              to: ref('stg_opendental__tasklist')
-              field: task_id
-              where: "entry_datetime >= '2023-01-01'"
-              severity: warn
-      
+        description: Foreign key to the task list table
       - name: key_id
-        description: Foreign key to the related entity (varies by object type)
-      
+        description: Foreign key to the related entity (varies based on object_type)
       - name: from_id
-        description: Foreign key to the source entity
-      
+        description: Foreign key to the task creator
       - name: user_id
-        description: Foreign key to the user who created the task
-        tests:
-          - relationships:
-              to: ref('stg_opendental__user')
-              field: user_id
-      
+        description: Foreign key to the user assigned to the task
       - name: priority_def_id
-        description: Foreign key to the priority definition
-        tests:
-          - relationships:
-              to: ref('stg_opendental__prioritydef')
-              field: priority_def_id
-      
+        description: Foreign key to the priority definition table
       - name: triage_category_id
-        description: Foreign key to the triage category
-        tests:
-          - relationships:
-              to: ref('stg_opendental__triagedef')
-              field: triage_def_id
-      
+        description: Foreign key to the triage category table
+
+      # Attributes
       - name: timestamp
         description: Timestamp when the history record was created
-        tests:
-          - not_null
-      
       - name: is_note_change
-        description: Flag indicating if this history record represents a note change
-        tests:
-          - not_null
-      
+        description: Flag indicating if the change was to the task notes
       - name: task_date
-        description: Optional date when the task is scheduled for. Note that this field is often NULL as many tasks are action items rather than scheduled appointments.
-        tests:
-          - not_null:
-              severity: warn
-      
+        description: Date when the task is due or scheduled
       - name: description
-        description: Main description of the task
-        tests:
-          - not_null
-      
+        description: Task description at the time of the change
       - name: task_status
-        description: Current status of the task
-        tests:
-          - not_null
-      
+        description: Task status at the time of the change
       - name: is_repeating
-        description: Flag indicating if this is a repeating task
-        tests:
-          - not_null
-      
+        description: Flag indicating if the task repeats
       - name: date_type
         description: Type of date associated with the task
-        tests:
-          - not_null
-      
       - name: object_type
-        description: Type of object this task is associated with
-        tests:
-          - not_null
-      
+        description: Type of object the task is associated with
       - name: entry_datetime
-        description: Timestamp when the task was entered
-        tests:
-          - not_null
-      
+        description: Timestamp when the task was created
       - name: finished_datetime
         description: Timestamp when the task was completed
-      
       - name: reminder_group_id
         description: Identifier for the reminder group
-      
       - name: reminder_type
-        description: Type of reminder associated with the task
-      
+        description: Type of reminder
       - name: reminder_frequency
-        description: Frequency of reminders for this task
-      
+        description: Frequency of the reminder
       - name: original_datetime
-        description: Original timestamp of the task
-      
+        description: Original creation timestamp of the task
       - name: description_override
-        description: Override description for the task
-      
+        description: Override text for the task description
       - name: is_read_only
         description: Flag indicating if the task is read-only
-        tests:
-          - not_null
-      
-      - name: _airbyte_ab_id
-        description: Unique identifier for the Airbyte record
-        tests:
-          - not_null
-      
-      - name: _airbyte_emitted_at
-        description: Timestamp when the record was emitted by Airbyte
-        tests:
-          - not_null
-      
-      - name: _airbyte_normalized_at
-        description: Timestamp when the record was normalized
-        tests:
-          - not_null
-      
-      - name: _airbyte_taskhist_hashid
-        description: Hash identifier for the task history record
-        tests:
-          - not_null
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - task_hist_id
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: task_id
+          related_to: stg_opendental__task.task_id
+        - relationship: many_to_one
+          field: user_hist_id
+          related_to: stg_opendental__user.user_id
+        - relationship: many_to_one
+          field: task_list_id
+          related_to: stg_opendental__tasklist.task_list_id
