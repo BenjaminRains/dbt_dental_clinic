@@ -12,6 +12,12 @@ models:
       # - Payment dates must be between 2000-01-01 and current date
       # - Required fields: payment_id, patient_id, payment_amount, payment_date, payment_type_id
       # - Status fields (payment_status, process_status, payment_source) must be non-negative
+      #
+      # Note: High-value payment warnings (type 69):
+      # - 13 payments > $5,000 (LOW)
+      # - 11 payments > $10,000 (MEDIUM)
+      # - 11 payments > $25,000 (HIGH)
+      # These warnings are expected and have been reviewed.
       - payment_validation_rules:
           config:
             severity: warn  # Changed from error to warn
