@@ -24,10 +24,11 @@ models:
           - relationships:
               to: ref('stg_opendental__insverify')
               field: insurance_verify_id
-              description: >
-                This test is currently failing due to 1,987 history records that do not have corresponding verification records.
-                These records show patterns of sequential verification activities and are primarily created by users 57 and 9282.
-                See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
+              config:
+                description: >
+                  This test is currently failing due to 1,987 history records that do not have corresponding verification records.
+                  These records show patterns of sequential verification activities and are primarily created by users 57 and 9282.
+                  See docs/data_quality/insurance_verification_orphaned_records.md for detailed analysis.
 
       - name: user_id
         description: Foreign key - ID of the user who created the original verification record
