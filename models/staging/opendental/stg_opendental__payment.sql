@@ -46,14 +46,15 @@ Renamed AS (
         -- Dates
         NULLIF("RecurringChargeDate", '1900-01-01'::date) AS recurring_charge_date,
         NULLIF("DateEntry", '1900-01-01'::date) AS entry_date,
-        COALESCE("SecDateTEdit", current_timestamp) AS updated_at,  -- DDL default: CURRENT_TIMESTAMP
 
         -- Text fields (handle empty strings)
         NULLIF(TRIM("PayNote"), '') AS payment_notes,    -- text
         NULLIF(TRIM("Receipt"), '') AS receipt_text,     -- text
 
         -- Metadata
-        current_timestamp AS _loaded_at
+        current_timestamp AS _loaded_at,
+        NULLIF("DateEntry", '1900-01-01'::date) AS _created_at,  -- Source creation timestamp
+        COALESCE("SecDateTEdit", current_timestamp) AS _updated_at  -- Source update timestamp
     FROM Source
 )
 

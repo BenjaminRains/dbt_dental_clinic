@@ -25,14 +25,16 @@ models:
         description: Foreign key to patients
         tests:
           - not_null
-      - name: payment_amount
-        description: Amount of the payment
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      - name: clinic_id
+        description: Foreign key to clinics
         tests:
           - not_null
-      - name: payment_date
-        description: Date of the payment
-        tests:
-          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
       - name: payment_type_id
         description: |
           Type of payment. Current patterns (2023-present):
@@ -55,6 +57,113 @@ models:
         tests:
           - not_null
           - accepted_values:
-               values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
-               config:
-                 severity: warn  # Keep warning severity for flexibility
+              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+              config:
+                severity: warn  # Keep warning severity for flexibility
+      - name: deposit_id
+        description: Foreign key to deposits
+      - name: created_by_user_id
+        description: Foreign key to users who created the payment
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+      - name: payment_date
+        description: Date of the payment
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "payment_date >= '2023-01-01'"
+          - dbt_utils.expression_is_true:
+              expression: "payment_date <= current_date"
+      - name: payment_amount
+        description: Amount of the payment
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "payment_amount >= 0"
+      - name: merchant_fee
+        description: Fee charged by the merchant for processing the payment
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "merchant_fee >= 0"
+      - name: check_number
+        description: Check number for check payments
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "length(check_number) <= 25"
+      - name: bank_branch
+        description: Bank branch information for check payments
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "length(bank_branch) <= 25"
+      - name: external_id
+        description: External reference ID for the payment
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "length(external_id) <= 255"
+      - name: is_split_flag
+        description: Indicates if the payment is split across multiple procedures
+        tests:
+          - not_null
+      - name: is_recurring_cc_flag
+        description: Indicates if this is a recurring credit card payment
+        tests:
+          - not_null
+      - name: is_cc_completed_flag
+        description: Indicates if the credit card payment was completed successfully
+        tests:
+          - not_null
+      - name: payment_status
+        description: Current status of the payment
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "payment_status >= 0"
+      - name: process_status
+        description: Processing status of the payment
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "process_status >= 0"
+      - name: payment_source
+        description: Source of the payment
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "payment_source >= 0"
+      - name: recurring_charge_date
+        description: Date when a recurring payment will be charged
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "recurring_charge_date > '2000-01-01'"
+      - name: entry_date
+        description: Date when the payment was entered into the system
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "entry_date > '2000-01-01'"
+      - name: payment_notes
+        description: Additional notes about the payment
+      - name: receipt_text
+        description: Text content of the payment receipt
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "<= current_timestamp"
+      - name: _created_at
+        description: Timestamp when the record was created in the source system
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "<= current_timestamp"
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "<= current_timestamp"
+          - dbt_utils.expression_is_true:
+              expression: "_updated_at >= _created_at"
