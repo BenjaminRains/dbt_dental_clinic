@@ -3,66 +3,104 @@ version: 2
 models:
   - name: stg_opendental__treatplan
     description: >
-      Staging model for OpenDental treatment plans. This incremental model contains 
-      treatment plans created on or after January 1, 2023.
+      Staging model for treatment plans from OpenDental. Tracks dental treatment plans including
+      procedures, costs, and patient signatures. This model supports treatment planning, financial
+      tracking, and patient consent management.
     config:
       materialized: incremental
     columns:
-      # Primary key
+      # Primary Key
       - name: treatment_plan_id
-        description: Unique identifier for the treatment plan
+        description: Primary key - unique identifier for each treatment plan
         tests:
           - unique
           - not_null
-      
-      # Foreign keys
+
+      # Foreign Keys
       - name: patient_id
-        description: Foreign key to the patient table
+        description: Foreign key to the patient who the treatment plan applies to
         tests:
           - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
       - name: responsible_party_id
-        description: Foreign key to the responsible party (usually guarantor)
+        description: Foreign key to the responsible party for the treatment plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__responsible_party')
+              field: responsible_party_id
       - name: document_id
-        description: Foreign key to associated document
+        description: Foreign key to the associated document
+        tests:
+          - relationships:
+              to: ref('stg_opendental__document')
+              field: document_id
       - name: entry_user_id
-        description: User ID of the person who created the treatment plan
+        description: Foreign key to the user who created the treatment plan
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
       - name: presenter_user_id
-        description: User ID of the person who presented the treatment plan
+        description: Foreign key to the user who presented the treatment plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
       - name: mobile_app_device_id
-        description: Device ID if created through mobile app
-      
-      # Timestamps and dates
+        description: Foreign key to the mobile device used for the treatment plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__mobile_app_device')
+              field: mobile_app_device_id
+
+      # Timestamps and Dates
       - name: treatment_plan_date
-        description: Date the treatment plan was created
+        description: Date when the treatment plan was created
         tests:
           - not_null
       - name: entry_date
-        description: Date the treatment plan was entered into the system
+        description: Date when the treatment plan was entered into the system
       - name: last_edit_timestamp
         description: Timestamp of the most recent edit
       - name: signed_timestamp
-        description: Timestamp when the treatment plan was signed
+        description: Timestamp when the patient signed the treatment plan
       - name: practice_signed_timestamp
         description: Timestamp when the practice signed the treatment plan
-      
-      # Descriptive fields
+
+      # Descriptive Fields
       - name: heading
-        description: Heading or title of the treatment plan
+        description: Title or heading of the treatment plan
       - name: note
-        description: General notes associated with the treatment plan
+        description: Additional notes or comments about the treatment plan
       - name: signature
-        description: Patient signature data
+        description: Patient's signature data
       - name: signature_text
-        description: Textual representation of patient signature
+        description: Text representation of patient's signature
       - name: signature_practice
-        description: Practice signature data
+        description: Practice's signature data
       - name: signature_practice_text
-        description: Textual representation of practice signature
-      
-      # Status and type flags
+        description: Text representation of practice's signature
+
+      # Status and Type Flags
       - name: is_signature_topaz
-        description: Boolean indicating if signature was captured using Topaz system
+        description: Flag indicating if the signature was captured using Topaz
       - name: treatment_plan_status
-        description: Status code for the treatment plan
+        description: Current status of the treatment plan
       - name: treatment_plan_type
-        description: Type code for the treatment plan
+        description: Type of treatment plan
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+      - name: _created_at
+        description: Timestamp when the treatment plan was created in the source system (OpenDental)
+      - name: _updated_at
+        description: Timestamp when the treatment plan was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - treatment_plan_id

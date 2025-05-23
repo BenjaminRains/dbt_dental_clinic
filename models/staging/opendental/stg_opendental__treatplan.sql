@@ -8,7 +8,7 @@ with source as (
     from {{ source('opendental', 'treatplan') }}
     where "DateTP" >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(last_edit_timestamp) from {{ this }})
+        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
@@ -28,7 +28,6 @@ renamed as (
         -- Timestamps and dates
         "DateTP" as treatment_plan_date,
         "SecDateEntry" as entry_date,
-        "SecDateTEdit" as last_edit_timestamp,
         "DateTSigned" as signed_timestamp,
         "DateTPracticeSigned" as practice_signed_timestamp,
         
@@ -43,7 +42,12 @@ renamed as (
         -- Status and type flags
         "SigIsTopaz" as is_signature_topaz,
         "TPStatus" as treatment_plan_status,
-        "TPType" as treatment_plan_type
+        "TPType" as treatment_plan_type,
+        
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "SecDateEntry" as _created_at,   -- When the treatment plan was created
+        "SecDateTEdit" as _updated_at    -- When the treatment plan was last updated
     from source
 )
 
