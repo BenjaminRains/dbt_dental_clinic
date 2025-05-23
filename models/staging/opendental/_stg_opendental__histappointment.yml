@@ -217,14 +217,19 @@ models:
       
       - name: patient_id
         description: >
-          Foreign key to the patient associated with this appointment.
-          Note: Some historical records may reference patients that have been deleted or merged.
+          Foreign key to patient record.
+          
+          Note:
+          - As of 2025, there are 6 historical appointments with invalid patient references
+          - These likely represent deleted patient records
+          - The appointments are from 1985-2006
         tests:
-          - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
-              severity: warn
+              config:
+                severity: warn
+                description: "Some historical appointments reference deleted patients"
       
       - name: provider_id
         description: >

@@ -11,13 +11,21 @@ models:
           - not_null
 
       - name: patient_id
-        description: "Foreign key to the patient dimension"
+        description: >
+          Foreign key to patient record.
+          
+          Note:
+          - As of 2025, there is 1 patient note with an invalid patient reference
+          - This likely represents a deleted patient record
+          - The note is from 2006
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
-              severity: warn
+              config:
+                severity: warn
+                description: "One historical note references a deleted patient"
 
       - name: family_financial_notes
         description: "Notes regarding family financial circumstances (Optional field, often null)"
