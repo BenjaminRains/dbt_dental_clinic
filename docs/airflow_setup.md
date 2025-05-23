@@ -11,13 +11,13 @@ Apache Airflow is used in this project to orchestrate the ETL processes that kee
 2. **Airflow Scheduler**: Manages DAG execution schedules
 3. **Airflow Workers**: Execute the actual tasks
 4. **Airflow Metadata Database**: Stores DAG and task metadata
-5. **PostgreSQL Database**: Our analytics database
-6. **MariaDB Database**: Source OpenDental database
+5. **PostgreSQL Database**: Our analytics database (opendental_analytics)
+6. **MySQL Database**: Source OpenDental database (MDC clinic server)
 
 ### DAG Structure
 ```
 dags/
-├── mariadb_postgre_dag.py      # Main ETL orchestration
+├── mysql_postgre_dag.py      # Main ETL orchestration
 └── dbt_run_dag.py             # dbt model execution (future)
 ```
 
@@ -26,7 +26,7 @@ dags/
 ### 1. Prerequisites
 - Python 3.8+
 - PostgreSQL 12+
-- MariaDB/MySQL client
+- MySQL client
 - Virtual environment (recommended)
 
 ### 2. Installation
@@ -55,16 +55,19 @@ pip install pandas sqlalchemy pymysql psycopg2-binary python-dotenv
    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://user:pass@localhost:5432/airflow
 
    # Database Connections
-   MARIADB_ROOT_USER=your_user
-   MARIADB_ROOT_PASSWORD=your_password
-   MARIADB_ROOT_HOST=your_host
-   MARIADB_ROOT_PORT=3306
-   DBT_MYSQL_DATABASE=your_db
+   # Source MySQL (MDC clinic server)
+   MYSQL_ROOT_USER=your_user
+   MYSQL_ROOT_PASSWORD=your_password
+   MYSQL_HOST=your_host
+   MYSQL_PORT=3306
+   MYSQL_DATABASE=your_db
+
+   # Target PostgreSQL (Local analytics)
    POSTGRES_USER=your_user
    POSTGRES_PASSWORD=your_password
    POSTGRES_HOST=localhost
    POSTGRES_PORT=5432
-   POSTGRES_DATABASE=your_db
+   POSTGRES_DATABASE=opendental_analytics
    ```
 
 2. **Initialize Airflow**
@@ -89,7 +92,7 @@ pip install pandas sqlalchemy pymysql psycopg2-binary python-dotenv
    - Open Airflow UI (http://localhost:8080)
    - Go to Admin > Connections
    - Add connections for:
-     - MariaDB (source)
+     - MySQL (source)
      - PostgreSQL (target)
      - dbt (future)
 
@@ -105,7 +108,7 @@ airflow/
 
 ## DAGs Overview
 
-### 1. MariaDB to PostgreSQL ETL (`mariadb_postgre_dag.py`)
+### 1. MySQL to PostgreSQL ETL (`mysql_postgre_dag.py`)
 
 #### High-Frequency DAG
 - Runs every 6 hours
@@ -151,13 +154,13 @@ airflow scheduler
 airflow dags list
 
 # Show DAG details
-airflow dags show mariadb_to_postgres_high_freq
+airflow dags show mysql_to_postgres_high_freq
 ```
 
 #### Manual Trigger
 ```bash
 # Trigger DAG run
-airflow dags trigger mariadb_to_postgres_high_freq
+airflow dags trigger mysql_to_postgres_high_freq
 ```
 
 ### 3. Troubleshooting
@@ -181,7 +184,7 @@ airflow dags trigger mariadb_to_postgres_high_freq
 ## Security Considerations
 
 1. **Database Access**
-   - Use read-only user for source database
+   - Use read-only user for source MySQL database
    - Implement connection pooling
    - Regular credential rotation
 
