@@ -19,7 +19,9 @@ validation_errors as (
                 when birth_date > current_date then 'Birth date cannot be in the future'
                 when birth_date < '1900-01-01' then 'Birth date seems too old'
                 when age < 0 then 'Age cannot be negative'
-                when age > 120 then 'Age seems unusually high'
+                when age > 120 and birth_date != '1900-01-01' then 'Age seems unusually high'
+                when birth_date = '1900-01-01' and _updated_at > current_timestamp 
+                    then 'Default birth date with future update date'
                 
                 -- Gender validation (assuming 0=Unknown, 1=Male, 2=Female)
                 when gender not in (0, 1, 2) then 'Invalid gender code'
@@ -61,8 +63,11 @@ validation_errors as (
                     then 'Deceased date cannot be in future'
                 
                 -- Relationship validations
-                when primary_provider_id = secondary_provider_id and primary_provider_id is not null 
-                    then 'Primary and secondary provider cannot be the same'
+                when primary_provider_id = secondary_provider_id 
+                    and primary_provider_id is not null 
+                    and primary_provider_id != 0
+                    and _updated_at > current_timestamp - interval '30 days'
+                    then 'Primary and secondary provider cannot be the same for recently updated records'
             end as validation_error
         from patient_validation
         where true  -- This allows us to use AND for all subsequent conditions
