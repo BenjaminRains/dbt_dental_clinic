@@ -100,6 +100,12 @@ pip install pandas sqlalchemy pymysql psycopg2-binary python-dotenv
 ```
 airflow/
 ├── dags/                    # DAG definitions
+│   ├── mysql_postgre_incremental_DAG.py  # Main ETL orchestration
+│   ├── monitoring_dag.py    # Health monitoring and reporting
+│   └── etl_job/            # ETL implementation
+│       ├── mysql_postgre_incremental.py  # Core ETL logic
+│       ├── connection_factory.py         # Database connections
+│       └── monitoring_utils.py           # Monitoring utilities
 ├── logs/                    # Task execution logs
 ├── plugins/                 # Custom plugins
 └── config/
@@ -108,24 +114,41 @@ airflow/
 
 ## DAGs Overview
 
-### 1. MySQL to PostgreSQL ETL (`mysql_postgre_dag.py`)
+### 1. MySQL to PostgreSQL ETL (`mysql_postgre_incremental_DAG.py`)
 
 #### High-Frequency DAG
-- Runs every 6 hours
-- Tables: appointments, procedures, payments, claims, communications, system logs
+- Runs every 4 hours
+- Tables: appointments, procedures, payments, claims, communications, system logs, recalls
 - Purpose: Keep operational data current
+- Includes connection testing and validation
 
 #### Medium-Frequency DAG
-- Runs weekly (Sunday 2 AM)
-- Tables: patient demographics, insurance information, provider schedules, fee schedules
+- Runs daily at 2 AM
+- Tables: patient demographics, insurance information, provider schedules, fee schedules, treatment plans, family relationships
 - Purpose: Update reference data
+- Includes sensor to wait for high-frequency DAG completion
 
 #### Low-Frequency DAG
-- Runs monthly (1st Sunday 3 AM)
-- Tables: reference data, historical records, configuration tables
+- Runs weekly (Sunday 3 AM)
+- Tables: procedure definitions, system preferences, security logs, user definitions, user groups
 - Purpose: Maintain static data
 
-### 2. dbt Execution DAG (Future)
+### 2. Monitoring DAG (`monitoring_dag.py`)
+
+#### Health Monitoring DAG
+- Runs every 2 hours
+- Tasks:
+  - Initialize monitoring tables
+  - Check ETL pipeline health
+- Purpose: Monitor ETL pipeline health and detect issues early
+
+#### Daily Summary DAG
+- Runs daily at 8 AM
+- Tasks:
+  - Generate daily ETL summary reports
+- Purpose: Provide daily insights into ETL operations
+
+### 3. dbt Execution DAG (Future)
 - Will run after ETL completion
 - Purpose: Transform data using dbt models
 - Schedule: TBD based on business requirements
@@ -136,6 +159,8 @@ airflow/
 - Task logs available in Airflow UI
 - Detailed ETL logs in `etl_incremental.log`
 - Error notifications via email/Slack
+- Health monitoring reports every 2 hours
+- Daily summary reports at 8 AM
 
 ### 2. Common Tasks
 
@@ -154,13 +179,17 @@ airflow scheduler
 airflow dags list
 
 # Show DAG details
-airflow dags show mysql_to_postgres_high_freq
+airflow dags show dental_etl_high_frequency
+airflow dags show dental_etl_medium_frequency
+airflow dags show dental_etl_low_frequency
+airflow dags show dental_etl_health_monitoring
+airflow dags show dental_etl_daily_summary
 ```
 
 #### Manual Trigger
 ```bash
 # Trigger DAG run
-airflow dags trigger mysql_to_postgres_high_freq
+airflow dags trigger dental_etl_high_frequency
 ```
 
 ### 3. Troubleshooting
@@ -170,16 +199,19 @@ airflow dags trigger mysql_to_postgres_high_freq
    - Check database credentials
    - Verify network connectivity
    - Check firewall settings
+   - Review connection test logs
 
 2. **Task Failures**
    - Review task logs
    - Check data quality issues
    - Verify table configurations
+   - Check monitoring reports for patterns
 
 3. **Performance Issues**
    - Monitor resource usage
    - Check batch sizes
    - Review index usage
+   - Analyze daily summary reports
 
 ## Security Considerations
 
