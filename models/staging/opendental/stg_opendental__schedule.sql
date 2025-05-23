@@ -6,7 +6,7 @@
 with source as (
     select * from {{ source('opendental', 'schedule') }}
     {% if is_incremental() %}
-        where "DateTStamp" > (select max(created_at) from {{ this }})
+        where "DateTStamp" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
@@ -28,7 +28,9 @@ renamed as (
         "ClinicNum" as clinic_id,
         
         -- Metadata
-        "DateTStamp" as created_at
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "DateTStamp" as _created_at,     -- When the record was created in source
+        "DateTStamp" as _updated_at      -- Last update timestamp
     from source
 )
 

@@ -2,10 +2,7 @@ version: 2
 
 models:
   - name: stg_opendental__schedule
-    description: >
-      Staging model for the OpenDental schedule data. This table contains information about
-      scheduled appointments, provider schedules, and blockout times in the dental practice.
-      Records are from 2023-01-01 onward.
+    description: Staging model for schedule records from OpenDental. Contains information about appointments, blockouts, and other scheduled events.
     config:
       materialized: incremental
     columns:
@@ -16,38 +13,47 @@ models:
           - not_null
           
       - name: schedule_date
-        description: The date of the scheduled event
+        description: Date of the scheduled event
         tests:
           - not_null
           
       - name: start_time
-        description: The start time of the scheduled event
+        description: Start time of the scheduled event
         
       - name: stop_time
-        description: The end time of the scheduled event
+        description: End time of the scheduled event
         
       - name: schedule_type
-        description: Type of schedule entry (0 for provider schedule, various other values for appointment types)
+        description: Type of scheduled event (e.g., appointment, blockout)
         
       - name: provider_id
-        description: Foreign key to the provider table, identifies the provider associated with this schedule
+        description: Foreign key to provider associated with the schedule
         
       - name: blockout_type_id
-        description: Identifies the type of blockout if this is a blockout entry
+        description: Foreign key to blockout type (if applicable)
         
       - name: note
-        description: Additional notes or information about the scheduled event
+        description: Additional notes about the scheduled event
         
       - name: status
-        description: Status code for the schedule entry
+        description: Current status of the scheduled event
         
       - name: employee_id
-        description: Foreign key to the employee table if this schedule is for a non-provider employee
+        description: Foreign key to employee associated with the schedule
         
       - name: clinic_id
-        description: Foreign key to the clinic table, identifies which clinic location this schedule belongs to
+        description: Foreign key to clinic where the event is scheduled
         
-      - name: created_at
-        description: Timestamp when this record was created or last updated in the source system
-        tests:
-          - not_null
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+        
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - schedule_id
