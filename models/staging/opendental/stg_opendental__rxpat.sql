@@ -15,9 +15,8 @@ renamed as (
         "ClinicNum" as clinic_id,
         "UserNum" as user_id,
         
-        -- Timestamps and Dates
+        -- Dates
         "RxDate" as rx_date,
-        "DateTStamp" as date_timestamp,
         
         -- Prescription Details
         "Drug" as drug_name,
@@ -37,7 +36,12 @@ renamed as (
         CASE WHEN "IsErxOld" = 1 THEN true ELSE false END as is_erx_old,
         "ErxPharmacyInfo" as erx_pharmacy_info,
         CASE WHEN "IsProcRequired" = 1 THEN true ELSE false END as is_proc_required,
-        "RxType" as rx_type
+        "RxType" as rx_type,
+        
+        -- Metadata
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "DateTStamp" as _created_at,     -- When the record was created in source
+        "DateTStamp" as _updated_at      -- Last update timestamp
 
     from source
 )

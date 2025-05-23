@@ -31,62 +31,69 @@ models:
       - name: user_id
         description: Foreign key to user who created/modified the prescription record
 
-      # Dates and Timestamps
+      # Dates
       - name: rx_date
         description: Date when prescription was written
-        
-      - name: date_timestamp
-        description: Timestamp of when record was last modified
 
       # Prescription Details
       - name: drug_name
-        description: Name of prescribed medication
-        
+        description: Name of the prescribed medication
+
       - name: sig
         description: Prescription instructions/signatura
-        
+
       - name: dispense_instructions
         description: Instructions for dispensing the medication
-        
+
       - name: refills
-        description: Number of refills authorized
-        
+        description: Number of authorized refills
+
       - name: notes
         description: Additional notes about the prescription
-        
+
       - name: is_controlled
         description: Boolean flag indicating if medication is a controlled substance
-        
+
       - name: send_status
         description: Status of prescription transmission
-        
+
       - name: rx_cui
         description: RxNorm Concept Unique Identifier for the medication
-        
+
       - name: dosage_code
         description: Code indicating medication dosage
-        
+
       - name: days_of_supply
         description: Number of days the prescription should last
-        
+
       - name: patient_instruction
         description: Detailed instructions for the patient
 
       # E-Prescription Related
       - name: erx_guid
         description: Globally unique identifier for electronic prescriptions
-        
+
       - name: is_erx_old
         description: Boolean flag indicating if this is an old electronic prescription
-        
+
       - name: erx_pharmacy_info
         description: Additional pharmacy information for electronic prescriptions
-        
+
       - name: is_proc_required
         description: Boolean flag indicating if a procedure is required
-        
+
       - name: rx_type
         description: Type of prescription
+
+      # Metadata
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental)
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental)
 
     # Table-level tests
     tests:
