@@ -29,7 +29,25 @@ The `relationships_where` test for Type 1 verifications is failing with 283 resu
   - `_updated_at` is exactly 1 hour and 1 minute after `_created_at`
 - Some records have very old `entry_timestamp` dates (2020, 2022) but recent `last_verified_date` (2023)
 
-This suggests these records are part of the same automated process as the orphaned verification records, but with a different pattern of data population.
+### 4. Verification Date Mismatches
+The `equality` test comparing verification and history records is failing with 29,708 results. Analysis shows:
+- 6,672 Type 1 records affecting 1,066 unique verifications
+- 6,196 Type 2 records affecting 1,997 unique verifications
+- All mismatches are in `last_verified_date` only
+- No mismatches in `foreign_key_id` or `last_assigned_date`
+- All records are user-generated (no system-generated records)
+- Records span from 2020-04-28 to 2025-02-13
+- Pattern shows:
+  - Verification records have future target dates
+  - History records show actual verification dates
+  - Multiple history records per verification
+  - History records form a linked list with next/prev references
+  - All history records for a verification have the same `entry_timestamp`
+
+This suggests the mismatches are expected behavior, where:
+1. The verification record's `last_verified_date` represents the target/scheduled date
+2. The history records track the actual verification dates
+3. The history records form a chain of verification activities leading up to the target date
 
 ## Key Findings
 
@@ -76,6 +94,7 @@ The data suggests a two-step automated process:
    - The `relationships` test is failing due to orphaned verification records
    - The `not_null` test on `_created_at` is failing due to system-generated records
    - The `relationships_where` test is failing due to invalid subscriber references
+   - The `equality` test is failing due to expected date mismatches between verification and history records
    - All issues indicate potential data integrity issues in the verification process
 
 2. **Process Issues**
@@ -84,6 +103,7 @@ The data suggests a two-step automated process:
    - No benefit notes or verification details are present
    - System-generated records are missing critical timestamp data
    - Consistent 1-hour-1-minute update pattern suggests automated processing
+   - Verification dates represent target dates while history records show actual dates
 
 ## Next Steps
 1. Investigate the automated process creating these records
@@ -93,6 +113,7 @@ The data suggests a two-step automated process:
 5. Investigate why system-generated records have null `entry_timestamp` values
 6. Investigate the 1-hour-1-minute update pattern in the timestamps
 7. Determine why some records have old creation dates but recent verification dates
+8. Update the equality test to account for the target vs actual date pattern
 
 ## Related Documentation
 - See `docs/data_quality/insurance_verification_orphaned_records.md` for analysis of orphaned history records
