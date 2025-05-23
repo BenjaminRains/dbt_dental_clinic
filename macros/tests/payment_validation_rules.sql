@@ -5,7 +5,9 @@
         where 1=0  -- Start with no errors
         
         -- Payment amount validation
-        or (payment_amount <= 0 and payment_type_id != 72)  -- Only refunds can be negative
+        or (payment_amount <= 0 
+            and payment_type_id not in (69, 70, 72)  -- Allow negative amounts for refunds in types 69, 70, 72
+            and not (payment_type_id = 0 and payment_amount = 0))  -- Allow zero amounts for type 0
         
         -- Payment type validation
         or payment_type_id not in (0, 69, 70, 71, 72, 391, 412, 417, 574, 634)
