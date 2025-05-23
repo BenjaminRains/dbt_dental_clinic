@@ -16,7 +16,9 @@ staged as (
         "DateTimeLink" as linked_at,
         
         -- metadata
-        current_timestamp as dbt_loaded_at
+        current_timestamp as _loaded_at,
+        "DateTimeLink" as _created_at,
+        "DateTimeLink" as _updated_at
 
     from source
 )
