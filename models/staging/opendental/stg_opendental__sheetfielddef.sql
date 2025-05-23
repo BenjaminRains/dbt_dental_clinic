@@ -1,14 +1,10 @@
 with source as (
     select 
         sfd.*,
-        sd."DateTCreated",
-        s."DateTimeSheet",
-        s."DateTSheetEdited"
+        sd."DateTCreated"
     from {{ source('opendental', 'sheetfielddef') }} sfd
     inner join {{ source('opendental', 'sheetdef') }} sd
         on sfd."SheetDefNum" = sd."SheetDefNum"
-    left join {{ source('opendental', 'sheet') }} s
-        on sd."SheetDefNum" = s."SheetDefNum"
 ),
 
 renamed as (
@@ -50,8 +46,8 @@ renamed as (
         
         -- Metadata
         current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        coalesce("DateTimeSheet", "DateTCreated") as _created_at,   -- When the record was created in source
-        coalesce("DateTSheetEdited", "DateTCreated") as _updated_at -- Last update timestamp
+        "DateTCreated" as _created_at,   -- When the record was created in source
+        "DateTCreated" as _updated_at    -- Last update timestamp (using creation date since no update timestamp is available)
 
     from source
 )

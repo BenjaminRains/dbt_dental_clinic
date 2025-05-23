@@ -145,4 +145,4 @@ models:
             - sheet_id
             - sheet_field_def_id
           severity: warn
-          description: "Warns about duplicate field definitions within the same sheet"
+          name: duplicate_field_definitions
