@@ -40,3 +40,18 @@ models:
         description: Boolean flag indicating if the property requires high security access
         tests:
           - not_null
+
+      - name: _loaded_at
+        description: Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: Timestamp when the record was created in the source system (OpenDental). For this reference data view, this matches the load time.
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: Timestamp when the record was last updated in the source system (OpenDental). For this reference data view, this matches the load time.
+        tests:
+          - not_null
