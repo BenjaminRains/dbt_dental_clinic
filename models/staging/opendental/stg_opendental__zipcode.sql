@@ -12,9 +12,11 @@ renamed as (
         "ZipCodeNum" as zipcode_id,
         
         -- Business Columns
-        "ZipCodeDigits" as zipcode,
+        -- Clean zipcode: ensure it's exactly 5 digits, pad with leading zeros if needed
+        LPAD(REGEXP_REPLACE("ZipCodeDigits", '[^0-9]', '', 'g'), 5, '0') as zipcode,
         "City" as city,
-        "State" as state,
+        -- Clean state: ensure it's exactly 2 uppercase letters
+        UPPER(REGEXP_REPLACE("State", '[^A-Za-z]', '', 'g')) as state,
         "IsFrequent" as is_frequent,
         
         -- Required metadata columns

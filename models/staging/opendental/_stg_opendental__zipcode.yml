@@ -18,8 +18,9 @@ models:
         description: The 5-digit postal code
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "length(zipcode) = 5"
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 5
+              max_value: 5
               name: zipcode_length_valid
               config:
                 description: "Zipcode must be exactly 5 digits"
@@ -33,8 +34,9 @@ models:
         description: The two-letter state code associated with this zipcode
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "length(state) = 2"
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 2
+              max_value: 2
               name: state_length_valid
               config:
                 description: "State must be exactly 2 letters"
