@@ -16,6 +16,19 @@ The `not_null` test on `_created_at` is failing with 1,094 results. Analysis sho
 - All records have null `entry_timestamp` and `last_assigned_date`
 - All Type 1 records have matching subscribers (mostly ACTIVE, some TERMINATED)
 
+### 3. Invalid Subscriber References
+The `relationships_where` test for Type 1 verifications is failing with 283 results. Analysis shows:
+- All records are Type 1 (Insurance subscriber)
+- All records are system-generated (`user_id = 0`)
+- All records have unique `foreign_key_id`s
+- Most records (275) have `last_verified_date` populated
+- None have `last_assigned_date` populated
+- Records span from 2023-01-04 to 2025-02-27
+- Consistent timestamp pattern:
+  - `entry_timestamp` and `_created_at` are identical
+  - `_updated_at` is exactly 1 hour and 1 minute after `_created_at`
+- Some records have very old `entry_timestamp` dates (2020, 2022) but recent `last_verified_date` (2023)
+
 This suggests these records are part of the same automated process as the orphaned verification records, but with a different pattern of data population.
 
 ## Key Findings
@@ -62,13 +75,15 @@ The data suggests a two-step automated process:
 1. **Test Failures**
    - The `relationships` test is failing due to orphaned verification records
    - The `not_null` test on `_created_at` is failing due to system-generated records
-   - Both issues indicate potential data integrity issues in the verification process
+   - The `relationships_where` test is failing due to invalid subscriber references
+   - All issues indicate potential data integrity issues in the verification process
 
 2. **Process Issues**
    - Some verification records never complete the subscriber creation step
    - The presence of old effective dates (2010, 2022) suggests possible data migration
    - No benefit notes or verification details are present
    - System-generated records are missing critical timestamp data
+   - Consistent 1-hour-1-minute update pattern suggests automated processing
 
 ## Next Steps
 1. Investigate the automated process creating these records
@@ -76,6 +91,8 @@ The data suggests a two-step automated process:
 3. Consider modifying the tests to account for these known patterns
 4. Document the expected behavior of the verification workflow
 5. Investigate why system-generated records have null `entry_timestamp` values
+6. Investigate the 1-hour-1-minute update pattern in the timestamps
+7. Determine why some records have old creation dates but recent verification dates
 
 ## Related Documentation
 - See `docs/data_quality/insurance_verification_orphaned_records.md` for analysis of orphaned history records

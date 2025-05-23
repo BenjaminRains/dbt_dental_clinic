@@ -30,6 +30,15 @@ models:
           Foreign key that can reference different entities based on verify_type:
           - When verify_type = 1, references inssub.inssub_id (95% match rate)
           - When verify_type = 2, references another entity (62% match rate with inssub)
+          
+          **Data Quality Note**: The relationships_where test for Type 1 verifications is currently
+           failing with 283 records. Analysis shows these are all system-generated records 
+           (user_id = 0) with a consistent timestamp pattern (1-hour-1-minute gap between
+            _created_at and _updated_at). Some records have old creation dates (2020, 2022) but
+             recent verification dates (2023). 
+             See docs/data_quality/insurance_verification_orphaned_verification_records.md for
+              detailed analysis. This is under investigation to determine if this is expected
+               behavior or a data quality issue.
         tests:
           - not_null
 
