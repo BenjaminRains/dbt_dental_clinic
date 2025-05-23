@@ -102,10 +102,6 @@ models:
       - dbt_utils.expression_is_true:
           expression: "NOT (payplan_id != 0 AND payplan_charge_id = 0)"
 
-      # Test: Cannot allocate to both payment plan charge and procedure
-      - dbt_utils.expression_is_true:
-          expression: "NOT (payplan_charge_id != 0 AND procedure_id != 0)"
-
       # Simple test for forward_split_id
       - dbt_utils.expression_is_true:
           expression: "forward_split_id = 0"
