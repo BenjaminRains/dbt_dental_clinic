@@ -28,6 +28,12 @@ models:
       - Historical task lists (pre-Dec 2023) may have different IDs
       - task_list_id = 0 indicates no assigned list
       
+      Known Data Quality Issues:
+      - 33 tasks reference task lists that don't exist in the source system
+      - These orphaned references are likely due to deleted task lists or data migration issues
+      - The relationship test is configured as a warning to allow the pipeline to continue
+      - These tasks should be reviewed and reassigned to valid task lists if needed
+      
       Data Sources:
       - stg_opendental__task: Base task data
       - stg_opendental__tasklist: Task list information
