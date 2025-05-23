@@ -1,13 +1,13 @@
 {{ config(
     materialized='incremental',
-    unique_key='proctp_num'
+    unique_key='proctp_id'
 ) }}
 
 with source as (
     select * from {{ source('opendental', 'proctp') }}
     where "DateTP" >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(last_edit_timestamp) from {{ this }})
+        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
@@ -49,8 +49,9 @@ renamed as (
         "SecDateTEdit" as last_edit_timestamp,
         
         -- Metadata
-        '{{ invocation_id }}' as _airbyte_ab_id,
-        current_timestamp as _airbyte_loaded_at
+        current_timestamp as _loaded_at,
+        "SecDateEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
     
     from source
 )
