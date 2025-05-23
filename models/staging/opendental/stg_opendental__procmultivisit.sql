@@ -7,7 +7,7 @@ with source as (
     select * from {{ source('opendental', 'procmultivisit') }}
     where "SecDateTEntry" >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(sec_date_edit) from {{ this }})
+        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
@@ -30,8 +30,9 @@ renamed as (
         "SecDateTEdit" as sec_date_edit,
         
         -- Metadata
-        '{{ invocation_id }}' as _airbyte_ab_id,
-        current_timestamp as _airbyte_loaded_at
+        current_timestamp as _loaded_at,
+        "SecDateTEntry" as _created_at,
+        "SecDateTEdit" as _updated_at
     from source
 )
 
