@@ -1,21 +1,31 @@
-with source as (
-    
-    select * from {{ source('opendental', 'recalltrigger') }}
+{{ config(
+    materialized='incremental',
+    unique_key='recall_trigger_id',
+    schema='staging'
+) }}
 
+with Source as (
+    select * from {{ source('opendental', 'recalltrigger') }}
+    {% if is_incremental() %}
+        where current_timestamp > (select max(_updated_at) from {{ this }})
+    {% endif %}
 ),
 
-renamed as (
-    
+Renamed as (
     select
+        -- Primary key
         "RecallTriggerNum" as recall_trigger_id,
+        
+        -- Relationships
         "RecallTypeNum" as recall_type_id,
         "CodeNum" as code_id,
         
-        -- Add metadata fields
-        {{ current_timestamp() }} as loaded_at
+        -- Required metadata columns
+        current_timestamp as _loaded_at,
+        current_timestamp as _created_at,
+        current_timestamp as _updated_at
 
-    from source
-
+    from Source
 )
 
-select * from renamed
+select * from Renamed
