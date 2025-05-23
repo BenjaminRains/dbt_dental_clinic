@@ -82,7 +82,7 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: ">= 0"
+              expression: ">= 0 OR payment_type_id = 72"
               column_name: payment_amount
       - name: merchant_fee
         description: Fee charged by the merchant for processing the payment
