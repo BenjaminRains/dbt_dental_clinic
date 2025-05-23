@@ -124,8 +124,8 @@ sources:
             tests:
               - not_null
               - relationships:
-                  to: ref('stg_opendental__program')
-                  field: program_num
+                  to: source('opendental', 'program')
+                  field: ProgramNum
 
           - name: "PropertyDesc"
             description: "Description of the program property or setting"
