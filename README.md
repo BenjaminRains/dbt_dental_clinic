@@ -113,7 +113,7 @@ These systems and their interconnections are visually represented in the
 
 ## Current Status
 
-The project has made significant progress in both staging and intermediate layers:
+The project has made significant progress in both staging and intermediate layers, with mart layer development now underway:
 
 ### Completed Components ✅
 
@@ -164,32 +164,49 @@ The project has made significant progress in both staging and intermediate layer
      - User action audit trail
      - Log source analysis
 
+3. **ETL Infrastructure**
+   - Automated ETL pipeline for MySQL to PostgreSQL sync
+   - Incremental processing with change tracking
+   - Comprehensive error handling and logging
+   - Data quality validation checks
+
 ### In Progress 🚧
 
-1. **Mart Layer**
+1. **Mart Layer Development**
    - Initial implementation of core analytics models
-   - Business requirements gathering
+   - Business requirements gathering and validation
    - Performance optimization strategies
    - Dashboard development planning
+   - Key metrics definition and implementation
+
+2. **Infrastructure Setup**
+   - Docker containerization for development and production
+   - Airflow DAG implementation for ETL orchestration
+   - Monitoring and alerting system setup
+   - Environment configuration and documentation
 
 ### Upcoming Work 📅
 
-1. **Mart Layer**
+1. **Mart Layer Completion**
    - Complete implementation of core analytics models
    - Develop reporting views
    - Create data marts for specific business areas
    - Implement dashboard data models
+   - Performance optimization and testing
 
-2. **Documentation**
+2. **Frontend Development**
+   - Begin implementation of web application
+   - Develop interactive dashboards
+   - Create user interfaces for data exploration
+   - Implement role-based access control
+   - Real-time analytics capabilities
+
+3. **Documentation**
    - Update technical documentation
    - Create user guides for new models
    - Document data lineage and dependencies
    - Create dashboard documentation
-
-3. **Frontend Development**
-   - Begin implementation of web application
-   - Develop interactive dashboards
-   - Create user interfaces for data exploration
+   - API documentation for frontend integration
 
 For detailed information about the intermediate models, see `dbt_int_models_plan.md`.
 
