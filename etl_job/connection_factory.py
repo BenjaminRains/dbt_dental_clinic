@@ -21,7 +21,7 @@ load_dotenv()
 def get_source_connection(readonly=True):
     """
     Create source connection with mandatory readonly flag.
-    Enforces read-only access to the MDC clinic's operational database.
+    Enforces read-only access to the OpenDental operational database.
     NEVER uses root user - only uses the dedicated readonly_user.
     """
     if not readonly:
@@ -60,6 +60,39 @@ def get_source_connection(readonly=True):
         return engine
     except Exception as e:
         logger.error(f"Failed to create source connection: {str(e)}")
+        raise
+
+def get_staging_connection():
+    """
+    Create staging MySQL connection for intermediate data storage.
+    This database should be local and have full read/write access.
+    """
+    try:
+        engine = create_engine(
+            f"mysql+pymysql://{os.getenv('STAGING_MYSQL_USER')}:{os.getenv('STAGING_MYSQL_PASSWORD')}@"
+            f"{os.getenv('STAGING_MYSQL_HOST')}:{os.getenv('STAGING_MYSQL_PORT')}/"
+            f"{os.getenv('STAGING_MYSQL_DATABASE')}"
+        )
+        
+        # Test connection and verify write access
+        with engine.connect() as conn:
+            # Test basic connection
+            conn.execute(text("SELECT 1"))
+            
+            # Test write access
+            try:
+                conn.execute(text("CREATE TABLE IF NOT EXISTS test_write (id INT)"))
+                conn.execute(text("DROP TABLE IF EXISTS test_write"))
+                logger.info("Write access verified successfully")
+            except SQLAlchemyError as e:
+                logger.error(f"Write access test failed: {str(e)}")
+                raise
+            
+            logger.info("Staging connection verified successfully")
+        
+        return engine
+    except Exception as e:
+        logger.error(f"Failed to create staging connection: {str(e)}")
         raise
 
 def get_target_connection():
@@ -101,8 +134,8 @@ def execute_source_query(query, params=None):
 
 def test_connections():
     """
-    Test both source and target connections.
-    Returns True if both connections are successful.
+    Test all database connections.
+    Returns True if all connections are successful.
     """
     try:
         # Test source connection
@@ -110,6 +143,12 @@ def test_connections():
         with source_conn.connect() as conn:
             conn.execute(text("SELECT 1"))
             logger.info("Source connection test successful")
+        
+        # Test staging connection
+        staging_conn = get_staging_connection()
+        with staging_conn.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            logger.info("Staging connection test successful")
         
         # Test target connection
         target_conn = get_target_connection()
