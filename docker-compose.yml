@@ -7,18 +7,35 @@ services:
     depends_on:
       - postgres
       - mysql
-      - mariadb
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      # ETL Connection Environment Variables
+      - OPENDENTAL_SOURCE_USER=${OPENDENTAL_SOURCE_USER}
+      - OPENDENTAL_SOURCE_PW=${OPENDENTAL_SOURCE_PW}
+      - OPENDENTAL_SOURCE_HOST=${OPENDENTAL_SOURCE_HOST}
+      - OPENDENTAL_SOURCE_PORT=${OPENDENTAL_SOURCE_PORT}
+      - OPENDENTAL_SOURCE_DB=${OPENDENTAL_SOURCE_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=postgres # Use Docker service name
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE}
+      # Email Configuration for Monitoring
+      - SMTP_SERVER=${SMTP_SERVER:-localhost}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - ALERT_RECIPIENTS=${ALERT_RECIPIENTS}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
       - ./airflow/scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
+      - ./etl_job:/opt/airflow/dags/etl_job # Mount ETL scripts
     ports:
       - "8080:8080"
     command: webserver
@@ -35,7 +52,44 @@ services:
     depends_on:
       - postgres
       - mysql
-      - mariadb
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      # ETL Connection Environment Variables (same as webserver)
+      - OPENDENTAL_SOURCE_USER=${OPENDENTAL_SOURCE_USER}
+      - OPENDENTAL_SOURCE_PW=${OPENDENTAL_SOURCE_PW}
+      - OPENDENTAL_SOURCE_HOST=${OPENDENTAL_SOURCE_HOST}
+      - OPENDENTAL_SOURCE_PORT=${OPENDENTAL_SOURCE_PORT}
+      - OPENDENTAL_SOURCE_DB=${OPENDENTAL_SOURCE_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE}
+      # Email Configuration for Monitoring
+      - SMTP_SERVER=${SMTP_SERVER:-localhost}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - ALERT_RECIPIENTS=${ALERT_RECIPIENTS}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/scripts:/opt/airflow/scripts
+      - ./config:/opt/airflow/config
+      - ./etl_job:/opt/airflow/dags/etl_job # Mount ETL scripts
+    command: scheduler
+
+  # Airflow Init (run once to initialize database)
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      - postgres
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
@@ -45,9 +99,19 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
-      - ./airflow/scripts:/opt/airflow/scripts
-      - ./config:/opt/airflow/config
-    command: scheduler
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin
+      "
+    profiles:
+      - init # Only run when specifically called
 
   # Existing dbt service
   dbt:
@@ -63,8 +127,9 @@ services:
     depends_on:
       - postgres
       - mysql
-      - mariadb
     command: dbt run
+    profiles:
+      - manual # Only run when specifically called
 
   # Database services
   postgres:
@@ -72,40 +137,38 @@ services:
     env_file:
       - .env
     ports:
-      - 5432:5432
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d # For initialization scripts
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DATABASE}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   mysql:
     image: mysql:8.4
     env_file:
       - .env
     ports:
-      - 3309:3306
+      - "3309:3306" # Fixed port mapping
     volumes:
       - mysql_data:/var/lib/mysql
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_ROOT_USER=${MYSQL_ROOT_USER}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
-
-  mariadb:
-    image: mariadb:latest
-    env_file:
-      - .env
-    ports:
-      - 3307:3307
-    volumes:
-      - mariadb_data:/var/lib/mysql
-    environment:
-      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
-      - MARIADB_DATABASE=${MARIADB_DATABASE}
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
   mysql_data:
-  mariadb_data:
