@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2025-05-23]
+### Added
+- Comprehensive ETL monitoring and alerting system with email notifications
+- Nightly incremental ETL DAG for simplified scheduling at 8 PM Central Time
+- ETL health monitoring DAG running every 2 hours with automated checks
+- Daily ETL summary report generation with detailed sync statistics
+- Database connection testing script with comprehensive validation
+- Auto-discovery system for all 432 OpenDental tables with metadata detection
+- ETL sync status tracking with PostgreSQL monitoring tables
+- Batch processing capabilities with configurable retry mechanisms
+- Data quality validation checks for critical dental clinic tables
+- Manual ETL trigger DAG for ad-hoc runs and testing
+
+### Changed
+- Simplified ETL orchestration from tiered refresh frequencies to single nightly runs
+- Enhanced Docker Compose configuration with proper environment variable handling
+- Refactored ETL pipeline to use security-first read-only database connections
+- Updated Airflow DAG structure with modular design and improved error handling
+- Consolidated all table processing into unified incremental sync engine
+
+### Fixed
+- Docker Compose port mappings for MySQL (3309:3306) 
+- Enhanced connection factory with mandatory read-only access validation
+- Improved error handling and logging throughout ETL pipeline
+- Database connection verification with user privilege validation
+- ETL script path mounting in Airflow containers
+
+### Removed
+- MariaDB service and dependencies from Docker Compose configuration
+- Tiered refresh frequency DAGs (high/medium/low frequency tables)
+- MariaDB environment variables and volume configurations
+- Complex multi-DAG orchestration in favor of simplified nightly processing
+
+### Security
+- Enforced read-only access to operational OpenDental database
+- Added user validation to prevent accidental root/admin account usage
+- Implemented connection testing with privilege verification
+- Enhanced database access controls with comprehensive error handling
+
+### Docs
+- Updated Airflow setup guide to reflect current implementation
+- Enhanced metadata flow documentation in SQL naming conventions
+- Documented comprehensive data quality issues across staging models
+- Added ETL monitoring and health check documentation
+
 ## [2025-05-22]
 ### Added
 - Insurance subscriber data quality report
