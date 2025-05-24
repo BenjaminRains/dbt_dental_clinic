@@ -219,53 +219,116 @@ This pattern should be used consistently across all staging models where boolean
 
 ## Metadata Columns
 
-**Rule**: All staging models should include the following standardized metadata columns for traceability and model freshness:
+**Rule**: Metadata columns are added at different stages of the data pipeline. Understanding when and where each metadata column is added is crucial for proper data lineage and change tracking.
 
-### Required Metadata Columns
-- `_loaded_at`: Timestamp when the data was loaded into the data warehouse by the ETL pipeline (use `current_timestamp`)
-- `_created_at`: Timestamp when the record was created in the source system (e.g., OpenDental). Rename an existing source column like `DateEntry`, `SecDateTEntry`, or similar creation timestamp to `_created_at`. Never use `current_timestamp` for this field.
-- `_updated_at`: Timestamp when the record was last updated in the source system. Rename an existing source column like `DateTStamp`, `SecDateTEdit`, or similar update timestamp to `_updated_at`.
+### ETL Stage (Initial Data Load)
+When data is first loaded from OpenDental (MySQL) to PostgreSQL via the ETL pipeline:
 
-### Optional Metadata Columns
-- `_source_system`: Name of the source system (e.g., 'opendental')
-- `_extract_timestamp`: Timestamp when the data was extracted from the source system
-- `_pipeline_id`: Unique identifier for the data pipeline run (e.g., dbt invocation_id)
+1. **Only `_loaded_at` is added**:
+   - Added by the ETL job (`mysql_postgre_incremental.py`)
+   - Tracks when data was loaded into PostgreSQL
+   - Uses `current_timestamp` at time of load
+   - Example:
+     ```sql
+     SELECT 
+         *,
+         current_timestamp as _loaded_at
+     FROM source_table
+     ```
 
-### Implementation Example
-```sql
-select
-    -- Source columns
-    "PatNum" as patient_id,
-    "DateEntry" as entry_date,
-    
-    -- Required metadata columns
-    current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-    "DateEntry" as _created_at,      -- Rename source creation timestamp
-    coalesce("DateTStamp", "DateEntry") as _updated_at  -- Rename source update timestamp
+2. **Source timestamps are preserved**:
+   - Original creation/update timestamps from OpenDental are kept as-is
+   - These will be transformed in the staging models
+   - Example source columns:
+     - `DateEntry`, `SecDateTEntry` (creation timestamps)
+     - `DateTStamp`, `SecDateTEdit` (update timestamps)
 
-from {{ source('opendental', 'patient') }}
-```
+### Staging Model Stage
+When dbt staging models transform the data:
 
-### Rationale
-- Underscore prefix (`_`) distinguishes metadata columns from business data
-- `_loaded_at` tracks when data was last refreshed in our data warehouse by the ETL pipeline
-- `_created_at` and `_updated_at` track record history in the source system
-- Consistent naming enables standardized freshness checks and data lineage
+1. **Required Metadata Columns**:
+   - `_loaded_at`: Preserved from ETL stage
+   - `_created_at`: Transformed from source creation timestamp
+   - `_updated_at`: Transformed from source update timestamp
 
-### Notes
-- `_created_at` must be renamed from an existing source system column that indicates when the record was created
-- Common source columns to rename to `_created_at` include:
-  - `DateEntry` → `_created_at` - When the record was entered
-  - `SecDateTEntry` → `_created_at` - Security timestamp of entry
-  - `CreatedDate` → `_created_at` - Explicit creation date
-  - `InsertDate` → `_created_at` - Date of insertion
-- Common source columns to rename to `_updated_at` include:
-  - `DateTStamp` → `_updated_at` - Last update timestamp
-  - `SecDateTEdit` → `_updated_at` - Security timestamp of last edit
-  - `ModifiedDate` → `_updated_at` - Last modification date
-- When source systems don't provide creation/update timestamps, use the most appropriate available date fields
-- For incremental models, ensure `_updated_at` is included in the unique_key configuration
-- All metadata columns should be documented in the model's YAML file
+2. **Transformation Example**:
+   ```sql
+   select
+       -- Source columns
+       "PatNum" as patient_id,
+       
+       -- Metadata columns
+       _loaded_at,  -- Preserved from ETL
+       "DateEntry" as _created_at,  -- Transformed from source
+       coalesce("DateTStamp", "DateEntry") as _updated_at  -- Transformed from source
+   from {{ source('opendental', 'patient') }}
+   ```
+
+### Metadata Column Rules
+
+1. **ETL Stage**:
+   - Only add `_loaded_at`
+   - Use `current_timestamp`
+   - Preserve all source timestamps
+
+2. **Staging Stage**:
+   - Transform source timestamps to standard metadata columns
+   - Common source columns to transform:
+     - `_created_at` from:
+       - `DateEntry` → `_created_at`
+       - `SecDateTEntry` → `_created_at`
+       - `CreatedDate` → `_created_at`
+       - `InsertDate` → `_created_at`
+     - `_updated_at` from:
+       - `DateTStamp` → `_updated_at`
+       - `SecDateTEdit` → `_updated_at`
+       - `ModifiedDate` → `_updated_at`
+
+3. **Naming Convention**:
+   - All metadata columns use underscore prefix (`_`)
+   - Use snake_case
+   - Be consistent with column names across all models
+
+4. **Documentation**:
+   - Document source timestamp mappings in staging model YAML files
+   - Include metadata columns in model documentation
+   - Example YAML:
+     ```yaml
+     models:
+       - name: stg_opendental__patient
+         columns:
+           - name: _loaded_at
+             description: "When the data was loaded into PostgreSQL by ETL"
+           - name: _created_at
+             description: "Transformed from DateEntry - when record was created in OpenDental"
+           - name: _updated_at
+             description: "Transformed from DateTStamp - when record was last updated in OpenDental"
+     ```
+
+### Implementation Notes
+
+1. **ETL Pipeline**:
+   - Keep ETL metadata minimal (`_loaded_at` only)
+   - Preserve all source timestamps
+   - Document timestamp mappings for staging models
+
+2. **Staging Models**:
+   - Transform source timestamps to standard metadata columns
+   - Include all three required metadata columns
+   - Document transformations in YAML files
+
+3. **Incremental Models**:
+   - Include `_updated_at` in unique_key configuration
+   - Use `_updated_at` for incremental logic
+   - Example:
+     ```sql
+     {{ config(
+         materialized='incremental',
+         unique_key='patient_id',
+         incremental_strategy='merge',
+         merge_update_columns=['_updated_at', '_loaded_at']
+     ) }}
+     ```
 
 ## Implementation Notes
 
