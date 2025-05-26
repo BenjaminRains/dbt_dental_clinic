@@ -5,8 +5,9 @@ from sqlalchemy.exc import SQLAlchemyError
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
-from connection_factory import get_source_connection, get_staging_connection, get_target_connection
+from connection_factory import get_source_connection, get_target_connection
 from dotenv import load_dotenv
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -26,15 +27,16 @@ class ELTPipeline:
     def __init__(self):
         """Initialize the ELT pipeline with all necessary connections."""
         self.source_engine = None
-        self.staging_engine = None
         self.target_engine = None
         
         # Database names and schemas
         self.source_db = os.getenv('OPENDENTAL_SOURCE_DB')
-        self.staging_db = os.getenv('STAGING_MYSQL_DATABASE')
         self.target_db = os.getenv('POSTGRES_DATABASE')
         self.target_schema = os.getenv('POSTGRES_SCHEMA', 'analytics')
         self.raw_schema = os.getenv('POSTGRES_RAW_SCHEMA', 'raw')
+        
+        # DDL file paths
+        self.ddl_base_path = os.path.join(os.path.dirname(__file__), '..', 'analysis')
         
         # Validate database names
         self.validate_database_names()
@@ -52,8 +54,6 @@ class ELTPipeline:
         
         if not self.source_db:
             missing_dbs.append('OPENDENTAL_SOURCE_DB')
-        if not self.staging_db:
-            missing_dbs.append('STAGING_MYSQL_DATABASE')
         if not self.target_db:
             missing_dbs.append('POSTGRES_DATABASE')
         
@@ -63,7 +63,6 @@ class ELTPipeline:
             raise ValueError(error_msg)
         
         logger.info(f"Source database: {self.source_db}")
-        logger.info(f"Staging database: {self.staging_db}")
         logger.info(f"Target database: {self.target_db}")
         logger.info(f"Analytics schema: {self.target_schema}")
         logger.info(f"Raw schema: {self.raw_schema}")
@@ -72,7 +71,6 @@ class ELTPipeline:
         """Initialize database connections with proper error handling."""
         try:
             self.source_engine = get_source_connection(readonly=True)
-            self.staging_engine = get_staging_connection()
             self.target_engine = get_target_connection()
             logger.info("Successfully initialized all database connections")
         except Exception as e:
@@ -87,11 +85,6 @@ class ELTPipeline:
                 self.source_engine.dispose()
                 self.source_engine = None
                 logger.info("Closed source database connection")
-            
-            if self.staging_engine:
-                self.staging_engine.dispose()
-                self.staging_engine = None
-                logger.info("Closed staging database connection")
             
             if self.target_engine:
                 self.target_engine.dispose()
@@ -129,24 +122,8 @@ class ELTPipeline:
             return False
     
     def ensure_tracking_tables(self):
-        """Create necessary tracking tables in staging and target databases."""
+        """Create necessary tracking tables in target database."""
         try:
-            # Create staging tracking table (for Extract phase)
-            with self.staging_engine.begin() as conn:
-                conn.execute(text(f"USE {self.staging_db}"))
-                
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS etl_extract_status (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        table_name VARCHAR(255) NOT NULL UNIQUE,
-                        last_extracted TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
-                        rows_extracted INTEGER DEFAULT 0,
-                        extraction_status VARCHAR(50) DEFAULT 'pending',
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                    )
-                """))
-            
             # Create target tracking tables (for Load and Transform phases)
             with self.target_engine.begin() as conn:
                 # Load tracking (raw data)
@@ -181,35 +158,163 @@ class ELTPipeline:
             logger.error(f"Error creating tracking tables: {str(e)}")
             raise
     
-    def extract_to_staging(self, table_name: str, force_full: bool = False) -> bool:
+    def get_ddl_path(self, table_name: str, is_postgres: bool = False) -> str:
+        """Get the path to the DDL file for a table."""
+        suffix = '_pg_ddl.sql' if is_postgres else '_ddl.sql'
+        return os.path.join(self.ddl_base_path, table_name, f"{table_name}{suffix}")
+    
+    def read_ddl_file(self, table_name: str, is_postgres: bool = False) -> str:
+        """Read the DDL file for a table."""
+        try:
+            ddl_path = self.get_ddl_path(table_name, is_postgres)
+            with open(ddl_path, 'r') as f:
+                return f.read()
+        except FileNotFoundError:
+            logger.warning(f"DDL file not found for {table_name} ({'PostgreSQL' if is_postgres else 'MySQL'})")
+            return None
+        except Exception as e:
+            logger.error(f"Error reading DDL file for {table_name}: {str(e)}")
+            return None
+    
+    def convert_mysql_to_pg_ddl(self, mysql_ddl: str) -> str:
+        """Convert MySQL DDL to PostgreSQL DDL with proper type mapping."""
+        if not mysql_ddl:
+            return None
+            
+        # Type mappings for OpenDental
+        type_mappings = {
+            'bigint(20)': 'bigint',
+            'tinyint(1)': 'boolean',
+            'tinyint(3)': 'smallint',
+            'tinyint(4)': 'smallint',
+            'int(11)': 'integer',
+            'varchar(255)': 'character varying(255)',
+            'text': 'text',
+            'datetime': 'timestamp without time zone',
+            'timestamp': 'timestamp without time zone',
+            'char(1)': 'character(1)',
+            'decimal(10,2)': 'numeric(10,2)',
+            'float': 'real',
+            'double': 'double precision',
+            'date': 'date',
+            'time': 'time without time zone',
+            'blob': 'bytea',
+            'longblob': 'bytea',
+            'mediumblob': 'bytea',
+            'tinyblob': 'bytea',
+            'enum': 'text',
+            'set': 'text'
+        }
+        
+        # Replace MySQL types with PostgreSQL types
+        for mysql_type, pg_type in type_mappings.items():
+            mysql_ddl = mysql_ddl.replace(mysql_type, pg_type)
+        
+        # Remove MySQL-specific syntax
+        mysql_ddl = mysql_ddl.replace('ENGINE=MyISAM', '')
+        mysql_ddl = mysql_ddl.replace('AUTO_INCREMENT', '')
+        mysql_ddl = mysql_ddl.replace('COLLATE utf8mb3_uca1400_ai_ci', '')
+        mysql_ddl = mysql_ddl.replace('COLLATE utf8mb3_general_ci', '')
+        mysql_ddl = mysql_ddl.replace('COLLATE utf8mb4_general_ci', '')
+        
+        # Convert MySQL index syntax to PostgreSQL
+        mysql_ddl = re.sub(r'KEY `([^`]+)` \(`([^`]+)`\)', r'INDEX \1 (\2)', mysql_ddl)
+        
+        return mysql_ddl
+    
+    def create_raw_table(self, table_name: str) -> bool:
+        """Create raw table in PostgreSQL using the MySQL DDL as reference."""
+        try:
+            # Read the MySQL DDL file
+            mysql_ddl = self.read_ddl_file(table_name, is_postgres=False)
+            if not mysql_ddl:
+                logger.error(f"Could not read MySQL DDL for {table_name}")
+                return False
+            
+            # Convert MySQL DDL to PostgreSQL DDL
+            pg_ddl = self.convert_mysql_to_pg_ddl(mysql_ddl)
+            if not pg_ddl:
+                logger.error(f"Could not convert MySQL DDL to PostgreSQL for {table_name}")
+                return False
+            
+            # Extract the column definitions
+            column_defs = re.search(r'CREATE TABLE.*?\((.*?)\)', pg_ddl, re.DOTALL)
+            if not column_defs:
+                logger.error(f"Could not extract column definitions from DDL for {table_name}")
+                return False
+            
+            # Create the raw table
+            with self.target_engine.begin() as conn:
+                conn.execute(text(f"""
+                    CREATE TABLE IF NOT EXISTS {self.raw_schema}.{table_name} (
+                        {column_defs.group(1)}
+                    )
+                """))
+            
+            logger.info(f"Created raw table {self.raw_schema}.{table_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error creating raw table {table_name}: {str(e)}")
+            return False
+    
+    def create_transform_table(self, table_name: str) -> bool:
+        """Create transformed table in PostgreSQL using the target DDL."""
+        try:
+            # Read the PostgreSQL DDL file
+            pg_ddl = self.read_ddl_file(table_name, is_postgres=True)
+            if not pg_ddl:
+                logger.error(f"Could not read PostgreSQL DDL for {table_name}")
+                return False
+            
+            # Extract the column definitions
+            column_defs = re.search(r'CREATE TABLE.*?\((.*?)\)', pg_ddl, re.DOTALL)
+            if not column_defs:
+                logger.error(f"Could not extract column definitions from DDL for {table_name}")
+                return False
+            
+            # Create the transformed table
+            with self.target_engine.begin() as conn:
+                conn.execute(text(f"""
+                    CREATE TABLE IF NOT EXISTS {self.target_schema}.{table_name} (
+                        {column_defs.group(1)}
+                    )
+                """))
+            
+            logger.info(f"Created transform table {self.target_schema}.{table_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error creating transform table {table_name}: {str(e)}")
+            return False
+    
+    def extract_and_load_raw(self, table_name: str, force_full: bool = False) -> bool:
         """
-        EXTRACT phase: Extract data from source MySQL to staging MySQL.
-        This is purely for incremental extraction logic and temporary storage.
+        EXTRACT and LOAD phase: Extract data from source MySQL and load directly to PostgreSQL raw schema.
+        Only basic type conversions are applied for PostgreSQL compatibility.
         """
         try:
             # Get last extraction time
-            with self.staging_engine.connect() as conn:
-                conn.execute(text(f"USE {self.staging_db}"))
-                
-                query = text("""
-                    SELECT last_extracted 
-                    FROM etl_extract_status 
+            with self.target_engine.connect() as conn:
+                query = text(f"""
+                    SELECT last_loaded 
+                    FROM {self.target_schema}.etl_load_status 
                     WHERE table_name = :table_name
                 """)
                 result = conn.execute(query.bindparams(table_name=table_name))
-                last_extracted = result.scalar()
+                last_loaded = result.scalar()
             
             # Build extraction query with incremental logic
-            if force_full or not last_extracted:
+            if force_full or not last_loaded:
                 where_clause = "1=1"
                 logger.info(f"Performing full extraction for {table_name}")
             else:
                 # OpenDental incremental extraction logic
                 where_clause = """
-                    (DateTStamp > :last_extracted OR DateTStamp IS NULL)
-                    OR (SecDateTEdit > :last_extracted OR SecDateTEdit IS NULL)
+                    (DateTStamp > :last_loaded OR DateTStamp IS NULL)
+                    OR (SecDateTEdit > :last_loaded OR SecDateTEdit IS NULL)
                 """
-                logger.info(f"Performing incremental extraction for {table_name} since {last_extracted}")
+                logger.info(f"Performing incremental extraction for {table_name} since {last_loaded}")
             
             # Extract data from source
             with self.source_engine.connect() as conn:
@@ -219,65 +324,11 @@ class ELTPipeline:
                 df = pd.read_sql(
                     query,
                     conn,
-                    params={'last_extracted': last_extracted} if not force_full and last_extracted else {}
+                    params={'last_loaded': last_loaded} if not force_full and last_loaded else {}
                 )
             
             if df.empty:
                 logger.info(f"No new data to extract for {table_name}")
-                return True
-            
-            # Store in staging for temporary processing
-            with self.staging_engine.begin() as conn:
-                conn.execute(text(f"USE {self.staging_db}"))
-                
-                # Create/replace staging table
-                df.to_sql(
-                    f"staging_{table_name}",
-                    conn,
-                    if_exists='replace',
-                    index=False,
-                    method='multi'
-                )
-            
-            # Update extraction status
-            with self.staging_engine.begin() as conn:
-                conn.execute(text(f"USE {self.staging_db}"))
-                
-                conn.execute(text("""
-                    INSERT INTO etl_extract_status 
-                    (table_name, last_extracted, rows_extracted, extraction_status)
-                    VALUES (:table_name, :now, :rows, 'success')
-                    ON DUPLICATE KEY UPDATE 
-                        last_extracted = :now,
-                        rows_extracted = :rows,
-                        extraction_status = 'success',
-                        updated_at = CURRENT_TIMESTAMP
-                """).bindparams(
-                    table_name=table_name,
-                    now=datetime.now(),
-                    rows=len(df)
-                ))
-            
-            logger.info(f"Successfully extracted {len(df)} rows for {table_name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error extracting {table_name}: {str(e)}")
-            return False
-    
-    def load_raw_to_postgres(self, table_name: str) -> bool:
-        """
-        LOAD phase: Load raw data from staging to PostgreSQL raw schema.
-        Minimal transformations - only type conversion for PostgreSQL compatibility.
-        """
-        try:
-            # Read from staging
-            with self.staging_engine.connect() as conn:
-                conn.execute(text(f"USE {self.staging_db}"))
-                df = pd.read_sql(f"SELECT * FROM staging_{table_name}", conn)
-            
-            if df.empty:
-                logger.info(f"No data to load for {table_name}")
                 return True
             
             # Get source schema for basic type mapping
@@ -290,7 +341,7 @@ class ELTPipeline:
             df_clean = self.apply_basic_type_conversions(df, schema, table_name)
             
             # Create raw table if it doesn't exist
-            if not self.create_raw_table(table_name, schema):
+            if not self.create_raw_table(table_name):
                 logger.error(f"Failed to create raw table for {table_name}")
                 return False
             
@@ -327,77 +378,13 @@ class ELTPipeline:
             return True
             
         except Exception as e:
-            logger.error(f"Error loading raw data for {table_name}: {str(e)}")
+            logger.error(f"Error extracting and loading {table_name}: {str(e)}")
             return False
-    
-    def apply_basic_type_conversions(self, df: pd.DataFrame, schema: Dict[str, str], table_name: str) -> pd.DataFrame:
-        """
-        Apply ONLY basic type conversions needed for PostgreSQL compatibility.
-        No business logic transformations - those happen in PostgreSQL.
-        """
-        try:
-            df = df.copy()
-            
-            for col in df.columns:
-                if col not in schema:
-                    continue
-                
-                mysql_type = schema[col]
-                try:
-                    # Handle OpenDental's zero dates (PostgreSQL compatibility)
-                    if any(t in mysql_type.lower() for t in ['datetime', 'timestamp', 'date']):
-                        if df[col].dtype == 'object':
-                            # Replace OpenDental zero dates with NULL
-                            zero_date_patterns = ['0000-00-00', '0000-00-00 00:00:00', '0001-01-01', '0001-01-01 00:00:00']
-                            for pattern in zero_date_patterns:
-                                df.loc[df[col] == pattern, col] = None
-                        
-                        # Convert to datetime
-                        df[col] = pd.to_datetime(df[col], errors='coerce')
-                    
-                    # Handle TIME type (convert OpenDental nanoseconds to time string)
-                    elif 'time' in mysql_type.lower() and not ('datetime' in mysql_type.lower() or 'timestamp' in mysql_type.lower()):
-                        def convert_time_for_postgres(val):
-                            if pd.isna(val) or val == '' or val == 0:
-                                return None
-                            
-                            try:
-                                if isinstance(val, (int, float)) and val > 86400:
-                                    seconds = val / 1000000000  # OpenDental nanoseconds
-                                else:
-                                    seconds = float(val)
-                                
-                                hours = int(seconds // 3600)
-                                minutes = int((seconds % 3600) // 60)
-                                secs = int(seconds % 60)
-                                
-                                return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-                            except (ValueError, TypeError):
-                                return None
-                        
-                        df[col] = df[col].apply(convert_time_for_postgres)
-                    
-                    # Handle numeric types
-                    elif self.is_numeric_type(mysql_type):
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
-                    
-                    # Handle text types (clean up NaN values)
-                    elif any(t in mysql_type.lower() for t in ['varchar', 'char', 'text']):
-                        df[col] = df[col].astype(str).replace(['nan', 'None', ''], None)
-                
-                except Exception as e:
-                    logger.warning(f"Error converting column '{col}' in {table_name}: {str(e)}")
-            
-            return df
-            
-        except Exception as e:
-            logger.error(f"Error applying basic type conversions to {table_name}: {str(e)}")
-            raise
     
     def transform_in_postgres(self, table_name: str) -> bool:
         """
         TRANSFORM phase: Apply business logic transformations using SQL in PostgreSQL.
-        All transformations happen in PostgreSQL using SQL.
+        Uses the target DDL structure for the transformed table.
         """
         try:
             # Get transformation SQL for this table
@@ -410,9 +397,14 @@ class ELTPipeline:
                     DROP TABLE IF EXISTS {self.target_schema}.{table_name}
                 """))
                 
-                # Create transformed table using SQL
+                # Create transformed table using target DDL
+                if not self.create_transform_table(table_name):
+                    logger.error(f"Failed to create transform table for {table_name}")
+                    return False
+                
+                # Insert transformed data
                 conn.execute(text(f"""
-                    CREATE TABLE {self.target_schema}.{table_name} AS
+                    INSERT INTO {self.target_schema}.{table_name}
                     {transformation_sql}
                 """))
                 
@@ -462,6 +454,100 @@ class ELTPipeline:
                 logger.error(f"Error updating transform status: {str(status_error)}")
             
             return False
+    
+    def run_elt_pipeline(self, table_name: str, force_full: bool = False) -> bool:
+        """
+        Run the complete ELT pipeline for a table with proper separation of concerns.
+        
+        E+L - Extract from MySQL and load directly to PostgreSQL raw schema
+        T - Transform using SQL in PostgreSQL (raw schema -> analytics schema)
+        """
+        logger.info(f"Starting ELT pipeline for {table_name}")
+        
+        # EXTRACT and LOAD phase
+        logger.info(f"[EXTRACT+LOAD] Processing {table_name}")
+        if not self.extract_and_load_raw(table_name, force_full):
+            logger.error(f"Extract+Load phase failed for {table_name}")
+            return False
+        
+        # TRANSFORM phase
+        logger.info(f"[TRANSFORM] Processing {table_name}")
+        if not self.transform_in_postgres(table_name):
+            logger.error(f"Transform phase failed for {table_name}")
+            return False
+        
+        logger.info(f"Successfully completed ELT pipeline for {table_name}")
+        return True
+    
+    # Helper methods (kept from original with minimal changes)
+    
+    def get_table_schema(self, table_name: str) -> Dict[str, str]:
+        """Get the schema for a table from MySQL."""
+        try:
+            schema_query = text("""
+                SELECT 
+                    COLUMN_NAME, 
+                    COLUMN_TYPE, 
+                    IS_NULLABLE,
+                    COLUMN_DEFAULT, 
+                    COLUMN_KEY, 
+                    EXTRA
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = :db_name
+                AND TABLE_NAME = :table_name
+                ORDER BY ORDINAL_POSITION
+            """)
+            
+            with self.source_engine.connect() as conn:
+                conn.execute(text(f"USE {self.source_db}"))
+                
+                result = conn.execute(
+                    schema_query.bindparams(
+                        db_name=self.source_db,
+                        table_name=table_name
+                    )
+                )
+                return {row[0]: row[1] for row in result}
+            
+        except Exception as e:
+            logger.error(f"Error getting schema for {table_name}: {str(e)}")
+            return {}
+    
+    def apply_basic_type_conversions(self, df: pd.DataFrame, schema: Dict[str, str], table_name: str) -> pd.DataFrame:
+        """Apply basic type conversions to the DataFrame based on the schema."""
+        for col_name, col_type in schema.items():
+            if col_type.startswith('varchar'):
+                try:
+                    length = col_type.split('(')[1].split(')')[0]
+                    df[col_name] = df[col_name].astype(f'str:{length}')
+                except (IndexError, ValueError):
+                    df[col_name] = df[col_name].astype('str')
+            elif col_type.startswith('int'):
+                df[col_name] = df[col_name].astype('int')
+            elif col_type.startswith('float'):
+                df[col_name] = df[col_name].astype('float')
+            elif col_type.startswith('date'):
+                df[col_name] = pd.to_datetime(df[col_name]).dt.strftime('%Y-%m-%d')
+            elif col_type.startswith('time'):
+                df[col_name] = pd.to_datetime(df[col_name]).dt.strftime('%H:%M:%S')
+            elif col_type.startswith('datetime'):
+                df[col_name] = pd.to_datetime(df[col_name])
+            elif col_type.startswith('decimal'):
+                try:
+                    precision = col_type.split('(')[1].split(')')[0]
+                    df[col_name] = df[col_name].astype(f'float:{precision}')
+                except (IndexError, ValueError):
+                    df[col_name] = df[col_name].astype('float')
+            elif col_type.startswith('text'):
+                df[col_name] = df[col_name].astype('str')
+            elif col_type.startswith('boolean'):
+                df[col_name] = df[col_name].astype('bool')
+            elif col_type.startswith('set(') or col_type.startswith('enum('):
+                df[col_name] = df[col_name].astype('str')
+            else:
+                logger.warning(f"Unknown type {col_type}, defaulting to str for {col_name}")
+                df[col_name] = df[col_name].astype('str')
+        return df
     
     def get_transformation_sql(self, table_name: str) -> str:
         """
@@ -606,194 +692,6 @@ class ELTPipeline:
         }
         
         return transformations.get(table_name, base_sql)
-    
-    def run_elt_pipeline(self, table_name: str, force_full: bool = False) -> bool:
-        """
-        Run the complete ELT pipeline for a table with proper separation of concerns.
-        
-        E - Extract from MySQL to staging MySQL (incremental logic)
-        L - Load raw data from staging to PostgreSQL raw schema
-        T - Transform using SQL in PostgreSQL (raw schema -> analytics schema)
-        """
-        logger.info(f"Starting ELT pipeline for {table_name}")
-        
-        # EXTRACT phase
-        logger.info(f"[EXTRACT] Processing {table_name}")
-        if not self.extract_to_staging(table_name, force_full):
-            logger.error(f"Extract phase failed for {table_name}")
-            return False
-        
-        # LOAD phase  
-        logger.info(f"[LOAD] Processing {table_name}")
-        if not self.load_raw_to_postgres(table_name):
-            logger.error(f"Load phase failed for {table_name}")
-            return False
-        
-        # TRANSFORM phase
-        logger.info(f"[TRANSFORM] Processing {table_name}")
-        if not self.transform_in_postgres(table_name):
-            logger.error(f"Transform phase failed for {table_name}")
-            return False
-        
-        logger.info(f"Successfully completed ELT pipeline for {table_name}")
-        return True
-    
-    # Helper methods (kept from original with minimal changes)
-    
-    def get_table_schema(self, table_name: str) -> Dict[str, str]:
-        """Get the schema for a table from MySQL."""
-        try:
-            schema_query = text("""
-                SELECT 
-                    COLUMN_NAME, 
-                    COLUMN_TYPE, 
-                    IS_NULLABLE,
-                    COLUMN_DEFAULT, 
-                    COLUMN_KEY, 
-                    EXTRA
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = :db_name
-                AND TABLE_NAME = :table_name
-                ORDER BY ORDINAL_POSITION
-            """)
-            
-            with self.source_engine.connect() as conn:
-                conn.execute(text(f"USE {self.source_db}"))
-                
-                result = conn.execute(
-                    schema_query.bindparams(
-                        db_name=self.source_db,
-                        table_name=table_name
-                    )
-                )
-                return {row[0]: row[1] for row in result}
-            
-        except Exception as e:
-            logger.error(f"Error getting schema for {table_name}: {str(e)}")
-            return {}
-    
-    def create_raw_table(self, table_name: str, schema: Dict[str, str]) -> bool:
-        """Create raw table in PostgreSQL with proper type mapping."""
-        try:
-            create_sql_parts = [f'CREATE TABLE IF NOT EXISTS {self.raw_schema}."{table_name}" (']
-            
-            for col_name, col_type in schema.items():
-                pg_type = self.map_mysql_to_postgres_type(col_type, col_name)
-                create_sql_parts.append(f'    "{col_name}" {pg_type},')
-            
-            # Remove trailing comma and close
-            create_sql_parts[-1] = create_sql_parts[-1].rstrip(',')
-            create_sql_parts.append(");")
-            create_sql = "\n".join(create_sql_parts)
-            
-            # Execute creation
-            with self.target_engine.begin() as conn:
-                conn.execute(text(create_sql))
-            
-            logger.info(f"Created raw table {self.raw_schema}.{table_name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error creating raw table {table_name}: {str(e)}")
-            return False
-    
-    def map_mysql_to_postgres_type(self, mysql_type: str, column_name: str = '') -> str:
-        """Map MySQL types to PostgreSQL types with OpenDental-specific handling."""
-        try:
-            type_lower = str(mysql_type).lower()
-            
-            # Handle OpenDental's boolean convention
-            if type_lower == 'tinyint(1)' or self.is_bool_column(column_name, mysql_type):
-                return 'BOOLEAN'
-            elif type_lower.startswith('tinyint'):
-                return 'SMALLINT'
-            elif type_lower.startswith('smallint'):
-                return 'SMALLINT'
-            elif type_lower.startswith('mediumint'):
-                return 'INTEGER'
-            elif type_lower.startswith('int'):
-                return 'INTEGER'
-            elif type_lower.startswith('bigint'):
-                return 'BIGINT'
-            
-            # Handle SET and ENUM types
-            elif type_lower.startswith('set(') or type_lower.startswith('enum('):
-                return 'TEXT'
-            
-            # String types
-            elif type_lower.startswith('varchar') or type_lower.startswith('char'):
-                try:
-                    length = type_lower.split('(')[1].split(')')[0]
-                    return f'VARCHAR({length})'
-                except (IndexError, ValueError):
-                    return 'VARCHAR(255)'
-            elif type_lower.startswith('text'):
-                return 'TEXT'
-            
-            # Date/time types
-            elif type_lower.startswith('datetime') or type_lower.startswith('timestamp'):
-                return 'TIMESTAMP'
-            elif type_lower.startswith('date'):
-                return 'DATE'
-            elif type_lower.startswith('time'):
-                return 'TIME'
-            
-            # Numeric types
-            elif type_lower.startswith('decimal') or type_lower.startswith('numeric'):
-                try:
-                    precision = type_lower.split('(')[1].split(')')[0]
-                    return f'NUMERIC({precision})'
-                except (IndexError, ValueError):
-                    return 'NUMERIC(10,2)'
-            elif type_lower.startswith('float'):
-                return 'REAL'
-            elif type_lower.startswith('double'):
-                return 'DOUBLE PRECISION'
-            
-            # Binary types
-            elif type_lower.startswith('blob') or type_lower.startswith('binary'):
-                return 'BYTEA'
-            
-            else:
-                logger.warning(f"Unknown type {mysql_type}, defaulting to TEXT")
-                return 'TEXT'
-            
-        except Exception as e:
-            logger.error(f"Error mapping type {mysql_type}: {str(e)}")
-            return 'TEXT'
-    
-    def is_bool_column(self, column_name: str, column_type: str) -> bool:
-        """Determine if a column should be treated as boolean based on OpenDental conventions."""
-        if str(column_type).lower() == 'tinyint(1)':
-            return True
-        
-        bool_patterns = [
-            'is_', 'has_', 'show', 'use', 'allow', 'enable', 'disable',
-            'visible', 'active', 'hidden', 'locked', 'no', 'can', 
-            'is', 'has', 'flag', 'bool', 'boolean', 'timelocked'
-        ]
-        
-        column_lower = column_name.lower()
-        known_boolean_columns = [
-            'timelocked', 'isnewpatient', 'ishygiene', 'isdeleted', 'isreverse',
-            'isestimate', 'isinsurance', 'isactive', 'iscomplete'
-        ]
-        
-        if column_lower in known_boolean_columns:
-            return True
-        
-        for pattern in bool_patterns:
-            if (column_lower.startswith(pattern) or 
-                f"_{pattern}" in column_lower or 
-                column_lower.endswith(f"_{pattern}")):
-                return True
-            
-        return False
-    
-    def is_numeric_type(self, mysql_type: str) -> bool:
-        """Check if MySQL type is numeric."""
-        type_lower = mysql_type.lower()
-        return any(t in type_lower for t in ['int', 'decimal', 'float', 'double', 'numeric'])
 
 
 def main():
@@ -837,9 +735,9 @@ def main():
                 
                 # Run specific phases based on arguments
                 if args.extract_only:
-                    success = pipeline.extract_to_staging(table, args.full_sync)
+                    success = pipeline.extract_and_load_raw(table, args.full_sync)
                 elif args.load_only:
-                    success = pipeline.load_raw_to_postgres(table)
+                    success = pipeline.extract_and_load_raw(table, args.full_sync)
                 elif args.transform_only:
                     success = pipeline.transform_in_postgres(table)
                 else:
