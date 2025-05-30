@@ -20,7 +20,7 @@
 
 {{ config(
     materialized='view',
-    schema='public'  -- Match the source schema
+    schema='staging'
 ) }}
 
 with source as (
@@ -87,10 +87,10 @@ renamed as (
         "SmsContractDate" as sms_contract_date,
         "SmsMonthlyLimit" as sms_monthly_limit,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- Temporary until ETL adds this column
-        "DateEntry" as _created_at,  -- Transformed from source creation timestamp
-        coalesce("DateTStamp", "DateEntry") as _updated_at  -- Transformed from source update timestamp
+        -- Required metadata columns
+        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
+        "date_entry" as _created_at,      -- Rename source creation timestamp
+        coalesce("date_tstamp", "date_entry") as _updated_at  -- Rename source update timestamp
 
     from source
 )
