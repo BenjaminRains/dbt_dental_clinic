@@ -2,7 +2,31 @@
 
 ## Overview
 
-This document outlines the strategy for our mart layer models, which will transform our intermediate models into business-focused analytics views. The mart layer serves as the final transformation layer before data reaches end users through dashboards and reports.
+This document outlines the strategy for our mart layer models, which will transform our intermediate
+ models into business-focused analytics views. The mart layer serves as the final transformation 
+ layer before data reaches end users through dashboards and reports.
+
+## List of Mart Models
+
+- mart_financial_performance
+- mart_insurance_performance
+- mart_procedure_analytics
+- mart_scheduling_analytics
+- mart_patient_engagement
+- mart_patient_financial
+- mart_operational_metrics
+- mart_quality_metrics
+- mart_hygiene_retention
+- mart_ar_summary
+- mart_ar_aging
+- mart_patient_refunds
+- mart_revenue_lost
+- mart_patient_growth
+- mart_patient_retention
+- mart_new_patients
+- mart_active_patients
+- mart_patient_source
+- mart_patient_cohort
 
 ## Dimensional Model Structure
 
@@ -150,6 +174,12 @@ This document outlines the strategy for our mart layer models, which will transf
   - Documentation completeness
   - Error rates
   - Sources: fact_procedure, fact_claim, dim_procedure, dim_provider
+
+## General Design Principles
+- **Date Grain**: Most marts should support daily, monthly, and rolling period aggregations.
+- **Breakdowns**: All marts should support breakdowns by provider, location, patient type, and source.
+- **Drill-down**: Fact tables at the patient or appointment level to support drill-downs from summary marts.
+- **Frontend Alignment**: Design marts so each dashboard card or chart can be powered by a single mart or a simple join.
 
 ## Implementation Strategy
 
