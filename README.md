@@ -229,34 +229,40 @@ For detailed information about the intermediate models, see `dbt_int_models_plan
 
 ### ETL Pipeline Features
 
-The [`mariadb_postgre_pipe.py`](etl_job/mariadb_postgre_pipe.py) ETL pipeline provides robust data
- transformation capabilities:
+The ETL pipeline in the `etl_pipeline` directory provides robust data transformation capabilities:
 
-1. **Data Type Handling**
+1. **Connection Management**
+   - Centralized connection factory (`connection_factory.py`)
+   - Secure environment variable handling
+   - Read-only access enforcement for source database
+   - SSL/TLS configuration support
+   - Connection validation and testing utilities
+
+2. **Data Type Handling**
    - Automatic conversion between MariaDB and PostgreSQL types
    - Special handling for date/time fields and NULL values
    - Boolean type detection and conversion
    - Numeric precision preservation
 
-2. **Schema Management**
+3. **Schema Management**
    - Automatic table creation in PostgreSQL
    - Schema validation and evolution
    - Index creation and optimization
    - Primary key preservation
 
-3. **Data Quality**
+4. **Data Quality**
    - Row count validation with configurable tolerance
    - NULL value handling and validation
    - Data type consistency checks
    - Comprehensive error logging
 
-4. **Incremental Processing**
+5. **Incremental Processing**
    - Sync status tracking
    - Incremental updates based on last modified timestamps
    - Chunked processing for large tables
    - Transaction management
 
-5. **Error Handling**
+6. **Error Handling**
    - Comprehensive error logging
    - Retry mechanisms
    - Quality issue tracking
@@ -273,7 +279,15 @@ dbt_dental_clinic/
 ├── dbt_docs/                 # Generated dbt documentation
 ├── dbt_packages/             # Installed dbt packages
 ├── docs/                     # Project documentation
-├── etl_job/                  # ETL job configurations
+├── etl_pipeline/            # ETL pipeline components
+│   ├── elt_pipeline.py      # Main ETL orchestration
+│   ├── connection_factory.py # Database connection management
+│   ├── test_connections.py  # Connection testing utilities
+│   ├── debug_source_connection.py # Source connection debugging
+│   ├── set_connection.sh    # Connection setup script (Unix)
+│   ├── set_connection.ps1   # Connection setup script (Windows)
+│   ├── set_env.ps1          # Environment setup script
+│   └── .env.template        # Environment variables template
 ├── frontend/                 # Frontend components
 ├── logs/                     # Log files
 ├── macros/                   # Reusable SQL templates
@@ -361,33 +375,35 @@ pipenv install
 pipenv shell
 ```
 
-3. Create and run the environment setup script:
+3. Set up environment variables:
 ```powershell
-# Create set_env.ps1
-@"
-# Read the .env file and set environment variables
-Get-Content .env | ForEach-Object {
-    if ($_ -match '^([^#][^=]+)=(.*)$') {
-        $name = $matches[1].Trim()
-        $value = $matches[2].Trim()
-        [Environment]::SetEnvironmentVariable($name, $value, 'Process')
-    }
-}
-"@ > set_env.ps1
+# Windows
+Copy-Item etl_pipeline\.env.template etl_pipeline\.env
+# Edit etl_pipeline\.env with your database credentials
 
-# Run the script to load environment variables
-. .\set_env.ps1
+# Unix/Linux
+cp etl_pipeline/.env.template etl_pipeline/.env
+# Edit etl_pipeline/.env with your database credentials
 ```
 
-4. Install DBT packages:
+4. Test database connections:
+```bash
+# Windows
+.\etl_pipeline\set_connection.ps1
+
+# Unix/Linux
+./etl_pipeline/set_connection.sh
+```
+
+5. Install DBT packages:
 ```bash
 # Install dbt packages
 dbt deps
 ```
 
-5. Configure database connection in `profiles.yml`
+6. Configure database connection in `profiles.yml`
 
-6. Run the models:
+7. Run the models:
 ```bash
 # Run all staging models
 dbt run --models staging
@@ -396,7 +412,7 @@ dbt run --models staging
 dbt run --select stg_opendental__payment
 ```
 
-7. Run tests:
+8. Run tests:
 ```bash
 # Test all models
 dbt test

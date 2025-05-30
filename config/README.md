@@ -8,7 +8,7 @@ This directory contains configuration files for the dbt_dental_clinic project.
 - `.env.template`: Template for creating a new `.env` file
 - `load_env.py`: Script to load environment variables from the `.env` file
 - `powershell_profile.txt`: PowerShell profile configuration
-- `mdc_opendental_config.txt`: OpenDental configuration
+- `mdc_opendental_config.txt`: OpenDental configuration for the mdc clinic
 
 ## Usage
 
