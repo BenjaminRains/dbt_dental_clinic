@@ -1,0 +1,96 @@
+version: 2
+
+models:
+  - name: etl_load_status
+    description: "Tracks the status of ETL load operations for each table"
+    columns:
+      - name: id
+        description: "Primary key"
+        tests:
+          - unique
+          - not_null
+      
+      - name: table_name
+        description: "Name of the table being loaded"
+        tests:
+          - unique
+          - not_null
+      
+      - name: last_extracted
+        description: "Timestamp of last successful extraction"
+        tests:
+          - not_null
+      
+      - name: rows_extracted
+        description: "Number of rows extracted in last run"
+        tests:
+          - not_null
+      
+      - name: extraction_status
+        description: "Current status of extraction (pending, in_progress, completed, failed)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['pending', 'in_progress', 'completed', 'failed']
+      
+      - name: _loaded_at
+        description: "When the record was loaded into PostgreSQL by ETL"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "When the record was created"
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "When the record was last updated"
+        tests:
+          - not_null
+
+  - name: etl_transform_status
+    description: "Tracks the status of ETL transform operations for each table"
+    columns:
+      - name: id
+        description: "Primary key"
+        tests:
+          - unique
+          - not_null
+      
+      - name: table_name
+        description: "Name of the table being transformed"
+        tests:
+          - unique
+          - not_null
+      
+      - name: last_transformed
+        description: "Timestamp of last successful transformation"
+        tests:
+          - not_null
+      
+      - name: rows_transformed
+        description: "Number of rows transformed in last run"
+        tests:
+          - not_null
+      
+      - name: transformation_status
+        description: "Current status of transformation (pending, in_progress, completed, failed)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['pending', 'in_progress', 'completed', 'failed']
+      
+      - name: _loaded_at
+        description: "When the record was loaded into PostgreSQL by ETL"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "When the record was created"
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "When the record was last updated"
+        tests:
+          - not_null 
