@@ -155,6 +155,81 @@ select * from {{ ref('stg_opendental__payment') }}
 select * from {{ source('opendental', 'payment') }}
 ```
 
+## Mart Model Nomenclature
+
+### Mart Model Types
+
+**Rule**: Use consistent prefixes for different types of mart models:
+- `mart_` prefix for aggregated business metrics
+- `fct_` prefix for fact tables
+- `dim_` prefix for dimension tables
+
+**Examples**:
+- `mart_financial_performance` - Aggregated financial metrics
+- `fct_procedure` - Procedure-level fact table
+- `dim_date` - Date dimension table
+
+### Mart Model Documentation
+
+**Rule**: Document mart models in YAML files with:
+- Clear descriptions of the mart's purpose
+- Comprehensive column documentation
+- Relationship tests to dimension tables
+- Business metric definitions
+
+**Example Structure**:
+```yaml
+models:
+  - name: mart_financial_performance
+    description: "Mart model for comprehensive financial performance analysis"
+    columns:
+      - name: date_id
+        description: "Foreign key to dim_date"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+```
+
+### Mart Model Metrics
+
+**Rule**: Use clear, business-focused names for metrics:
+- Use snake_case for metric names
+- Include units in the name where applicable
+- Use descriptive prefixes for time-based metrics
+
+**Examples**:
+- `total_revenue` - Sum of all revenue
+- `procedure_count` - Count of procedures
+- `average_fee` - Average fee per procedure
+- `collection_rate` - Percentage of fees collected
+- `ar_aging_0_30` - Accounts receivable aging 0-30 days
+
+### Fact Table Conventions
+
+**Rule**: Fact tables should:
+- Include all relevant dimension keys
+- Use consistent naming for common fields
+- Include metadata columns for tracking
+
+**Example Structure**:
+```yaml
+models:
+  - name: fct_procedure
+    description: "Fact table containing procedure execution details and metrics"
+    columns:
+      - name: procedure_id
+        description: "Primary key for the procedure fact"
+        tests:
+          - unique
+          - not_null
+      - name: _created_at
+        description: "When the procedure record was created"
+      - name: _updated_at
+        description: "When the procedure record was last updated"
+```
+
 ## Visual Differentiation Benefits
 
 This multi-case approach provides immediate visual cues about the nature of each element:
