@@ -34,4 +34,161 @@ models:
       - name: fiscal_year
         description: "Fiscal year (starting in October)"
       - name: fiscal_quarter
-        description: "Fiscal quarter (1-4)" 
+        description: "Fiscal quarter (1-4)"
+
+  - name: dim_patient
+    description: "Dimension table containing comprehensive patient information including demographics, status, financials, and related data"
+    columns:
+      - name: patient_id
+        description: "Primary key for patient records"
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      # Demographics
+      - name: middle_initial
+        description: "Patient's middle initial"
+      - name: preferred_name
+        description: "Patient's preferred name"
+      - name: gender
+        description: "Patient's gender (0=Male, 1=Female, 2=Other)"
+        tests:
+          - accepted_values:
+              values: [0, 1, 2]
+      - name: language
+        description: "Patient's preferred language"
+      - name: birth_date
+        description: "Patient's date of birth"
+      - name: age
+        description: "Patient's current age in years"
+
+      # Status and Classification
+      - name: patient_status
+        description: "Current status of the patient (0=Patient, 1=NonPatient, 2=Inactive, 3=Archived, 4=Deceased, 5=Deleted)"
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5]
+      - name: position_code
+        description: "Patient position classification (0=Default, 1=House, 2=Staff, 3=VIP, 4=Other)"
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3, 4]
+      - name: student_status
+        description: "Patient's student status if applicable"
+      - name: urgency
+        description: "Patient's urgency level"
+      - name: premedication_required
+        description: "Flag indicating if patient requires premedication"
+
+      # Contact Preferences
+      - name: preferred_confirmation_method
+        description: "Patient's preferred method for appointment confirmations"
+      - name: preferred_contact_method
+        description: "Patient's preferred method of contact"
+      - name: preferred_recall_method
+        description: "Patient's preferred method for recall notifications"
+      - name: text_messaging_consent
+        description: "Flag indicating if patient has consented to text messaging"
+      - name: prefer_confidential_contact
+        description: "Flag indicating if patient prefers confidential contact"
+
+      # Financial Information
+      - name: estimated_balance
+        description: "Estimated balance for the patient"
+      - name: total_balance
+        description: "Total balance for the patient"
+      - name: balance_0_30_days
+        description: "Balance aged 0-30 days"
+      - name: balance_31_60_days
+        description: "Balance aged 31-60 days"
+      - name: balance_61_90_days
+        description: "Balance aged 61-90 days"
+      - name: balance_over_90_days
+        description: "Balance aged over 90 days"
+      - name: insurance_estimate
+        description: "Estimated insurance coverage"
+      - name: payment_plan_due
+        description: "Amount due on payment plan"
+      - name: has_insurance_flag
+        description: "Flag indicating if patient has insurance"
+      - name: billing_cycle_day
+        description: "Day of month for billing cycle"
+
+      # Important Dates
+      - name: first_visit_date
+        description: "Date of patient's first visit"
+      - name: deceased_datetime
+        description: "Date and time of patient's death if applicable"
+      - name: admit_date
+        description: "Date patient was admitted to the practice"
+
+      # Relationships
+      - name: guarantor_id
+        description: "Foreign key to guarantor patient"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      - name: primary_provider_id
+        description: "Foreign key to primary provider"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+      - name: secondary_provider_id
+        description: "Foreign key to secondary provider"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+      - name: clinic_id
+        description: "Foreign key to clinic"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+      - name: fee_schedule_id
+        description: "Foreign key to fee schedule"
+
+      # Patient Notes
+      - name: medical_notes
+        description: "Medical notes about the patient"
+      - name: treatment_notes
+        description: "Notes about patient's treatment"
+      - name: financial_notes
+        description: "Notes about patient's financial situation"
+      - name: emergency_contact_name
+        description: "Name of emergency contact"
+      - name: emergency_contact_phone
+        description: "Phone number of emergency contact"
+
+      # Patient Links
+      - name: linked_patient_ids
+        description: "Array of linked patient IDs"
+      - name: link_types
+        description: "Array of link types corresponding to linked_patient_ids"
+
+      # Patient Diseases
+      - name: disease_count
+        description: "Count of active diseases"
+      - name: disease_ids
+        description: "Array of active disease definition IDs"
+      - name: disease_statuses
+        description: "Array of disease statuses corresponding to disease_ids"
+
+      # Patient Documents
+      - name: document_count
+        description: "Count of patient documents"
+      - name: document_categories
+        description: "Array of document category IDs"
+
+      # Metadata
+      - name: _loaded_at
+        description: "When the data was loaded into PostgreSQL by ETL"
+      - name: _created_at
+        description: "When the record was created in OpenDental"
+      - name: _updated_at
+        description: "When the record was last updated in OpenDental" 
