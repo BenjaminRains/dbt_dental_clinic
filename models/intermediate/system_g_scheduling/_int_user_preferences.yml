@@ -22,7 +22,7 @@ models:
       Data Sources:
       - stg_opendental__userodpref: Base user preferences
       - stg_opendental__userodapptview: Appointment view settings
-      - stg_opendental__user: User information
+      - stg_opendental__userod: User information
       - stg_opendental__clinic: Clinic information
       - stg_opendental__apptview: Appointment view definitions
       
@@ -62,7 +62,7 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
       - name: fkey
         description: Foreign key reference

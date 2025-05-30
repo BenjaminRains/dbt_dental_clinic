@@ -94,7 +94,7 @@ models:
         description: ID of the user assigned to the task
         tests:
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
       - name: priority_def_id
         description: ID of the priority definition

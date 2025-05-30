@@ -52,13 +52,13 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
       - name: presenter_user_id
         description: Foreign key to the user who presented the treatment plan
         tests:
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
       - name: mobile_app_device_id
         description: Foreign key to the mobile device used for the treatment plan

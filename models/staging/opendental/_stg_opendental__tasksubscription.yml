@@ -27,7 +27,7 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
       - name: task_list_id
         description: Foreign key to the task list (if subscription is for a list)

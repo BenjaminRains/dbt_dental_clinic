@@ -57,4 +57,4 @@ models:
           related_to: stg_opendental__tasklist.task_list_id
         - relationship: many_to_one
           field: from_id
-          related_to: stg_opendental__user.user_id
+          related_to: stg_opendental__userod.user_id

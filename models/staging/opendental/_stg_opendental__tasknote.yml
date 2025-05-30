@@ -35,7 +35,7 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
 
       # Timestamps

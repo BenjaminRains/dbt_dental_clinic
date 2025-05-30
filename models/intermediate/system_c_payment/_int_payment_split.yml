@@ -331,7 +331,7 @@ models:
         description: ID of the user who created the record
         tests:
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
 
       - name: procedure_code

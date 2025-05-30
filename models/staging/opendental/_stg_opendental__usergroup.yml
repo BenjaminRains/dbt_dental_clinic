@@ -33,7 +33,7 @@ models:
       relationships:
         - name: users
           description: Users can belong to one or more user groups
-          model: stg_opendental__user
+          model: stg_opendental__userod
           field_mapping:
             - from: usergroup_id
               to: usergroup_id

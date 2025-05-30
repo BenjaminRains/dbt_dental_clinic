@@ -37,7 +37,7 @@ models:
         description: Foreign key - ID of the user who created the record. Historical records (pre-2020) may have user_entry_id = 0.
         tests:
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
               where: "user_entry_id > 0"
           - test_column_greater_than:
