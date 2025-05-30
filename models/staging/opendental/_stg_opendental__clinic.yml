@@ -6,6 +6,10 @@ models:
       Staging model for clinic/location information. This model standardizes and
       renames columns from the source clinic table, making it easier to work with
       in downstream models.
+
+      NOTE: This model is currently not built or tested. The source OpenDental data
+      is not being used by the MDC clinic and the ETL script has not been updated
+      to include this data yet.
     columns:
       - name: clinic_id
         description: "Primary key for clinic records"
