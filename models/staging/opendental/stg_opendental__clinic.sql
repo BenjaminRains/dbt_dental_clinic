@@ -63,7 +63,7 @@ renamed as (
         "SmsMonthlyLimit" as sms_monthly_limit,
         
         -- Metadata
-        _loaded_at,  -- Preserved from ETL
+        _loaded_at,  -- Added by ETL pipeline when loading to raw schema
         "DateEntry" as _created_at,  -- Transformed from source creation timestamp
         coalesce("DateTStamp", "DateEntry") as _updated_at  -- Transformed from source update timestamp
 
