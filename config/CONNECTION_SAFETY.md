@@ -37,7 +37,7 @@ Update your `.env` file (based on `.env.template`) with the following structure:
 SOURCE_DB_HOST=client-server.example.com  # LIVE operation server
 SOURCE_DB_PORT=3306
 SOURCE_DB_NAME=opendental
-SOURCE_DB_READONLY_USER=analytics_reader
+SOURCE_DB_READONLY_USER=readonly_user
 SOURCE_DB_READONLY_PASSWORD=readonly_password
 
 # Target Database (WRITE)
@@ -56,8 +56,8 @@ ENVIRONMENT=development  # or production
 Create a dedicated read-only user on the source database with these credentials:
 
 ```sql
-CREATE USER 'dental_analytics_reader'@'%' IDENTIFIED BY 'readonly_password';
-GRANT SELECT ON opendental.* TO 'dental_analytics_reader'@'%';
+CREATE USER 'readonly_user'@'%' IDENTIFIED BY 'readonly_password';
+GRANT SELECT ON opendental.* TO 'readonly_user'@'%';
 FLUSH PRIVILEGES;
 ```
 
@@ -199,12 +199,4 @@ def test_target_connection():
 - [ ] Never store credentials in code - always use environment variables
 
 Remember: The operational database is mission-critical for the dental clinic. Any disruption could
-
-
-
-
-
-
-
-
- affect patient care. Always prioritize safety and data integrity over convenience or performance.
+affect patient care. Always prioritize safety and data integrity over convenience or performance.
