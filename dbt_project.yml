@@ -33,12 +33,12 @@ models:
     # Configure materializations by folder
     staging:
       +materialized: view  # Default materialization, some models override this to be tables
-      +schema: staging  # Optional: organize models in different schemas
+      +schema: public_staging  # Optional: organize models in different schemas
       +description: "Staging models for raw data transformation"
     
     intermediate:
       +materialized: table
-      +schema: intermediate
+      +schema: public_intermediate
       +description: "Intermediate models for business logic implementation"
     
     marts:
@@ -46,12 +46,22 @@ models:
       +schema: marts
       +description: "Mart models for business reporting and analytics"
 
+    raw:
+      +materialized: table
+      +schema: raw
+      +description: "Raw ingested and ETL tracking tables"
+
+    public:
+      +materialized: table  # or view, as needed
+      +schema: public
+      +description: "Models and views for public schema (shared or BI outputs)"
+
 # Add vars for flexible configuration
 vars:
   # Set a variable for your dental practice database name
   dental_database: opendental_analytics
-  # Set maximum valid date for data validation
-  max_valid_date: '2025-02-28'
+  # Set maximum valid date for data validation (can be overridden by environment variable)
+  max_valid_date: "{{ env_var('MAX_VALID_DATE', '2099-12-31') }}"
   schedule_window_days: 90  # Number of days to look back for scheduling data
 
 # Package dependencies
