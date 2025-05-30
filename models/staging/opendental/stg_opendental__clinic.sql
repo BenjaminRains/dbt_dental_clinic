@@ -1,3 +1,28 @@
+{#
+    Note: This staging model is prepared for when data becomes available.
+    Current Status (2024-03-14):
+    - Database: opendental_analytics
+    - Schema: public
+    - Table: clinic
+    - Status: No data available in local development environment
+    - Expected Columns: See DDL in analysis/clinic/clinic_pg_ddl.sql
+    
+    The model is structured to handle:
+    1. Standard column naming and transformations
+    2. Metadata fields (_loaded_at, _created_at, _updated_at)
+    3. All columns from the source DDL
+    
+    TODO: Once data is available:
+    1. Verify all columns exist as expected
+    2. Test data quality and transformations
+    3. Update documentation with actual data examples
+#}
+
+{{ config(
+    materialized='view',
+    schema='public'  -- Match the source schema
+) }}
+
 with source as (
     select * from {{ source('opendental', 'clinic') }}
 ),
@@ -63,7 +88,7 @@ renamed as (
         "SmsMonthlyLimit" as sms_monthly_limit,
         
         -- Metadata
-        _loaded_at,  -- Added by ETL pipeline when loading to raw schema
+        current_timestamp as _loaded_at,  -- Temporary until ETL adds this column
         "DateEntry" as _created_at,  -- Transformed from source creation timestamp
         coalesce("DateTStamp", "DateEntry") as _updated_at  -- Transformed from source update timestamp
 
