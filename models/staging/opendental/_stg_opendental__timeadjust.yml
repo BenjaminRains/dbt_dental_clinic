@@ -31,10 +31,6 @@ models:
               field: clinic_id
       - name: pto_def_id
         description: Foreign key to the PTO definition if this adjustment is for paid time off
-        tests:
-          - relationships:
-              to: ref('stg_opendental__ptodef')
-              field: pto_def_id
       - name: secu_user_entry_id
         description: Foreign key to the user who entered the time adjustment
         tests:

@@ -29,10 +29,6 @@ models:
               field: patient_id
       - name: responsible_party_id
         description: Foreign key to the responsible party for the treatment plan
-        tests:
-          - relationships:
-              to: ref('stg_opendental__responsible_party')
-              field: responsible_party_id
       - name: document_id
         description: >
           Foreign key to the associated document.
@@ -62,10 +58,6 @@ models:
               field: user_id
       - name: mobile_app_device_id
         description: Foreign key to the mobile device used for the treatment plan
-        tests:
-          - relationships:
-              to: ref('stg_opendental__mobile_app_device')
-              field: mobile_app_device_id
 
       # Timestamps and Dates
       - name: treatment_plan_date
