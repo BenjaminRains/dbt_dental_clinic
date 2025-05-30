@@ -1,0 +1,188 @@
+version: 2
+
+models:
+  - name: stg_opendental__clinic
+    description: >
+      Staging model for clinic/location information. This model standardizes and
+      renames columns from the source clinic table, making it easier to work with
+      in downstream models.
+    columns:
+      - name: clinic_id
+        description: "Primary key for clinic records"
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: source('opendental', 'clinic')
+              field: "ClinicNum"
+      
+      - name: clinic_name
+        description: "Name or description of the clinic location"
+      
+      - name: clinic_abbreviation
+        description: "Abbreviation used for the clinic in reports and displays"
+      
+      - name: display_order
+        description: "Display order for the clinic in lists and dropdowns"
+      
+      - name: address_line_1
+        description: "Primary address line of the clinic"
+      
+      - name: address_line_2
+        description: "Secondary address line of the clinic"
+      
+      - name: city
+        description: "City where the clinic is located"
+      
+      - name: state
+        description: "State where the clinic is located"
+      
+      - name: zip_code
+        description: "ZIP/Postal code of the clinic"
+      
+      - name: phone_number
+        description: "Contact phone number for the clinic"
+      
+      - name: fax_number
+        description: "Fax number for the clinic"
+      
+      - name: email_address_id
+        description: "Foreign key to email address record"
+      
+      - name: email_alias
+        description: "Custom email alias for the clinic"
+      
+      - name: bank_number
+        description: "Bank account number for the clinic"
+      
+      - name: billing_address_line_1
+        description: "Primary billing address line"
+      
+      - name: billing_address_line_2
+        description: "Secondary billing address line"
+      
+      - name: billing_city
+        description: "City for billing address"
+      
+      - name: billing_state
+        description: "State for billing address"
+      
+      - name: billing_zip
+        description: "ZIP/Postal code for billing address"
+      
+      - name: pay_to_address_line_1
+        description: "Primary pay-to address line"
+      
+      - name: pay_to_address_line_2
+        description: "Secondary pay-to address line"
+      
+      - name: pay_to_city
+        description: "City for pay-to address"
+      
+      - name: pay_to_state
+        description: "State for pay-to address"
+      
+      - name: pay_to_zip
+        description: "ZIP/Postal code for pay-to address"
+      
+      - name: default_provider_id
+        description: "Foreign key to default provider for the clinic"
+        tests:
+          - relationships:
+              to: source('opendental', 'provider')
+              field: "ProvNum"
+              where: "default_provider_id is not null"
+      
+      - name: insurance_billing_provider_id
+        description: "Foreign key to insurance billing provider"
+        tests:
+          - relationships:
+              to: source('opendental', 'provider')
+              field: "ProvNum"
+              where: "insurance_billing_provider_id is not null"
+      
+      - name: default_place_of_service
+        description: "Default place of service code for the clinic"
+      
+      - name: is_medical_only
+        description: "Flag indicating if clinic is medical-only (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: use_billing_address_on_claims
+        description: "Flag to use billing address on insurance claims (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_insurance_verification_excluded
+        description: "Flag to exclude from insurance verification (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_confirmation_enabled
+        description: "Flag for appointment confirmation feature (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_confirmation_default
+        description: "Flag for default confirmation setting (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_new_patient_appointment_excluded
+        description: "Flag to exclude from new patient appointments (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: is_hidden
+        description: "Flag to hide clinic from normal view (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: has_procedure_on_prescription
+        description: "Flag for procedure on prescription feature (0=no, 1=yes)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: region_id
+        description: "Foreign key to region table"
+      
+      - name: timezone
+        description: "Timezone setting for the clinic"
+      
+      - name: scheduling_note
+        description: "Scheduling notes for the clinic"
+      
+      - name: medical_lab_account_number
+        description: "Medical lab account number"
+      
+      - name: external_id
+        description: "External system identifier"
+      
+      - name: sms_contract_date
+        description: "Date of SMS contract"
+      
+      - name: sms_monthly_limit
+        description: "Monthly SMS message limit"
+      
+      - name: _loaded_at
+        description: "When the data was loaded into PostgreSQL by ETL"
+      
+      - name: _created_at
+        description: "Transformed from DateEntry - when record was created in OpenDental"
+      
+      - name: _updated_at
+        description: "Transformed from DateTStamp - when record was last updated in OpenDental"
+    
+    meta:
+      contains_pii: true
+      business_owners: ["dental_operations_team"]
+      technical_owners: ["data_engineering_team"] 
