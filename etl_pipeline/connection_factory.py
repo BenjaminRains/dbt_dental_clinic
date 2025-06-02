@@ -234,18 +234,26 @@ def get_target_connection():
             f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
         )
         
-        # Test connection and write access
+        # Test connection and table access
         with engine.connect() as conn:
+            # Test basic connection
             conn.execute(text("SELECT 1"))
             
-            # Test write access - try to create a test schema
+            # Test table access - try to read from etl_load_status
             try:
-                conn.execute(text("CREATE SCHEMA IF NOT EXISTS test_schema"))
-                conn.execute(text("DROP SCHEMA IF EXISTS test_schema"))
-                logger.info("Write access verified successfully")
+                conn.execute(text("SELECT COUNT(*) FROM raw.etl_load_status"))
+                logger.info("Table read access verified successfully")
+                
+                # Test table write access
+                conn.execute(text("""
+                    INSERT INTO raw.etl_load_status (table_name, last_extracted, rows_extracted, extraction_status)
+                    VALUES ('test_table', CURRENT_TIMESTAMP, 0, 'test')
+                    ON CONFLICT (table_name) DO NOTHING
+                """))
+                logger.info("Table write access verified successfully")
             except SQLAlchemyError as e:
-                logger.warning(f"Write access test failed: {str(e)}")
-                logger.warning("PostgreSQL connection works but may lack full permissions")
+                logger.warning(f"Table access test failed: {str(e)}")
+                logger.warning("PostgreSQL connection works but may lack table permissions")
             
             logger.info("Target connection verified successfully")
         
