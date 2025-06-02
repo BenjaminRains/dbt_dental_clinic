@@ -176,7 +176,7 @@ class ELTPipeline:
     def extract_to_target_mysql(self, table_name: str, force_full: bool = False) -> bool:
         """
         EXTRACT phase: Extract data from source MySQL to target MySQL.
-        This maintains the MySQL architecture in the target system.
+        This performs a pure extract-load without any transformations.
         """
         try:
             # Get last extraction time
@@ -196,47 +196,73 @@ class ELTPipeline:
                 where_clause = "1=1"
                 logger.info(f"Performing full extraction for {table_name}")
             else:
-                # OpenDental incremental extraction logic
+                # Use a generic incremental extraction based on any timestamp column
                 where_clause = """
-                    (DateTStamp > :last_extracted OR DateTStamp IS NULL)
-                    OR (SecDateTEdit > :last_extracted OR SecDateTEdit IS NULL)
+                    EXISTS (
+                        SELECT 1 
+                        FROM information_schema.columns 
+                        WHERE table_schema = :db_name 
+                        AND table_name = :table_name 
+                        AND data_type IN ('datetime', 'timestamp')
+                        AND column_name IN (
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_schema = :db_name 
+                            AND table_name = :table_name 
+                            AND data_type IN ('datetime', 'timestamp')
+                        )
+                        AND table_name.column_name > :last_extracted
+                    )
                 """
                 logger.info(f"Performing incremental extraction for {table_name} since {last_extracted}")
-            
-            # Extract data from source
-            with self.source_engine.connect() as conn:
-                conn.execute(text(f"USE {self.source_db}"))
-                
-                query = f"SELECT * FROM {table_name} WHERE {where_clause}"
-                df = pd.read_sql(
-                    query,
-                    conn,
-                    params={'last_extracted': last_extracted} if not force_full and last_extracted else {}
-                )
-            
-            if df.empty:
-                logger.info(f"No new data to extract for {table_name}")
-                return True
             
             # Create target table using MySQL DDL if it doesn't exist
             self.create_target_mysql_table(table_name)
             
-            # Load data to target MySQL (preserving MySQL architecture)
-            with self.target_mysql_engine.begin() as conn:
-                conn.execute(text(f"USE {self.target_mysql_db}"))
+            # Perform direct table copy using MySQL's INSERT ... SELECT
+            with self.source_engine.connect() as source_conn, self.target_mysql_engine.connect() as target_conn:
+                # Use the source database
+                source_conn.execute(text(f"USE {self.source_db}"))
+                target_conn.execute(text(f"USE {self.target_mysql_db}"))
                 
-                df.to_sql(
-                    table_name,
-                    conn,
-                    if_exists='replace',
-                    index=False,
-                    method='multi'
-                )
+                # Get column names from source table
+                result = source_conn.execute(text(f"""
+                    SELECT GROUP_CONCAT(column_name) 
+                    FROM information_schema.columns 
+                    WHERE table_schema = :db_name 
+                    AND table_name = :table_name
+                    ORDER BY ordinal_position
+                """).bindparams(db_name=self.source_db, table_name=table_name))
+                columns = result.scalar()
+                
+                if not columns:
+                    raise ValueError(f"No columns found for table {table_name}")
+                
+                # Truncate target table
+                target_conn.execute(text(f"TRUNCATE TABLE {table_name}"))
+                
+                # Copy data directly using INSERT ... SELECT
+                copy_query = f"""
+                    INSERT INTO {self.target_mysql_db}.{table_name} ({columns})
+                    SELECT {columns}
+                    FROM {self.source_db}.{table_name}
+                    WHERE {where_clause}
+                """
+                
+                params = {
+                    'db_name': self.source_db,
+                    'table_name': table_name,
+                    'last_extracted': last_extracted
+                } if not force_full and last_extracted else {
+                    'db_name': self.source_db,
+                    'table_name': table_name
+                }
+                
+                result = target_conn.execute(text(copy_query).bindparams(**params))
+                rows_copied = result.rowcount
             
             # Update extraction status
             with self.target_mysql_engine.begin() as conn:
-                conn.execute(text(f"USE {self.target_mysql_db}"))
-                
                 conn.execute(text("""
                     INSERT INTO etl_extract_status 
                     (table_name, last_extracted, rows_extracted, extraction_status)
@@ -249,10 +275,10 @@ class ELTPipeline:
                 """).bindparams(
                     table_name=table_name,
                     now=datetime.now(),
-                    rows=len(df)
+                    rows=rows_copied
                 ))
             
-            logger.info(f"Successfully extracted {len(df)} rows for {table_name}")
+            logger.info(f"Successfully extracted {rows_copied} rows for {table_name}")
             return True
             
         except Exception as e:
