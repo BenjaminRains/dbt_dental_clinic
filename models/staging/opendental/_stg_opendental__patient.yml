@@ -22,6 +22,11 @@ models:
           name: valid_date_sequence
           expression: "(_updated_at >= _created_at) OR _created_at IS NULL"
           severity: warn
+      # Warns when estimated_balance and total_balance differ significantly
+      - dbt_utils.expression_is_true:
+          name: balance_discrepancy_check
+          expression: "ABS(estimated_balance - total_balance) <= 0.01 OR (estimated_balance = 0 AND total_balance = 0)"
+          severity: warn
     columns:
       - name: patient_id
         description: "Primary key for patient records (PatNum in source)"
