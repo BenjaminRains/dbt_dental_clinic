@@ -1,0 +1,423 @@
+# Table-specific configurations for the dental clinic ETL pipeline
+
+# Source tables configuration
+source_tables:
+  # Core Tables (Modeled in dbt)
+  patient:
+    incremental_column: DateTStamp
+    batch_size: 1000
+    is_modeled: true  # Flag indicating this table is modeled in dbt
+    validation_rules:
+      - name: not_null
+        columns: [PatNum, DateTStamp]
+      - name: unique
+        columns: [PatNum]
+    dependencies: []
+
+  appointment:
+    incremental_column: AptDateTime
+    batch_size: 500
+    is_modeled: true
+    validation_rules:
+      - name: not_null
+        columns: [AptNum, PatNum, AptDateTime, AptStatus]
+      - name: relationships
+        columns: [PatNum]
+        references: patient.PatNum
+    dependencies: ["patient"]
+
+  procedurelog:
+    incremental_column: ProcDate
+    batch_size: 500
+    is_modeled: true
+    validation_rules:
+      - name: not_null
+        columns: [ProcNum, PatNum, ProcDate, ProcStatus]
+      - name: relationships
+        columns: [PatNum]
+        references: patient.PatNum
+    dependencies: ["patient"]
+
+  payment:
+    incremental_column: PayDate
+    batch_size: 1000
+    is_modeled: true
+    validation_rules:
+      - name: not_null
+        columns: [PayNum, PatNum, PayDate, PayAmt]
+      - name: numeric
+        columns: [PayAmt]
+      - name: relationships
+        columns: [PatNum]
+        references: patient.PatNum
+    dependencies: ["patient"]
+
+  # Additional Tables (Not Modeled in dbt)
+  # These tables are extracted but not transformed by dbt
+  # They are still tracked in ETL status tables
+  
+  # Patient Related
+  patientlink:
+    incremental_column: DateTimeLink
+    batch_size: 500
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [PatientLinkNum, PatNumFrom, PatNumTo, LinkType, DateTimeLink]
+    dependencies: ["patient"]
+
+  patientnote:
+    incremental_column: SecDateTEdit
+    batch_size: 500
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [PatNum, SecDateTEntry, SecDateTEdit]
+    dependencies: ["patient"]
+
+  # Appointment Related
+  histappointment:
+    incremental_column: HistDateTStamp
+    batch_size: 1000
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [HistApptNum, AptNum, HistDateTStamp, HistApptAction]
+    dependencies: ["appointment"]
+
+  recall:
+    incremental_column: DateTStamp
+    batch_size: 500
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [RecallNum, PatNum, DateDueCalc, DateDue]
+    dependencies: ["patient"]
+
+  # Insurance Related
+  claim:
+    incremental_column: DateSent
+    batch_size: 500
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [ClaimNum, PatNum, DateSent, ClaimStatus]
+    dependencies: ["patient"]
+
+  insplan:
+    incremental_column: DateTStamp
+    batch_size: 100
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [PlanNum, CarrierName]
+    dependencies: []
+
+  # Provider Related
+  provider:
+    incremental_column: DateTStamp
+    batch_size: 100
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [ProvNum, Abbr, IsHidden]
+    dependencies: []
+
+  # Referral Related
+  referral:
+    incremental_column: DateTStamp
+    batch_size: 100
+    is_modeled: false
+    validation_rules:
+      - name: not_null
+        columns: [ReferralNum, LName, FName]
+    dependencies: []
+
+  # ETL Status Tables
+  etl_load_status:
+    incremental_column: _updated_at
+    batch_size: 100
+    is_modeled: true
+    validation_rules:
+      - name: not_null
+        columns: [id, table_name, last_extracted, extraction_status]
+    dependencies: []
+
+  etl_transform_status:
+    incremental_column: _updated_at
+    batch_size: 100
+    is_modeled: true
+    validation_rules:
+      - name: not_null
+        columns: [id, table_name, last_transformed, transformation_status]
+    dependencies: []
+
+# Staging tables configuration
+staging_tables:
+  # Core Tables (Modeled in dbt)
+  patient:
+    schema: staging
+    indexes:
+      - columns: [PatNum]
+        type: primary
+      - columns: [DateTStamp]
+        type: btree
+    cleanup_after_load: true
+
+  appointment:
+    schema: staging
+    indexes:
+      - columns: [AptNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [AptDateTime]
+        type: btree
+    cleanup_after_load: true
+
+  procedurelog:
+    schema: staging
+    indexes:
+      - columns: [ProcNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [ProcDate]
+        type: btree
+    cleanup_after_load: true
+
+  payment:
+    schema: staging
+    indexes:
+      - columns: [PayNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [PayDate]
+        type: btree
+    cleanup_after_load: true
+
+  # Additional Tables (Not Modeled in dbt)
+  # These tables are still staged but not transformed
+  patientlink:
+    schema: staging
+    indexes:
+      - columns: [PatientLinkNum]
+        type: primary
+      - columns: [PatNumFrom, PatNumTo]
+        type: btree
+      - columns: [DateTimeLink]
+        type: btree
+    cleanup_after_load: true
+
+  patientnote:
+    schema: staging
+    indexes:
+      - columns: [PatNum]
+        type: primary
+      - columns: [SecDateTEdit]
+        type: btree
+    cleanup_after_load: true
+
+  histappointment:
+    schema: staging
+    indexes:
+      - columns: [HistApptNum]
+        type: primary
+      - columns: [AptNum]
+        type: btree
+      - columns: [HistDateTStamp]
+        type: btree
+    cleanup_after_load: true
+
+  recall:
+    schema: staging
+    indexes:
+      - columns: [RecallNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [DateDue]
+        type: btree
+    cleanup_after_load: true
+
+  claim:
+    schema: staging
+    indexes:
+      - columns: [ClaimNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [DateSent]
+        type: btree
+    cleanup_after_load: true
+
+  insplan:
+    schema: staging
+    indexes:
+      - columns: [PlanNum]
+        type: primary
+      - columns: [DateTStamp]
+        type: btree
+    cleanup_after_load: true
+
+  provider:
+    schema: staging
+    indexes:
+      - columns: [ProvNum]
+        type: primary
+      - columns: [DateTStamp]
+        type: btree
+    cleanup_after_load: true
+
+  referral:
+    schema: staging
+    indexes:
+      - columns: [ReferralNum]
+        type: primary
+      - columns: [DateTStamp]
+        type: btree
+    cleanup_after_load: true
+
+  # ETL Status Tables
+  etl_load_status:
+    schema: staging
+    indexes:
+      - columns: [id]
+        type: primary
+      - columns: [table_name]
+        type: btree
+      - columns: [_updated_at]
+        type: btree
+    cleanup_after_load: false
+
+  etl_transform_status:
+    schema: staging
+    indexes:
+      - columns: [id]
+        type: primary
+      - columns: [table_name]
+        type: btree
+      - columns: [_updated_at]
+        type: btree
+    cleanup_after_load: false
+
+# Target tables configuration
+target_tables:
+  # Core Tables (Modeled in dbt)
+  patient:
+    schema: analytics
+    indexes:
+      - columns: [PatNum]
+        type: primary
+      - columns: [DateTStamp]
+        type: btree
+    partitioning:
+      type: range
+      column: DateTStamp
+      interval: 1 month
+
+  appointment:
+    schema: analytics
+    indexes:
+      - columns: [AptNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [AptDateTime]
+        type: btree
+    partitioning:
+      type: range
+      column: AptDateTime
+      interval: 1 month
+
+  procedurelog:
+    schema: analytics
+    indexes:
+      - columns: [ProcNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [ProcDate]
+        type: btree
+    partitioning:
+      type: range
+      column: ProcDate
+      interval: 1 month
+
+  payment:
+    schema: analytics
+    indexes:
+      - columns: [PayNum]
+        type: primary
+      - columns: [PatNum]
+        type: btree
+      - columns: [PayDate]
+        type: btree
+    partitioning:
+      type: range
+      column: PayDate
+      interval: 1 month
+
+  # ETL Status Tables
+  etl_load_status:
+    schema: analytics
+    indexes:
+      - columns: [id]
+        type: primary
+      - columns: [table_name]
+        type: btree
+      - columns: [_updated_at]
+        type: btree
+    partitioning:
+      type: range
+      column: _updated_at
+      interval: 1 month
+
+  etl_transform_status:
+    schema: analytics
+    indexes:
+      - columns: [id]
+        type: primary
+      - columns: [table_name]
+        type: btree
+      - columns: [_updated_at]
+        type: btree
+    partitioning:
+      type: range
+      column: _updated_at
+      interval: 1 month
+
+# Data quality rules
+data_quality:
+  patient:
+    - name: patient_age_check
+      rule: "date_of_birth <= CURRENT_DATE"
+      severity: error
+    - name: patient_name_check
+      rule: "LENGTH(first_name) >= 2 AND LENGTH(last_name) >= 2"
+      severity: warning
+
+  appointment:
+    - name: appointment_date_check
+      rule: "AptDateTime >= '2020-01-01'"
+      severity: error
+    - name: appointment_status_check
+      rule: "AptStatus IN (1, 2, 3, 5, 6)"
+      severity: error
+
+  procedurelog:
+    - name: procedure_date_check
+      rule: "ProcDate >= '2020-01-01'"
+      severity: error
+    - name: procedure_status_check
+      rule: "ProcStatus IN ('TP', 'C', 'EO', 'R', 'D')"
+      severity: error
+
+  payment:
+    - name: payment_amount_check
+      rule: "PayAmt > 0"
+      severity: error
+    - name: payment_date_check
+      rule: "PayDate >= '2020-01-01'"
+      severity: error 
