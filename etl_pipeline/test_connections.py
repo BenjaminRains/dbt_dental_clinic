@@ -1,7 +1,8 @@
-from connection_factory import get_source_connection, get_staging_connection, get_target_connection
+from etl_pipeline.connection_factory import get_source_connection, get_staging_connection, get_target_connection
 from sqlalchemy import text
 import os
 from dotenv import load_dotenv
+from etl_pipeline.core.connections import ConnectionFactory
 
 # Load environment variables
 load_dotenv()
@@ -366,43 +367,31 @@ def test_target_postgres_connection():
     return True
 
 def main():
-    """Main function to test all connections."""
-    print("🔌 TESTING DATABASE CONNECTIONS FOR ELT PIPELINE")
-    print("=" * 60)
-    
-    results = {
-        'source': False,
-        'target_mysql': False, 
-        'target_postgres': False
-    }
-    
-    # Test all connections
-    results['source'] = test_source_connection()
-    results['target_mysql'] = test_target_mysql_connection()
-    results['target_postgres'] = test_target_postgres_connection()
-    
-    # Summary
-    print_header("Connection Test Summary")
-    
-    success_count = sum(results.values())
-    total_count = len(results)
-    
-    print(f"Source MySQL (OpenDental):     {'✓ PASS' if results['source'] else '❌ FAIL'}")
-    print(f"Target MySQL (Local/Staging):  {'✓ PASS' if results['target_mysql'] else '❌ FAIL'}")
-    print(f"Target PostgreSQL (Analytics): {'✓ PASS' if results['target_postgres'] else '❌ FAIL'}")
-    
-    print(f"\nOverall Status: {success_count}/{total_count} connections successful")
-    
-    if success_count == total_count:
-        print("🎉 All database connections are working properly!")
-        print("✅ ELT pipeline is ready to run.")
-    else:
-        print("⚠️  Some connections failed. Please check configuration.")
-        print("❌ ELT pipeline may not work correctly.")
-        return False
-    
-    return True
+    """Run all connection tests."""
+    try:
+        # Test source connection (OpenDental MySQL)
+        source_success = test_source_connection()
+        
+        # Test target MySQL connection (staging)
+        mysql_success = test_target_mysql_connection()
+        
+        # Test target PostgreSQL connection (analytics)
+        postgres_success = test_target_postgres_connection()
+        
+        # Print summary
+        print_header("Connection Test Summary")
+        print(f"Source MySQL (OpenDental): {'✅' if source_success else '❌'}")
+        print(f"Target MySQL (Staging): {'✅' if mysql_success else '❌'}")
+        print(f"Target PostgreSQL (Analytics): {'✅' if postgres_success else '❌'}")
+        
+        # Overall success
+        if all([source_success, mysql_success, postgres_success]):
+            print("\n✅ All connections successful!")
+        else:
+            print("\n❌ Some connections failed. Check the logs above for details.")
+            
+    except Exception as e:
+        print(f"❌ Connection test failed: {e}")
 
 if __name__ == "__main__":
-    success = main()
-    exit(0 if success else 1)
+    main()
