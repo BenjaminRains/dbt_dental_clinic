@@ -24,7 +24,7 @@ models:
       ## Business Logic
       ### Calendar Attributes
       - Standard calendar year, quarter, month, and day attributes
-      - Day of week (1-7, where 1 is Sunday)
+      - Day of week (0-6, where 0 is Sunday, 6 is Saturday)
       - Month and day names for reporting
 
       ### Fiscal Periods
@@ -104,12 +104,12 @@ models:
 
       - name: day_of_week
         description: >
-          Day of week (1-7, where 1 is Sunday).
+          Day of week (0-6, where 0 is Sunday, 6 is Saturday).
           Used for weekly patterns and weekend vs. weekday analysis.
         tests:
           - not_null
           - accepted_values:
-              values: [1, 2, 3, 4, 5, 6, 7]
+              values: [0, 1, 2, 3, 4, 5, 6]
 
       - name: month_name
         description: >
