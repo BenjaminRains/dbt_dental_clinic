@@ -98,10 +98,20 @@ models:
 
       # Financial Information
       - name: estimated_balance
-        description: Estimated balance for the patient
+        description: Estimated balance for the patient (can be negative for credits/refunds)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "estimated_balance >= -25000"  # Allow negative balances up to $25k for credits/refunds
+              severity: error
+              name: check_estimated_balance_reasonable
 
       - name: total_balance
-        description: Total balance for the patient
+        description: Total balance for the patient (can be negative for credits/refunds)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "total_balance >= -25000"  # Allow negative balances up to $25k for credits/refunds
+              severity: error
+              name: check_total_balance_reasonable
 
       - name: balance_0_30_days
         description: Balance aged 0-30 days
