@@ -11,13 +11,13 @@
 
     select
         {{ column_name }},
-        {{ compare_column }},
+        '{{ compare_column }}'::date as compare_date,
         'should be after {{ compare_column }}' as expected_value
     from {{ model }}
     where 
         {% if allow_null %}
         {{ column_name }} is not null and
         {% endif %}
-        not({{ column_name }} >= {{ compare_column }})
+        not({{ column_name }} >= '{{ compare_column }}'::date)
 
 {% endtest %} 
