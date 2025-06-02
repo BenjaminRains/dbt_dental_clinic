@@ -249,7 +249,7 @@ def test_target_postgres_connection():
                 print(f"Server Address: {server_addr}")
                 print(f"Server Port: {server_port}")
             
-            result = conn.execute(text("SELECT VERSION()"))
+            result = conn.execute(text("SELECT version()"))
             version = result.scalar()
             print(f"PostgreSQL Version: {version}")
             
@@ -265,120 +265,99 @@ def test_target_postgres_connection():
             print_section("Available Schemas")
             result = conn.execute(text("""
                 SELECT 
-                    schema_name,
-                    schema_owner,
+                    nspname as schema_name,
+                    rolname as owner,
                     CASE 
-                        WHEN schema_name = 'public' THEN 'Default schema'
-                        WHEN schema_name LIKE 'pg_%' THEN 'System schema'
-                        WHEN schema_name IN ('analytics', 'raw') THEN 'ELT schema'
+                        WHEN nspname = 'raw' THEN 'ELT schema'
+                        WHEN nspname = 'public' THEN 'Default schema'
+                        WHEN nspname = 'pg_catalog' THEN 'System schema'
+                        WHEN nspname = 'information_schema' THEN 'User schema'
                         ELSE 'User schema'
-                    END as schema_type
-                FROM information_schema.schemata 
-                WHERE schema_name NOT LIKE 'pg_temp%'
-                AND schema_name NOT LIKE 'pg_toast%'
-                ORDER BY 
-                    CASE 
-                        WHEN schema_name IN ('analytics', 'raw') THEN 1
-                        WHEN schema_name = 'public' THEN 2
-                        WHEN schema_name LIKE 'pg_%' THEN 3
-                        ELSE 4
-                    END,
-                    schema_name
+                    END as description
+                FROM pg_namespace
+                JOIN pg_roles ON pg_roles.oid = pg_namespace.nspowner
+                WHERE nspname NOT LIKE 'pg_%'
+                OR nspname = 'pg_catalog'
+                ORDER BY nspname
             """))
             
             for row in result:
-                schema_name, owner, schema_type = row
-                print(f"{schema_name}: {schema_type} (owner: {owner})")
+                schema_name, owner, description = row
+                print(f"{schema_name}: {description} (owner: {owner})")
             
-            # Show tables in ELT schemas
+            # Show ELT schema tables
             print_section("ELT Schema Tables")
-            target_schema = os.getenv('TARGET_POSTGRES_SCHEMA', 'public')
-            raw_schema = 'raw'
+            result = conn.execute(text("""
+                SELECT 
+                    table_schema,
+                    table_name,
+                    table_type
+                FROM information_schema.tables
+                WHERE table_schema = 'raw'
+                ORDER BY table_schema, table_name
+            """))
             
-            for schema in [raw_schema, target_schema]:
-                result = conn.execute(text(f"""
-                    SELECT 
-                        table_name,
-                        table_type,
-                        CASE 
-                            WHEN table_type = 'BASE TABLE' THEN 'Table'
-                            WHEN table_type = 'VIEW' THEN 'View'
-                            ELSE table_type
-                        END as type_desc
-                    FROM information_schema.tables 
-                    WHERE table_schema = '{schema}'
-                    ORDER BY table_name
-                """))
-                
-                tables = list(result)
-                if tables:
-                    print(f"\n{schema} schema:")
-                    for row in tables:
-                        table_name, table_type, type_desc = row
-                        print(f"  {table_name} ({type_desc})")
-                else:
-                    print(f"\n{schema} schema: (empty)")
+            for row in result:
+                schema, table, type = row
+                print(f"\n{schema} schema:")
+                print(f"  {table} ({type})")
             
             # Show ELT tracking tables
             print_section("ELT Tracking Tables")
-            tracking_tables = ['etl_load_status', 'etl_transform_status']
-            
-            for table in tracking_tables:
-                try:
-                    result = conn.execute(text(f"""
-                        SELECT COUNT(*) as record_count
-                        FROM {target_schema}.{table}
-                    """))
-                    count = result.scalar()
-                    print(f"{target_schema}.{table}: {count} records")
-                except Exception:
-                    print(f"{target_schema}.{table}: (not found)")
-            
-            # Test write access
-            print_section("Write Access Verification")
-            try:
-                # Test creating schema
-                conn.execute(text("CREATE SCHEMA IF NOT EXISTS test_schema"))
-                
-                # Test creating table
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS test_schema.test_table (
-                        id SERIAL PRIMARY KEY,
-                        test_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """))
-                
-                # Test insert
-                conn.execute(text("INSERT INTO test_schema.test_table DEFAULT VALUES"))
-                
-                # Test select
-                result = conn.execute(text("SELECT COUNT(*) FROM test_schema.test_table"))
-                count = result.scalar()
-                
-                # Cleanup
-                conn.execute(text("DROP TABLE test_schema.test_table"))
-                conn.execute(text("DROP SCHEMA test_schema"))
-                
-                print(f"✓ Write access verified (created schema, table, inserted {count} record, cleaned up)")
-                
-            except Exception as e:
-                print(f"❌ Write access test failed: {str(e)}")
-            
-            # Show database size
-            print_section("Database Statistics")
-            result = conn.execute(text(f"""
+            result = conn.execute(text("""
                 SELECT 
-                    pg_size_pretty(pg_database_size(current_database())) as database_size,
-                    (SELECT COUNT(*) FROM information_schema.tables WHERE table_catalog = current_database()) as total_tables,
-                    (SELECT COUNT(*) FROM information_schema.schemata WHERE catalog_name = current_database()) as total_schemas
+                    table_schema,
+                    table_name,
+                    (SELECT COUNT(*) FROM raw.etl_load_status) as load_status_count,
+                    (SELECT COUNT(*) FROM raw.etl_transform_status) as transform_status_count
+                FROM information_schema.tables
+                WHERE table_schema = 'raw'
+                AND table_name IN ('etl_load_status', 'etl_transform_status')
+                ORDER BY table_schema, table_name
             """))
             
-            row = result.first()
-            if row:
-                db_size, total_tables, total_schemas = row
-                print(f"Database Size: {db_size}")
-                print(f"Total Tables: {total_tables}")
-                print(f"Total Schemas: {total_schemas}")
+            for row in result:
+                schema, table, load_count, transform_count = row
+                if table == 'etl_load_status':
+                    print(f"{schema}.{table}: {load_count} records")
+                else:
+                    print(f"{schema}.{table}: {transform_count} records")
+            
+            # Test table access
+            print_section("Table Access Verification")
+            try:
+                # Test read access
+                conn.execute(text("SELECT COUNT(*) FROM raw.etl_load_status"))
+                print("✓ Read access verified")
+                
+                # Test write access
+                conn.execute(text("""
+                    INSERT INTO raw.etl_load_status (table_name, last_extracted, rows_extracted, extraction_status)
+                    VALUES ('test_table', CURRENT_TIMESTAMP, 0, 'test')
+                    ON CONFLICT (table_name) DO NOTHING
+                """))
+                print("✓ Write access verified")
+            except Exception as e:
+                print(f"❌ Table access test failed: {str(e)}")
+            
+            # Show database statistics
+            print_section("Database Statistics")
+            try:
+                result = conn.execute(text("""
+                    SELECT
+                        pg_size_pretty(pg_database_size(current_database())) as database_size,
+                        (SELECT COUNT(*) FROM information_schema.tables WHERE table_catalog = current_database()) as total_tables,
+                        (SELECT COUNT(*) FROM information_schema.schemata WHERE catalog_name = current_database()) as total_schemas
+                """))
+                
+                row = result.first()
+                if row:
+                    db_size, total_tables, total_schemas = row
+                    print(f"Database Size: {db_size}")
+                    print(f"Total Tables: {total_tables}")
+                    print(f"Total Schemas: {total_schemas}")
+            except Exception as e:
+                print(f"❌ Database statistics query failed: {str(e)}")
             
     except Exception as e:
         print(f"❌ Target PostgreSQL connection failed: {str(e)}")
