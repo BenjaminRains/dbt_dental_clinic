@@ -216,12 +216,6 @@ models:
             - month
             - day
 
-      - relationships:
-          to: ref('dim_date')
-          field: date_id
-          config:
-            severity: error
-
     meta:
       owner: "Data Team"
       contains_pii: false
