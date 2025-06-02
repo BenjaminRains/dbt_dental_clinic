@@ -1,0 +1,290 @@
+version: 2
+
+models:
+  - name: fact_claim
+    description: >
+      Fact table containing individual claim transactions and procedures.
+      This model serves as the foundation for claim-level analysis and reporting,
+      providing detailed information about each claim procedure and its associated
+      payments, statuses, and documentation.
+
+      ## Business Context
+      The claim fact table is a critical component of our dimensional model, enabling:
+      - Individual claim transaction analysis
+      - Procedure-level payment tracking
+      - Claim status monitoring
+      - EOB documentation tracking
+      - Payment timing analysis
+      - Revenue cycle metrics
+
+      ## Technical Specifications
+      - Grain: One row per claim procedure (claim_id + procedure_id + claim_procedure_id)
+      - Source: int_claim_details (primary source)
+      - Refresh: Daily
+      - Dependencies: 
+        * int_claim_details (core claim data)
+        * int_claim_payments (payment information)
+        * int_claim_snapshot (historical states)
+        * int_claim_tracking (status updates)
+        * int_insurance_eob_attachments (EOB documentation)
+
+      ## Business Logic
+      ### Claim Processing
+      - Claims are tracked at the procedure level
+      - Multiple procedures can be part of one claim
+      - Each procedure can have multiple payments
+      - EOB attachments are linked to payments
+
+      ### Payment Handling
+      - Payments can be partial or complete
+      - Multiple payment types supported
+      - Write-offs and patient responsibility tracked
+      - Payment timing recorded
+
+      ### Status Tracking
+      - Claim status at procedure level
+      - Payment status tracking
+      - EOB documentation status
+      - Verification status
+
+      ## Data Quality Notes
+      - Claims are deduplicated using composite key
+      - Payment amounts are validated
+      - Status transitions are tracked
+      - EOB attachments are verified
+
+      ## Usage Guidelines
+      - Primary source for claim-level analysis
+      - Supports daily, monthly, and rolling period aggregations
+      - Enables breakdowns by provider, location, and patient type
+      - Integrates with dim_insurance for plan-level analysis
+      - Supports procedure-level analysis
+      - Enables payment performance analysis
+      - Facilitates EOB documentation tracking
+
+      ## Dimensional Relationships
+      - Links to dim_insurance through insurance_plan_id
+      - Links to dim_patient through patient_id
+      - Links to dim_procedure through procedure_id
+      - Links to dim_provider through provider_id
+      - Links to dim_date through claim_date
+
+      ## Naming Conventions
+      - Source columns from OpenDental use original CamelCase names
+      - Derived/calculated fields use snake_case
+      - Metadata columns use underscore prefix (_loaded_at, _created_at, _updated_at)
+      - Amount fields use descriptive suffixes (_amount)
+      - Status fields use descriptive prefixes (is_, has_)
+
+    columns:
+      - name: claim_id
+        description: Primary key for the claim
+        tests:
+          - not_null
+          - unique:
+              combination_of: [claim_id, procedure_id, claim_procedure_id]
+
+      - name: procedure_id
+        description: Foreign key to the procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_procedure')
+              field: procedure_id
+
+      - name: claim_procedure_id
+        description: Unique identifier for the claim procedure
+        tests:
+          - not_null
+
+      - name: insurance_plan_id
+        description: Foreign key to the insurance plan
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_insurance')
+              field: insurance_plan_id
+
+      - name: patient_id
+        description: Foreign key to the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+
+      - name: provider_id
+        description: Foreign key to the provider
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+
+      - name: claim_date
+        description: Date when the claim was submitted
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+
+      - name: claim_status
+        description: Current status of the claim
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['pending', 'approved', 'denied', 'paid', 'rejected']
+
+      - name: claim_type
+        description: Type of claim (e.g., primary, secondary)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['primary', 'secondary', 'tertiary']
+
+      - name: claim_procedure_status
+        description: Status of the specific procedure in the claim
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['pending', 'approved', 'denied', 'paid', 'rejected']
+
+      - name: billed_amount
+        description: Amount billed for the procedure
+        tests:
+          - not_null
+
+      - name: allowed_amount
+        description: Amount allowed by insurance
+        tests:
+          - not_null
+
+      - name: paid_amount
+        description: Amount paid by insurance
+        tests:
+          - not_null
+
+      - name: write_off_amount
+        description: Amount written off
+        tests:
+          - not_null
+
+      - name: patient_responsibility
+        description: Amount patient is responsible for
+        tests:
+          - not_null
+
+      - name: claim_payment_id
+        description: ID of the associated payment
+        tests:
+          - relationships:
+              to: ref('int_claim_payments')
+              field: claim_payment_id
+
+      - name: check_amount
+        description: Amount of the insurance check
+        tests:
+          - not_null
+
+      - name: check_date
+        description: Date when the check was received
+        tests:
+          - not_null
+
+      - name: payment_type_id
+        description: Type of payment received
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['check', 'electronic', 'credit_card']
+
+      - name: is_partial
+        description: Flag indicating if this is a partial payment
+        tests:
+          - not_null
+
+      - name: eob_attachment_count
+        description: Number of EOB attachments
+        tests:
+          - not_null
+
+      - name: eob_attachment_ids
+        description: Array of EOB attachment IDs
+        tests:
+          - not_null
+
+      - name: eob_attachment_file_names
+        description: Array of EOB attachment file names
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+
+      - name: _loaded_at
+        description: Timestamp when the record was loaded
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - claim_id
+            - procedure_id
+            - claim_procedure_id
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - claim_id
+            - claim_payment_id
+
+    meta:
+      owner: "Data Team"
+      contains_pii: true
+      contains_phi: true
+      refresh_frequency: "Daily"
+      business_owner: "Insurance Operations Team"
+      technical_owner: "Data Engineering Team"
+      usage_notes: >
+        This fact table is used for all claim-level analysis and reporting.
+        
+        ## Key Use Cases
+        - Claim analysis
+          * Claim status tracking
+          * Procedure-level analysis
+          * Payment tracking
+          * EOB documentation
+        
+        - Financial analysis
+          * Billed vs paid amounts
+          * Write-off analysis
+          * Patient responsibility
+          * Payment timing
+        
+        - Operational metrics
+          * Claim processing time
+          * Payment receipt time
+          * EOB documentation
+          * Status transitions
+        
+        ## Common Analysis Patterns
+        - Claim status distribution
+        - Payment timing analysis
+        - Procedure-level analysis
+        - EOB documentation tracking
+        - Write-off analysis
+        - Patient responsibility analysis
+        
+        ## Performance Optimization
+        - Use composite key for joins
+        - Leverage pre-calculated metrics
+        - Utilize status fields for filtering
+        - Apply date fields for time-based analysis 
