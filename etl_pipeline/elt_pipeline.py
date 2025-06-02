@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from connection_factory import get_source_connection, get_staging_connection, get_target_connection
 from dotenv import load_dotenv
 import re
+from mysql_replicator import ExactMySQLReplicator
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +30,7 @@ class ELTPipeline:
         self.source_engine = None
         self.target_mysql_engine = None  # Local MySQL target
         self.target_postgres_engine = None  # PostgreSQL for transformations
+        self.mysql_replicator = None  # MySQL replicator for exact copies
         
         # Database names and schemas - FIXED variable names
         self.source_db = os.getenv('OPENDENTAL_SOURCE_DB')
@@ -75,6 +77,15 @@ class ELTPipeline:
             self.source_engine = get_source_connection(readonly=True)
             self.target_mysql_engine = get_staging_connection()  # This is actually the target MySQL
             self.target_postgres_engine = get_target_connection()
+            
+            # Initialize the MySQL replicator
+            self.mysql_replicator = ExactMySQLReplicator(
+                source_engine=self.source_engine,
+                target_engine=self.target_mysql_engine,
+                source_db=self.source_db,
+                target_db=self.target_mysql_db
+            )
+            
             logger.info("Successfully initialized all database connections")
         except Exception as e:
             logger.error(f"Failed to initialize database connections: {str(e)}")
@@ -123,6 +134,7 @@ class ELTPipeline:
                         last_extracted TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
                         rows_extracted INTEGER DEFAULT 0,
                         extraction_status VARCHAR(50) DEFAULT 'pending',
+                        schema_hash VARCHAR(32),
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                     )
@@ -153,164 +165,71 @@ class ELTPipeline:
             logger.error(f"Error creating tracking tables: {str(e)}")
             raise
     
-    def get_mysql_ddl_path(self, table_name: str) -> str:
-        """Get the path to the MySQL DDL file for a table."""
-        return os.path.join(self.analysis_base_path, table_name, f"{table_name}_ddl.sql")
-    
-    def get_postgres_transform_path(self, table_name: str) -> str:
-        """Get the path to the PostgreSQL transformation file for a table."""
-        return os.path.join(self.analysis_base_path, table_name, f"{table_name}_pg_ddl.sql")
-    
-    def read_file(self, file_path: str) -> str:
-        """Read a file and return its contents."""
-        try:
-            with open(file_path, 'r') as f:
-                return f.read()
-        except FileNotFoundError:
-            logger.warning(f"File not found: {file_path}")
-            return None
-        except Exception as e:
-            logger.error(f"Error reading file {file_path}: {str(e)}")
-            return None
-    
     def extract_to_target_mysql(self, table_name: str, force_full: bool = False) -> bool:
         """
-        EXTRACT phase: Extract data from source MySQL to target MySQL.
+        EXTRACT phase using exact MySQL replication.
         This performs a pure extract-load without any transformations.
         """
         try:
-            # Get last extraction time
+            # Get last extraction info
             with self.target_mysql_engine.connect() as conn:
                 conn.execute(text(f"USE {self.target_mysql_db}"))
                 
                 query = text("""
-                    SELECT last_extracted 
+                    SELECT last_extracted, schema_hash 
                     FROM etl_extract_status 
                     WHERE table_name = :table_name
                 """)
                 result = conn.execute(query.bindparams(table_name=table_name))
-                last_extracted = result.scalar()
+                row = result.fetchone()
+                
+                last_extracted = row[0] if row else None
+                stored_schema_hash = row[1] if row and len(row) > 1 else None
             
-            # Build extraction query with incremental logic
-            if force_full or not last_extracted:
-                where_clause = "1=1"
-                logger.info(f"Performing full extraction for {table_name}")
-            else:
-                # Use a generic incremental extraction based on any timestamp column
-                where_clause = """
-                    EXISTS (
-                        SELECT 1 
-                        FROM information_schema.columns 
-                        WHERE table_schema = :db_name 
-                        AND table_name = :table_name 
-                        AND data_type IN ('datetime', 'timestamp')
-                        AND column_name IN (
-                            SELECT column_name 
-                            FROM information_schema.columns 
-                            WHERE table_schema = :db_name 
-                            AND table_name = :table_name 
-                            AND data_type IN ('datetime', 'timestamp')
-                        )
-                        AND table_name.column_name > :last_extracted
-                    )
-                """
-                logger.info(f"Performing incremental extraction for {table_name} since {last_extracted}")
+            # Check if schema has changed
+            current_schema_hash = self.mysql_replicator.get_schema_hash(table_name)
+            schema_changed = stored_schema_hash != current_schema_hash
             
-            # Create target table using MySQL DDL if it doesn't exist
-            self.create_target_mysql_table(table_name)
+            if schema_changed:
+                logger.info(f"Schema change detected for {table_name}, forcing full extraction")
+                force_full = True
             
-            # Perform direct table copy using MySQL's INSERT ... SELECT
-            with self.source_engine.connect() as source_conn, self.target_mysql_engine.connect() as target_conn:
-                # Use the source database
-                source_conn.execute(text(f"USE {self.source_db}"))
-                target_conn.execute(text(f"USE {self.target_mysql_db}"))
-                
-                # Get column names from source table
-                result = source_conn.execute(text(f"""
-                    SELECT GROUP_CONCAT(column_name) 
-                    FROM information_schema.columns 
-                    WHERE table_schema = :db_name 
-                    AND table_name = :table_name
-                    ORDER BY ordinal_position
-                """).bindparams(db_name=self.source_db, table_name=table_name))
-                columns = result.scalar()
-                
-                if not columns:
-                    raise ValueError(f"No columns found for table {table_name}")
-                
-                # Truncate target table
-                target_conn.execute(text(f"TRUNCATE TABLE {table_name}"))
-                
-                # Copy data directly using INSERT ... SELECT
-                copy_query = f"""
-                    INSERT INTO {self.target_mysql_db}.{table_name} ({columns})
-                    SELECT {columns}
-                    FROM {self.source_db}.{table_name}
-                    WHERE {where_clause}
-                """
-                
-                params = {
-                    'db_name': self.source_db,
-                    'table_name': table_name,
-                    'last_extracted': last_extracted
-                } if not force_full and last_extracted else {
-                    'db_name': self.source_db,
-                    'table_name': table_name
-                }
-                
-                result = target_conn.execute(text(copy_query).bindparams(**params))
-                rows_copied = result.rowcount
+            # Perform extraction
+            rows_extracted = self.mysql_replicator.extract_table_data(
+                table_name=table_name,
+                last_extracted=last_extracted,
+                force_full=force_full
+            )
+            
+            # Verify extraction
+            if not self.mysql_replicator.verify_extraction(table_name):
+                logger.error(f"Extraction verification failed for {table_name}")
+                return False
             
             # Update extraction status
             with self.target_mysql_engine.begin() as conn:
                 conn.execute(text("""
                     INSERT INTO etl_extract_status 
-                    (table_name, last_extracted, rows_extracted, extraction_status)
-                    VALUES (:table_name, :now, :rows, 'success')
+                    (table_name, last_extracted, rows_extracted, extraction_status, schema_hash)
+                    VALUES (:table_name, :now, :rows, 'success', :schema_hash)
                     ON DUPLICATE KEY UPDATE 
                         last_extracted = :now,
                         rows_extracted = :rows,
                         extraction_status = 'success',
+                        schema_hash = :schema_hash,
                         updated_at = CURRENT_TIMESTAMP
                 """).bindparams(
                     table_name=table_name,
                     now=datetime.now(),
-                    rows=rows_copied
+                    rows=rows_extracted,
+                    schema_hash=current_schema_hash
                 ))
             
-            logger.info(f"Successfully extracted {rows_copied} rows for {table_name}")
+            logger.info(f"Successfully extracted {rows_extracted} rows for {table_name}")
             return True
             
         except Exception as e:
-            logger.error(f"Error extracting {table_name}: {str(e)}")
-            return False
-    
-    def create_target_mysql_table(self, table_name: str) -> bool:
-        """
-        Create target MySQL table using the MySQL DDL file.
-        This preserves the exact MySQL architecture.
-        """
-        try:
-            mysql_ddl_path = self.get_mysql_ddl_path(table_name)
-            mysql_ddl = self.read_file(mysql_ddl_path)
-            
-            if not mysql_ddl:
-                logger.error(f"Could not read MySQL DDL for {table_name}")
-                return False
-            
-            # Execute the MySQL DDL (it should create the table exactly as in source)
-            with self.target_mysql_engine.begin() as conn:
-                conn.execute(text(f"USE {self.target_mysql_db}"))
-                
-                # Drop table if exists and recreate
-                conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
-                conn.execute(text(mysql_ddl))
-            
-            logger.info(f"Created target MySQL table {table_name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error creating target MySQL table {table_name}: {str(e)}")
+            logger.error(f"Error in extract phase for {table_name}: {str(e)}")
             return False
     
     def load_to_postgres(self, table_name: str) -> bool:
@@ -434,6 +353,22 @@ class ELTPipeline:
                 logger.error(f"Error updating transform status: {str(status_error)}")
             
             return False
+    
+    def get_postgres_transform_path(self, table_name: str) -> str:
+        """Get the path to the PostgreSQL transformation file for a table."""
+        return os.path.join(self.analysis_base_path, table_name, f"{table_name}_pg_ddl.sql")
+    
+    def read_file(self, file_path: str) -> str:
+        """Read a file and return its contents."""
+        try:
+            with open(file_path, 'r') as f:
+                return f.read()
+        except FileNotFoundError:
+            logger.warning(f"File not found: {file_path}")
+            return None
+        except Exception as e:
+            logger.error(f"Error reading file {file_path}: {str(e)}")
+            return None
     
     def extract_transformation_logic(self, pg_ddl_content: str, table_name: str) -> str:
         """
