@@ -33,22 +33,22 @@ models:
     # Configure materializations by folder
     staging:
       +materialized: view  # Default materialization, some models override this to be tables
-      +schema: public_staging  # Optional: organize models in different schemas
+      +schema: staging  # dbt will prefix with 'public_'
       +description: "Staging models for raw data transformation"
     
     intermediate:
       +materialized: table
-      +schema: public_intermediate
+      +schema: intermediate  # dbt will prefix with 'public_'
       +description: "Intermediate models for business logic implementation"
     
     marts:
       +materialized: table
-      +schema: marts
+      +schema: marts  # dbt will prefix with 'public_'
       +description: "Mart models for business reporting and analytics"
 
     raw:
       +materialized: table
-      +schema: raw
+      +schema: raw  # Keep raw schema as is since it's used for ETL
       +description: "Raw ingested and ETL tracking tables"
 
     public:
