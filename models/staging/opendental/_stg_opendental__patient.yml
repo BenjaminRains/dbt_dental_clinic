@@ -82,9 +82,14 @@ models:
       - name: student_status
         description: "Patient's student status if applicable"
       - name: urgency
-        description: "Patient urgency classification"
+        description: "Patient urgency classification (0=Normal, 1=High)"
+        tests:
+          - accepted_values:
+              values: [0, 1]
       - name: premedication_required
-        description: "Indicates if patient requires premedication"
+        description: "Indicates if patient requires premedication (boolean)"
+        tests:
+          - not_null
       
       # Contact Preferences
       - name: preferred_confirmation_method
@@ -103,9 +108,13 @@ models:
           - accepted_values:
               values: [0, 2, 4, 8]
       - name: text_messaging_consent
-        description: "Indicates if patient has consented to text messaging"
+        description: "Indicates if patient has consented to text messaging (boolean)"
+        tests:
+          - not_null
       - name: prefer_confidential_contact
-        description: "Indicates if patient requires confidential contact"
+        description: "Indicates if patient requires confidential contact (boolean)"
+        tests:
+          - not_null
       
       # Financial Information
       - name: estimated_balance
@@ -133,7 +142,9 @@ models:
       - name: payment_plan_due
         description: "Amount due under payment plan"
       - name: has_insurance_flag
-        description: "Indicates if patient has insurance"
+        description: "Indicates if patient has insurance (boolean)"
+        tests:
+          - not_null
       - name: billing_cycle_day
         description: "Day of month for billing cycle (1-31)"
         tests:
