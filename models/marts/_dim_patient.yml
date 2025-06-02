@@ -20,8 +20,8 @@ models:
       - name: middle_initial
         description: Patient's middle initial
         tests:
-          - string_length_equal:
-              length: 1
+          - test_string_length:
+              max_length: 1
 
       - name: preferred_name
         description: Patient's preferred name or nickname
@@ -39,9 +39,8 @@ models:
         description: Patient's date of birth
         tests:
           - not_null
-          - dbt_utils.date_after:
-              datepart: day
-              field: '1900-01-01'
+          - test_date_after:
+              compare_column: '1900-01-01'
 
       - name: age
         description: Patient's current age
@@ -135,9 +134,8 @@ models:
       - name: first_visit_date
         description: Date of patient's first visit
         tests:
-          - dbt_utils.date_after:
-              datepart: day
-              field: '1900-01-01'
+          - test_date_after:
+              compare_column: '1900-01-01'
 
       - name: deceased_datetime
         description: Date and time of patient's death, if applicable
@@ -146,9 +144,8 @@ models:
         description: Date patient was admitted to the system
         tests:
           - not_null
-          - dbt_utils.date_after:
-              datepart: day
-              field: '1900-01-01'
+          - test_date_after:
+              compare_column: '1900-01-01'
 
       # Relationships
       - name: guarantor_id
