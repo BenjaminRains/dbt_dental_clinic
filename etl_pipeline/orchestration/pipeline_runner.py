@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine
 from etl_pipeline.orchestration.dependency_graph import DependencyGraph
 from etl_pipeline.orchestration.scheduler import PipelineScheduler, ScheduleConfig, RetryConfig
 from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.core.monitoring import PipelineMonitor
+from etl_pipeline.monitoring import PipelineMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +18,13 @@ class PipelineRunner:
     
     def __init__(self, config: Dict[str, Any] = None, 
                  connection_factory: Optional[ConnectionFactory] = None,
-                 monitor: Optional[PipelineMonitor] = None,
+                 monitor: Optional[PipelineMetrics] = None,
                  performance_monitor: Optional[Any] = None,
                  notification_manager: Optional[Any] = None):
         self.config = config or {}
         self.dependency_graph = DependencyGraph()
         self.scheduler = PipelineScheduler()
-        self.monitor = monitor or PipelineMonitor()
+        self.monitor = monitor or PipelineMetrics()
         self.connection_factory = connection_factory or ConnectionFactory()
         self.performance_monitor = performance_monitor
         self.notification_manager = notification_manager
