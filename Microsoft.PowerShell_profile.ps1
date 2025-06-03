@@ -3,7 +3,7 @@
 
 # Load ETL functions
 $projectPath = "C:\Users\rains\dbt_dental_clinic"
-$etlFunctionsPath = Join-Path $projectPath "etl_pipeline/cli/etl_functions.ps1"
+$etlFunctionsPath = Join-Path $projectPath "etl_pipeline\cli\etl_functions.ps1"
 if (Test-Path $etlFunctionsPath) {
     . $etlFunctionsPath
     Write-Host "✅ ETL functions loaded successfully" -ForegroundColor Green
