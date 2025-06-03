@@ -19,7 +19,7 @@ from sqlalchemy import text
 
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
-from etl_pipeline.core.monitoring import PipelineMonitor
+from etl_pipeline.monitoring import PipelineMetrics
 from etl_pipeline.orchestration.pipeline_runner import PipelineRunner
 from etl_pipeline.utils.validation import DataValidator
 from etl_pipeline.utils.performance import PerformanceMonitor
@@ -47,13 +47,24 @@ def run(config: str, tables: Optional[str], full: bool, force: bool,
         parallel: int, dry_run: bool) -> None:
     """Run ETL pipeline for specified tables or full pipeline."""
     try:
+        if dry_run:
+            click.echo("🔍 DRY RUN: Showing what would be executed")
+            if tables:
+                table_list = [t.strip() for t in tables.split(',')]
+                click.echo(f"  📊 Tables: {', '.join(table_list)}")
+            elif full:
+                click.echo("  📊 Would run complete pipeline")
+            click.echo(f"  ⚙️  Parallel workers: {parallel}")
+            click.echo(f"  🔄 Force mode: {'Yes' if force else 'No'}")
+            return
+        
         # Load configuration
         with open(config, 'r') as f:
             config_data = yaml.safe_load(f)
         
         # Initialize components
         connection_factory = ConnectionFactory()
-        monitor = PipelineMonitor()
+        monitor = PipelineMetrics()
         performance_monitor = PerformanceMonitor()
         
         # Set up notifications
@@ -71,17 +82,6 @@ def run(config: str, tables: Optional[str], full: bool, force: bool,
             performance_monitor=performance_monitor,
             notification_manager=notification_manager
         )
-        
-        if dry_run:
-            click.echo("🔍 DRY RUN: Showing what would be executed")
-            if tables:
-                table_list = [t.strip() for t in tables.split(',')]
-                click.echo(f"  📊 Tables: {', '.join(table_list)}")
-            elif full:
-                click.echo("  📊 Would run complete pipeline")
-            click.echo(f"  ⚙️  Parallel workers: {parallel}")
-            click.echo(f"  🔄 Force mode: {'Yes' if force else 'No'}")
-            return
         
         if tables:
             table_list = [t.strip() for t in tables.split(',')]
@@ -225,7 +225,7 @@ def status(config: str, format: str, table: Optional[str], watch: bool, output: 
         
         # Initialize components
         connection_factory = ConnectionFactory()
-        monitor = PipelineMonitor()
+        monitor = PipelineMetrics()
         performance_monitor = PerformanceMonitor()
         
         runner = PipelineRunner(
@@ -906,7 +906,7 @@ def test_connections() -> None:
         os.chdir(project_root)
         
         # Now import and run the test connections
-        from etl_pipeline.test_connections import main as test_connections_main
+        from test_connections import main as test_connections_main
         test_connections_main()
     except Exception as e:
         logger.error(f"Connection test failed: {str(e)}")
