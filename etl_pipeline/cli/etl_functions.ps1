@@ -1,70 +1,118 @@
-# ETL Pipeline PowerShell Functions
-# This file contains core ETL functions that are sourced by the main PowerShell profile
+# ETL Pipeline Functions
+# This file contains functions for managing the ETL pipeline environment
 
-# Core ETL environment functions
 function Initialize-ETLEnvironment {
-    if ($script:IsETLInitialized) {
-        Write-Host "✅ ETL environment already initialized" -ForegroundColor Green
-        return
-    }
+    param (
+        [string]$ProjectPath = $PWD.Path
+    )
 
-    Write-Host "🚀 Initializing ETL environment..." -ForegroundColor Magenta
-    
-    # Check if we're in the correct directory
-    if (-not (Test-Path "etl_pipeline")) {
-        Write-Host "❌ Not in ETL project directory. Please navigate to the project root." -ForegroundColor Red
-        return
-    }
+    Write-Host "`n╔════════════════════════════════╗"
+    Write-Host "║      ETL Pipeline Environment  ║"
+    Write-Host "╚════════════════════════════════╝`n"
+
+    Write-Host "🔄 Initializing ETL environment for: $(Split-Path $ProjectPath -Leaf)"
+    Write-Host "📂 Project path: $ProjectPath`n"
 
     # Check if Pipenv is installed
     if (-not (Get-Command pipenv -ErrorAction SilentlyContinue)) {
-        Write-Host "❌ Pipenv not found. Please install it first: pip install pipenv" -ForegroundColor Red
-        return
+        Write-Host "❌ Pipenv is not installed. Please install it first." -ForegroundColor Red
+        return $false
     }
 
-    # Install dependencies if needed
-    if (-not (Test-Path "Pipfile.lock")) {
-        Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
-        pipenv install
+    # Check if Pipfile exists
+    $pipfilePath = Join-Path $ProjectPath "etl_pipeline/Pipfile"
+    if (-not (Test-Path $pipfilePath)) {
+        Write-Host "❌ Pipfile not found at: $pipfilePath" -ForegroundColor Red
+        return $false
     }
 
-    # Create necessary directories
-    $directories = @(
-        "etl_pipeline/logs",
-        "etl_pipeline/config",
-        "etl_pipeline/data"
-    )
+    Write-Host "✅ ETL Pipenv environment detected"
+    Write-Host "📦 Installing ETL dependencies..."
 
-    foreach ($dir in $directories) {
-        if (-not (Test-Path $dir)) {
-            New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            Write-Host "📁 Created directory: $dir" -ForegroundColor Green
+    # Change to the directory containing the Pipfile
+    Push-Location (Split-Path $pipfilePath)
+    
+    try {
+        # Install dependencies
+        pipenv install --dev
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install dependencies"
         }
+        Write-Host "✅ Dependencies installed successfully"
+
+        # Load environment variables
+        Write-Host "🔧 Loading ETL .env variables..."
+        $envPath = Join-Path $ProjectPath "etl_pipeline/.env"
+        if (Test-Path $envPath) {
+            Get-Content $envPath | ForEach-Object {
+                if ($_ -match '^([^=]+)=(.*)$') {
+                    $name = $matches[1]
+                    $value = $matches[2]
+                    [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+                }
+            }
+            Write-Host "✅ .env variables loaded successfully"
+        }
+        else {
+            Write-Host "⚠️  No .env file found at: $envPath" -ForegroundColor Yellow
+        }
+
+        # Activate the virtual environment
+        $venvPath = pipenv --venv
+        if ($venvPath) {
+            $activateScript = Join-Path $venvPath "Scripts/Activate.ps1"
+            if (Test-Path $activateScript) {
+                . $activateScript
+                Write-Host "✅ Virtual environment activated"
+            }
+        }
+
+        Write-Host "`n🎉 ETL environment ready!`n"
+
+        # Display available commands
+        Write-Host "🔄 ETL Pipeline Commands:"
+        Write-Host "  etl                       - Main ETL CLI (run 'etl' for help)"
+        Write-Host "  etl-help                  - Show detailed command help"
+        Write-Host "  etl-status                - Get pipeline status"
+        Write-Host "  etl-validate [table]      - Validate data quality"
+        Write-Host "  etl-performance           - Analyze performance"
+        Write-Host "  etl-config [action]       - Manage configuration`n"
+
+        Write-Host "🏥 Dental Clinic Specific:"
+        Write-Host "  etl-patient-sync          - Sync patient data"
+        Write-Host "  etl-appointment-metrics   - Daily appointment metrics"
+        Write-Host "  etl-compliance-check      - HIPAA compliance check`n"
+
+        Write-Host "⚡ Quick Actions:"
+        Write-Host "  etl-quick-status          - Quick status check"
+        Write-Host "  etl-quick-validate        - Quick patient validation"
+        Write-Host "  etl-quick-run             - Quick run core tables`n"
+
+        Write-Host "🔧 Basic Operations:"
+        Write-Host "  etl-test-connections      - Test database connections"
+        Write-Host "  etl-run                   - Run ETL pipeline"
+        Write-Host "  etl-setup                 - Set up databases"
+        Write-Host "  etl-deactivate            - Deactivate ETL environment"
+
+        return $true
     }
-
-    # Set environment variables
-    $env:ETL_ENV = "development"
-    $env:PYTHONPATH = $PWD.Path
-
-    # Mark as initialized
-    $script:IsETLInitialized = $true
-    Write-Host "✅ ETL environment initialized successfully" -ForegroundColor Green
-    Write-Host "📝 Available commands: etl-help" -ForegroundColor Cyan
+    catch {
+        Write-Host "❌ Error initializing ETL environment: $_" -ForegroundColor Red
+        return $false
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 function Deactivate-ETLEnvironment {
-    if (-not $script:IsETLInitialized) {
-        Write-Host "ℹ️  ETL environment not initialized" -ForegroundColor Yellow
-        return
+    if ($env:PIPENV_ACTIVE) {
+        deactivate
+        Write-Host "✅ ETL environment deactivated"
     }
-
-    # Clear environment variables
-    Remove-Item Env:\ETL_ENV -ErrorAction SilentlyContinue
-    Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
-
-    # Mark as deinitialized
-    $script:IsETLInitialized = $false
-    Write-Host "✅ ETL environment deactivated" -ForegroundColor Green
+    else {
+        Write-Host "⚠️  No active ETL environment to deactivate" -ForegroundColor Yellow
+    }
 }
 
 # Core ETL operation functions
@@ -83,10 +131,12 @@ function Run-ETLPipeline {
     if ($Full) {
         Write-Host "🚀 Running full ETL pipeline..." -ForegroundColor Magenta
         etl run --full
-    } elseif ($Tables) {
+    }
+    elseif ($Tables) {
         Write-Host "🚀 Running ETL pipeline for tables: $Tables" -ForegroundColor Magenta
         etl run --tables $Tables
-    } else {
+    }
+    else {
         Write-Host "❌ Please specify either --Full or --Tables" -ForegroundColor Red
     }
 }
@@ -153,5 +203,5 @@ function Test-HIPAACompliance {
     etl compliance-check $args
 }
 
-# Export functions
-Export-ModuleMember -Function * 
+# Remove the Export-ModuleMember line since we're dot-sourcing this file
+# Export-ModuleMember -Function Initialize-ETLEnvironment, Deactivate-ETLEnvironment, Test-ETLConnections, Run-ETLPipeline, Setup-ETLDatabases, Quick-ETLStatus, Quick-ETLValidate, Quick-ETLRun, Sync-PatientData, Get-AppointmentMetrics, Test-HIPAACompliance 
