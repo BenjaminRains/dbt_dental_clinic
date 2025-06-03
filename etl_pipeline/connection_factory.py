@@ -9,7 +9,6 @@ import logging
 import warnings
 from functools import wraps
 from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.config.database import DatabaseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +52,6 @@ def check_connection_health(*args, **kwargs):
 @deprecation_warning
 def dispose_all(*args, **kwargs):
     return ConnectionFactory.dispose_all(*args, **kwargs)
-
-# Load environment variables and validate configuration
-DatabaseConfig.load_environment()
-if not DatabaseConfig.validate_configs():
-    raise ValueError("Database configuration validation failed. Please check your .env file.")
 
 # Add module-level deprecation warning
 warnings.warn(
