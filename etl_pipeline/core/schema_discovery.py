@@ -7,11 +7,13 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 import hashlib
 import re
-import logging
 from datetime import datetime
-from etl_pipeline.config import DatabaseConfig, PipelineConfig
 
-logger = logging.getLogger(__name__)
+# Use the new logger architecture
+from etl_pipeline.core.logger import get_logger
+from etl_pipeline.config.settings import settings
+
+logger = get_logger(__name__)
 
 class SchemaDiscovery:
     """Handles MySQL schema discovery and replication."""
@@ -22,7 +24,8 @@ class SchemaDiscovery:
         self.source_db = source_db
         self.target_db = target_db
         self._schema_cache = {}
-        self.config = PipelineConfig()
+        # Use the new settings system instead of PipelineConfig
+        self.settings = settings
     
     def get_table_schema(self, table_name: str) -> Dict:
         """
@@ -337,4 +340,68 @@ class SchemaDiscovery:
                 'extra': row.EXTRA
             })
         
-        return columns 
+        return columns
+
+    def discover_all_tables(self) -> List[str]:
+        """Discover all tables in the source database."""
+        try:
+            with self.source_engine.connect() as conn:
+                conn.execute(text(f"USE {self.source_db}"))
+                
+                query = text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = :db_name 
+                    AND table_type = 'BASE TABLE'
+                    ORDER BY table_name
+                """)
+                
+                result = conn.execute(query.bindparams(db_name=self.source_db))
+                return [row.table_name for row in result]
+                
+        except Exception as e:
+            logger.error(f"Error discovering tables: {str(e)}")
+            return []
+
+    def get_table_size_info(self, table_name: str) -> Dict:
+        """Get size and row count information for a table."""
+        try:
+            with self.source_engine.connect() as conn:
+                query = text("""
+                    SELECT 
+                        table_rows,
+                        data_length,
+                        index_length,
+                        (data_length + index_length) as total_size
+                    FROM information_schema.tables
+                    WHERE table_schema = :db_name
+                    AND table_name = :table_name
+                """)
+                
+                result = conn.execute(query.bindparams(db_name=self.source_db, table_name=table_name))
+                row = result.fetchone()
+                
+                if row:
+                    return {
+                        'row_count': row.table_rows or 0,
+                        'data_size_bytes': row.data_length or 0,
+                        'index_size_bytes': row.index_length or 0,
+                        'total_size_bytes': row.total_size or 0,
+                        'data_size_mb': round((row.data_length or 0) / (1024 * 1024), 2),
+                        'index_size_mb': round((row.index_length or 0) / (1024 * 1024), 2),
+                        'total_size_mb': round((row.total_size or 0) / (1024 * 1024), 2)
+                    }
+                else:
+                    return {
+                        'row_count': 0,
+                        'data_size_bytes': 0,
+                        'index_size_bytes': 0,
+                        'total_size_bytes': 0,
+                        'data_size_mb': 0.0,
+                        'index_size_mb': 0.0,
+                        'total_size_mb': 0.0
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Error getting size info for {table_name}: {str(e)}")
+            return {}
