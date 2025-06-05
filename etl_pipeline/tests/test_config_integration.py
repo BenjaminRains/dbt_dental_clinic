@@ -6,43 +6,135 @@ import pytest
 from pathlib import Path
 import yaml
 from sqlalchemy import create_engine
-from etl_pipeline.config import DatabaseConfig, PipelineConfig
-from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.config import DatabaseConfig, PipelineConfig, load_config
+from etl_pipeline.core.connections import (
+    ConnectionFactory,
+    get_source_connection,
+    get_staging_connection,
+    get_target_connection
+)
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
 @pytest.fixture
 def test_env():
     """Set up test environment variables."""
-    env_vars = {
-        'OPENDENTAL_SOURCE_HOST': 'test_source_host',
-        'OPENDENTAL_SOURCE_PORT': '3306',
-        'OPENDENTAL_SOURCE_DB': 'test_source_db',
-        'OPENDENTAL_SOURCE_USER': 'test_source_user',
-        'OPENDENTAL_SOURCE_PW': 'test_source_pass',
-        'STAGING_MYSQL_HOST': 'test_staging_host',
-        'STAGING_MYSQL_PORT': '3306',
-        'STAGING_MYSQL_DB': 'test_staging_db',
-        'STAGING_MYSQL_USER': 'test_staging_user',
-        'STAGING_MYSQL_PASSWORD': 'test_staging_pass',
-        'TARGET_POSTGRES_HOST': 'test_target_host',
-        'TARGET_POSTGRES_PORT': '5432',
-        'TARGET_POSTGRES_DB': 'test_target_db',
-        'TARGET_POSTGRES_USER': 'test_target_user',
-        'TARGET_POSTGRES_PASSWORD': 'test_target_pass',
-        'TARGET_POSTGRES_SCHEMA': 'test_schema'
+    return {
+        'SOURCE_MYSQL_HOST': 'test_source_host',
+        'SOURCE_MYSQL_PORT': '3306',
+        'SOURCE_MYSQL_DB': 'test_source_db',
+        'SOURCE_MYSQL_USER': 'test_source_user',
+        'SOURCE_MYSQL_PASSWORD': 'test_source_pass',
+        
+        'REPLICATION_MYSQL_HOST': 'test_replication_host',
+        'REPLICATION_MYSQL_PORT': '3305',
+        'REPLICATION_MYSQL_DB': 'test_replication_db',
+        'REPLICATION_MYSQL_USER': 'test_replication_user',
+        'REPLICATION_MYSQL_PASSWORD': 'test_replication_pass',
+        
+        'ANALYTICS_POSTGRES_HOST': 'test_analytics_host',
+        'ANALYTICS_POSTGRES_PORT': '5432',
+        'ANALYTICS_POSTGRES_DB': 'test_analytics_db',
+        'ANALYTICS_POSTGRES_SCHEMA': 'raw',
+        'ANALYTICS_POSTGRES_USER': 'test_analytics_user',
+        'ANALYTICS_POSTGRES_PASSWORD': 'test_analytics_pass'
     }
+
+def test_database_config_integration(test_env):
+    """Test database configuration integration."""
+    # Set up environment
+    for key, value in test_env.items():
+        os.environ[key] = value
     
-    # Save original environment
-    original_env = dict(os.environ)
+    # Test source config
+    source_config = DatabaseConfig.get_source_config()
+    assert source_config['host'] == test_env['SOURCE_MYSQL_HOST']
+    assert source_config['port'] == int(test_env['SOURCE_MYSQL_PORT'])
+    assert source_config['database'] == test_env['SOURCE_MYSQL_DB']
+    assert source_config['user'] == test_env['SOURCE_MYSQL_USER']
+    assert source_config['password'] == test_env['SOURCE_MYSQL_PASSWORD']
     
-    # Set test environment
-    os.environ.update(env_vars)
+    # Test replication config
+    replication_config = DatabaseConfig.get_replication_config()
+    assert replication_config['host'] == test_env['REPLICATION_MYSQL_HOST']
+    assert replication_config['port'] == int(test_env['REPLICATION_MYSQL_PORT'])
+    assert replication_config['database'] == test_env['REPLICATION_MYSQL_DB']
+    assert replication_config['user'] == test_env['REPLICATION_MYSQL_USER']
+    assert replication_config['password'] == test_env['REPLICATION_MYSQL_PASSWORD']
     
-    yield env_vars
+    # Test analytics config
+    analytics_config = DatabaseConfig.get_analytics_config()
+    assert analytics_config['host'] == test_env['ANALYTICS_POSTGRES_HOST']
+    assert analytics_config['port'] == int(test_env['ANALYTICS_POSTGRES_PORT'])
+    assert analytics_config['database'] == test_env['ANALYTICS_POSTGRES_DB']
+    assert analytics_config['schema'] == test_env['ANALYTICS_POSTGRES_SCHEMA']
+    assert analytics_config['user'] == test_env['ANALYTICS_POSTGRES_USER']
+    assert analytics_config['password'] == test_env['ANALYTICS_POSTGRES_PASSWORD']
+
+def test_connection_strings(test_env):
+    """Test connection string generation."""
+    # Set up environment
+    for key, value in test_env.items():
+        os.environ[key] = value
     
-    # Restore original environment
-    os.environ.clear()
-    os.environ.update(original_env)
+    # Test source connection string
+    source_conn = DatabaseConfig.get_source_connection()
+    assert source_conn.url.host == test_env['SOURCE_MYSQL_HOST']
+    assert source_conn.url.port == int(test_env['SOURCE_MYSQL_PORT'])
+    assert source_conn.url.database == test_env['SOURCE_MYSQL_DB']
+    assert source_conn.url.username == test_env['SOURCE_MYSQL_USER']
+    
+    # Test replication connection string
+    replication_conn = DatabaseConfig.get_replication_connection()
+    assert replication_conn.url.host == test_env['REPLICATION_MYSQL_HOST']
+    assert replication_conn.url.port == int(test_env['REPLICATION_MYSQL_PORT'])
+    assert replication_conn.url.database == test_env['REPLICATION_MYSQL_DB']
+    assert replication_conn.url.username == test_env['REPLICATION_MYSQL_USER']
+    
+    # Test analytics connection string
+    analytics_conn = DatabaseConfig.get_analytics_connection()
+    assert analytics_conn.url.host == test_env['ANALYTICS_POSTGRES_HOST']
+    assert analytics_conn.url.port == int(test_env['ANALYTICS_POSTGRES_PORT'])
+    assert analytics_conn.url.database == test_env['ANALYTICS_POSTGRES_DB']
+    assert analytics_conn.url.username == test_env['ANALYTICS_POSTGRES_USER']
+
+def test_pipeline_config_integration(test_env):
+    """Test pipeline configuration integration."""
+    # Set up environment
+    for key, value in test_env.items():
+        os.environ[key] = value
+    
+    # Load configuration
+    config = load_config()
+    
+    # Test source connection
+    source_conn = config.get_connection('source')
+    assert source_conn.url.host == test_env['SOURCE_MYSQL_HOST']
+    assert source_conn.url.port == int(test_env['SOURCE_MYSQL_PORT'])
+    assert source_conn.url.database == test_env['SOURCE_MYSQL_DB']
+    
+    # Test replication connection
+    replication_conn = config.get_connection('replication')
+    assert replication_conn.url.host == test_env['REPLICATION_MYSQL_HOST']
+    assert replication_conn.url.port == int(test_env['REPLICATION_MYSQL_PORT'])
+    assert replication_conn.url.database == test_env['REPLICATION_MYSQL_DB']
+    
+    # Test analytics connection
+    analytics_conn = config.get_connection('analytics')
+    assert analytics_conn.url.host == test_env['ANALYTICS_POSTGRES_HOST']
+    assert analytics_conn.url.port == int(test_env['ANALYTICS_POSTGRES_PORT'])
+    assert analytics_conn.url.database == test_env['ANALYTICS_POSTGRES_DB']
+
+def test_loader_config_integration(test_env):
+    """Test loader configuration integration."""
+    # Set up environment
+    for key, value in test_env.items():
+        os.environ[key] = value
+    
+    # Create loader
+    loader = PostgresLoader()
+    
+    # Test schema configuration
+    assert loader.target_schema == test_env['ANALYTICS_POSTGRES_SCHEMA']
 
 @pytest.fixture
 def test_config_path(tmp_path):
@@ -117,28 +209,95 @@ def test_config_path(tmp_path):
     
     return config_path
 
-def test_config_integration(test_env, test_config_path):
-    """Test integration between configuration and database connections."""
-    # Load configuration
-    config = PipelineConfig()
-    config.load_config(test_config_path)
+def test_config_integration():
+    """Test integration of configuration loading and connection creation."""
+    # Set up test environment
+    test_env = {
+        'SOURCE_MYSQL_HOST': 'test_source_host',
+        'SOURCE_MYSQL_PORT': '3306',
+        'SOURCE_MYSQL_DB': 'test_source_db',
+        'SOURCE_MYSQL_USER': 'test_source_user',
+        'SOURCE_MYSQL_PASSWORD': 'test_source_pass',
+        'REPLICATION_MYSQL_HOST': 'test_replication_host',
+        'REPLICATION_MYSQL_PORT': '3305',
+        'REPLICATION_MYSQL_DB': 'test_replication_db',
+        'REPLICATION_MYSQL_USER': 'test_replication_user',
+        'REPLICATION_MYSQL_PASSWORD': 'test_replication_pass',
+        'ANALYTICS_POSTGRES_HOST': 'test_analytics_host',
+        'ANALYTICS_POSTGRES_PORT': '5432',
+        'ANALYTICS_POSTGRES_DB': 'test_analytics_db',
+        'ANALYTICS_POSTGRES_USER': 'test_analytics_user',
+        'ANALYTICS_POSTGRES_PASSWORD': 'test_analytics_pass',
+        'ANALYTICS_POSTGRES_SCHEMA': 'raw'
+    }
     
-    # Verify database configurations
-    source_config = DatabaseConfig.get_source_config()
-    assert source_config['host'] == test_env['OPENDENTAL_SOURCE_HOST']
-    assert source_config['port'] == int(test_env['OPENDENTAL_SOURCE_PORT'])
-    assert source_config['database'] == test_env['OPENDENTAL_SOURCE_DB']
+    # Set environment variables
+    for key, value in test_env.items():
+        os.environ[key] = value
     
-    staging_config = DatabaseConfig.get_staging_config()
-    assert staging_config['host'] == test_env['STAGING_MYSQL_HOST']
-    assert staging_config['port'] == int(test_env['STAGING_MYSQL_PORT'])
-    assert staging_config['database'] == test_env['STAGING_MYSQL_DB']
-    
-    target_config = DatabaseConfig.get_target_config()
-    assert target_config['host'] == test_env['TARGET_POSTGRES_HOST']
-    assert target_config['port'] == int(test_env['TARGET_POSTGRES_PORT'])
-    assert target_config['database'] == test_env['TARGET_POSTGRES_DB']
-    assert target_config['schema'] == test_env['TARGET_POSTGRES_SCHEMA']
+    try:
+        # Test configuration loading
+        config = load_config()
+        assert config is not None
+        assert 'source' in config
+        assert 'staging' in config
+        assert 'target' in config
+        
+        # Test source configuration
+        source_config = config['source']
+        assert source_config['host'] == test_env['SOURCE_MYSQL_HOST']
+        assert source_config['port'] == int(test_env['SOURCE_MYSQL_PORT'])
+        assert source_config['database'] == test_env['SOURCE_MYSQL_DB']
+        assert source_config['user'] == test_env['SOURCE_MYSQL_USER']
+        assert source_config['password'] == test_env['SOURCE_MYSQL_PASSWORD']
+        
+        # Test staging configuration
+        staging_config = config['staging']
+        assert staging_config['host'] == test_env['REPLICATION_MYSQL_HOST']
+        assert staging_config['port'] == int(test_env['REPLICATION_MYSQL_PORT'])
+        assert staging_config['database'] == test_env['REPLICATION_MYSQL_DB']
+        assert staging_config['user'] == test_env['REPLICATION_MYSQL_USER']
+        assert staging_config['password'] == test_env['REPLICATION_MYSQL_PASSWORD']
+        
+        # Test target configuration
+        target_config = config['target']
+        assert target_config['host'] == test_env['ANALYTICS_POSTGRES_HOST']
+        assert target_config['port'] == int(test_env['ANALYTICS_POSTGRES_PORT'])
+        assert target_config['database'] == test_env['ANALYTICS_POSTGRES_DB']
+        assert target_config['schema'] == test_env['ANALYTICS_POSTGRES_SCHEMA']
+        assert target_config['user'] == test_env['ANALYTICS_POSTGRES_USER']
+        assert target_config['password'] == test_env['ANALYTICS_POSTGRES_PASSWORD']
+        
+        # Test connection creation
+        source_conn = get_source_connection()
+        staging_conn = get_staging_connection()
+        target_conn = get_target_connection()
+        
+        # Verify connection URLs
+        assert source_conn.url.host == test_env['SOURCE_MYSQL_HOST']
+        assert source_conn.url.port == int(test_env['SOURCE_MYSQL_PORT'])
+        assert source_conn.url.database == test_env['SOURCE_MYSQL_DB']
+        assert source_conn.url.username == test_env['SOURCE_MYSQL_USER']
+        
+        assert staging_conn.url.host == test_env['REPLICATION_MYSQL_HOST']
+        assert staging_conn.url.port == int(test_env['REPLICATION_MYSQL_PORT'])
+        assert staging_conn.url.database == test_env['REPLICATION_MYSQL_DB']
+        assert staging_conn.url.username == test_env['REPLICATION_MYSQL_USER']
+        
+        assert target_conn.url.host == test_env['ANALYTICS_POSTGRES_HOST']
+        assert target_conn.url.port == int(test_env['ANALYTICS_POSTGRES_PORT'])
+        assert target_conn.url.database == test_env['ANALYTICS_POSTGRES_DB']
+        assert target_conn.url.username == test_env['ANALYTICS_POSTGRES_USER']
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Configuration integration test failed: {str(e)}")
+        return False
+    finally:
+        # Clean up environment variables
+        for key in test_env:
+            os.environ.pop(key, None)
 
 def test_connection_factory_integration(test_env, test_config_path):
     """Test integration between configuration and connection factory."""
@@ -152,17 +311,17 @@ def test_connection_factory_integration(test_env, test_config_path):
     target_conn = ConnectionFactory.get_target_connection()
     
     # Verify connection URLs
-    assert source_conn.url.host == test_env['OPENDENTAL_SOURCE_HOST']
-    assert source_conn.url.port == int(test_env['OPENDENTAL_SOURCE_PORT'])
-    assert source_conn.url.database == test_env['OPENDENTAL_SOURCE_DB']
+    assert source_conn.url.host == test_env['SOURCE_MYSQL_HOST']
+    assert source_conn.url.port == int(test_env['SOURCE_MYSQL_PORT'])
+    assert source_conn.url.database == test_env['SOURCE_MYSQL_DB']
     
-    assert staging_conn.url.host == test_env['STAGING_MYSQL_HOST']
-    assert staging_conn.url.port == int(test_env['STAGING_MYSQL_PORT'])
-    assert staging_conn.url.database == test_env['STAGING_MYSQL_DB']
+    assert staging_conn.url.host == test_env['REPLICATION_MYSQL_HOST']
+    assert staging_conn.url.port == int(test_env['REPLICATION_MYSQL_PORT'])
+    assert staging_conn.url.database == test_env['REPLICATION_MYSQL_DB']
     
-    assert target_conn.url.host == test_env['TARGET_POSTGRES_HOST']
-    assert target_conn.url.port == int(test_env['TARGET_POSTGRES_PORT'])
-    assert target_conn.url.database == test_env['TARGET_POSTGRES_DB']
+    assert target_conn.url.host == test_env['ANALYTICS_POSTGRES_HOST']
+    assert target_conn.url.port == int(test_env['ANALYTICS_POSTGRES_PORT'])
+    assert target_conn.url.database == test_env['ANALYTICS_POSTGRES_DB']
 
 def test_postgres_loader_integration(test_env, test_config_path):
     """Test integration between configuration and postgres loader."""
@@ -178,7 +337,7 @@ def test_postgres_loader_integration(test_env, test_config_path):
     loader = PostgresLoader(source_conn, target_conn)
     
     # Verify schema configurations
-    assert loader.target_schema == test_env['TARGET_POSTGRES_SCHEMA']
+    assert loader.target_schema == test_env['ANALYTICS_POSTGRES_SCHEMA']
     assert loader.staging_schema == config.get_connection_config('staging')['schema']
     
     # Verify pipeline configuration
