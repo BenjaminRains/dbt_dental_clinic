@@ -101,33 +101,11 @@ class ConfigLoader:
         database_config = {}
         
         # Load environment variables for database connections
-        database_config['source'] = {
-            'type': 'mysql',
-            'host': os.getenv('OPENDENTAL_SOURCE_HOST', 'localhost'),
-            'port': int(os.getenv('OPENDENTAL_SOURCE_PORT', '3306')),
-            'database': os.getenv('OPENDENTAL_SOURCE_DB', 'opendental'),
-            'username': os.getenv('OPENDENTAL_SOURCE_USER', 'root'),
-            'password': os.getenv('OPENDENTAL_SOURCE_PW', ''),
-        }
+        database_config['source'] = self.get_source_config()
         
-        database_config['staging'] = {
-            'type': 'mysql',
-            'host': os.getenv('STAGING_MYSQL_HOST', 'localhost'),
-            'port': int(os.getenv('STAGING_MYSQL_PORT', '3305')),
-            'database': os.getenv('STAGING_MYSQL_DB', 'opendental_staging'),
-            'username': os.getenv('STAGING_MYSQL_USER', 'staging_user'),
-            'password': os.getenv('STAGING_MYSQL_PASSWORD', ''),
-        }
+        database_config['staging'] = self.get_staging_config()
         
-        database_config['target'] = {
-            'type': 'postgresql',
-            'host': os.getenv('TARGET_POSTGRES_HOST', 'localhost'),
-            'port': int(os.getenv('TARGET_POSTGRES_PORT', '5432')),
-            'database': os.getenv('TARGET_POSTGRES_DB', 'opendental_analytics'),
-            'username': os.getenv('TARGET_POSTGRES_USER', 'analytics_user'),
-            'password': os.getenv('TARGET_POSTGRES_PASSWORD', ''),
-            'schema': os.getenv('TARGET_POSTGRES_SCHEMA', 'analytics'),
-        }
+        database_config['target'] = self.get_target_config()
         
         return database_config
     
