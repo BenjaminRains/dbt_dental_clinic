@@ -1,3 +1,7 @@
+"""
+Main ETL pipeline implementation.
+Handles the extraction and loading of data from OpenDental to analytics.
+"""
 import os
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -5,10 +9,12 @@ from sqlalchemy.exc import SQLAlchemyError
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
-from connection_factory import get_source_connection, get_staging_connection, get_target_connection
+from etl_pipeline.core.connections import ConnectionFactory
 from dotenv import load_dotenv
 import re
 from mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.core.metrics import MetricsCollector
+import sys
 
 # Configure logging
 logging.basicConfig(
@@ -26,26 +32,32 @@ load_dotenv()
 
 class ELTPipeline:
     def __init__(self):
-        """Initialize the ELT pipeline with all necessary connections."""
-        self.source_engine = None
-        self.target_mysql_engine = None  # Local MySQL target
-        self.target_postgres_engine = None  # PostgreSQL for transformations
-        self.mysql_replicator = None  # MySQL replicator for exact copies
+        """Initialize the ETL pipeline."""
+        # Load environment variables
+        self.source_db = os.getenv('SOURCE_MYSQL_DB')
+        self.replication_db = os.getenv('REPLICATION_MYSQL_DB')
+        self.analytics_db = os.getenv('ANALYTICS_POSTGRES_DB')
+        self.analytics_schema = os.getenv('ANALYTICS_POSTGRES_SCHEMA', 'raw')
         
-        # Database names and schemas - FIXED variable names
-        self.source_db = os.getenv('OPENDENTAL_SOURCE_DB')
-        self.target_mysql_db = os.getenv('STAGING_MYSQL_DB')  # Fixed from 'STAGING_MYSQL_DATABASE'
-        self.target_postgres_db = os.getenv('TARGET_POSTGRES_DB')  # Fixed from 'POSTGRES_DB'
-        self.target_schema = os.getenv('TARGET_POSTGRES_SCHEMA', 'analytics')  # Fixed from 'POSTGRES_SCHEMA'
+        # Validate required environment variables
+        missing_dbs = []
+        if not self.source_db:
+            missing_dbs.append('SOURCE_MYSQL_DB')
+        if not self.replication_db:
+            missing_dbs.append('REPLICATION_MYSQL_DB')
+        if not self.analytics_db:
+            missing_dbs.append('ANALYTICS_POSTGRES_DB')
         
-        # Transform file paths
-        self.analysis_base_path = os.path.join(os.path.dirname(__file__), '..', 'analysis')
-        
-        # Validate database names
-        self.validate_database_names()
+        if missing_dbs:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing_dbs)}")
         
         # Initialize connections
-        self.initialize_connections()
+        self.source_engine = None
+        self.replication_engine = None
+        self.analytics_engine = None
+        
+        # Initialize metrics
+        self.metrics = MetricsCollector()
         
         # Initialize tracking tables
         self.ensure_tracking_tables()
@@ -55,11 +67,11 @@ class ELTPipeline:
         missing_dbs = []
         
         if not self.source_db:
-            missing_dbs.append('OPENDENTAL_SOURCE_DB')
-        if not self.target_mysql_db:
-            missing_dbs.append('STAGING_MYSQL_DB')  # Fixed variable name
-        if not self.target_postgres_db:
-            missing_dbs.append('TARGET_POSTGRES_DB')  # Fixed variable name
+            missing_dbs.append('SOURCE_MYSQL_DB')
+        if not self.replication_db:
+            missing_dbs.append('REPLICATION_MYSQL_DB')
+        if not self.analytics_db:
+            missing_dbs.append('ANALYTICS_POSTGRES_DB')
         
         if missing_dbs:
             error_msg = f"Missing required database names: {', '.join(missing_dbs)}"
@@ -67,23 +79,23 @@ class ELTPipeline:
             raise ValueError(error_msg)
         
         logger.info(f"Source database: {self.source_db}")
-        logger.info(f"Target MySQL database: {self.target_mysql_db}")
-        logger.info(f"Target PostgreSQL database: {self.target_postgres_db}")
-        logger.info(f"PostgreSQL schema: {self.target_schema}")
+        logger.info(f"Replication database: {self.replication_db}")
+        logger.info(f"Analytics database: {self.analytics_db}")
+        logger.info(f"PostgreSQL schema: {self.analytics_schema}")
     
     def initialize_connections(self):
         """Initialize database connections with proper error handling."""
         try:
-            self.source_engine = get_source_connection(readonly=True)
-            self.target_mysql_engine = get_staging_connection()  # This is actually the target MySQL
-            self.target_postgres_engine = get_target_connection()
+            self.source_engine = ConnectionFactory.get_source_connection()
+            self.replication_engine = ConnectionFactory.get_replication_connection()
+            self.analytics_engine = ConnectionFactory.get_analytics_connection()
             
             # Initialize the MySQL replicator
             self.mysql_replicator = ExactMySQLReplicator(
                 source_engine=self.source_engine,
-                target_engine=self.target_mysql_engine,
+                target_engine=self.replication_engine,
                 source_db=self.source_db,
-                target_db=self.target_mysql_db
+                target_db=self.replication_db
             )
             
             logger.info("Successfully initialized all database connections")
@@ -100,15 +112,15 @@ class ELTPipeline:
                 self.source_engine = None
                 logger.info("Closed source database connection")
             
-            if self.target_mysql_engine:
-                self.target_mysql_engine.dispose()
-                self.target_mysql_engine = None
-                logger.info("Closed target MySQL database connection")
+            if self.replication_engine:
+                self.replication_engine.dispose()
+                self.replication_engine = None
+                logger.info("Closed replication database connection")
             
-            if self.target_postgres_engine:
-                self.target_postgres_engine.dispose()
-                self.target_postgres_engine = None
-                logger.info("Closed target PostgreSQL database connection")
+            if self.analytics_engine:
+                self.analytics_engine.dispose()
+                self.analytics_engine = None
+                logger.info("Closed analytics database connection")
         except Exception as e:
             logger.error(f"Error during connection cleanup: {str(e)}")
     
@@ -121,11 +133,11 @@ class ELTPipeline:
         self.cleanup()
     
     def ensure_tracking_tables(self):
-        """Create necessary tracking tables in target MySQL and PostgreSQL databases."""
+        """Create necessary tracking tables in replication and analytics databases."""
         try:
-            # Create extract tracking table in target MySQL
-            with self.target_mysql_engine.begin() as conn:
-                conn.execute(text(f"USE {self.target_mysql_db}"))
+            # Create extract tracking table in replication MySQL
+            with self.replication_engine.begin() as conn:
+                conn.execute(text(f"USE {self.replication_db}"))
                 
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS etl_extract_status (
@@ -140,20 +152,20 @@ class ELTPipeline:
                     )
                 """))
             
-            # Create transform tracking table in PostgreSQL
-            with self.target_postgres_engine.begin() as conn:
+            # Create load tracking table in PostgreSQL
+            with self.analytics_engine.begin() as conn:
                 # Ensure schema exists
                 conn.execute(text(f"""
-                    CREATE SCHEMA IF NOT EXISTS {self.target_schema}
+                    CREATE SCHEMA IF NOT EXISTS {self.analytics_schema}
                 """))
                 
                 conn.execute(text(f"""
-                    CREATE TABLE IF NOT EXISTS {self.target_schema}.etl_transform_status (
+                    CREATE TABLE IF NOT EXISTS {self.analytics_schema}.etl_load_status (
                         id SERIAL PRIMARY KEY,
                         table_name VARCHAR(255) NOT NULL UNIQUE,
-                        last_transformed TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
-                        rows_transformed INTEGER DEFAULT 0,
-                        transformation_status VARCHAR(50) DEFAULT 'pending',
+                        last_loaded TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
+                        rows_loaded INTEGER DEFAULT 0,
+                        load_status VARCHAR(50) DEFAULT 'pending',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -165,15 +177,15 @@ class ELTPipeline:
             logger.error(f"Error creating tracking tables: {str(e)}")
             raise
     
-    def extract_to_target_mysql(self, table_name: str, force_full: bool = False) -> bool:
+    def extract_to_replication(self, table_name: str, force_full: bool = False) -> bool:
         """
         EXTRACT phase using exact MySQL replication.
         This performs a pure extract-load without any transformations.
         """
         try:
             # Get last extraction info
-            with self.target_mysql_engine.connect() as conn:
-                conn.execute(text(f"USE {self.target_mysql_db}"))
+            with self.replication_engine.connect() as conn:
+                conn.execute(text(f"USE {self.replication_db}"))
                 
                 query = text("""
                     SELECT last_extracted, schema_hash 
@@ -207,7 +219,7 @@ class ELTPipeline:
                 return False
             
             # Update extraction status
-            with self.target_mysql_engine.begin() as conn:
+            with self.replication_engine.begin() as conn:
                 conn.execute(text("""
                     INSERT INTO etl_extract_status 
                     (table_name, last_extracted, rows_extracted, extraction_status, schema_hash)
@@ -232,328 +244,136 @@ class ELTPipeline:
             logger.error(f"Error in extract phase for {table_name}: {str(e)}")
             return False
     
-    def load_to_postgres(self, table_name: str) -> bool:
+    def load_to_analytics(self, table_name: str) -> bool:
         """
-        LOAD phase: Load data from target MySQL to PostgreSQL.
-        This is a simple data movement with basic type conversion.
+        Load data from replication MySQL to PostgreSQL analytics.
+        Applies basic type conversions for PostgreSQL compatibility.
         """
         try:
-            # Read data from target MySQL
-            with self.target_mysql_engine.connect() as conn:
-                conn.execute(text(f"USE {self.target_mysql_db}"))
+            # Read from replication MySQL
+            with self.replication_engine.connect() as conn:
                 df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
             
             if df.empty:
                 logger.info(f"No data to load for {table_name}")
                 return True
             
-            # Apply basic type conversions for PostgreSQL compatibility
+            # Apply basic PostgreSQL compatibility conversions
             df_clean = self.apply_basic_postgres_conversions(df, table_name)
             
-            # Create raw PostgreSQL table (simple structure for data loading)
-            self.create_postgres_raw_table(table_name, df_clean)
-            
-            # Load to PostgreSQL raw area
-            with self.target_postgres_engine.begin() as conn:
+            # Load to PostgreSQL analytics
+            with self.analytics_engine.begin() as conn:
                 df_clean.to_sql(
-                    f"{table_name}_raw",
+                    table_name,  # Clean name: raw.patient, raw.appointment
                     conn,
-                    schema=self.target_schema,
+                    schema=self.analytics_schema,
                     if_exists='replace',
                     index=False,
                     method='multi'
                 )
             
-            logger.info(f"Successfully loaded {len(df_clean)} rows to PostgreSQL for {table_name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error loading {table_name} to PostgreSQL: {str(e)}")
-            return False
-    
-    def transform_in_postgres(self, table_name: str) -> bool:
-        """
-        TRANSFORM phase: Apply business logic transformations using PostgreSQL DDL files.
-        This uses the transformation SQL from the analysis/{table_name}_pg_ddl.sql files.
-        """
-        try:
-            # Read the PostgreSQL transformation file
-            pg_transform_path = self.get_postgres_transform_path(table_name)
-            pg_transform_sql = self.read_file(pg_transform_path)
-            
-            if not pg_transform_sql:
-                logger.error(f"Could not read PostgreSQL transformation file for {table_name}")
-                return False
-            
-            # Extract the transformation logic from the DDL file
-            # The DDL file should contain the final table structure and any views/functions
-            transformation_sql = self.extract_transformation_logic(pg_transform_sql, table_name)
-            
-            # Execute the transformation in PostgreSQL
-            with self.target_postgres_engine.begin() as conn:
-                # Drop existing transformed table if it exists
+            # Update load status using PostgreSQL syntax
+            with self.analytics_engine.begin() as conn:
                 conn.execute(text(f"""
-                    DROP TABLE IF EXISTS {self.target_schema}.{table_name} CASCADE
-                """))
-                
-                # Execute the PostgreSQL DDL/transformation
-                conn.execute(text(pg_transform_sql))
-                
-                # If there's custom transformation logic, execute it
-                if transformation_sql:
-                    conn.execute(text(transformation_sql))
-                
-                # Get row count for tracking
-                try:
-                    result = conn.execute(text(f"""
-                        SELECT COUNT(*) FROM {self.target_schema}.{table_name}
-                    """))
-                    row_count = result.scalar()
-                except:
-                    # If the table doesn't exist or is a view, set row count to 0
-                    row_count = 0
-            
-            # Update transform status
-            with self.target_postgres_engine.begin() as conn:
-                conn.execute(text(f"""
-                    INSERT INTO {self.target_schema}.etl_transform_status 
-                    (table_name, last_transformed, rows_transformed, transformation_status)
+                    INSERT INTO {self.analytics_schema}.etl_load_status 
+                    (table_name, last_loaded, rows_loaded, load_status)
                     VALUES (:table_name, :now, :rows, 'success')
-                    ON CONFLICT (table_name) 
-                    DO UPDATE SET 
-                        last_transformed = :now,
-                        rows_transformed = :rows,
-                        transformation_status = 'success',
+                    ON CONFLICT (table_name) DO UPDATE SET
+                        last_loaded = EXCLUDED.last_loaded,
+                        rows_loaded = EXCLUDED.rows_loaded,
+                        load_status = EXCLUDED.load_status,
                         updated_at = CURRENT_TIMESTAMP
                 """).bindparams(
                     table_name=table_name,
                     now=datetime.now(),
-                    rows=row_count
+                    rows=len(df_clean)
                 ))
             
-            logger.info(f"Successfully transformed {row_count} rows for {self.target_schema}.{table_name}")
+            logger.info(f"Successfully loaded {len(df_clean)} rows to analytics for {table_name}")
             return True
             
         except Exception as e:
-            logger.error(f"Error transforming {table_name}: {str(e)}")
-            
-            # Update transform status with error
-            try:
-                with self.target_postgres_engine.begin() as conn:
-                    conn.execute(text(f"""
-                        INSERT INTO {self.target_schema}.etl_transform_status 
-                        (table_name, transformation_status)
-                        VALUES (:table_name, 'error')
-                        ON CONFLICT (table_name) 
-                        DO UPDATE SET 
-                            transformation_status = 'error',
-                            updated_at = CURRENT_TIMESTAMP
-                    """).bindparams(table_name=table_name))
-            except Exception as status_error:
-                logger.error(f"Error updating transform status: {str(status_error)}")
-            
+            logger.error(f"Error in load phase for {table_name}: {str(e)}")
             return False
-    
-    def get_postgres_transform_path(self, table_name: str) -> str:
-        """Get the path to the PostgreSQL transformation file for a table."""
-        return os.path.join(self.analysis_base_path, table_name, f"{table_name}_pg_ddl.sql")
-    
-    def read_file(self, file_path: str) -> str:
-        """Read a file and return its contents."""
-        try:
-            with open(file_path, 'r') as f:
-                return f.read()
-        except FileNotFoundError:
-            logger.warning(f"File not found: {file_path}")
-            return None
-        except Exception as e:
-            logger.error(f"Error reading file {file_path}: {str(e)}")
-            return None
-    
-    def extract_transformation_logic(self, pg_ddl_content: str, table_name: str) -> str:
-        """
-        Extract any custom transformation logic from the PostgreSQL DDL file.
-        This method can be extended to parse specific transformation patterns.
-        """
-        # Look for any INSERT or SELECT statements that might be transformation logic
-        transformation_patterns = [
-            r'INSERT INTO.*?SELECT.*?FROM.*?;',
-            r'CREATE OR REPLACE VIEW.*?AS\s+SELECT.*?;',
-            r'-- TRANSFORM:.*?;'
-        ]
-        
-        transformations = []
-        for pattern in transformation_patterns:
-            matches = re.findall(pattern, pg_ddl_content, re.DOTALL | re.IGNORECASE)
-            transformations.extend(matches)
-        
-        if transformations:
-            return '\n'.join(transformations)
-        
-        # If no explicit transformations found, create a simple INSERT from raw table
-        return f"""
-            INSERT INTO {self.target_schema}.{table_name}
-            SELECT * FROM {self.target_schema}.{table_name}_raw;
-        """
-    
-    def run_elt_pipeline(self, table_name: str, force_full: bool = False) -> bool:
-        """
-        Run the complete ELT pipeline for a table with proper separation of concerns.
-        
-        E - Extract from source MySQL to target MySQL (preserving architecture)
-        L - Load from target MySQL to PostgreSQL raw area
-        T - Transform using PostgreSQL DDL files and SQL
-        """
-        logger.info(f"Starting ELT pipeline for {table_name}")
-        
-        # EXTRACT phase
-        logger.info(f"[EXTRACT] Processing {table_name}")
-        if not self.extract_to_target_mysql(table_name, force_full):
-            logger.error(f"Extract phase failed for {table_name}")
-            return False
-        
-        # LOAD phase
-        logger.info(f"[LOAD] Processing {table_name}")
-        if not self.load_to_postgres(table_name):
-            logger.error(f"Load phase failed for {table_name}")
-            return False
-        
-        # TRANSFORM phase
-        logger.info(f"[TRANSFORM] Processing {table_name}")
-        if not self.transform_in_postgres(table_name):
-            logger.error(f"Transform phase failed for {table_name}")
-            return False
-        
-        logger.info(f"Successfully completed ELT pipeline for {table_name}")
-        return True
-    
-    # Helper methods
     
     def apply_basic_postgres_conversions(self, df: pd.DataFrame, table_name: str) -> pd.DataFrame:
         """
         Apply basic type conversions for PostgreSQL compatibility.
-        Only essential conversions - no business logic.
+        Only handles technical transformations, no business logic.
         """
         try:
-            df = df.copy()
+            df_clean = df.copy()
             
-            for col in df.columns:
-                # Handle OpenDental's zero dates
-                if df[col].dtype == 'object':
-                    # Check if this might be a date column
-                    if any(str(val).startswith(('0000-00-00', '0001-01-01')) for val in df[col].dropna().head() if val):
-                        zero_date_patterns = ['0000-00-00', '0000-00-00 00:00:00', '0001-01-01', '0001-01-01 00:00:00']
-                        for pattern in zero_date_patterns:
-                            df.loc[df[col] == pattern, col] = None
-                        
-                        # Try to convert to datetime
-                        df[col] = pd.to_datetime(df[col], errors='coerce')
-                
-                # Handle text fields - replace empty strings with None for PostgreSQL
-                if df[col].dtype == 'object':
-                    df[col] = df[col].replace(['', 'nan', 'None'], None)
+            # Convert MySQL zero dates to NULL
+            for col in df_clean.columns:
+                if df_clean[col].dtype == 'datetime64[ns]':
+                    df_clean[col] = df_clean[col].replace(pd.Timestamp('1969-12-31 19:00:00'), pd.NaT)
             
-            return df
+            # Convert boolean columns
+            for col in df_clean.columns:
+                if df_clean[col].dtype == 'int64' and df_clean[col].isin([0, 1]).all():
+                    df_clean[col] = df_clean[col].astype('bool')
+            
+            # Convert text columns to string
+            for col in df_clean.columns:
+                if df_clean[col].dtype == 'object':
+                    df_clean[col] = df_clean[col].astype('string')
+            
+            return df_clean
             
         except Exception as e:
-            logger.error(f"Error applying basic conversions to {table_name}: {str(e)}")
-            return df
+            logger.error(f"Error applying PostgreSQL conversions for {table_name}: {str(e)}")
+            raise
     
-    def create_postgres_raw_table(self, table_name: str, df: pd.DataFrame) -> bool:
+    def run_elt_pipeline(self, table_name: str, force_full: bool = False) -> bool:
         """
-        Create a simple raw table in PostgreSQL for data loading.
-        This is just for initial data loading, not the final structure.
+        Run the complete ETL pipeline for a table.
+        
+        Args:
+            table_name: Name of the table to process
+            force_full: Whether to force a full extraction
+            
+        Returns:
+            bool: True if successful, False otherwise
         """
         try:
-            with self.target_postgres_engine.begin() as conn:
-                # Let pandas infer the structure for the raw table
-                df.head(0).to_sql(
-                    f"{table_name}_raw",
-                    conn,
-                    schema=self.target_schema,
-                    if_exists='replace',
-                    index=False
-                )
+            # Initialize connections if needed
+            if not all([self.source_engine, self.replication_engine, self.analytics_engine]):
+                self.initialize_connections()
             
-            logger.info(f"Created PostgreSQL raw table for {table_name}")
+            # Extract to replication
+            if not self.extract_to_replication(table_name, force_full):
+                logger.error(f"Extraction failed for {table_name}")
+                return False
+            
+            # Load to analytics
+            if not self.load_to_analytics(table_name):
+                logger.error(f"Loading failed for {table_name}")
+                return False
+            
+            logger.info(f"Successfully completed ETL pipeline for {table_name}")
             return True
             
         except Exception as e:
-            logger.error(f"Error creating PostgreSQL raw table for {table_name}: {str(e)}")
+            logger.error(f"Error in ETL pipeline for {table_name}: {str(e)}")
             return False
-
+        finally:
+            self.cleanup()
 
 def main():
-    """Main entry point for the ELT pipeline."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='ELT Pipeline for OpenDental Data')
-    parser.add_argument('--tables', nargs='+', help='Specific tables to process')
-    parser.add_argument('--full-sync', action='store_true', help='Force full sync for all tables')
-    parser.add_argument('--extract-only', action='store_true', help='Run only extract phase')
-    parser.add_argument('--load-only', action='store_true', help='Run only load phase')
-    parser.add_argument('--transform-only', action='store_true', help='Run only transform phase')
-    args = parser.parse_args()
-    
-    # Use context manager to ensure proper cleanup
-    with ELTPipeline() as pipeline:
-        try:
-            # Get list of tables to process
-            if args.tables:
-                tables_to_process = args.tables
-            else:
-                # Get all tables from source
-                with pipeline.source_engine.connect() as conn:
-                    result = conn.execute(text("""
-                        SELECT table_name 
-                        FROM information_schema.tables 
-                        WHERE table_schema = :db_name
-                        AND table_type = 'BASE TABLE'
-                    """).bindparams(db_name=os.getenv('OPENDENTAL_SOURCE_DB')))
-                    tables_to_process = [row[0] for row in result]
+    """Main entry point for the ETL pipeline."""
+    try:
+        pipeline = ELTPipeline()
+        pipeline.validate_database_names()
+        
+        # Example usage
+        tables = ['patient', 'appointment', 'treatment']
+        for table in tables:
+            pipeline.run_elt_pipeline(table)
             
-            # Process each table
-            results = {'success': 0, 'failed': 0}
-            
-            for table in tables_to_process:
-                logger.info(f"\n{'='*50}")
-                logger.info(f"Processing table: {table}")
-                logger.info(f"{'='*50}")
-                
-                success = False
-                
-                # Run specific phases based on arguments
-                if args.extract_only:
-                    success = pipeline.extract_to_target_mysql(table, args.full_sync)
-                elif args.load_only:
-                    success = pipeline.load_to_postgres(table)
-                elif args.transform_only:
-                    success = pipeline.transform_in_postgres(table)
-                else:
-                    # Run full ELT pipeline
-                    success = pipeline.run_elt_pipeline(table, args.full_sync)
-                
-                if success:
-                    results['success'] += 1
-                else:
-                    results['failed'] += 1
-            
-            # Print summary
-            logger.info(f"\n{'='*50}")
-            logger.info("PIPELINE SUMMARY")
-            logger.info(f"{'='*50}")
-            logger.info(f"Tables processed: {len(tables_to_process)}")
-            logger.info(f"Successful: {results['success']}")
-            logger.info(f"Failed: {results['failed']}")
-            logger.info(f"Success rate: {results['success']/len(tables_to_process)*100:.1f}%")
-            
-            return results['failed'] == 0
-            
-        except Exception as e:
-            logger.error(f"Pipeline failed: {str(e)}")
-            return False
-
+    except Exception as e:
+        logger.error(f"Pipeline failed: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    success = main()
-    exit(0 if success else 1)
+    main()
