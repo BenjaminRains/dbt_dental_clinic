@@ -5,7 +5,7 @@ import os
 import pytest
 from pathlib import Path
 import yaml
-from etl_pipeline.config import DatabaseConfig, PipelineConfig
+from etl_pipeline.config import DatabaseConfig, PipelineConfig, load_config
 
 @pytest.fixture
 def test_config_path(tmp_path):
@@ -20,12 +20,12 @@ def test_config_path(tmp_path):
                 'schema': 'source_db',
                 'charset': 'utf8mb4'
             },
-            'staging': {
-                'schema': 'staging',
+            'replication': {
+                'schema': 'replication',
                 'charset': 'utf8mb4'
             },
-            'target': {
-                'schema': 'public',
+            'analytics': {
+                'schema': 'raw',
                 'charset': 'utf8'
             }
         },
@@ -93,8 +93,8 @@ def test_pipeline_config_load(test_config_path):
     assert config.general['version'] == '1.0.0'
     
     assert config.connections['source']['schema'] == 'source_db'
-    assert config.connections['staging']['schema'] == 'staging'
-    assert config.connections['target']['schema'] == 'public'
+    assert config.connections['replication']['schema'] == 'replication'
+    assert config.connections['analytics']['schema'] == 'raw'
     
     assert config.stages['extract']['enabled'] is True
     assert config.stages['transform']['enabled'] is True
@@ -164,11 +164,11 @@ def test_pipeline_config_getters(test_config_path):
 def test_database_config_environment():
     """Test database configuration environment loading."""
     # Test environment variable loading
-    os.environ['OPENDENTAL_SOURCE_HOST'] = 'test_host'
-    os.environ['OPENDENTAL_SOURCE_PORT'] = '3306'
-    os.environ['OPENDENTAL_SOURCE_DB'] = 'test_db'
-    os.environ['OPENDENTAL_SOURCE_USER'] = 'test_user'
-    os.environ['OPENDENTAL_SOURCE_PW'] = 'test_pass'
+    os.environ['SOURCE_MYSQL_HOST'] = 'test_host'
+    os.environ['SOURCE_MYSQL_PORT'] = '3306'
+    os.environ['SOURCE_MYSQL_DB'] = 'test_db'
+    os.environ['SOURCE_MYSQL_USER'] = 'test_user'
+    os.environ['SOURCE_MYSQL_PASSWORD'] = 'test_pass'
     
     source_config = DatabaseConfig.get_source_config()
     assert source_config['host'] == 'test_host'
@@ -184,13 +184,71 @@ def test_database_config_validation():
     assert DatabaseConfig.validate_configs() is False
     
     # Test with empty variables
-    os.environ['OPENDENTAL_SOURCE_HOST'] = ''
-    os.environ['OPENDENTAL_SOURCE_PORT'] = '3306'
-    os.environ['OPENDENTAL_SOURCE_DB'] = 'test_db'
-    os.environ['OPENDENTAL_SOURCE_USER'] = 'test_user'
-    os.environ['OPENDENTAL_SOURCE_PW'] = 'test_pass'
+    os.environ['SOURCE_MYSQL_HOST'] = ''
+    os.environ['SOURCE_MYSQL_PORT'] = '3306'
+    os.environ['SOURCE_MYSQL_DB'] = 'test_db'
+    os.environ['SOURCE_MYSQL_USER'] = 'test_user'
+    os.environ['SOURCE_MYSQL_PASSWORD'] = 'test_pass'
     assert DatabaseConfig.validate_configs() is False
     
     # Test with valid variables
-    os.environ['OPENDENTAL_SOURCE_HOST'] = 'test_host'
-    assert DatabaseConfig.validate_configs() is True 
+    os.environ['SOURCE_MYSQL_HOST'] = 'test_host'
+    assert DatabaseConfig.validate_configs() is True
+
+def test_valid_config():
+    """Test configuration with valid environment variables."""
+    # Set up test environment
+    os.environ['SOURCE_MYSQL_HOST'] = 'test_host'
+    os.environ['SOURCE_MYSQL_PORT'] = '3306'
+    os.environ['SOURCE_MYSQL_DB'] = 'test_db'
+    os.environ['SOURCE_MYSQL_USER'] = 'test_user'
+    os.environ['SOURCE_MYSQL_PASSWORD'] = 'test_pass'
+    
+    os.environ['REPLICATION_MYSQL_HOST'] = 'test_replication_host'
+    os.environ['REPLICATION_MYSQL_PORT'] = '3305'
+    os.environ['REPLICATION_MYSQL_DB'] = 'test_replication_db'
+    os.environ['REPLICATION_MYSQL_USER'] = 'test_replication_user'
+    os.environ['REPLICATION_MYSQL_PASSWORD'] = 'test_replication_pass'
+    
+    os.environ['ANALYTICS_POSTGRES_HOST'] = 'test_analytics_host'
+    os.environ['ANALYTICS_POSTGRES_PORT'] = '5432'
+    os.environ['ANALYTICS_POSTGRES_DB'] = 'test_analytics_db'
+    os.environ['ANALYTICS_POSTGRES_SCHEMA'] = 'raw'
+    os.environ['ANALYTICS_POSTGRES_USER'] = 'test_analytics_user'
+    os.environ['ANALYTICS_POSTGRES_PASSWORD'] = 'test_analytics_pass'
+    
+    # Test configuration loading
+    config = load_config()
+    assert config is not None
+    assert 'source' in config
+    assert 'replication' in config
+    assert 'analytics' in config
+
+def test_missing_required_vars():
+    """Test configuration with missing required environment variables."""
+    # Clear environment
+    os.environ.clear()
+    
+    # Set only some variables
+    os.environ['SOURCE_MYSQL_HOST'] = ''
+    os.environ['SOURCE_MYSQL_PORT'] = '3306'
+    os.environ['SOURCE_MYSQL_DB'] = 'test_db'
+    os.environ['SOURCE_MYSQL_USER'] = 'test_user'
+    os.environ['SOURCE_MYSQL_PASSWORD'] = 'test_pass'
+    
+    # Test configuration loading
+    with pytest.raises(ValueError):
+        load_config()
+
+def test_invalid_port():
+    """Test configuration with invalid port numbers."""
+    # Set up test environment with invalid port
+    os.environ['SOURCE_MYSQL_HOST'] = 'test_host'
+    os.environ['SOURCE_MYSQL_PORT'] = 'invalid'
+    os.environ['SOURCE_MYSQL_DB'] = 'test_db'
+    os.environ['SOURCE_MYSQL_USER'] = 'test_user'
+    os.environ['SOURCE_MYSQL_PASSWORD'] = 'test_pass'
+    
+    # Test configuration loading
+    with pytest.raises(ValueError):
+        load_config() 
