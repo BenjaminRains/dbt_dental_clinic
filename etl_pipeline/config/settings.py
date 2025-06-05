@@ -18,26 +18,26 @@ class Settings:
     # Environment variable mappings
     ENV_MAPPINGS = {
         'source': {
-            'host': 'OPENDENTAL_SOURCE_HOST',
-            'port': 'OPENDENTAL_SOURCE_PORT',
-            'database': 'OPENDENTAL_SOURCE_DB',
-            'user': 'OPENDENTAL_SOURCE_USER',
-            'password': 'OPENDENTAL_SOURCE_PW'
+            'host': 'SOURCE_MYSQL_HOST',
+            'port': 'SOURCE_MYSQL_PORT',
+            'database': 'SOURCE_MYSQL_DB',
+            'user': 'SOURCE_MYSQL_USER',
+            'password': 'SOURCE_MYSQL_PASSWORD'
         },
-        'staging': {
-            'host': 'STAGING_MYSQL_HOST',
-            'port': 'STAGING_MYSQL_PORT',
-            'database': 'STAGING_MYSQL_DB',
-            'user': 'STAGING_MYSQL_USER',
-            'password': 'STAGING_MYSQL_PASSWORD'
+        'replication': {
+            'host': 'REPLICATION_MYSQL_HOST',
+            'port': 'REPLICATION_MYSQL_PORT',
+            'database': 'REPLICATION_MYSQL_DB',
+            'user': 'REPLICATION_MYSQL_USER',
+            'password': 'REPLICATION_MYSQL_PASSWORD'
         },
-        'target': {
-            'host': 'TARGET_POSTGRES_HOST',
-            'port': 'TARGET_POSTGRES_PORT',
-            'database': 'TARGET_POSTGRES_DB',
-            'user': 'TARGET_POSTGRES_USER',
-            'password': 'TARGET_POSTGRES_PASSWORD',
-            'schema': 'TARGET_POSTGRES_SCHEMA'
+        'analytics': {
+            'host': 'ANALYTICS_POSTGRES_HOST',
+            'port': 'ANALYTICS_POSTGRES_PORT',
+            'database': 'ANALYTICS_POSTGRES_DB',
+            'schema': 'ANALYTICS_POSTGRES_SCHEMA',
+            'user': 'ANALYTICS_POSTGRES_USER',
+            'password': 'ANALYTICS_POSTGRES_PASSWORD'
         }
     }
     
@@ -108,13 +108,13 @@ class Settings:
             config.update(pipeline_connections[db_type])
         
         # Add default connection parameters
-        if db_type in ['source', 'staging']:
+        if db_type in ['source', 'replication']:  # Updated to match new naming
             # MySQL defaults
             config.setdefault('connect_timeout', 10)
             config.setdefault('read_timeout', 30)
             config.setdefault('write_timeout', 30)
             config.setdefault('charset', 'utf8mb4')
-        else:
+        else:  # analytics (PostgreSQL)
             # PostgreSQL defaults
             config.setdefault('connect_timeout', 10)
             config.setdefault('application_name', 'etl_pipeline')
@@ -137,7 +137,7 @@ class Settings:
                     value = int(value)
                 except ValueError:
                     logger.warning(f"Invalid port value for {env_var}: {value}")
-                    value = 3306 if db_type in ['source', 'staging'] else 5432
+                    value = 3306 if db_type in ['source', 'replication'] else 5432  # Updated to match new naming
             config[key] = value
         
         return config
@@ -152,7 +152,7 @@ class Settings:
         if missing_fields:
             raise ValueError(f"Missing required database config fields for {db_type}: {missing_fields}")
         
-        if db_type in ['source', 'staging']:
+        if db_type in ['source', 'replication']:  # Updated to match new naming
             # MySQL connection string
             return (
                 f"mysql+pymysql://{config['user']}:{config['password']}@"
@@ -162,7 +162,7 @@ class Settings:
                 f"&write_timeout={config.get('write_timeout', 30)}"
                 f"&charset={config.get('charset', 'utf8mb4')}"
             )
-        else:  # target (PostgreSQL)
+        else:  # analytics (PostgreSQL)
             # PostgreSQL connection string
             conn_str = (
                 f"postgresql+psycopg2://{config['user']}:{config['password']}@"
