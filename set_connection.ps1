@@ -31,13 +31,16 @@ function Test-Port($hostname, $port) {
     }
 }
 
-# Function to safely extract env variable value
-function Get-EnvValue($content, $pattern) {
-    $match = $content | Select-String -Pattern $pattern -AllMatches
-    if ($match -and $match.Matches.Count -gt 0 -and $match.Matches[0].Groups.Count -gt 1) {
-        return $match.Matches[0].Groups[1].Value.Trim()
+# Function to extract environment variable values
+function Get-EnvValue {
+    param (
+        [string]$content,
+        [string]$pattern
+    )
+    if ($content -match $pattern) {
+        return $matches[1]
     }
-    return ""
+    return $null
 }
 
 # Function to load environment variables (replaces set_env.ps1)
@@ -108,27 +111,132 @@ if (-not $envContent) {
 
 Write-Host "✅ Environment variables loaded" -ForegroundColor Green
 
+# Read the .env file
+$envPath = Join-Path $PSScriptRoot ".env"
+if (-not (Test-Path $envPath)) {
+    Write-Host "❌ .env file not found at $envPath" -ForegroundColor Red
+    exit 1
+}
+
+$envContent = Get-Content $envPath -Raw
+
+# Extract environment variables
+$sourceHost = Get-EnvValue $envContent "SOURCE_MYSQL_HOST=(.*)"
+$sourcePort = Get-EnvValue $envContent "SOURCE_MYSQL_PORT=(.*)"
+$sourceDb = Get-EnvValue $envContent "SOURCE_MYSQL_DB=(.*)"
+$sourceUser = Get-EnvValue $envContent "SOURCE_MYSQL_USER=(.*)"
+$sourcePassword = Get-EnvValue $envContent "SOURCE_MYSQL_PASSWORD=(.*)"
+
+$replicationHost = Get-EnvValue $envContent "REPLICATION_MYSQL_HOST=(.*)"
+$replicationPort = Get-EnvValue $envContent "REPLICATION_MYSQL_PORT=(.*)"
+$replicationDb = Get-EnvValue $envContent "REPLICATION_MYSQL_DB=(.*)"
+$replicationUser = Get-EnvValue $envContent "REPLICATION_MYSQL_USER=(.*)"
+$replicationPassword = Get-EnvValue $envContent "REPLICATION_MYSQL_PASSWORD=(.*)"
+
+$analyticsHost = Get-EnvValue $envContent "ANALYTICS_POSTGRES_HOST=(.*)"
+$analyticsPort = Get-EnvValue $envContent "ANALYTICS_POSTGRES_PORT=(.*)"
+$analyticsDb = Get-EnvValue $envContent "ANALYTICS_POSTGRES_DB=(.*)"
+$analyticsSchema = Get-EnvValue $envContent "ANALYTICS_POSTGRES_SCHEMA=(.*)"
+$analyticsUser = Get-EnvValue $envContent "ANALYTICS_POSTGRES_USER=(.*)"
+$analyticsPassword = Get-EnvValue $envContent "ANALYTICS_POSTGRES_PASSWORD=(.*)"
+
+# Check for missing variables
+$missingVars = @()
+
+# Source MySQL
+if ([string]::IsNullOrEmpty($sourceHost)) { $missingVars += "SOURCE_MYSQL_HOST" }
+if ([string]::IsNullOrEmpty($sourcePort)) { $missingVars += "SOURCE_MYSQL_PORT" }
+if ([string]::IsNullOrEmpty($sourceDb)) { $missingVars += "SOURCE_MYSQL_DB" }
+if ([string]::IsNullOrEmpty($sourceUser)) { $missingVars += "SOURCE_MYSQL_USER" }
+if ([string]::IsNullOrEmpty($sourcePassword)) { $missingVars += "SOURCE_MYSQL_PASSWORD" }
+
+# Replication MySQL
+if ([string]::IsNullOrEmpty($replicationHost)) { $missingVars += "REPLICATION_MYSQL_HOST" }
+if ([string]::IsNullOrEmpty($replicationPort)) { $missingVars += "REPLICATION_MYSQL_PORT" }
+if ([string]::IsNullOrEmpty($replicationDb)) { $missingVars += "REPLICATION_MYSQL_DB" }
+if ([string]::IsNullOrEmpty($replicationUser)) { $missingVars += "REPLICATION_MYSQL_USER" }
+if ([string]::IsNullOrEmpty($replicationPassword)) { $missingVars += "REPLICATION_MYSQL_PASSWORD" }
+
+# Analytics PostgreSQL
+if ([string]::IsNullOrEmpty($analyticsHost)) { $missingVars += "ANALYTICS_POSTGRES_HOST" }
+if ([string]::IsNullOrEmpty($analyticsPort)) { $missingVars += "ANALYTICS_POSTGRES_PORT" }
+if ([string]::IsNullOrEmpty($analyticsDb)) { $missingVars += "ANALYTICS_POSTGRES_DB" }
+if ([string]::IsNullOrEmpty($analyticsSchema)) { $missingVars += "ANALYTICS_POSTGRES_SCHEMA" }
+if ([string]::IsNullOrEmpty($analyticsUser)) { $missingVars += "ANALYTICS_POSTGRES_USER" }
+if ([string]::IsNullOrEmpty($analyticsPassword)) { $missingVars += "ANALYTICS_POSTGRES_PASSWORD" }
+
+if ($missingVars.Count -gt 0) {
+    Write-Host "❌ Missing required environment variables:" -ForegroundColor Red
+    foreach ($var in $missingVars) {
+        Write-Host "  - $var" -ForegroundColor Red
+    }
+    exit 1
+}
+
+# Set environment variables
+$env:SOURCE_MYSQL_HOST = $sourceHost
+$env:SOURCE_MYSQL_PORT = $sourcePort
+$env:SOURCE_MYSQL_DB = $sourceDb
+$env:SOURCE_MYSQL_USER = $sourceUser
+$env:SOURCE_MYSQL_PASSWORD = $sourcePassword
+
+$env:REPLICATION_MYSQL_HOST = $replicationHost
+$env:REPLICATION_MYSQL_PORT = $replicationPort
+$env:REPLICATION_MYSQL_DB = $replicationDb
+$env:REPLICATION_MYSQL_USER = $replicationUser
+$env:REPLICATION_MYSQL_PASSWORD = $replicationPassword
+
+$env:ANALYTICS_POSTGRES_HOST = $analyticsHost
+$env:ANALYTICS_POSTGRES_PORT = $analyticsPort
+$env:ANALYTICS_POSTGRES_DB = $analyticsDb
+$env:ANALYTICS_POSTGRES_SCHEMA = $analyticsSchema
+$env:ANALYTICS_POSTGRES_USER = $analyticsUser
+$env:ANALYTICS_POSTGRES_PASSWORD = $analyticsPassword
+
+# Verify database configurations
+$mysqlConfig = @{
+    Host = $replicationHost
+    Port = $replicationPort
+    Database = $replicationDb
+    User = $replicationUser
+    Password = $replicationPassword
+}
+
+$pgConfig = @{
+    Host = $analyticsHost
+    Port = $analyticsPort
+    Database = $analyticsDb
+    Schema = $analyticsSchema
+    User = $analyticsUser
+    Password = $analyticsPassword
+}
+
+# Check MySQL configuration
+if ([string]::IsNullOrEmpty($replicationDb)) {
+    Write-Host "⏭️  MySQL database not configured (REPLICATION_MYSQL_DB missing)" -ForegroundColor Yellow
+} else {
+    Write-Host "✅ MySQL database configured: $replicationDb" -ForegroundColor Green
+}
+
+# Check PostgreSQL configuration
+if ([string]::IsNullOrEmpty($analyticsDb)) {
+    Write-Host "⏭️  PostgreSQL database not configured (ANALYTICS_POSTGRES_DB missing)" -ForegroundColor Yellow
+} else {
+    Write-Host "✅ PostgreSQL database configured: $analyticsDb" -ForegroundColor Green
+}
+
+Write-Host "`n✨ Environment variables set successfully!" -ForegroundColor Green
+
 # MySQL Setup
 if (-not $SkipMySQL) {
     Write-Host "`n🐬 MySQL Staging Database Setup" -ForegroundColor Cyan
     Write-Host "================================" -ForegroundColor Cyan
     
-    # Extract MySQL connection information
-    $stagingHost = Get-EnvValue $envContent "STAGING_MYSQL_HOST=(.*)"
-    $stagingPort = Get-EnvValue $envContent "STAGING_MYSQL_PORT=(.*)"
-    $stagingDb = Get-EnvValue $envContent "STAGING_MYSQL_DB=(.*)"
-    $stagingUser = Get-EnvValue $envContent "STAGING_MYSQL_USER=(.*)"
-    $stagingPassword = Get-EnvValue $envContent "STAGING_MYSQL_PASSWORD=(.*)"
-    
-    # Set defaults if not specified
-    if ([string]::IsNullOrEmpty($stagingHost)) { $stagingHost = "localhost" }
-    if ([string]::IsNullOrEmpty($stagingPort)) { $stagingPort = "3306" }
-    
     # Validate required staging variables
     $missingVars = @()
-    if ([string]::IsNullOrEmpty($stagingDb)) { $missingVars += "STAGING_MYSQL_DB" }
-    if ([string]::IsNullOrEmpty($stagingUser)) { $missingVars += "STAGING_MYSQL_USER" }
-    if ([string]::IsNullOrEmpty($stagingPassword)) { $missingVars += "STAGING_MYSQL_PASSWORD" }
+    if ([string]::IsNullOrEmpty($replicationDb)) { $missingVars += "REPLICATION_MYSQL_DB" }
+    if ([string]::IsNullOrEmpty($replicationUser)) { $missingVars += "REPLICATION_MYSQL_USER" }
+    if ([string]::IsNullOrEmpty($replicationPassword)) { $missingVars += "REPLICATION_MYSQL_PASSWORD" }
     
     if ($missingVars.Count -gt 0) {
         Write-Host "❌ Missing MySQL environment variables:" -ForegroundColor Red
@@ -138,11 +246,11 @@ if (-not $SkipMySQL) {
         Write-Host "⏭️  Skipping MySQL setup" -ForegroundColor Yellow
     } else {
         # Check if MySQL is running
-        Write-Host "Checking MySQL service on $stagingHost`:$stagingPort..." -ForegroundColor Yellow
+        Write-Host "Checking MySQL service on $replicationHost`:$replicationPort..." -ForegroundColor Yellow
         
-        $mysqlRunning = Test-Port $stagingHost $stagingPort
+        $mysqlRunning = Test-Port $replicationHost $replicationPort
         if ($mysqlRunning) {
-            Write-Host "✅ MySQL is running on $stagingHost`:$stagingPort" -ForegroundColor Green
+            Write-Host "✅ MySQL is running on $replicationHost`:$replicationPort" -ForegroundColor Green
             
             # MySQL Setup SQL
             $mysqlSetupSql = @"
@@ -150,35 +258,35 @@ if (-not $SkipMySQL) {
 SELECT VERSION() as MySQL_Version, @@port as Port;
 
 -- Create staging database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS $stagingDb
+CREATE DATABASE IF NOT EXISTS $replicationDb
     CHARACTER SET utf8mb4 
     COLLATE utf8mb4_unicode_ci;
 
 -- Create staging user if it doesn't exist
-CREATE USER IF NOT EXISTS '$stagingUser'@'localhost' IDENTIFIED BY '$stagingPassword';
-CREATE USER IF NOT EXISTS '$stagingUser'@'%' IDENTIFIED BY '$stagingPassword';
+CREATE USER IF NOT EXISTS '$replicationUser'@'localhost' IDENTIFIED BY '$replicationPassword';
+CREATE USER IF NOT EXISTS '$replicationUser'@'%' IDENTIFIED BY '$replicationPassword';
 
 -- Grant permissions
-GRANT ALL PRIVILEGES ON $stagingDb.* TO '$stagingUser'@'localhost';
-GRANT ALL PRIVILEGES ON $stagingDb.* TO '$stagingUser'@'%';
+GRANT ALL PRIVILEGES ON $replicationDb.* TO '$replicationUser'@'localhost';
+GRANT ALL PRIVILEGES ON $replicationDb.* TO '$replicationUser'@'%';
 
 -- Flush privileges
 FLUSH PRIVILEGES;
 
 -- Show created resources
-SHOW DATABASES LIKE '$stagingDb';
-SELECT User, Host FROM mysql.user WHERE User = '$stagingUser';
+SHOW DATABASES LIKE '$replicationDb';
+SELECT User, Host FROM mysql.user WHERE User = '$replicationUser';
 "@
 
             Write-Host "🔧 Setting up MySQL staging database..." -ForegroundColor Yellow
             
             try {
                 # Try without password first
-                $setupOutput = $mysqlSetupSql | mysql -h $stagingHost -P $stagingPort -u root --password="" 2>$null
+                $setupOutput = $mysqlSetupSql | mysql -h $replicationHost -P $replicationPort -u root --password="" 2>$null
                 if ($LASTEXITCODE -ne 0) {
                     # Try with password prompt
                     Write-Host "Please enter your MySQL root password:" -ForegroundColor Cyan
-                    $setupOutput = $mysqlSetupSql | mysql -h $stagingHost -P $stagingPort -u root -p
+                    $setupOutput = $mysqlSetupSql | mysql -h $replicationHost -P $replicationPort -u root -p
                 }
                 
                 if ($LASTEXITCODE -eq 0) {
@@ -190,7 +298,7 @@ SELECT User, Host FROM mysql.user WHERE User = '$stagingUser';
                 Write-Host "❌ MySQL setup failed: $($_.Exception.Message)" -ForegroundColor Red
             }
         } else {
-            Write-Host "❌ MySQL is not running on $stagingHost`:$stagingPort" -ForegroundColor Red
+            Write-Host "❌ MySQL is not running on $replicationHost`:$replicationPort" -ForegroundColor Red
             Write-Host "   Please start MySQL and try again" -ForegroundColor Gray
         }
     }
@@ -203,45 +311,32 @@ if (-not $SkipPostgreSQL) {
     Write-Host "`n🐘 PostgreSQL Analytics Database Setup" -ForegroundColor Cyan
     Write-Host "======================================" -ForegroundColor Cyan
     
-    # Extract PostgreSQL connection information
-    $pgHost = Get-EnvValue $envContent "TARGET_POSTGRES_HOST=(.*)"
-    $pgPort = Get-EnvValue $envContent "TARGET_POSTGRES_PORT=(.*)"
-    $pgDb = Get-EnvValue $envContent "TARGET_POSTGRES_DB=(.*)"
-    $pgSchema = Get-EnvValue $envContent "TARGET_POSTGRES_SCHEMA=(.*)"
-    $pgUser = Get-EnvValue $envContent "TARGET_POSTGRES_USER=(.*)"
-    $pgPassword = Get-EnvValue $envContent "TARGET_POSTGRES_PASSWORD=(.*)"
-    
-    # Set defaults
-    if ([string]::IsNullOrEmpty($pgHost)) { $pgHost = "localhost" }
-    if ([string]::IsNullOrEmpty($pgPort)) { $pgPort = "5432" }
-    if ([string]::IsNullOrEmpty($pgSchema)) { $pgSchema = "analytics" }
-    
-    if ([string]::IsNullOrEmpty($pgDb)) {
-        Write-Host "⏭️  PostgreSQL database not configured (TARGET_POSTGRES_DB missing)" -ForegroundColor Yellow
+    if ([string]::IsNullOrEmpty($analyticsDb)) {
+        Write-Host "⏭️  PostgreSQL database not configured (ANALYTICS_POSTGRES_DB missing)" -ForegroundColor Yellow
     } else {
-        $postgresRunning = Test-Port $pgHost $pgPort
+        $postgresRunning = Test-Port $analyticsHost $analyticsPort
         if ($postgresRunning) {
-            Write-Host "✅ PostgreSQL is running on $pgHost`:$pgPort" -ForegroundColor Green
+            Write-Host "✅ PostgreSQL is running on $analyticsHost`:$analyticsPort" -ForegroundColor Green
             
-            $setupPG = Read-Host "Do you want to set up PostgreSQL analytics database '$pgDb'? (y/n)"
+            $setupPG = Read-Host "Do you want to set up PostgreSQL analytics database '$analyticsDb'? (y/n)"
             if ($setupPG -eq "y") {
                 Write-Host "🔧 Setting up PostgreSQL database and user..." -ForegroundColor Yellow
                 
                 # Note: This is a simplified setup - you may need to adjust for your PostgreSQL configuration
                 Write-Host "   Please run these commands in your PostgreSQL admin tool:" -ForegroundColor Cyan
-                Write-Host "   CREATE DATABASE $pgDb;" -ForegroundColor Gray
-                Write-Host "   CREATE USER $pgUser WITH PASSWORD '$pgPassword';" -ForegroundColor Gray
-                Write-Host "   GRANT ALL PRIVILEGES ON DATABASE $pgDb TO $pgUser;" -ForegroundColor Gray
-                Write-Host "   \c $pgDb;" -ForegroundColor Gray
-                Write-Host "   CREATE SCHEMA IF NOT EXISTS $pgSchema;" -ForegroundColor Gray
-                Write-Host "   GRANT ALL ON SCHEMA $pgSchema TO $pgUser;" -ForegroundColor Gray
+                Write-Host "   CREATE DATABASE $analyticsDb;" -ForegroundColor Gray
+                Write-Host "   CREATE USER $analyticsUser WITH PASSWORD '$analyticsPassword';" -ForegroundColor Gray
+                Write-Host "   GRANT ALL PRIVILEGES ON DATABASE $analyticsDb TO $analyticsUser;" -ForegroundColor Gray
+                Write-Host "   \c $analyticsDb;" -ForegroundColor Gray
+                Write-Host "   CREATE SCHEMA IF NOT EXISTS $analyticsSchema;" -ForegroundColor Gray
+                Write-Host "   GRANT ALL ON SCHEMA $analyticsSchema TO $analyticsUser;" -ForegroundColor Gray
                 
                 Write-Host "✅ PostgreSQL setup instructions provided" -ForegroundColor Green
             } else {
                 Write-Host "⏭️  Skipping PostgreSQL setup" -ForegroundColor Yellow
             }
         } else {
-            Write-Host "❌ PostgreSQL not running on $pgHost`:$pgPort" -ForegroundColor Red
+            Write-Host "❌ PostgreSQL not running on $analyticsHost`:$analyticsPort" -ForegroundColor Red
             Write-Host "   Install and start PostgreSQL if you need the analytics database" -ForegroundColor Gray
         }
     }
@@ -252,9 +347,9 @@ if (-not $SkipPostgreSQL) {
 Write-Host "`n🎉 Database setup completed!" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Configuration Summary:" -ForegroundColor White
-Write-Host "- MySQL staging: $stagingHost`:$stagingPort / $stagingDb" -ForegroundColor Cyan
-if (-not [string]::IsNullOrEmpty($pgDb)) {
-    Write-Host "- PostgreSQL analytics: $pgHost`:$pgPort / $pgDb" -ForegroundColor Cyan
+Write-Host "- MySQL staging: $replicationHost`:$replicationPort / $replicationDb" -ForegroundColor Cyan
+if (-not [string]::IsNullOrEmpty($analyticsDb)) {
+    Write-Host "- PostgreSQL analytics: $analyticsHost`:$analyticsPort / $analyticsDb" -ForegroundColor Cyan
 }
 Write-Host ""
 Write-Host "🔧 Next steps:" -ForegroundColor White
