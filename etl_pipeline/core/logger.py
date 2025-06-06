@@ -37,16 +37,16 @@ class ETLLogger:
             self.debug(f"SQL Query: {query}")
 
     def log_etl_start(self, table_name: str, operation: str) -> None:
-        self.info(f"🚀 Starting {operation} for table: {table_name}")
+        self.info(f"[START] Starting {operation} for table: {table_name}")
 
     def log_etl_complete(self, table_name: str, operation: str, records_count: int = 0) -> None:
-        self.info(f"✅ Completed {operation} for table: {table_name} | Records: {records_count}")
+        self.info(f"[PASS] Completed {operation} for table: {table_name} | Records: {records_count}")
 
     def log_etl_error(self, table_name: str, operation: str, error: Exception) -> None:
-        self.error(f"❌ Error during {operation} for table: {table_name} | Error: {error}")
+        self.error(f"[FAIL] Error during {operation} for table: {table_name} | Error: {error}")
 
     def log_validation_result(self, table_name: str, passed: bool, issues_count: int = 0) -> None:
         if passed:
-            self.info(f"✅ Validation passed for table: {table_name}")
+            self.info(f"[PASS] Validation passed for table: {table_name}")
         else:
-            self.warning(f"⚠️ Validation failed for table: {table_name} | Issues: {issues_count}") 
+            self.warning(f"[WARN] Validation failed for table: {table_name} | Issues: {issues_count}") 
