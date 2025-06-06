@@ -2,7 +2,7 @@ import os
 import re
 import hashlib
 import json
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 from datetime import datetime
@@ -250,7 +250,7 @@ class ExactMySQLReplicator:
         return best_column['column_name']
     
     def extract_table_data(self, table_name: str, last_extracted: Optional[datetime] = None, 
-                          force_full: bool = False, chunk_size: int = 10000) -> int:
+                          force_full: bool = False, batch_size: int = 10000) -> int:
         """
         Extract data from source to target table with chunked processing for large tables.
         """
@@ -263,15 +263,37 @@ class ExactMySQLReplicator:
             incremental_column = self.get_best_incremental_column(table_name)
             
             if force_full or not last_extracted or not incremental_column:
-                return self._extract_full_table(table_name, chunk_size)
+                return self._extract_full_table(table_name, batch_size)
             else:
-                return self._extract_incremental(table_name, incremental_column, last_extracted, chunk_size)
+                return self._extract_incremental(table_name, incremental_column, last_extracted, batch_size)
                 
         except Exception as e:
             logger.error(f"Error extracting data for {table_name}: {str(e)}")
             return 0
     
-    def _extract_full_table(self, table_name: str, chunk_size: int) -> int:
+    def extract_incremental_data(self, table_name: str, incremental_column: str, 
+                               last_extracted: Optional[datetime], batch_size: int = 10000) -> int:
+        """
+        Extract incremental data using a specific column.
+        This method is called by the intelligent pipeline when it has already determined
+        the best incremental column to use.
+        """
+        try:
+            # Ensure target table exists and is exact replica
+            if not self.create_exact_target_table(table_name):
+                return 0
+                
+            if not last_extracted:
+                logger.info(f"No last_extracted timestamp, performing full extraction for {table_name}")
+                return self._extract_full_table(table_name, batch_size)
+            
+            return self._extract_incremental(table_name, incremental_column, last_extracted, batch_size)
+                
+        except Exception as e:
+            logger.error(f"Error in incremental extraction for {table_name}: {str(e)}")
+            return 0
+    
+    def _extract_full_table(self, table_name: str, batch_size: int) -> int:
         """Extract all data from source table."""
         logger.info(f"Performing full extraction for {table_name}")
         
@@ -293,22 +315,20 @@ class ExactMySQLReplicator:
             target_conn.execute(text(f"TRUNCATE TABLE {table_name}"))
             
             # Extract in chunks if table is large
-            if total_rows > chunk_size:
-                return self._extract_in_chunks(source_conn, target_conn, table_name, total_rows, chunk_size)
+            if total_rows > batch_size:
+                return self._extract_in_chunks(source_conn, target_conn, table_name, total_rows, batch_size)
             else:
                 # Small table - extract all at once
                 return self._extract_direct_copy(source_conn, target_conn, table_name)
     
     def _extract_incremental(self, table_name: str, incremental_column: str, 
-                           last_extracted: datetime, chunk_size: int) -> int:
-        """Extract only new/modified data based on incremental column."""
+                           last_extracted: datetime, batch_size: int) -> int:
+        """Extract only new/modified data based on incremental column using secure two-step approach."""
         logger.info(f"Performing incremental extraction for {table_name} using {incremental_column} > {last_extracted}")
         
-        with self.source_engine.connect() as source_conn, \
-             self.target_engine.connect() as target_conn:
-            
+        # Step 1: Extract data from source (using readonly connection)
+        with self.source_engine.connect() as source_conn:
             source_conn.execute(text(f"USE {self.source_db}"))
-            target_conn.execute(text(f"USE {self.target_db}"))
             
             # Check if there are new records
             count_query = text(f"""
@@ -322,23 +342,42 @@ class ExactMySQLReplicator:
                 logger.info(f"No new data to extract from {table_name}")
                 return 0
             
-            # Extract new data
-            extract_query = f"""
-                INSERT INTO {self.target_db}.{table_name}
-                SELECT * FROM {self.source_db}.{table_name}
+            # Extract new data from source
+            extract_query = text(f"""
+                SELECT * FROM {table_name}
                 WHERE {incremental_column} > :last_extracted
-            """
+                ORDER BY {incremental_column}
+            """)
             
-            result = target_conn.execute(text(extract_query).bindparams(last_extracted=last_extracted))
-            rows_inserted = result.rowcount
-            
-            logger.info(f"Extracted {rows_inserted} new/modified rows from {table_name}")
-            return rows_inserted
+            result = source_conn.execute(extract_query.bindparams(last_extracted=last_extracted))
+            rows = result.fetchall()
+            columns = result.keys()
+        
+        # Step 2: Insert into target (using replication connection)
+        if rows:
+            with self.target_engine.connect() as target_conn:
+                target_conn.execute(text(f"USE {self.target_db}"))
+                
+                # Build parameterized INSERT statement
+                placeholders = ', '.join([':' + col for col in columns])
+                insert_query = text(f"""
+                    INSERT INTO {table_name} ({', '.join(columns)})
+                    VALUES ({placeholders})
+                """)
+                
+                # Execute bulk insert
+                target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+                rows_inserted = len(rows)
+                
+                logger.info(f"Extracted {rows_inserted} new/modified rows from {table_name}")
+                return rows_inserted
+        
+        return 0
     
     def _extract_in_chunks(self, source_conn, target_conn, table_name: str, 
-                          total_rows: int, chunk_size: int) -> int:
-        """Extract large table in chunks to manage memory usage."""
-        logger.info(f"Extracting {total_rows} rows from {table_name} in chunks of {chunk_size}")
+                          total_rows: int, batch_size: int) -> int:
+        """Extract large table in chunks using secure two-step approach."""
+        logger.info(f"Extracting {total_rows} rows from {table_name} in chunks of {batch_size}")
         
         # Get primary key column for chunking
         pk_query = text("""
@@ -360,43 +399,98 @@ class ExactMySQLReplicator:
         if not pk_column:
             # No primary key - fall back to direct copy
             logger.warning(f"No primary key found for {table_name}, using direct copy")
-            return self._extract_direct_copy(source_conn, target_conn, table_name)
+            return self._extract_direct_copy_secure(table_name)
         
         total_extracted = 0
         offset = 0
         
         while offset < total_rows:
-            chunk_query = f"""
-                INSERT INTO {self.target_db}.{table_name}
-                SELECT * FROM {self.source_db}.{table_name}
+            # Step 1: Extract chunk from source (readonly connection)
+            chunk_query = text(f"""
+                SELECT * FROM {table_name}
                 ORDER BY {pk_column}
-                LIMIT {chunk_size} OFFSET {offset}
-            """
+                LIMIT {batch_size} OFFSET {offset}
+            """)
             
-            result = target_conn.execute(text(chunk_query))
-            chunk_rows = result.rowcount
+            result = source_conn.execute(chunk_query)
+            rows = result.fetchall()
+            
+            if not rows:
+                break  # No more data
+            
+            # Step 2: Insert chunk into target (replication connection)  
+            columns = result.keys()
+            placeholders = ', '.join([':' + col for col in columns])
+            insert_query = text(f"""
+                INSERT INTO {table_name} ({', '.join(columns)})
+                VALUES ({placeholders})
+            """)
+            
+            target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+            chunk_rows = len(rows)
             total_extracted += chunk_rows
-            offset += chunk_size
+            offset += batch_size
             
             logger.info(f"Extracted chunk: {total_extracted}/{total_rows} rows")
             
-            if chunk_rows < chunk_size:
+            if chunk_rows < batch_size:
                 break  # Last chunk
         
         return total_extracted
     
     def _extract_direct_copy(self, source_conn, target_conn, table_name: str) -> int:
-        """Direct table copy for smaller tables."""
-        copy_query = f"""
-            INSERT INTO {self.target_db}.{table_name}
-            SELECT * FROM {self.source_db}.{table_name}
-        """
+        """Direct table copy for smaller tables using secure two-step approach."""
+        # Step 1: Extract all data from source (readonly connection)
+        extract_query = text(f"SELECT * FROM {table_name}")
+        result = source_conn.execute(extract_query)
+        rows = result.fetchall()
         
-        result = target_conn.execute(text(copy_query))
-        rows_copied = result.rowcount
+        if not rows:
+            logger.info(f"No data to copy from {table_name}")
+            return 0
+        
+        # Step 2: Insert into target (replication connection)
+        columns = result.keys()
+        placeholders = ', '.join([':' + col for col in columns])
+        insert_query = text(f"""
+            INSERT INTO {table_name} ({', '.join(columns)})
+            VALUES ({placeholders})
+        """)
+        
+        target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+        rows_copied = len(rows)
         
         logger.info(f"Direct copy completed: {rows_copied} rows")
         return rows_copied
+    
+    def _extract_direct_copy_secure(self, table_name: str) -> int:
+        """Secure direct table copy using separate connections for source and target."""
+        # Step 1: Extract all data from source (readonly connection)
+        with self.source_engine.connect() as source_conn:
+            source_conn.execute(text(f"USE {self.source_db}"))
+            extract_query = text(f"SELECT * FROM {table_name}")
+            result = source_conn.execute(extract_query)
+            rows = result.fetchall()
+            columns = result.keys()
+        
+        if not rows:
+            logger.info(f"No data to copy from {table_name}")
+            return 0
+        
+        # Step 2: Insert into target (replication connection)
+        with self.target_engine.connect() as target_conn:
+            target_conn.execute(text(f"USE {self.target_db}"))
+            placeholders = ', '.join([':' + col for col in columns])
+            insert_query = text(f"""
+                INSERT INTO {table_name} ({', '.join(columns)})
+                VALUES ({placeholders})
+            """)
+            
+            target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+            rows_copied = len(rows)
+            
+            logger.info(f"Secure direct copy completed: {rows_copied} rows")
+            return rows_copied
     
     def verify_extraction(self, table_name: str) -> bool:
         """Verify that the extraction was successful by comparing row counts."""
