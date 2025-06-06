@@ -10,6 +10,7 @@ import os
 import json
 from datetime import datetime
 from tabulate import tabulate
+from dotenv import load_dotenv
 from etl_pipeline.scripts.generate_table_config import (
     get_optimized_source_engine,
     analyze_table_relationships,
@@ -19,34 +20,45 @@ from etl_pipeline.scripts.generate_table_config import (
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
 from etl_pipeline.core.connections import ConnectionFactory
 from sqlalchemy import text
+
+# Load environment variables
+load_dotenv()
+
 def test_database_connection():
     """Test database connectivity and basic queries."""
     try:
         # Get readonly source connection
-        source_engine = ConnectionFactory.get_source_connection(readonly=True)
-        target_engine = ConnectionFactory.get_staging_connection()  # Use staging MySQL as target
+        source_engine = ConnectionFactory.get_source_connection()
+        replication_engine = ConnectionFactory.get_replication_connection()
         
         # Test both connections
         with source_engine.connect() as conn:
             result = conn.execute(text("SELECT 1")).fetchone()
             if result[0] == 1:
                 print("✅ Source database connection successful (readonly)")
+                print(f"Connected to: {os.getenv('SOURCE_MYSQL_HOST')}:{os.getenv('SOURCE_MYSQL_PORT')}/{os.getenv('SOURCE_MYSQL_DB')}")
         
-        with target_engine.connect() as conn:
+        with replication_engine.connect() as conn:
             result = conn.execute(text("SELECT 1")).fetchone()
             if result[0] == 1:
-                print("✅ Staging database connection successful")
+                print("✅ Replication database connection successful")
+                print(f"Connected to: {os.getenv('REPLICATION_MYSQL_HOST')}:{os.getenv('REPLICATION_MYSQL_PORT')}/{os.getenv('REPLICATION_MYSQL_DB')}")
         
-        return source_engine, target_engine
+        return source_engine, replication_engine
     except Exception as e:
         print(f"❌ Database connection failed: {str(e)}")
         raise
 
-def test_schema_discovery(source_engine, target_engine, table_name: str):
+def test_schema_discovery(source_engine, replication_engine, table_name: str):
     """Test SchemaDiscovery functionality for a single table."""
     print(f"\n🔍 Testing SchemaDiscovery for table: {table_name}")
     
-    schema_discovery = SchemaDiscovery(source_engine, target_engine, 'opendental', 'staging')  # Use staging schema
+    schema_discovery = SchemaDiscovery(
+        source_engine, 
+        replication_engine, 
+        os.getenv('SOURCE_MYSQL_DB'), 
+        os.getenv('REPLICATION_MYSQL_DB')
+    )
     
     # Get schema information
     schema_info = schema_discovery.get_table_schema(table_name)
@@ -90,13 +102,19 @@ def get_test_tables(engine, limit: int = 10):
         query = text("""
             SELECT table_name
             FROM information_schema.tables
-            WHERE table_schema = 'opendental'
+            WHERE table_schema = :db_name
             AND table_type = 'BASE TABLE'
             ORDER BY table_name
             LIMIT :limit
         """)
         
-        results = conn.execute(query, {'limit': limit}).fetchall()
+        results = conn.execute(
+            query, 
+            {
+                'db_name': os.getenv('SOURCE_MYSQL_DB'),
+                'limit': limit
+            }
+        ).fetchall()
         return [row.table_name for row in results]
 
 def display_relationship_analysis(relationships: dict):
@@ -215,7 +233,7 @@ def main():
     
     try:
         # Test database connections
-        source_engine, target_engine = test_database_connection()
+        source_engine, replication_engine = test_database_connection()
         
         # Get test tables
         test_tables = get_test_tables(source_engine, limit=5)  # Reduced to 5 for clearer output
@@ -223,12 +241,12 @@ def main():
         print(", ".join(test_tables))
         
         # Test SchemaDiscovery for first table
-        schema_info, incremental_columns = test_schema_discovery(source_engine, target_engine, test_tables[0])
+        schema_info, incremental_columns = test_schema_discovery(source_engine, replication_engine, test_tables[0])
         
         # Run configuration analysis
         print("\n🔄 Running configuration analysis...")
-        relationships = analyze_table_relationships(source_engine, 'opendental', test_tables)
-        usage = analyze_table_usage(source_engine, 'opendental', test_tables)
+        relationships = analyze_table_relationships(source_engine, os.getenv('SOURCE_MYSQL_DB'), test_tables)
+        usage = analyze_table_usage(source_engine, os.getenv('SOURCE_MYSQL_DB'), test_tables)
         importance = determine_table_importance(relationships, usage)
         
         # Display results
