@@ -6,12 +6,7 @@ This script will:
 3. Find suitable incremental columns
 4. Generate the appropriate configuration
 
-Optimized to minimize load on source database by:
-- Batching information_schema queries
-- Caching results
-- Using single queries where possible
-- Connection pooling
-- Smart table analysis
+Uses the SchemaDiscovery class for robust schema analysis.
 """
 import os
 import yaml
@@ -19,6 +14,7 @@ from typing import Dict, List, Set, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
+from etl_pipeline.core.connections import ConnectionFactory
 import logging
 from collections import defaultdict
 from tqdm import tqdm
@@ -27,7 +23,6 @@ from datetime import datetime
 import json
 from tabulate import tabulate
 import networkx as nx
-from etl_pipeline.core.connections import ConnectionFactory
 
 class ProgressTracker:
     """Class to track and report progress of schema discovery."""
@@ -62,143 +57,423 @@ class ProgressTracker:
             'successful_tables': self.successful_tables
         }
 
-def get_all_tables(engine, database: str) -> List[str]:
-    """
-    Get all tables from the database.
-    
-    Args:
-        engine: SQLAlchemy engine
-        database: Database name
-        
-    Returns:
-        List[str]: List of table names
-    """
-    with engine.connect() as conn:
-        query = text("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = :db_name 
-            AND table_type = 'BASE TABLE'
-        """)
-        result = conn.execute(query.bindparams(db_name=database))
-        return [row[0] for row in result]
+# Constants for filtering tables
+EXCLUDED_PATTERNS = ['tmp_', 'temp_', 'backup_', '#', 'test_']
 
-def batch_get_schemas(engine, database: str, tables: List[str], pbar) -> Dict[str, Dict]:
-    """
-    Get schema information for multiple tables in batches.
-    
-    Args:
-        engine: SQLAlchemy engine
-        database: Database name
-        tables: List of table names
-        pbar: Progress bar object
-        
-    Returns:
-        Dict[str, Dict]: Schema information for each table
-    """
-    schemas = {}
-    batch_size = 50  # Process tables in batches to avoid memory issues
-    
-    # Get columns information
-    pbar.set_description("Fetching column information")
-    with engine.connect() as conn:
-        for i in range(0, len(tables), batch_size):
-            batch = tables[i:i + batch_size]
-            query = text("""
-                SELECT 
-                    table_name,
-                    column_name,
-                    data_type,
-                    is_nullable,
-                    column_default,
-                    extra
-                FROM information_schema.columns
-                WHERE table_schema = :db_name
-                AND table_name IN :table_names
-            """)
-            result = conn.execute(query.bindparams(
-                db_name=database,
-                table_names=tuple(batch)
-            ))
-            
-            for row in result:
-                if row.table_name not in schemas:
-                    schemas[row.table_name] = {
-                        'columns': [],
-                        'indexes': [],
-                        'foreign_keys': [],
-                        'incremental_columns': []
-                    }
-                schemas[row.table_name]['columns'].append(row)
-    
-    # Get index information
-    pbar.set_description("Fetching index information")
-    with engine.connect() as conn:
-        for i in range(0, len(tables), batch_size):
-            batch = tables[i:i + batch_size]
-            query = text("""
-                SELECT 
-                    table_name,
-                    index_name,
-                    non_unique,
-                    GROUP_CONCAT(column_name ORDER BY seq_in_index) as columns
-                FROM information_schema.statistics
-                WHERE table_schema = :db_name
-                AND table_name IN :table_names
-                GROUP BY table_name, index_name, non_unique
-            """)
-            result = conn.execute(query.bindparams(
-                db_name=database,
-                table_names=tuple(batch)
-            ))
-            
-            for row in result:
-                schemas[row.table_name]['indexes'].append(row)
-    
-    # Get foreign key information
-    pbar.set_description("Fetching foreign key information")
-    with engine.connect() as conn:
-        for i in range(0, len(tables), batch_size):
-            batch = tables[i:i + batch_size]
-            query = text("""
-                SELECT 
-                    table_name,
-                    column_name,
-                    referenced_table_name,
-                    referenced_column_name
-                FROM information_schema.key_column_usage
-                WHERE table_schema = :db_name
-                AND table_name IN :table_names
-                AND referenced_table_name IS NOT NULL
-            """)
-            result = conn.execute(query.bindparams(
-                db_name=database,
-                table_names=tuple(batch)
-            ))
-            
-            for row in result:
-                schemas[row.table_name]['foreign_keys'].append(row)
-    
-    # Identify incremental columns
-    pbar.set_description("Identifying incremental columns")
-    for table_name, schema in schemas.items():
-        for column in schema['columns']:
-            if (column.data_type in ('datetime', 'timestamp') or
-                'auto_increment' in (column.extra or '').lower()):
-                schema['incremental_columns'].append(column)
-    
-    pbar.update(1)
-    return schemas
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(f'etl_pipeline/logs/schema_discovery_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-def generate_summary_report(progress_tracker: ProgressTracker, config: Dict, output_path: str) -> None:
-    """
-    Generate a summary report of the configuration generation process.
+def analyze_table_relationships(schema_discovery: SchemaDiscovery, tables: List[str]) -> Dict[str, Dict]:
+    """Analyze table relationships using SchemaDiscovery."""
+    table_metrics = {}
     
-    Args:
-        progress_tracker: Progress tracker object
-        config: Generated configuration
-        output_path: Path to the output configuration file
-    """
+    # Build relationship graph from foreign keys
+    graph = nx.DiGraph()
+    
+    for table in tables:
+        try:
+            schema_info = schema_discovery.get_table_schema(table)
+            foreign_keys = schema_info['foreign_keys']
+            
+            # Initialize metrics
+            table_metrics[table] = {
+                'referenced_by_count': 0,
+                'references_count': len(foreign_keys),
+                'pagerank_score': 0.0,
+                'is_core_reference': False
+            }
+            
+            # Add edges to graph
+            for fk in foreign_keys:
+                if fk['referenced_table'] in tables:
+                    graph.add_edge(table, fk['referenced_table'])
+                    
+        except Exception as e:
+            logger.warning(f"Could not analyze relationships for {table}: {str(e)}")
+            table_metrics[table] = {
+                'referenced_by_count': 0,
+                'references_count': 0,
+                'pagerank_score': 0.0,
+                'is_core_reference': False
+            }
+    
+    # Calculate PageRank if we have relationships
+    if graph.edges():
+        pagerank_scores = nx.pagerank(graph)
+        for table in tables:
+            if table in graph:
+                table_metrics[table].update({
+                    'referenced_by_count': graph.in_degree(table),
+                    'pagerank_score': pagerank_scores.get(table, 0.0)
+                })
+    
+    # Identify core reference tables
+    if table_metrics:
+        reference_counts = [m['referenced_by_count'] for m in table_metrics.values()]
+        if reference_counts:
+            threshold = max(reference_counts) * 0.3  # Top 30% by references
+            for table, metrics in table_metrics.items():
+                metrics['is_core_reference'] = metrics['referenced_by_count'] >= threshold
+    
+    return table_metrics
+
+def analyze_table_usage(schema_discovery: SchemaDiscovery, tables: List[str]) -> Dict[str, Dict]:
+    """Analyze table usage patterns using SchemaDiscovery."""
+    usage_metrics = {}
+    
+    for table in tables:
+        try:
+            # Get size information
+            size_info = schema_discovery.get_table_size_info(table)
+            
+            # Get schema information for column analysis
+            schema_info = schema_discovery.get_table_schema(table)
+            columns = schema_info['columns']
+            
+            # Analyze column patterns
+            has_audit_columns = any(
+                col['name'].lower() in ['datetestamp', 'datemodified', 'secdatetsedit'] 
+                for col in columns
+            )
+            
+            has_timestamp_columns = any(
+                'timestamp' in col['type'].lower() or 'datetime' in col['type'].lower()
+                for col in columns
+            )
+            
+            has_soft_delete = any(
+                col['name'].lower() in ['isdeleted', 'ishidden', 'isarchived']
+                for col in columns
+            )
+            
+            # Determine update frequency based on auto_increment gap
+            auto_increment_col = next((col for col in columns if 'auto_increment' in (col['extra'] or '').lower()), None)
+            update_frequency = 'low'
+            
+            if auto_increment_col and schema_info['metadata']['auto_increment'] and size_info['row_count']:
+                auto_inc_value = schema_info['metadata']['auto_increment']
+                row_count = size_info['row_count']
+                if auto_inc_value > row_count:
+                    churn_rate = (auto_inc_value - row_count) / row_count * 100
+                    if churn_rate > 50:
+                        update_frequency = 'high'
+                    elif churn_rate > 10:
+                        update_frequency = 'medium'
+            
+            usage_metrics[table] = {
+                'row_count': size_info['row_count'],
+                'size_mb': size_info['total_size_mb'],
+                'has_audit_columns': has_audit_columns,
+                'has_timestamp_columns': has_timestamp_columns,
+                'has_soft_delete': has_soft_delete,
+                'update_frequency': update_frequency
+            }
+            
+        except Exception as e:
+            logger.warning(f"Could not analyze usage for {table}: {str(e)}")
+            usage_metrics[table] = {
+                'row_count': 0,
+                'size_mb': 0.0,
+                'has_audit_columns': False,
+                'has_timestamp_columns': False,
+                'has_soft_delete': False,
+                'update_frequency': 'low'
+            }
+    
+    return usage_metrics
+
+def determine_table_importance(relationships: Dict[str, Dict], usage: Dict[str, Dict]) -> Dict[str, str]:
+    """Determine table importance based purely on discovered data patterns."""
+    importance = {}
+    
+    # Calculate scores for all tables first
+    table_scores = {}
+    for table in relationships.keys():
+        rel_metrics = relationships[table]
+        usage_metrics = usage[table]
+        
+        # Calculate importance score based on discovered characteristics
+        score = 0
+        
+        # Relationship-based scoring (tables that are heavily referenced are important)
+        score += rel_metrics['referenced_by_count'] * 3  # High weight for being referenced
+        score += rel_metrics['pagerank_score'] * 100     # PageRank indicates centrality
+        if rel_metrics['is_core_reference']:
+            score += 50  # Core reference tables are important
+        
+        # Usage-based scoring (tables with audit/tracking features are important)
+        if usage_metrics['has_audit_columns']:
+            score += 40  # Audit columns indicate important business data
+        if usage_metrics['has_timestamp_columns']:
+            score += 25  # Timestamp columns indicate activity tracking
+        if usage_metrics['update_frequency'] == 'high':
+            score += 30  # Frequently updated tables are active/important
+        
+        # Size-based scoring (larger tables likely contain more business data)
+        if usage_metrics['size_mb'] > 500:
+            score += 25  # Very large tables
+        elif usage_metrics['size_mb'] > 100:
+            score += 15  # Large tables
+        elif usage_metrics['size_mb'] > 10:
+            score += 5   # Medium tables
+        
+        # Row count scoring (tables with many rows likely important)
+        if usage_metrics['row_count'] > 100000:
+            score += 20  # Very high row count
+        elif usage_metrics['row_count'] > 10000:
+            score += 10  # High row count
+        elif usage_metrics['row_count'] > 1000:
+            score += 5   # Medium row count
+        
+        table_scores[table] = score
+    
+    # Determine importance levels based on score distribution
+    scores = list(table_scores.values())
+    if scores:
+        scores.sort(reverse=True)
+        
+        # Use percentiles to determine thresholds dynamically
+        total_tables = len(scores)
+        critical_threshold = scores[min(int(total_tables * 0.05), total_tables-1)] if total_tables > 0 else 100  # Top 5%
+        important_threshold = scores[min(int(total_tables * 0.20), total_tables-1)] if total_tables > 0 else 50   # Top 20%
+        audit_threshold = scores[min(int(total_tables * 0.40), total_tables-1)] if total_tables > 0 else 25      # Top 40%
+        
+        # Minimum thresholds to ensure quality
+        critical_threshold = max(critical_threshold, 80)   # Minimum score for critical
+        important_threshold = max(important_threshold, 40)  # Minimum score for important
+        audit_threshold = max(audit_threshold, 15)          # Minimum score for audit
+    else:
+        critical_threshold = 80
+        important_threshold = 40
+        audit_threshold = 15
+    
+    # Assign importance levels
+    for table, score in table_scores.items():
+        rel_metrics = relationships[table]
+        usage_metrics = usage[table]
+        
+        if score >= critical_threshold:
+            importance[table] = 'critical'
+        elif score >= important_threshold:
+            importance[table] = 'important'
+        elif (score >= audit_threshold or 
+              usage_metrics['has_audit_columns'] or 
+              usage_metrics['has_timestamp_columns']):
+            importance[table] = 'audit'
+        elif rel_metrics['is_core_reference']:
+            importance[table] = 'reference'
+        else:
+            importance[table] = 'standard'
+    
+    return importance
+
+def get_recommended_batch_size(usage_metrics: Dict) -> int:
+    """Determine optimal batch size based on table characteristics."""
+    size_mb = usage_metrics['size_mb']
+    update_freq = usage_metrics['update_frequency']
+    
+    if size_mb < 1:
+        return 5000
+    elif size_mb < 100:
+        return 2000 if update_freq == 'high' else 3000
+    elif size_mb < 1000:
+        return 1000 if update_freq == 'high' else 2000
+    else:
+        return 500 if update_freq == 'high' else 1000
+
+def get_extraction_strategy(usage_metrics: Dict, importance: str) -> str:
+    """Determine optimal extraction strategy."""
+    size_mb = usage_metrics['size_mb']
+    update_freq = usage_metrics['update_frequency']
+    
+    if size_mb < 1:
+        return 'full_table'
+    elif size_mb < 100:
+        return 'incremental'
+    elif size_mb < 1000:
+        return 'chunked_incremental' if update_freq == 'high' else 'incremental'
+    else:
+        return 'streaming_incremental'
+
+def generate_smart_table_config(
+    table_name: str, 
+    schema_discovery: SchemaDiscovery,
+    relationships: Dict[str, Dict],
+    usage: Dict[str, Dict],
+    importance: Dict[str, str]
+) -> Dict:
+    """Generate configuration using SchemaDiscovery and analysis."""
+    try:
+        # Get schema information using SchemaDiscovery
+        schema_info = schema_discovery.get_table_schema(table_name)
+        incremental_columns = schema_discovery.get_incremental_columns(table_name)
+        size_info = schema_discovery.get_table_size_info(table_name)
+        
+        # Get analysis data
+        rel_metrics = relationships.get(table_name, {})
+        usage_metrics = usage.get(table_name, {})
+        table_importance = importance.get(table_name, 'standard')
+        
+        # Find the best incremental column
+        best_incremental = None
+        if incremental_columns:
+            best_incremental = incremental_columns[0]['column_name']
+        
+        # Get dependencies from foreign keys
+        dependencies = [fk['referenced_table'] for fk in schema_info['foreign_keys']]
+        
+        # Generate source table config
+        source_config = {
+            'incremental_column': best_incremental,
+            'batch_size': get_recommended_batch_size(usage_metrics),
+            'extraction_strategy': get_extraction_strategy(usage_metrics, table_importance),
+            'is_modeled': table_importance in ['critical', 'important'],
+            'table_importance': table_importance,
+            'estimated_size_mb': size_info['total_size_mb'],
+            'estimated_rows': size_info['row_count'],
+            'dependencies': dependencies,
+            'monitoring': {
+                'alert_on_failure': table_importance in ['critical', 'important'],
+                'max_extraction_time_minutes': min(180, max(5, int(size_info['total_size_mb'] / 10))),
+                'data_quality_threshold': 0.99 if table_importance == 'critical' else 0.95
+            }
+        }
+        
+        # Generate staging config
+        staging_config = {
+            'schema': 'staging',
+            'indexes': [
+                {
+                    'columns': idx['columns'],
+                    'type': 'primary' if idx['is_unique'] and idx['name'] == 'PRIMARY' else 'btree'
+                }
+                for idx in schema_info['indexes']
+            ],
+            'cleanup_after_load': not usage_metrics.get('has_audit_columns', False)
+        }
+        
+        # Generate target config
+        target_config = {
+            'schema': 'analytics',
+            'indexes': staging_config['indexes'],
+            'partitioning': {
+                'type': 'range',
+                'column': best_incremental,
+                'interval': '1 month'
+            } if best_incremental else None
+        }
+        
+        return {
+            'source': source_config,
+            'staging': staging_config,
+            'target': target_config
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating config for {table_name}: {str(e)}")
+        return None
+
+def save_comprehensive_json_analysis(
+    relationships: Dict[str, Dict], 
+    usage: Dict[str, Dict], 
+    importance: Dict[str, str],
+    schema_discovery: SchemaDiscovery,
+    tables: List[str]
+) -> str:
+    """Save comprehensive analysis data to JSON file for all tables."""
+    from datetime import datetime
+    import json
+    
+    logger.info("Generating comprehensive JSON analysis...")
+    
+    # Build comprehensive analysis data
+    analysis_data = {
+        'metadata': {
+            'timestamp': datetime.now().isoformat(),
+            'total_tables': len(tables),
+            'analysis_version': '2.0',
+            'source_database': os.getenv('SOURCE_MYSQL_DB'),
+            'generated_by': 'generate_table_config.py'
+        },
+        'relationships': relationships,
+        'usage': usage,
+        'importance': importance,
+        'detailed_schemas': {},
+        'summary_statistics': {}
+    }
+    
+    # Add detailed schema information for a sample of important tables
+    important_tables = [table for table, imp in importance.items() 
+                       if imp in ['critical', 'important']][:10]  # Limit to 10 for file size
+    
+    for table in important_tables:
+        try:
+            schema_info = schema_discovery.get_table_schema(table)
+            incremental_cols = schema_discovery.get_incremental_columns(table)
+            
+            analysis_data['detailed_schemas'][table] = {
+                'schema_info': schema_info,
+                'incremental_columns': incremental_cols
+            }
+        except Exception as e:
+            logger.warning(f"Could not get detailed schema for {table}: {str(e)}")
+    
+    # Calculate summary statistics
+    rel_stats = list(relationships.values())
+    usage_stats = list(usage.values())
+    
+    analysis_data['summary_statistics'] = {
+        'table_classifications': {
+            'critical': sum(1 for imp in importance.values() if imp == 'critical'),
+            'important': sum(1 for imp in importance.values() if imp == 'important'),
+            'audit': sum(1 for imp in importance.values() if imp == 'audit'),
+            'reference': sum(1 for imp in importance.values() if imp == 'reference'),
+            'standard': sum(1 for imp in importance.values() if imp == 'standard'),
+        },
+        'relationship_metrics': {
+            'max_referenced_by': max((r['referenced_by_count'] for r in rel_stats), default=0),
+            'max_references': max((r['references_count'] for r in rel_stats), default=0),
+            'total_core_references': sum(1 for r in rel_stats if r['is_core_reference']),
+            'avg_pagerank': sum(r['pagerank_score'] for r in rel_stats) / len(rel_stats) if rel_stats else 0
+        },
+        'usage_metrics': {
+            'total_size_mb': sum(u['size_mb'] for u in usage_stats),
+            'total_rows': sum(u['row_count'] for u in usage_stats),
+            'tables_with_audit_columns': sum(1 for u in usage_stats if u['has_audit_columns']),
+            'tables_with_timestamps': sum(1 for u in usage_stats if u['has_timestamp_columns']),
+            'tables_with_soft_delete': sum(1 for u in usage_stats if u['has_soft_delete']),
+            'high_frequency_tables': sum(1 for u in usage_stats if u['update_frequency'] == 'high')
+        },
+        'top_tables_by_size': sorted(
+            [(table, usage[table]['size_mb']) for table in tables],
+            key=lambda x: x[1], reverse=True
+        )[:20],
+        'top_tables_by_rows': sorted(
+            [(table, usage[table]['row_count']) for table in tables],
+            key=lambda x: x[1], reverse=True
+        )[:20]
+    }
+    
+    # Save to JSON file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = f'etl_pipeline/logs/comprehensive_analysis_{timestamp}.json'
+    
+    with open(json_path, 'w') as f:
+        json.dump(analysis_data, f, indent=2, default=str)
+    
+    logger.info(f"📊 Comprehensive analysis saved to: {json_path}")
+    return json_path
+
+def generate_summary_report(progress_tracker: ProgressTracker, config: Dict, output_path: str, json_path: str = None) -> None:
+    """Generate a summary report of the configuration generation process."""
     progress = progress_tracker.get_progress()
     
     # Calculate statistics
@@ -236,6 +511,7 @@ Failed Tables
 Output
 ------
 Configuration written to: {output_path}
+{f"Comprehensive analysis: {json_path}" if json_path else ""}
 """
     
     # Write report to file
@@ -246,623 +522,91 @@ Configuration written to: {output_path}
     # Print report to console
     logger.info("\n" + report)
 
-# Constants
-EXCLUDED_PATTERNS = ['tmp_', 'temp_', 'backup_', '#', 'test_']
-CORE_TABLES = {
-    'patient', 'appointment', 'procedurelog', 'payment', 'claim', 
-    'treatment', 'recall', 'insurance'
-}
-IMPORTANT_TABLES = {
-    'provider', 'operatory', 'definition', 'preference', 'userod',
-    'schedule', 'scheduleop', 'timeadjust', 'claimproc'
-}
-AUDIT_TABLES = {
-    'securitylog', 'emailmessage', 'commlog', 'histappointment',
-    'patientnote', 'treatplan', 'document'
-}
-SYSTEM_TABLES = {
-    'procedurecode', 'icd9', 'icd10', 'cpt', 'fee', 'feesched',
-    'carrier', 'insplan', 'benefit', 'covcat'
-}
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'etl_pipeline/logs/schema_discovery_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
-def get_optimized_source_engine():
-    """Get source engine optimized for schema discovery."""
-    return create_engine(
-        ConnectionFactory.get_source_connection(readonly=True).url,
-        poolclass=QueuePool,
-        pool_size=2,  # Limit concurrent connections
-        pool_pre_ping=True,
-        connect_args={
-            "read_timeout": 30,
-            "write_timeout": 30,
-            "connect_timeout": 10
-        }
-    )
-
-def analyze_table_relationships(engine, db_name: str, tables: List[str]) -> Dict[str, Dict]:
-    """Analyze table relationships and dependencies."""
-    table_metrics = {}
-    
-    with engine.connect() as conn:
-        # Get all foreign key relationships
-        query = text("""
-            SELECT 
-                table_name,
-                referenced_table_name
-            FROM information_schema.key_column_usage
-            WHERE table_schema = :db_name
-            AND referenced_table_name IS NOT NULL
-            AND table_name IN :tables
-        """)
-        
-        results = conn.execute(query.bindparams(db_name=db_name, tables=tuple(tables))).fetchall()
-        
-        # Initialize metrics for all tables
-        for table in tables:
-            table_metrics[table] = {
-                'referenced_by_count': 0,
-                'references_count': 0,
-                'pagerank_score': 0.0,
-                'is_core_reference': False
-            }
-        
-        # If no foreign keys found, return basic metrics
-        if not results:
-            return table_metrics
-        
-        # Build relationship graph
-        graph = nx.DiGraph()
-        for row in results:
-            if row.table_name in tables and row.referenced_table_name in tables:
-                graph.add_edge(row.table_name, row.referenced_table_name)
-        
-        # Calculate metrics
-        for table in tables:
-            if table in graph:
-                table_metrics[table].update({
-                    'referenced_by_count': graph.in_degree(table),
-                    'references_count': graph.out_degree(table),
-                    'pagerank_score': nx.pagerank(graph).get(table, 0.0)
-                })
-        
-        # Identify core reference tables (tables referenced by many others)
-        if table_metrics:
-            reference_counts = [m['referenced_by_count'] for m in table_metrics.values()]
-            if reference_counts:
-                reference_threshold = sorted(reference_counts, reverse=True)[:10]
-                if reference_threshold:
-                    threshold = reference_threshold[-1]
-                    for table, metrics in table_metrics.items():
-                        metrics['is_core_reference'] = metrics['referenced_by_count'] >= threshold
-        
-        return table_metrics
-
-def analyze_table_usage(source_engine, source_db: str, tables: List[str]) -> Dict[str, Dict]:
-    """
-    Analyze table usage patterns based on:
-    1. Update frequency (auto_increment gap)
-    2. Presence of audit columns
-    3. Table size and growth
-    """
-    with source_engine.connect() as conn:
-        usage_query = text("""
-            SELECT 
-                t.table_name,
-                t.table_rows,
-                t.auto_increment,
-                t.data_length,
-                t.index_length,
-                -- Check for audit columns
-                (SELECT COUNT(*) FROM information_schema.columns c 
-                 WHERE c.table_schema = t.table_schema 
-                 AND c.table_name = t.table_name 
-                 AND c.column_name IN ('DateTStamp', 'DateModified', 'SecDateTEdit')) AS has_audit_columns,
-                -- Check for timestamp columns
-                (SELECT COUNT(*) FROM information_schema.columns c 
-                 WHERE c.table_schema = t.table_schema 
-                 AND c.table_name = t.table_name 
-                 AND c.data_type IN ('datetime', 'timestamp')) AS has_timestamp_columns,
-                -- Check for soft delete
-                (SELECT COUNT(*) FROM information_schema.columns c 
-                 WHERE c.table_schema = t.table_schema 
-                 AND c.table_name = t.table_name 
-                 AND c.column_name IN ('IsDeleted', 'IsHidden', 'IsArchived')) AS has_soft_delete
-            FROM information_schema.tables t
-            WHERE t.table_schema = :db_name
-            AND t.table_name IN :table_names
-            AND t.table_type = 'BASE TABLE'
-        """)
-        
-        results = conn.execute(usage_query.bindparams(
-            db_name=source_db,
-            table_names=tuple(tables)
-        )).fetchall()
-        
-        usage_metrics = {}
-        for row in results:
-            # Calculate update frequency
-            update_frequency = 'low'
-            if row.auto_increment and row.table_rows:
-                churn_rate = (row.auto_increment - row.table_rows) / row.table_rows * 100
-                if churn_rate > 50:
-                    update_frequency = 'high'
-                elif churn_rate > 10:
-                    update_frequency = 'medium'
-            
-            # Calculate table size
-            size_mb = (row.data_length + row.index_length) / 1024 / 1024
-            
-            usage_metrics[row.table_name] = {
-                'row_count': row.table_rows or 0,
-                'size_mb': round(size_mb, 2),
-                'has_audit_columns': bool(row.has_audit_columns),
-                'has_timestamp_columns': bool(row.has_timestamp_columns),
-                'has_soft_delete': bool(row.has_soft_delete),
-                'update_frequency': update_frequency
-            }
-        
-        return usage_metrics
-
-def determine_table_importance(relationships: Dict[str, Dict], usage: Dict[str, Dict]) -> Dict[str, str]:
-    """
-    Determine table importance based on relationship and usage analysis.
-    Returns a mapping of table names to importance levels.
-    """
-    importance = {}
-    
-    for table in relationships.keys():
-        rel_metrics = relationships[table]
-        usage_metrics = usage[table]
-        
-        # Calculate importance score
-        score = 0
-        
-        # Relationship-based scoring
-        score += rel_metrics['referenced_by_count'] * 2  # Weight references to this table
-        score += rel_metrics['pagerank_score'] * 100     # Weight PageRank score
-        if rel_metrics['is_core_reference']:
-            score += 50  # Bonus for core reference tables
-        
-        # Usage-based scoring
-        if usage_metrics['has_audit_columns']:
-            score += 30  # Tables with audit columns are important
-        if usage_metrics['has_timestamp_columns']:
-            score += 20  # Tables with timestamps are likely important
-        if usage_metrics['update_frequency'] == 'high':
-            score += 25  # Frequently updated tables are important
-        if usage_metrics['size_mb'] > 100:
-            score += 15  # Large tables are likely important
-        
-        # Determine importance level based on score
-        if score >= 100:
-            importance[table] = 'critical'
-        elif score >= 50:
-            importance[table] = 'important'
-        elif usage_metrics['has_audit_columns'] or usage_metrics['has_timestamp_columns']:
-            importance[table] = 'audit'
-        elif rel_metrics['is_core_reference']:
-            importance[table] = 'reference'
-        else:
-            importance[table] = 'standard'
-    
-    return importance
-
-def analyze_table_characteristics(source_engine, source_db: str, tables: List[str]) -> Dict[str, Dict]:
-    """
-    Analyze table characteristics to make smarter configuration decisions.
-    This helps optimize batch sizes and extraction strategies.
-    """
-    # Analyze relationships
-    logger.info("Analyzing table relationships...")
-    relationships = analyze_table_relationships(source_engine, source_db, tables)
-    
-    # Analyze usage patterns
-    logger.info("Analyzing table usage patterns...")
-    usage = analyze_table_usage(source_engine, source_db, tables)
-    
-    # Determine table importance
-    logger.info("Determining table importance...")
-    importance = determine_table_importance(relationships, usage)
-    
-    # Combine all metrics
-    table_analysis = {}
-    for table in tables:
-        table_analysis[table] = {
-            'size_mb': usage[table]['size_mb'],
-            'row_count': usage[table]['row_count'],
-            'update_frequency': usage[table]['update_frequency'],
-            'has_audit_columns': usage[table]['has_audit_columns'],
-            'has_timestamp_columns': usage[table]['has_timestamp_columns'],
-            'has_soft_delete': usage[table]['has_soft_delete'],
-            'referenced_by_count': relationships[table]['referenced_by_count'],
-            'references_count': relationships[table]['references_count'],
-            'pagerank_score': relationships[table]['pagerank_score'],
-            'is_core_reference': relationships[table]['is_core_reference'],
-            'table_importance': importance[table],
-            # Determine optimal batch size based on table characteristics
-            'recommended_batch_size': get_recommended_batch_size(usage[table]),
-            'extraction_strategy': get_extraction_strategy(usage[table], importance[table])
-        }
-    
-    return table_analysis
-
-def get_recommended_batch_size(usage_metrics: Dict) -> int:
-    """Determine optimal batch size based on table characteristics."""
-    size_mb = usage_metrics['size_mb']
-    update_freq = usage_metrics['update_frequency']
-    
-    if size_mb < 1:  # Small tables
-        return 5000
-    elif size_mb < 100:  # Medium tables
-        return 2000 if update_freq == 'high' else 3000
-    elif size_mb < 1000:  # Large tables
-        return 1000 if update_freq == 'high' else 2000
-    else:  # Very large tables
-        return 500 if update_freq == 'high' else 1000
-
-def get_extraction_strategy(usage_metrics: Dict, importance: str) -> str:
-    """Determine optimal extraction strategy based on table characteristics."""
-    size_mb = usage_metrics['size_mb']
-    update_freq = usage_metrics['update_frequency']
-    
-    if size_mb < 1:
-        return 'full_table'
-    elif size_mb < 100:
-        return 'chunked'
-    elif size_mb < 1000:
-        return 'chunked_parallel' if update_freq == 'high' else 'chunked'
-    else:
-        return 'streaming'
-
-def classify_table_importance(table_name: str) -> str:
-    """Classify OpenDental tables by business importance."""
-    table_lower = table_name.lower()
-    
-    if any(core in table_lower for core in CORE_TABLES):
-        return 'critical'
-    elif any(imp in table_lower for imp in IMPORTANT_TABLES):
-        return 'important'  
-    elif any(audit in table_lower for audit in AUDIT_TABLES):
-        return 'audit'
-    elif any(sys in table_lower for sys in SYSTEM_TABLES):
-        return 'reference'
-    else:
-        return 'standard'
-
-def get_column_priority(column_name: str, data_type: str, extra: str) -> int:
-    """Determine priority of a column for incremental loading."""
-    priority = 0
-    
-    # Handle SQLAlchemy result row
-    if hasattr(column_name, 'column_name'):
-        column_name = column_name.column_name
-    if hasattr(data_type, 'data_type'):
-        data_type = data_type.data_type
-    if hasattr(extra, 'extra'):
-        extra = extra.extra
-    
-    # Prefer timestamp columns
-    if data_type in ('datetime', 'timestamp'):
-        priority += 100
-        # Prefer audit columns
-        if any(name in column_name.lower() for name in ['modified', 'updated', 'created']):
-            priority += 50
-    
-    # Prefer auto-increment columns
-    if extra and 'auto_increment' in str(extra).lower():
-        priority += 75
-    
-    # Prefer date columns
-    if data_type == 'date':
-        priority += 25
-    
-    return priority
-
-def generate_validation_rules(table_name: str, schema_info: Dict, analysis: Dict) -> List[Dict]:
-    """Generate appropriate validation rules based on table characteristics."""
-    rules = []
-    
-    # Get primary key columns for not_null validation
-    pk_columns = []
-    for idx in schema_info['indexes']:
-        if not idx.non_unique and 'PRIMARY' in (idx.index_name or '').upper():
-            pk_columns.extend(idx.columns.split(','))
-    
-    if pk_columns:
-        rules.append({
-            'name': 'not_null',
-            'columns': [col.strip() for col in pk_columns]
-        })
-    
-    # Add foreign key validation
-    for fk in schema_info['foreign_keys']:
-        rules.append({
-            'name': 'relationships',
-            'columns': [fk.column_name],
-            'references': f"{fk.referenced_table_name}.{fk.referenced_column_name}"
-        })
-    
-    # Add business-specific validations based on table importance
-    importance = analysis.get('table_importance', 'standard')
-    if importance == 'critical':
-        # Add stricter validation for critical tables
-        rules.append({
-            'name': 'row_count_change',
-            'threshold': 0.1,  # Alert if row count changes by more than 10%
-            'severity': 'error'
-        })
-    
-    return rules
-
-def get_max_extraction_time(analysis: Dict) -> int:
-    """Calculate appropriate timeout based on table size."""
-    size_mb = analysis.get('size_mb', 0)
-    
-    if size_mb < 10:
-        return 5  # 5 minutes for small tables
-    elif size_mb < 100:
-        return 15  # 15 minutes for medium tables
-    elif size_mb < 1000:
-        return 60  # 1 hour for large tables
-    else:
-        return 180  # 3 hours for very large tables
-
-def get_quality_threshold(analysis: Dict) -> float:
-    """Set data quality thresholds based on table importance."""
-    importance = analysis.get('table_importance', 'standard')
-    
-    thresholds = {
-        'critical': 0.99,    # 99% quality required
-        'important': 0.95,   # 95% quality required  
-        'audit': 0.90,       # 90% quality required
-        'reference': 0.98,   # 98% quality required (reference data should be clean)
-        'standard': 0.85     # 85% quality required
-    }
-    
-    return thresholds.get(importance, 0.85)
-
-def has_circular_dependencies(dependencies: Dict[str, List[str]]) -> bool:
-    """Check for circular dependencies in table relationships."""
-    graph = nx.DiGraph()
-    
-    # Add edges to the graph
-    for table, deps in dependencies.items():
-        for dep in deps:
-            graph.add_edge(table, dep)
-    
-    try:
-        # Find cycles
-        cycles = list(nx.simple_cycles(graph))
-        return len(cycles) > 0
-    except nx.NetworkXNoCycle:
-        return False
-
-def validate_generated_config(config: Dict) -> List[str]:
-    """Validate the generated configuration for common issues."""
-    issues = []
-    
-    # Check for circular dependencies
-    dependencies = {table: info.get('dependencies', []) 
-                   for table, info in config['source_tables'].items()}
-    
-    if has_circular_dependencies(dependencies):
-        issues.append("Circular dependencies detected in table relationships")
-    
-    # Check for missing incremental columns on large tables
-    for table, info in config['source_tables'].items():
-        if (info.get('estimated_rows', 0) > 10000 and 
-            not info.get('incremental_column')):
-            issues.append(f"Large table {table} has no incremental column")
-    
-    # Check for unrealistic batch sizes
-    for table, info in config['source_tables'].items():
-        batch_size = info.get('batch_size', 1000)
-        size_mb = info.get('estimated_size_mb', 0)
-        
-        if size_mb > 100 and batch_size > 5000:
-            issues.append(f"Table {table} has large batch size for its size")
-    
-    return issues
-
-def generate_smart_table_config(table_name: str, schema_info: Dict, analysis: Dict) -> Dict:
-    """Generate configuration using both schema discovery and table analysis."""
-    try:
-        # Get analysis data
-        table_analysis = analysis.get(table_name, {})
-        
-        # Find the best incremental column
-        incremental_columns = schema_info['incremental_columns']
-        best_incremental = None
-        
-        if incremental_columns:
-            # Sort by priority and pick the best one
-            sorted_columns = sorted(incremental_columns, 
-                                  key=lambda x: get_column_priority(x.column_name, x.data_type, x.extra))
-            best_incremental = sorted_columns[0].column_name
-        
-        # Get foreign keys for dependencies
-        dependencies = list(set(fk.referenced_table_name for fk in schema_info['foreign_keys']))
-        
-        # Generate validation rules based on table analysis
-        validation_rules = generate_validation_rules(table_name, schema_info, table_analysis)
-        
-        # Generate source table config with smart defaults
-        source_config = {
-            'incremental_column': best_incremental,
-            'batch_size': table_analysis.get('recommended_batch_size', 1000),
-            'extraction_strategy': table_analysis.get('extraction_strategy', 'chunked'),
-            'is_modeled': table_analysis.get('table_importance') in ['critical', 'important'],
-            'table_importance': table_analysis.get('table_importance', 'standard'),
-            'estimated_size_mb': table_analysis.get('size_mb', 0),
-            'estimated_rows': table_analysis.get('row_count', 0),
-            'is_append_only': table_analysis.get('is_append_only', False),
-            'validation_rules': validation_rules,
-            'dependencies': dependencies,
-            'monitoring': {
-                'alert_on_failure': table_analysis.get('table_importance') in ['critical', 'important'],
-                'max_extraction_time_minutes': get_max_extraction_time(table_analysis),
-                'data_quality_threshold': get_quality_threshold(table_analysis)
-            }
-        }
-        
-        # Generate staging config
-        staging_config = {
-            'schema': 'staging',
-            'indexes': [
-                {
-                    'columns': idx.columns.split(',') if hasattr(idx, 'columns') else [idx.column_name],
-                    'type': 'primary' if not idx.non_unique else 'btree'
-                }
-                for idx in schema_info['indexes']
-            ],
-            'cleanup_after_load': not table_analysis.get('is_append_only', False)
-        }
-        
-        # Generate target config
-        target_config = {
-            'schema': 'analytics',
-            'indexes': staging_config['indexes'],
-            'partitioning': {
-                'type': 'range',
-                'column': best_incremental,
-                'interval': '1 month'
-            } if best_incremental else None
-        }
-        
-        return {
-            'source': source_config,
-            'staging': staging_config,
-            'target': target_config
-        }
-        
-    except Exception as e:
-        logger.error(f"Error generating smart config for {table_name}: {str(e)}")
-        return None
-
 def main():
-    """Main function to generate tables.yaml configuration."""
+    """Main function to generate tables.yaml configuration using SchemaDiscovery."""
     try:
         # Create logs directory if it doesn't exist
         os.makedirs('etl_pipeline/logs', exist_ok=True)
         
-        # Get optimized database connections
-        source_engine = get_optimized_source_engine()
-        target_engine = ConnectionFactory.get_staging_connection()  # Use staging MySQL as target
+        # Get database connections
+        source_engine = ConnectionFactory.get_source_connection()
+        replication_engine = ConnectionFactory.get_replication_connection()
         
-        # Get all tables
-        tables = get_all_tables(source_engine, 'opendental')
+        # Initialize SchemaDiscovery
+        source_db = os.getenv('SOURCE_MYSQL_DB')
+        replication_db = os.getenv('REPLICATION_MYSQL_DB')
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            target_engine=replication_engine,
+            source_db=source_db,
+            target_db=replication_db
+        )
+        
+        # Discover all tables
+        logger.info("Discovering tables...")
+        all_tables = schema_discovery.discover_all_tables()
+        
         # Filter out excluded tables
-        tables = [t for t in tables if not any(pattern in t.lower() for pattern in EXCLUDED_PATTERNS)]
+        tables = [t for t in all_tables if not any(pattern in t.lower() for pattern in EXCLUDED_PATTERNS)]
         total_tables = len(tables)
-        logger.info(f"Found {total_tables} tables in source database")
+        logger.info(f"Found {total_tables} tables to process (filtered from {len(all_tables)} total)")
         
         # Initialize progress tracker
         progress_tracker = ProgressTracker(total_tables)
         
-        # Create progress bar for schema discovery
-        with tqdm(total=total_tables, desc="Schema Discovery") as pbar:
-            # Batch get all schema information
-            logger.info("Fetching schema information for all tables...")
-            schemas = batch_get_schemas(source_engine, 'opendental', tables, pbar)
-            
-            # Analyze table characteristics
-            logger.info("Analyzing table characteristics...")
-            table_analysis = analyze_table_characteristics(source_engine, 'opendental', tables)
-            
-            # Generate configurations
-            config = {
-                'source_tables': {},
-                'staging_tables': {},
-                'target_tables': {}
-            }
-            
-            # Process tables in batches to avoid memory issues
-            batch_size = 50
-            for i in range(0, len(tables), batch_size):
-                batch = tables[i:i + batch_size]
-                logger.info(f"Processing tables {i+1} to {min(i+batch_size, len(tables))}...")
-                
-                for table_name in batch:
-                    try:
-                        table_config = generate_smart_table_config(table_name, schemas[table_name], table_analysis)
-                        if table_config:
-                            config['source_tables'][table_name] = table_config['source']
-                            config['staging_tables'][table_name] = table_config['staging']
-                            config['target_tables'][table_name] = table_config['target']
-                            progress_tracker.update(table_name, success=True)
-                        else:
-                            progress_tracker.update(table_name, success=False)
-                    except Exception as e:
-                        logger.error(f"Error processing table {table_name}: {str(e)}")
+        # Analyze table characteristics
+        logger.info("Analyzing table relationships...")
+        relationships = analyze_table_relationships(schema_discovery, tables)
+        
+        logger.info("Analyzing table usage patterns...")
+        usage = analyze_table_usage(schema_discovery, tables)
+        
+        logger.info("Determining table importance...")
+        importance = determine_table_importance(relationships, usage)
+        
+        # Generate configurations
+        config = {
+            'source_tables': {},
+            'staging_tables': {},
+            'target_tables': {}
+        }
+        
+        # Process tables with progress tracking
+        logger.info("Generating table configurations...")
+        with tqdm(total=total_tables, desc="Generating configs") as pbar:
+            for table_name in tables:
+                try:
+                    table_config = generate_smart_table_config(
+                        table_name, schema_discovery, relationships, usage, importance
+                    )
+                    
+                    if table_config:
+                        config['source_tables'][table_name] = table_config['source']
+                        config['staging_tables'][table_name] = table_config['staging']
+                        config['target_tables'][table_name] = table_config['target']
+                        progress_tracker.update(table_name, success=True)
+                    else:
                         progress_tracker.update(table_name, success=False)
-                    
-                    pbar.update(1)
-                    
-                    # Log progress every 10 tables
-                    if progress_tracker.processed_tables % 10 == 0:
-                        progress = progress_tracker.get_progress()
-                        logger.info(
-                            f"Progress: {progress['processed']}/{progress['total']} tables "
-                            f"({progress['success_rate']:.1f}% success) - "
-                            f"Elapsed: {progress['elapsed_time']:.1f}s - "
-                            f"Remaining: {progress['estimated_remaining']:.1f}s"
-                        )
+                        
+                except Exception as e:
+                    logger.error(f"Error processing table {table_name}: {str(e)}")
+                    progress_tracker.update(table_name, success=False)
+                
+                pbar.update(1)
+                
+                # Log progress every 50 tables
+                if progress_tracker.processed_tables % 50 == 0:
+                    progress = progress_tracker.get_progress()
+                    logger.info(
+                        f"Progress: {progress['processed']}/{progress['total']} tables "
+                        f"({progress['success_rate']:.1f}% success)"
+                    )
         
-        # Validate configuration
-        logger.info("Validating generated configuration...")
-        issues = validate_generated_config(config)
-        if issues:
-            logger.warning("Configuration validation issues found:")
-            for issue in issues:
-                logger.warning(f"- {issue}")
-        
-        # Add ETL status tables
-        logger.info("Adding ETL status tables...")
-        etl_tables = ['etl_load_status', 'etl_transform_status']
-        for table in etl_tables:
-            config['source_tables'][table] = {
-                'incremental_column': '_updated_at',
-                'batch_size': 100,
-                'is_modeled': True,
-                'validation_rules': [
-                    {
-                        'name': 'not_null',
-                        'columns': ['id', 'table_name', 'last_extracted', 'extraction_status']
-                    }
-                ],
-                'dependencies': []
-            }
-            
-            config['staging_tables'][table] = {
-                'schema': 'staging',
-                'indexes': [
-                    {'columns': ['id'], 'type': 'primary'},
-                    {'columns': ['table_name'], 'type': 'btree'},
-                    {'columns': ['_updated_at'], 'type': 'btree'}
-                ],
-                'cleanup_after_load': False
-            }
-            
-            config['target_tables'][table] = {
-                'schema': 'analytics',
-                'indexes': config['staging_tables'][table]['indexes'],
-                'partitioning': {
-                    'type': 'range',
-                    'column': '_updated_at',
-                    'interval': '1 month'
-                }
-            }
+        # Save comprehensive JSON analysis
+        json_path = save_comprehensive_json_analysis(
+            relationships, usage, importance, schema_discovery, tables
+        )
         
         # Write to YAML file
         output_path = os.path.join('etl_pipeline', 'config', 'tables.yaml')
@@ -871,7 +615,9 @@ def main():
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
         
         # Generate and display summary report
-        generate_summary_report(progress_tracker, config, output_path)
+        generate_summary_report(progress_tracker, config, output_path, json_path)
+        
+        logger.info("✅ Configuration generation completed successfully!")
         
     except Exception as e:
         logger.error(f"Error generating configuration: {str(e)}")
