@@ -48,10 +48,7 @@ class ConnectionFactory:
             engine = create_engine(
                 connection_string,
                 pool_pre_ping=True,
-                pool_recycle=3600,
-                connect_args={
-                    'readonly': readonly
-                } if readonly else {}
+                pool_recycle=3600
             )
             
             logger.info(f"Successfully created MySQL connection to {database}")
