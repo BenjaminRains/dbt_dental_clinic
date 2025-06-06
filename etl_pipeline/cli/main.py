@@ -142,24 +142,37 @@ def run(ctx: click.Context, tables: Optional[str], full: bool, source: str,
         
         if tables:
             table_list = [t.strip() for t in tables.split(',')]
-            click.echo(f"🚀 Running pipeline for tables: {', '.join(table_list)}")
+            click.echo(f"[START] Running pipeline for tables: {', '.join(table_list)}")
             etl_logger.log_etl_start("multiple_tables", "pipeline")
             
-            # TODO: Implement actual pipeline logic here
-            for table in table_list:
-                etl_logger.log_etl_start(table, "extract")
-                # Add your ETL logic here
-                etl_logger.log_etl_complete(table, "extract", records_count=0)
+            # Import and use our IntelligentELTPipeline
+            from etl_pipeline.elt_pipeline import IntelligentELTPipeline
             
-            etl_logger.log_etl_complete("multiple_tables", "pipeline")
+            try:
+                pipeline = IntelligentELTPipeline()
+                success_tables, failed_tables = pipeline.process_tables_parallel(table_list, max_workers=5)
+                
+                total_records = 0
+                for table in success_tables:
+                    etl_logger.log_etl_complete(table, "extract", records_count=0)  # Will be updated with actual counts
+                    total_records += 1  # Placeholder - actual implementation will track real record counts
+                
+                for table in failed_tables:
+                    etl_logger.log_etl_error(table, "extract", Exception("Processing failed"))
+                
+                etl_logger.log_etl_complete("multiple_tables", "pipeline", records_count=total_records)
+                
+            except Exception as e:
+                etl_logger.log_etl_error("multiple_tables", "pipeline", e)
+                raise
             
         elif full:
-            click.echo("🚀 Running complete ETL pipeline...")
+            click.echo("[START] Running complete ETL pipeline...")
             etl_logger.log_etl_start("full_pipeline", "complete_etl")
             
             # Get all tables from configuration
             all_tables = settings.list_tables('source_tables')
-            click.echo(f"📊 Processing {len(all_tables)} tables")
+            click.echo(f"[INFO] Processing {len(all_tables)} tables")
             
             # TODO: Implement full pipeline logic here
             for table in all_tables:
@@ -169,16 +182,16 @@ def run(ctx: click.Context, tables: Optional[str], full: bool, source: str,
             
             etl_logger.log_etl_complete("full_pipeline", "complete_etl")
         else:
-            click.echo("🚀 Running default pipeline")
+            click.echo("[START] Running default pipeline")
             etl_logger.log_etl_start("default", "pipeline")
             # TODO: Implement default pipeline logic
             etl_logger.log_etl_complete("default", "pipeline")
         
-        click.echo("✅ Pipeline execution completed successfully")
+        click.echo("[PASS] Pipeline execution completed successfully")
         
     except Exception as e:
         etl_logger.log_etl_error("pipeline", "execution", e)
-        click.echo(f"❌ Pipeline execution failed: {str(e)}")
+        click.echo(f"[FAIL] Pipeline execution failed: {str(e)}")
         sys.exit(1)
 
 @cli.command()
