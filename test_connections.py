@@ -48,11 +48,14 @@ def test_source_mysql_connection():
         
         # List tables
         conn.execute(text(f"USE {os.getenv('SOURCE_MYSQL_DB')}"))
-        result = conn.execute(text("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = %s
-        """, (os.getenv('SOURCE_MYSQL_DB'),)))
+        result = conn.execute(
+            text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = :db_name
+            """),
+            {"db_name": os.getenv('SOURCE_MYSQL_DB')}
+        )
         
         tables = [row[0] for row in result]
         if tables:
@@ -97,11 +100,14 @@ def test_replication_mysql_connection():
         
         # List tables
         conn.execute(text(f"USE {os.getenv('REPLICATION_MYSQL_DB')}"))
-        result = conn.execute(text("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = %s
-        """, (os.getenv('REPLICATION_MYSQL_DB'),)))
+        result = conn.execute(
+            text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = :db_name
+            """),
+            {"db_name": os.getenv('REPLICATION_MYSQL_DB')}
+        )
         
         tables = [row[0] for row in result]
         if tables:
@@ -146,11 +152,14 @@ def test_analytics_postgres_connection():
         print("✅ Analytics PostgreSQL connection successful")
         
         # List tables
-        result = conn.execute(text("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = %s
-        """, (os.getenv('ANALYTICS_POSTGRES_SCHEMA'),)))
+        result = conn.execute(
+            text("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = :schema_name
+            """),
+            {"schema_name": os.getenv('ANALYTICS_POSTGRES_SCHEMA')}
+        )
         
         tables = [row[0] for row in result]
         if tables:
