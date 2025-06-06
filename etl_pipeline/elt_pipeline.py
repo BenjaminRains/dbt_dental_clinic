@@ -1,20 +1,24 @@
 """
-Main ETL pipeline implementation.
-Handles the extraction and loading of data from OpenDental to analytics.
+Intelligent ETL pipeline implementation.
+Handles the extraction and loading of data from OpenDental to analytics
+using data-driven configuration and priority-based processing.
 """
 import os
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 import logging
-from datetime import datetime
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
 from etl_pipeline.core.connections import ConnectionFactory
 from dotenv import load_dotenv
 import re
-from mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.mysql_replicator import ExactMySQLReplicator
 from etl_pipeline.core.metrics import MetricsCollector
 import sys
+import yaml
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -30,9 +34,14 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-class ELTPipeline:
-    def __init__(self):
-        """Initialize the ETL pipeline."""
+class IntelligentELTPipeline:
+    def __init__(self, config_path: str = 'etl_pipeline/config/tables.yaml'):
+        """
+        Initialize the intelligent ETL pipeline (Phase 1: Configuration Only).
+        
+        This phase loads configuration and validates environment without creating
+        database connections. Call initialize_connections() for database operations.
+        """
         # Load environment variables
         self.source_db = os.getenv('SOURCE_MYSQL_DB')
         self.replication_db = os.getenv('REPLICATION_MYSQL_DB')
@@ -51,16 +60,117 @@ class ELTPipeline:
         if missing_dbs:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_dbs)}")
         
-        # Initialize connections
+        # Load intelligent configuration
+        self.config_path = config_path
+        self.table_config = self.load_table_configuration()
+        
+        # Initialize connection state (Phase 2 will populate these)
         self.source_engine = None
         self.replication_engine = None
         self.analytics_engine = None
+        self.mysql_replicator = None
         
         # Initialize metrics
         self.metrics = MetricsCollector()
         
-        # Initialize tracking tables
-        self.ensure_tracking_tables()
+        # Track initialization state
+        self.connections_initialized = False
+        self.tracking_tables_created = False
+        
+        logger.info(f"Initialized intelligent ETL pipeline with {len(self.table_config.get('source_tables', {}))} table configurations")
+        logger.info("Call initialize_connections() to enable database operations")
+    
+    def load_table_configuration(self) -> Dict:
+        """Load intelligent table configuration from YAML file."""
+        try:
+            with open(self.config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            logger.info(f"Loaded configuration for {len(config.get('source_tables', {}))} tables")
+            return config
+            
+        except FileNotFoundError:
+            logger.error(f"Configuration file not found: {self.config_path}")
+            raise
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing YAML configuration: {str(e)}")
+            raise
+    
+    def get_tables_by_priority(self, importance_level: str) -> List[str]:
+        """Get list of tables by importance level."""
+        tables = []
+        source_tables = self.table_config.get('source_tables', {})
+        
+        for table_name, config in source_tables.items():
+            if config.get('table_importance') == importance_level:
+                tables.append(table_name)
+        
+        logger.info(f"Found {len(tables)} tables with importance level: {importance_level}")
+        return tables
+    
+    def get_critical_tables(self) -> List[str]:
+        """Get the top 5 critical tables for Phase 1 implementation."""
+        critical_tables = self.get_tables_by_priority('critical')
+        
+        # Sort by estimated size (descending) to get the largest critical tables first
+        source_tables = self.table_config.get('source_tables', {})
+        critical_with_size = [
+            (table, source_tables[table].get('estimated_size_mb', 0))
+            for table in critical_tables
+        ]
+        critical_with_size.sort(key=lambda x: x[1], reverse=True)
+        
+        # Return top 5 for Phase 1
+        top_5_critical = [table for table, _ in critical_with_size[:5]]
+        
+        logger.info(f"Phase 1 critical tables: {top_5_critical}")
+        return top_5_critical
+    
+    def get_table_config(self, table_name: str) -> Dict:
+        """Get configuration for a specific table."""
+        source_tables = self.table_config.get('source_tables', {})
+        config = source_tables.get(table_name, {})
+        
+        if not config:
+            logger.warning(f"No configuration found for table: {table_name}")
+            # Return default configuration
+            return {
+                'incremental_column': None,
+                'batch_size': 5000,
+                'extraction_strategy': 'full_table',
+                'table_importance': 'reference',
+                'monitoring': {
+                    'alert_on_failure': False,
+                    'max_extraction_time_minutes': 10,
+                    'data_quality_threshold': 0.95
+                }
+            }
+        
+        return config
+    
+    def should_use_incremental(self, table_name: str) -> bool:
+        """Check if table supports incremental extraction."""
+        config = self.get_table_config(table_name)
+        return config.get('extraction_strategy') == 'incremental'
+    
+    def get_incremental_column(self, table_name: str) -> Optional[str]:
+        """Get the timestamp column for incremental extraction."""
+        config = self.get_table_config(table_name)
+        return config.get('incremental_column')
+    
+    def get_batch_size(self, table_name: str) -> int:
+        """Get intelligent batch size for table."""
+        config = self.get_table_config(table_name)
+        return config.get('batch_size', 5000)
+    
+    def get_monitoring_config(self, table_name: str) -> Dict:
+        """Get monitoring configuration for table."""
+        config = self.get_table_config(table_name)
+        return config.get('monitoring', {
+            'alert_on_failure': False,
+            'max_extraction_time_minutes': 10,
+            'data_quality_threshold': 0.95
+        })
     
     def validate_database_names(self):
         """Validate that all required database names are set."""
@@ -84,8 +194,20 @@ class ELTPipeline:
         logger.info(f"PostgreSQL schema: {self.analytics_schema}")
     
     def initialize_connections(self):
-        """Initialize database connections with proper error handling."""
+        """
+        Initialize database connections and setup tracking tables (Phase 2).
+        
+        This creates all database connections and ensures tracking tables exist.
+        Must be called before any database operations.
+        """
+        if self.connections_initialized:
+            logger.debug("Database connections already initialized")
+            return
+            
         try:
+            logger.info("Initializing database connections...")
+            
+            # Create database connections
             self.source_engine = ConnectionFactory.get_source_connection()
             self.replication_engine = ConnectionFactory.get_replication_connection()
             self.analytics_engine = ConnectionFactory.get_analytics_connection()
@@ -98,14 +220,21 @@ class ELTPipeline:
                 target_db=self.replication_db
             )
             
-            logger.info("Successfully initialized all database connections")
+            # Now that connections exist, create tracking tables
+            self.ensure_tracking_tables()
+            
+            # Mark as successfully initialized
+            self.connections_initialized = True
+            
+            logger.info("Successfully initialized all database connections and tracking tables")
+            
         except Exception as e:
             logger.error(f"Failed to initialize database connections: {str(e)}")
             self.cleanup()
             raise
     
     def cleanup(self):
-        """Clean up database connections."""
+        """Clean up database connections and reset state."""
         try:
             if self.source_engine:
                 self.source_engine.dispose()
@@ -121,6 +250,12 @@ class ELTPipeline:
                 self.analytics_engine.dispose()
                 self.analytics_engine = None
                 logger.info("Closed analytics database connection")
+            
+            # Reset state
+            self.mysql_replicator = None
+            self.connections_initialized = False
+            self.tracking_tables_created = False
+            
         except Exception as e:
             logger.error(f"Error during connection cleanup: {str(e)}")
     
@@ -133,8 +268,21 @@ class ELTPipeline:
         self.cleanup()
     
     def ensure_tracking_tables(self):
-        """Create necessary tracking tables in replication and analytics databases."""
+        """
+        Create necessary tracking tables in replication and analytics databases.
+        
+        This method requires database connections to be initialized first.
+        """
+        if self.tracking_tables_created:
+            logger.debug("Tracking tables already created")
+            return
+            
+        if not self._connections_available():
+            raise RuntimeError("Database connections must be initialized before creating tracking tables. Call initialize_connections() first.")
+        
         try:
+            logger.info("Creating tracking tables...")
+            
             # Create extract tracking table in replication MySQL
             with self.replication_engine.begin() as conn:
                 conn.execute(text(f"USE {self.replication_db}"))
@@ -143,7 +291,7 @@ class ELTPipeline:
                     CREATE TABLE IF NOT EXISTS etl_extract_status (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         table_name VARCHAR(255) NOT NULL UNIQUE,
-                        last_extracted TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
+                        last_extracted TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
                         rows_extracted INTEGER DEFAULT 0,
                         extraction_status VARCHAR(50) DEFAULT 'pending',
                         schema_hash VARCHAR(32),
@@ -163,7 +311,7 @@ class ELTPipeline:
                     CREATE TABLE IF NOT EXISTS {self.analytics_schema}.etl_load_status (
                         id SERIAL PRIMARY KEY,
                         table_name VARCHAR(255) NOT NULL UNIQUE,
-                        last_loaded TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
+                        last_loaded TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
                         rows_loaded INTEGER DEFAULT 0,
                         load_status VARCHAR(50) DEFAULT 'pending',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -171,17 +319,40 @@ class ELTPipeline:
                     )
                 """))
             
+            self.tracking_tables_created = True
             logger.info("Tracking tables created successfully")
             
         except Exception as e:
             logger.error(f"Error creating tracking tables: {str(e)}")
             raise
     
+    def _connections_available(self) -> bool:
+        """Check if all required database connections are available."""
+        return all([
+            self.source_engine is not None,
+            self.replication_engine is not None,
+            self.analytics_engine is not None
+        ])
+    
+    def _require_connections(self):
+        """Ensure database connections are available, or raise an error."""
+        if not self._connections_available():
+            raise RuntimeError(
+                "Database connections required but not available. "
+                "Call initialize_connections() before database operations."
+            )
+    
     def extract_to_replication(self, table_name: str, force_full: bool = False) -> bool:
         """
-        EXTRACT phase using exact MySQL replication.
-        This performs a pure extract-load without any transformations.
+        Intelligent EXTRACT phase using configuration-driven approach.
+        Uses smart batching and incremental extraction when available.
         """
+        self._require_connections()  # Ensure database connections are available
+        
+        start_time = time.time()
+        table_config = self.get_table_config(table_name)
+        monitoring = self.get_monitoring_config(table_name)
+        
         try:
             # Get last extraction info
             with self.replication_engine.connect() as conn:
@@ -206,16 +377,42 @@ class ELTPipeline:
                 logger.info(f"Schema change detected for {table_name}, forcing full extraction")
                 force_full = True
             
-            # Perform extraction
-            rows_extracted = self.mysql_replicator.extract_table_data(
-                table_name=table_name,
-                last_extracted=last_extracted,
-                force_full=force_full
-            )
+            # Determine extraction strategy
+            use_incremental = self.should_use_incremental(table_name) and not force_full and last_extracted
+            batch_size = self.get_batch_size(table_name)
+            
+            logger.info(f"Extracting {table_name} - Strategy: {'incremental' if use_incremental else 'full'}, Batch size: {batch_size}")
+            
+            # Perform intelligent extraction
+            if use_incremental:
+                rows_extracted = self.mysql_replicator.extract_incremental_data(
+                    table_name=table_name,
+                    incremental_column=self.get_incremental_column(table_name),
+                    last_extracted=last_extracted,
+                    batch_size=batch_size
+                )
+            else:
+                rows_extracted = self.mysql_replicator.extract_table_data(
+                    table_name=table_name,
+                    last_extracted=last_extracted,
+                    force_full=force_full,
+                    batch_size=batch_size
+                )
+            
+            # Check processing time against SLA
+            processing_time = (time.time() - start_time) / 60  # Convert to minutes
+            max_time = monitoring.get('max_extraction_time_minutes', 10)
+            
+            if processing_time > max_time:
+                logger.warning(f"{table_name} extraction took {processing_time:.2f} minutes (SLA: {max_time} minutes)")
+                if monitoring.get('alert_on_failure', False):
+                    self.send_monitoring_alert(table_name, 'TIME_EXCEEDED', f"Extraction time: {processing_time:.2f}min")
             
             # Verify extraction
             if not self.mysql_replicator.verify_extraction(table_name):
                 logger.error(f"Extraction verification failed for {table_name}")
+                if monitoring.get('alert_on_failure', False):
+                    self.send_monitoring_alert(table_name, 'VERIFICATION_FAILED', "Data verification failed")
                 return False
             
             # Update extraction status
@@ -237,40 +434,97 @@ class ELTPipeline:
                     schema_hash=current_schema_hash
                 ))
             
-            logger.info(f"Successfully extracted {rows_extracted} rows for {table_name}")
+            importance = table_config.get('table_importance', 'reference')
+            logger.info(f"[PASS] Successfully extracted {rows_extracted} rows for {table_name} ({importance}) in {processing_time:.2f} minutes")
             return True
             
         except Exception as e:
-            logger.error(f"Error in extract phase for {table_name}: {str(e)}")
+            processing_time = (time.time() - start_time) / 60
+            logger.error(f"[FAIL] Error in extract phase for {table_name} after {processing_time:.2f} minutes: {str(e)}")
+            
+            # Send alert for critical tables
+            if monitoring.get('alert_on_failure', False):
+                self.send_monitoring_alert(table_name, 'EXTRACTION_FAILED', str(e))
+            
             return False
+    
+    def send_monitoring_alert(self, table_name: str, alert_type: str, message: str):
+        """Send monitoring alert for critical issues."""
+        table_config = self.get_table_config(table_name)
+        importance = table_config.get('table_importance', 'reference')
+        
+        # Log the alert (in a real system, this would integrate with monitoring tools)
+        alert_msg = f"[FAIL] ALERT [{alert_type}] - Table: {table_name} ({importance}) - {message}"
+        logger.error(alert_msg)
+        
+        # TODO: Integrate with actual monitoring systems (PagerDuty, Slack, etc.)
+        # For now, just log at ERROR level for critical tables
+        if importance == 'critical':
+            logger.critical(alert_msg)
     
     def load_to_analytics(self, table_name: str) -> bool:
         """
-        Load data from replication MySQL to PostgreSQL analytics.
-        Applies basic type conversions for PostgreSQL compatibility.
+        Intelligent LOAD phase with data quality validation.
+        Applies PostgreSQL conversions and monitors data quality.
         """
+        self._require_connections()  # Ensure database connections are available
+        
+        start_time = time.time()
+        monitoring = self.get_monitoring_config(table_name)
+        
         try:
             # Read from replication MySQL
             with self.replication_engine.connect() as conn:
+                source_count_query = f"SELECT COUNT(*) FROM {table_name}"
+                source_count = conn.execute(text(source_count_query)).scalar()
+                
+                if source_count == 0:
+                    logger.info(f"No data to load for {table_name}")
+                    return True
+                
                 df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
-            
-            if df.empty:
-                logger.info(f"No data to load for {table_name}")
-                return True
             
             # Apply basic PostgreSQL compatibility conversions
             df_clean = self.apply_basic_postgres_conversions(df, table_name)
             
-            # Load to PostgreSQL analytics
+            # Data quality validation
+            quality_score = len(df_clean) / source_count if source_count > 0 else 1.0
+            quality_threshold = monitoring.get('data_quality_threshold', 0.95)
+            
+            if quality_score < quality_threshold:
+                error_msg = f"Data quality below threshold: {quality_score:.3f} < {quality_threshold}"
+                logger.error(f"[FAIL] {table_name} - {error_msg}")
+                if monitoring.get('alert_on_failure', False):
+                    self.send_monitoring_alert(table_name, 'DATA_QUALITY_FAILED', error_msg)
+                return False
+            
+            # Load to PostgreSQL analytics with intelligent batching
+            batch_size = min(self.get_batch_size(table_name), 10000)  # Cap at 10k for memory
+            
             with self.analytics_engine.begin() as conn:
                 df_clean.to_sql(
-                    table_name,  # Clean name: raw.patient, raw.appointment
+                    table_name,
                     conn,
                     schema=self.analytics_schema,
                     if_exists='replace',
                     index=False,
-                    method='multi'
+                    method='multi',
+                    chunksize=batch_size
                 )
+            
+            # Verify load success
+            with self.analytics_engine.connect() as conn:
+                target_count_query = f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}"
+                target_count = conn.execute(text(target_count_query)).scalar()
+                
+                final_quality_score = target_count / source_count if source_count > 0 else 1.0
+                
+                if final_quality_score < quality_threshold:
+                    error_msg = f"Final data quality check failed: {final_quality_score:.3f} < {quality_threshold}"
+                    logger.error(f"[FAIL] {table_name} - {error_msg}")
+                    if monitoring.get('alert_on_failure', False):
+                        self.send_monitoring_alert(table_name, 'LOAD_QUALITY_FAILED', error_msg)
+                    return False
             
             # Update load status using PostgreSQL syntax
             with self.analytics_engine.begin() as conn:
@@ -286,14 +540,23 @@ class ELTPipeline:
                 """).bindparams(
                     table_name=table_name,
                     now=datetime.now(),
-                    rows=len(df_clean)
+                    rows=target_count
                 ))
             
-            logger.info(f"Successfully loaded {len(df_clean)} rows to analytics for {table_name}")
+            processing_time = (time.time() - start_time) / 60
+            table_config = self.get_table_config(table_name)
+            importance = table_config.get('table_importance', 'reference')
+            
+            logger.info(f"[PASS] Successfully loaded {target_count} rows to analytics for {table_name} ({importance}) - Quality: {final_quality_score:.3f} in {processing_time:.2f} minutes")
             return True
             
         except Exception as e:
-            logger.error(f"Error in load phase for {table_name}: {str(e)}")
+            processing_time = (time.time() - start_time) / 60
+            logger.error(f"[FAIL] Error in load phase for {table_name} after {processing_time:.2f} minutes: {str(e)}")
+            
+            if monitoring.get('alert_on_failure', False):
+                self.send_monitoring_alert(table_name, 'LOAD_FAILED', str(e))
+            
             return False
     
     def apply_basic_postgres_conversions(self, df: pd.DataFrame, table_name: str) -> pd.DataFrame:
@@ -327,7 +590,7 @@ class ELTPipeline:
     
     def run_elt_pipeline(self, table_name: str, force_full: bool = False) -> bool:
         """
-        Run the complete ETL pipeline for a table.
+        Run the complete intelligent ETL pipeline for a single table.
         
         Args:
             table_name: Name of the table to process
@@ -336,44 +599,250 @@ class ELTPipeline:
         Returns:
             bool: True if successful, False otherwise
         """
+        start_time = time.time()
+        table_config = self.get_table_config(table_name)
+        importance = table_config.get('table_importance', 'reference')
+        
         try:
-            # Initialize connections if needed
-            if not all([self.source_engine, self.replication_engine, self.analytics_engine]):
+            # Ensure connections are initialized
+            if not self.connections_initialized:
                 self.initialize_connections()
+            
+            logger.info(f"[START] Starting ETL pipeline for {table_name} ({importance})")
             
             # Extract to replication
             if not self.extract_to_replication(table_name, force_full):
-                logger.error(f"Extraction failed for {table_name}")
+                logger.error(f"[FAIL] Extraction failed for {table_name}")
                 return False
             
             # Load to analytics
             if not self.load_to_analytics(table_name):
-                logger.error(f"Loading failed for {table_name}")
+                logger.error(f"[FAIL] Loading failed for {table_name}")
                 return False
             
-            logger.info(f"Successfully completed ETL pipeline for {table_name}")
+            total_time = (time.time() - start_time) / 60
+            logger.info(f"[PASS] Successfully completed ETL pipeline for {table_name} ({importance}) in {total_time:.2f} minutes")
             return True
             
         except Exception as e:
-            logger.error(f"Error in ETL pipeline for {table_name}: {str(e)}")
+            total_time = (time.time() - start_time) / 60
+            logger.error(f"[FAIL] Error in ETL pipeline for {table_name} after {total_time:.2f} minutes: {str(e)}")
             return False
-        finally:
-            self.cleanup()
+    
+    def process_tables_by_priority(self, importance_levels: List[str] = None, max_workers: int = 5) -> Dict[str, List[str]]:
+        """
+        Process tables by priority with intelligent parallelization.
+        
+        Args:
+            importance_levels: List of importance levels to process (default: all)
+            max_workers: Maximum number of parallel workers for critical tables
+            
+        Returns:
+            Dict with success/failure lists for each importance level
+        """
+        if importance_levels is None:
+            importance_levels = ['critical', 'important', 'audit', 'reference']
+        
+        results = {}
+        
+        for importance in importance_levels:
+            tables = self.get_tables_by_priority(importance)
+            if not tables:
+                logger.info(f"No tables found for importance level: {importance}")
+                continue
+                
+            logger.info(f"[START] Processing {len(tables)} {importance} tables")
+            
+            if importance == 'critical' and len(tables) > 1:
+                # Process critical tables in parallel for speed
+                success_tables, failed_tables = self.process_tables_parallel(tables, max_workers)
+            else:
+                # Process other tables sequentially to manage resources
+                success_tables, failed_tables = self.process_tables_sequential(tables)
+            
+            results[importance] = {
+                'success': success_tables,
+                'failed': failed_tables,
+                'total': len(tables)
+            }
+            
+            logger.info(f"[PASS] {importance.capitalize()} tables: {len(success_tables)}/{len(tables)} successful")
+            
+            # Stop processing if critical tables failed
+            if importance == 'critical' and failed_tables:
+                logger.error(f"[FAIL] Critical table failures detected. Stopping pipeline.")
+                break
+        
+        return results
+    
+    def process_tables_parallel(self, tables: List[str], max_workers: int = 5) -> Tuple[List[str], List[str]]:
+        """Process tables in parallel using ThreadPoolExecutor."""
+        success_tables = []
+        failed_tables = []
+        
+        logger.info(f"[START] Processing {len(tables)} tables in parallel (max workers: {max_workers})")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_table = {
+                executor.submit(self.run_elt_pipeline, table): table 
+                for table in tables
+            }
+            
+            # Process completed tasks
+            for future in as_completed(future_to_table):
+                table = future_to_table[future]
+                try:
+                    success = future.result()
+                    if success:
+                        success_tables.append(table)
+                    else:
+                        failed_tables.append(table)
+                except Exception as e:
+                    logger.error(f"[FAIL] Exception in parallel processing for {table}: {str(e)}")
+                    failed_tables.append(table)
+        
+        return success_tables, failed_tables
+    
+    def process_tables_sequential(self, tables: List[str]) -> Tuple[List[str], List[str]]:
+        """Process tables sequentially."""
+        success_tables = []
+        failed_tables = []
+        
+        logger.info(f"[SEQ] Processing {len(tables)} tables sequentially")
+        
+        for table in tables:
+            try:
+                success = self.run_elt_pipeline(table)
+                if success:
+                    success_tables.append(table)
+                else:
+                    failed_tables.append(table)
+            except Exception as e:
+                logger.error(f"[FAIL] Exception in sequential processing for {table}: {str(e)}")
+                failed_tables.append(table)
+        
+        return success_tables, failed_tables
+    
+    def run_phase1_critical_tables(self) -> bool:
+        """
+        Run Phase 1 implementation: Process top 5 critical tables.
+        This is the entry point for Phase 1 testing.
+        """
+        logger.info("[START] Starting Phase 1: Critical Tables Processing")
+        
+        # Get top 5 critical tables
+        critical_tables = self.get_critical_tables()
+        
+        if not critical_tables:
+            logger.error("[FAIL] No critical tables found for Phase 1")
+            return False
+        
+        logger.info(f"[INFO] Phase 1 tables: {critical_tables}")
+        
+        # Process critical tables with parallel execution  
+        success_tables, failed_tables = self.process_tables_parallel(critical_tables, max_workers=5)
+        
+        # Report results
+        success_rate = len(success_tables) / len(critical_tables) * 100
+        logger.info(f"[INFO] Phase 1 Results: {len(success_tables)}/{len(critical_tables)} successful ({success_rate:.1f}%)")
+        
+        if failed_tables:
+            logger.error(f"[FAIL] Failed tables: {failed_tables}")
+            return False
+        
+        logger.info("[PASS] Phase 1 completed successfully!")
+        return True
 
 def main():
-    """Main entry point for the ETL pipeline."""
+    """Main entry point for the intelligent ETL pipeline."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Intelligent OpenDental ETL Pipeline')
+    parser.add_argument('--phase', choices=['1', '2', '3', '4'], default='1',
+                       help='Implementation phase to run (default: 1)')
+    parser.add_argument('--tables', type=str, nargs='+',
+                       help='Specific tables to process')
+    parser.add_argument('--importance', choices=['critical', 'important', 'audit', 'reference'],
+                       help='Process tables by importance level')
+    parser.add_argument('--dry-run', action='store_true',
+                       help='Show what would be processed without executing')
+    parser.add_argument('--config', type=str, default='etl_pipeline/config/tables.yaml',
+                       help='Path to table configuration file')
+    
+    args = parser.parse_args()
+    
     try:
-        pipeline = ELTPipeline()
+        # Initialize intelligent pipeline
+        pipeline = IntelligentELTPipeline(config_path=args.config)
         pipeline.validate_database_names()
+        pipeline.initialize_connections()
         
-        # Example usage
-        tables = ['patient', 'appointment', 'treatment']
-        for table in tables:
-            pipeline.run_elt_pipeline(table)
+        if args.dry_run:
+            logger.info("[TEST] DRY RUN MODE - Showing what would be processed")
+            
+            if args.tables:
+                tables = args.tables
+            elif args.importance:
+                tables = pipeline.get_tables_by_priority(args.importance)
+            else:
+                # Default to Phase 1 critical tables
+                tables = pipeline.get_critical_tables()
+            
+            logger.info(f"[INFO] Would process {len(tables)} tables: {tables}")
+            
+            for table in tables:
+                config = pipeline.get_table_config(table)
+                logger.info(f"  - {table}: {config.get('table_importance')} "
+                           f"({config.get('estimated_size_mb', 0):.1f} MB, "
+                           f"{config.get('extraction_strategy')} extraction)")
+            return
+        
+        # Execute based on arguments
+        if args.tables:
+            # Process specific tables
+            logger.info(f"[START] Processing specific tables: {args.tables}")
+            success_count = 0
+            for table in args.tables:
+                if pipeline.run_elt_pipeline(table):
+                    success_count += 1
+            
+            logger.info(f"[PASS] Completed: {success_count}/{len(args.tables)} tables successful")
+            
+        elif args.importance:
+            # Process by importance level
+            logger.info(f"[START] Processing {args.importance} tables")
+            results = pipeline.process_tables_by_priority([args.importance])
+            
+        elif args.phase == '1':
+            # Phase 1: Critical tables only
+            if not pipeline.run_phase1_critical_tables():
+                logger.error("[FAIL] Phase 1 failed")
+                sys.exit(1)
+                
+        elif args.phase == '2':
+            # Phase 2: Critical + Important tables
+            logger.info("[START] Starting Phase 2: Critical + Important Tables")
+            results = pipeline.process_tables_by_priority(['critical', 'important'])
+            
+        elif args.phase == '3':
+            # Phase 3: Critical + Important + Audit tables
+            logger.info("[START] Starting Phase 3: Critical + Important + Audit Tables")
+            results = pipeline.process_tables_by_priority(['critical', 'important', 'audit'])
+            
+        elif args.phase == '4':
+            # Phase 4: All tables
+            logger.info("[START] Starting Phase 4: All Tables")
+            results = pipeline.process_tables_by_priority()
+        
+        logger.info("[PASS] ETL Pipeline completed successfully!")
             
     except Exception as e:
-        logger.error(f"Pipeline failed: {str(e)}")
+        logger.error(f"[FAIL] Pipeline failed: {str(e)}")
         sys.exit(1)
+    finally:
+        if 'pipeline' in locals():
+            pipeline.cleanup()
 
 if __name__ == "__main__":
     main()
