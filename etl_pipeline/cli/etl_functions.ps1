@@ -148,8 +148,18 @@ function Setup-ETLDatabases {
 
 # Quick action functions
 function Quick-ETLStatus {
-    Write-Host "📊 Quick ETL status check..." -ForegroundColor Magenta
-    etl status --format summary
+    param(
+        [switch]$IncludeDental,
+        [string]$Format = "summary"
+    )
+    
+    if ($IncludeDental) {
+        Write-Host "📊 Quick ETL status check with dental intelligence..." -ForegroundColor Magenta
+        etl status --format $Format --include-dental-intelligence
+    } else {
+        Write-Host "📊 Quick ETL status check..." -ForegroundColor Magenta
+        etl status --format $Format
+    }
 }
 
 function Quick-ETLValidate {
@@ -201,6 +211,32 @@ function Test-HIPAACompliance {
     
     Write-Host "🔒 Running HIPAA compliance check..." -ForegroundColor Magenta
     etl compliance-check $args
+}
+
+# New enhanced health check function
+function Test-ComprehensiveHealth {
+    param(
+        [switch]$IncludeDentalIntelligence,
+        [string]$OutputFile,
+        [string]$Format = "summary"
+    )
+    
+    Write-Host "🏥 Running comprehensive health check..." -ForegroundColor Magenta
+    
+    if ($IncludeDentalIntelligence) {
+        Write-Host "   🧠 Including dental practice intelligence..." -ForegroundColor Cyan
+        $args = @("status", "--format", $Format, "--include-dental-intelligence")
+    } else {
+        Write-Host "   🔧 Basic technical health check..." -ForegroundColor Cyan
+        $args = @("status", "--format", $Format)
+    }
+    
+    if ($OutputFile) {
+        $args += "--output", $OutputFile
+        Write-Host "   📄 Results will be saved to: $OutputFile" -ForegroundColor Gray
+    }
+    
+    etl @args
 }
 
 # Remove the Export-ModuleMember line since we're dot-sourcing this file
