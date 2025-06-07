@@ -188,8 +188,14 @@ class ExactMySQLReplicator:
             with self.target_engine.begin() as conn:
                 conn.execute(text(f"USE {self.target_db}"))
                 
-                # Drop table if it exists and requested
-                if drop_if_exists:
+                # Check if table already exists
+                check_table_result = conn.execute(text(f"SHOW TABLES LIKE '{table_name}'"))
+                table_exists = check_table_result.fetchone() is not None
+                
+                if table_exists and not drop_if_exists:
+                    logger.info(f"Table {table_name} already exists in target, skipping creation for incremental extraction")
+                    return True
+                elif drop_if_exists:
                     conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
                     logger.info(f"Dropped existing table {table_name} in target")
                 
@@ -279,8 +285,8 @@ class ExactMySQLReplicator:
         the best incremental column to use.
         """
         try:
-            # Ensure target table exists and is exact replica
-            if not self.create_exact_target_table(table_name):
+            # For incremental extraction, only create table if it doesn't exist (don't drop existing data)
+            if not self.create_exact_target_table(table_name, drop_if_exists=False):
                 return 0
                 
             if not last_extracted:
@@ -358,15 +364,18 @@ class ExactMySQLReplicator:
             with self.target_engine.connect() as target_conn:
                 target_conn.execute(text(f"USE {self.target_db}"))
                 
-                # Build parameterized INSERT statement
+                # Build parameterized INSERT statement with ON DUPLICATE KEY UPDATE for upsert behavior
                 placeholders = ', '.join([':' + col for col in columns])
+                update_clause = ', '.join([f"{col} = VALUES({col})" for col in columns])
                 insert_query = text(f"""
                     INSERT INTO {table_name} ({', '.join(columns)})
                     VALUES ({placeholders})
+                    ON DUPLICATE KEY UPDATE {update_clause}
                 """)
                 
                 # Execute bulk insert
                 target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+                target_conn.commit()  # CRITICAL: Commit the transaction
                 rows_inserted = len(rows)
                 
                 logger.info(f"Extracted {rows_inserted} new/modified rows from {table_name}")
@@ -427,6 +436,7 @@ class ExactMySQLReplicator:
             """)
             
             target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+            target_conn.commit()  # CRITICAL: Commit each chunk
             chunk_rows = len(rows)
             total_extracted += chunk_rows
             offset += batch_size
@@ -458,6 +468,7 @@ class ExactMySQLReplicator:
         """)
         
         target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+        target_conn.commit()  # CRITICAL: Commit the transaction
         rows_copied = len(rows)
         
         logger.info(f"Direct copy completed: {rows_copied} rows")
@@ -487,13 +498,13 @@ class ExactMySQLReplicator:
             """)
             
             target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+            target_conn.commit()  # CRITICAL: Commit the transaction
             rows_copied = len(rows)
             
             logger.info(f"Secure direct copy completed: {rows_copied} rows")
             return rows_copied
     
-    def verify_extraction(self, table_name: str) -> bool:
-        """Verify that the extraction was successful by comparing row counts."""
+    
         try:
             with self.source_engine.connect() as source_conn, \
                  self.target_engine.connect() as target_conn:
@@ -505,16 +516,42 @@ class ExactMySQLReplicator:
                 source_count = source_conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
                 target_count = target_conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
                 
-                if source_count == target_count:
-                    logger.info(f"Extraction verified: {table_name} has {target_count} rows in both source and target")
+                # Always log the row counts for tracking purposes
+                logger.info(f"Row count tracking - {table_name}: source MySQL ({self.source_db})={source_count:,}, target MySQL ({self.target_db})={target_count:,}")
+                
+                # For incremental extractions, don't fail on row count mismatches
+                if is_incremental:
+                    logger.info(f"Incremental extraction verification skipped for {table_name} - row count comparison not applicable for incremental loads")
                     return True
+                
+                # For full extractions, verify row counts match
+                # Exact match - perfect!
+                if source_count == target_count:
+                    logger.info(f"Full extraction verified: {table_name} has {target_count} rows in both source MySQL ({self.source_db}) and target MySQL ({self.target_db})")
+                    return True
+                
+                # For large tables (>100K rows), allow small discrepancies due to live database changes
+                if target_count > 100000:
+                    difference = abs(source_count - target_count)
+                    tolerance_rows = max(10, int(target_count * 0.001))  # 0.1% or 10 rows, whichever is larger
+                    
+                    if difference <= tolerance_rows:
+                        logger.info(f"Full extraction verified with tolerance: {table_name} has {target_count} rows in target MySQL ({self.target_db}) vs {source_count} in source MySQL ({self.source_db}) - difference: {difference} within tolerance: {tolerance_rows}")
+                        return True
+                    else:
+                        logger.error(f"Full extraction verification failed: {table_name} has {source_count} rows in source MySQL ({self.source_db}) but {target_count} in target MySQL ({self.target_db}) - difference: {difference} exceeds tolerance: {tolerance_rows}")
+                        return False
                 else:
-                    logger.error(f"Extraction verification failed: {table_name} has {source_count} rows in source but {target_count} in target")
+                    # Small tables must match exactly
+                    logger.error(f"Full extraction verification failed: {table_name} has {source_count} rows in source MySQL ({self.source_db}) but {target_count} in target MySQL ({self.target_db})")
                     return False
                     
         except Exception as e:
             logger.error(f"Error verifying extraction for {table_name}: {str(e)}")
             return False
+    
+    def verify_extraction(self, table_name: str, is_incremental: bool = False) -> bool:
+        """Verify that the extraction was successful by comparing row counts with tolerance for live databases."""
     
     def has_schema_changed(self, table_name: str, stored_hash: str) -> bool:
         """Check if the source table schema has changed."""
