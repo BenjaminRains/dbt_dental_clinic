@@ -504,7 +504,8 @@ class ExactMySQLReplicator:
             logger.info(f"Secure direct copy completed: {rows_copied} rows")
             return rows_copied
     
-    
+    def verify_extraction(self, table_name: str, is_incremental: bool = False) -> bool:
+        """Verify that the extraction was successful by comparing row counts with tolerance for live databases."""
         try:
             with self.source_engine.connect() as source_conn, \
                  self.target_engine.connect() as target_conn:
@@ -549,9 +550,6 @@ class ExactMySQLReplicator:
         except Exception as e:
             logger.error(f"Error verifying extraction for {table_name}: {str(e)}")
             return False
-    
-    def verify_extraction(self, table_name: str, is_incremental: bool = False) -> bool:
-        """Verify that the extraction was successful by comparing row counts with tolerance for live databases."""
     
     def has_schema_changed(self, table_name: str, stored_hash: str) -> bool:
         """Check if the source table schema has changed."""
