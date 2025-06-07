@@ -143,44 +143,87 @@ def run(ctx: click.Context, tables: Optional[str], full: bool, source: str,
         if tables:
             table_list = [t.strip() for t in tables.split(',')]
             click.echo(f"[START] Running pipeline for tables: {', '.join(table_list)}")
-            etl_logger.log_etl_start("multiple_tables", "pipeline")
+            
+            # Use appropriate log identifier based on number of tables
+            log_identifier = table_list[0] if len(table_list) == 1 else "multiple_tables"
+            etl_logger.log_etl_start(log_identifier, "pipeline")
             
             # Import and use our IntelligentELTPipeline
             from etl_pipeline.elt_pipeline import IntelligentELTPipeline
             
             try:
-                pipeline = IntelligentELTPipeline()
-                success_tables, failed_tables = pipeline.process_tables_parallel(table_list, max_workers=5)
-                
-                total_records = 0
-                for table in success_tables:
-                    etl_logger.log_etl_complete(table, "extract", records_count=0)  # Will be updated with actual counts
-                    total_records += 1  # Placeholder - actual implementation will track real record counts
-                
-                for table in failed_tables:
-                    etl_logger.log_etl_error(table, "extract", Exception("Processing failed"))
-                
-                etl_logger.log_etl_complete("multiple_tables", "pipeline", records_count=total_records)
+                with IntelligentELTPipeline() as pipeline:
+                    pipeline.initialize_connections()
+                    
+                    total_records = 0
+                    success_tables = []
+                    failed_tables = []
+                    
+                    # Process each table individually with proper force_full handling
+                    for table in table_list:
+                        click.echo(f"Processing table: {table}")
+                        etl_logger.log_etl_start(table, "elt_pipeline")
+                        
+                        success = pipeline.run_elt_pipeline(table, force_full=full or force)
+                        
+                        if success:
+                            success_tables.append(table)
+                            # Get actual row count from the pipeline
+                            table_rows = pipeline.get_table_row_count_from_target(table)
+                            etl_logger.log_etl_complete(table, "elt_pipeline", records_count=table_rows)
+                            total_records += table_rows
+                            click.echo(f"✅ {table}: {table_rows:,} rows processed")
+                        else:
+                            failed_tables.append(table)
+                            etl_logger.log_etl_error(table, "elt_pipeline", Exception("Processing failed"))
+                            click.echo(f"❌ {table}: Processing failed")
+                    
+                    etl_logger.log_etl_complete(log_identifier, "pipeline", records_count=total_records)
+                    click.echo(f"📊 Total records processed: {total_records:,}")
                 
             except Exception as e:
-                etl_logger.log_etl_error("multiple_tables", "pipeline", e)
+                etl_logger.log_etl_error(log_identifier, "pipeline", e)
                 raise
             
         elif full:
-            click.echo("[START] Running complete ETL pipeline...")
+            click.echo("[START] Running complete ETL pipeline with full extraction...")
             etl_logger.log_etl_start("full_pipeline", "complete_etl")
             
-            # Get all tables from configuration
-            all_tables = settings.list_tables('source_tables')
-            click.echo(f"[INFO] Processing {len(all_tables)} tables")
+            # Import and use our IntelligentELTPipeline
+            from etl_pipeline.elt_pipeline import IntelligentELTPipeline
             
-            # TODO: Implement full pipeline logic here
-            for table in all_tables:
-                etl_logger.log_etl_start(table, "full_process")
-                # Add your ETL logic here
-                etl_logger.log_etl_complete(table, "full_process", records_count=0)
-            
-            etl_logger.log_etl_complete("full_pipeline", "complete_etl")
+            try:
+                with IntelligentELTPipeline() as pipeline:
+                    pipeline.initialize_connections()
+                    
+                    # Process tables by priority for optimal order with full extraction
+                    results = pipeline.process_tables_by_priority(
+                        importance_levels=['critical', 'important', 'audit', 'reference'],
+                        max_workers=5,
+                        force_full=True  # Force full extraction for all tables
+                    )
+                    
+                    total_records = 0
+                    total_tables = 0
+                    
+                    for importance, result in results.items():
+                        success_count = len(result['success'])
+                        total_count = result['total']
+                        total_tables += total_count
+                        
+                        click.echo(f"📊 {importance.title()} tables: {success_count}/{total_count} successful")
+                        
+                        # Get record counts for successful tables
+                        for table in result['success']:
+                            table_rows = pipeline.get_table_row_count_from_target(table)
+                            total_records += table_rows
+                    
+                    click.echo(f"📊 Full pipeline completed: {total_records:,} total records across {total_tables} tables")
+                    etl_logger.log_etl_complete("full_pipeline", "complete_etl", records_count=total_records)
+                    
+            except Exception as e:
+                etl_logger.log_etl_error("full_pipeline", "complete_etl", e)
+                raise
         else:
             click.echo("[START] Running default pipeline")
             etl_logger.log_etl_start("default", "pipeline")
@@ -199,19 +242,39 @@ def run(ctx: click.Context, tables: Optional[str], full: bool, source: str,
               default='summary', help='Output format (default: summary)')
 @click.option('--table', help='Show status for specific table only')
 @click.option('--output', '-o', help='Output file for status report')
+@click.option('--include-dental-intelligence', is_flag=True, 
+              help='Include MCP dental business intelligence in status')
 @click.pass_context
-def status(ctx: click.Context, format: str, table: Optional[str], output: Optional[str]) -> None:
+def status(ctx: click.Context, format: str, table: Optional[str], output: Optional[str], 
+           include_dental_intelligence: bool) -> None:
     """Show pipeline status and metrics."""
-    logger.info("Getting pipeline status")
+    logger.info(f"Getting pipeline status (dental intelligence: {include_dental_intelligence})")
     
     try:
-        # TODO: Implement actual status checking logic
+        # Basic status checking logic
         status_data = {
             'last_updated': '2024-01-01T00:00:00',
             'tables': settings.list_tables('source_tables'),
             'total_tables': len(settings.list_tables('source_tables')),
             'status': 'ready'
         }
+        
+        # Enhanced status with MCP dental intelligence
+        if include_dental_intelligence:
+            try:
+                import asyncio
+                from etl_pipeline.mcp.health_integration import run_enhanced_health_check
+                
+                click.echo("🏥 Gathering dental practice intelligence...")
+                enhanced_health = asyncio.run(run_enhanced_health_check())
+                status_data['dental_intelligence'] = enhanced_health
+                
+            except ImportError:
+                click.echo("⚠️  MCP dental intelligence not available - install aiohttp")
+                status_data['dental_intelligence'] = {'status': 'not_available', 'reason': 'missing_dependencies'}
+            except Exception as e:
+                click.echo(f"⚠️  MCP dental intelligence failed: {str(e)}")
+                status_data['dental_intelligence'] = {'status': 'error', 'reason': str(e)}
         
         if table:
             # Filter for specific table
@@ -258,10 +321,47 @@ def _display_status(status_data: dict, format: str) -> None:
         
         click.echo(f"Status: {status_data.get('status', 'Unknown')}")
         click.echo(f"Last Updated: {status_data.get('last_updated', 'Unknown')}")
+        
+        # Display dental intelligence if available
+        dental_intel = status_data.get('dental_intelligence')
+        if dental_intel:
+            _display_dental_intelligence(dental_intel)
     else:
         # Table format
         click.echo("📋 Pipeline Status:")
         click.echo(yaml.dump(status_data, default_flow_style=False))
+
+def _display_dental_intelligence(dental_intel: dict) -> None:
+    """Display dental intelligence summary."""
+    if dental_intel.get('status') == 'not_available':
+        click.echo(f"\n🏥 Dental Intelligence: Not Available ({dental_intel.get('reason', 'unknown')})")
+        return
+    
+    if dental_intel.get('status') == 'error':
+        click.echo(f"\n🏥 Dental Intelligence: Error ({dental_intel.get('reason', 'unknown')})")
+        return
+    
+    click.echo("\n🏥 Dental Practice Health")
+    click.echo("=" * 40)
+    
+    overall = dental_intel.get('overall_assessment', {})
+    click.echo(f"Overall Health: {overall.get('status', 'UNKNOWN')} ({overall.get('overall_score', 0)}%)")
+    
+    # Technical vs Business breakdown
+    breakdown = overall.get('breakdown', {})
+    click.echo(f"Technical Health: {breakdown.get('technical_score', 0)}%")
+    click.echo(f"Business Health: {breakdown.get('dental_score', 0)}%")
+    
+    # Recommendations
+    recommendations = dental_intel.get('recommendations', [])
+    if recommendations:
+        click.echo(f"\n💡 Recommendations ({len(recommendations)}):")
+        for i, rec in enumerate(recommendations[:3], 1):  # Show top 3
+            priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(rec.get('priority', 'low'), "⚪")
+            click.echo(f"  {i}. {priority_emoji} {rec.get('title', 'No title')}")
+        
+        if len(recommendations) > 3:
+            click.echo(f"     ... and {len(recommendations) - 3} more")
 
 @cli.command()
 @click.option('--table', '-t', help='Table name to validate')
