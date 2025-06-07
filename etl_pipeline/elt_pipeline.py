@@ -20,15 +20,34 @@ import yaml
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-# Configure logging
+# Configure logging with dedicated log directory and unique filenames
+import os
+from datetime import datetime
+
+# Create logs directory if it doesn't exist
+logs_dir = "logs"
+os.makedirs(logs_dir, exist_ok=True)
+
+# Generate unique log filename with timestamp
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_filename = f"elt_pipeline_{timestamp}.log"
+log_file_path = os.path.join(logs_dir, log_filename)
+
+# Configure handlers
+file_handler = logging.FileHandler(log_file_path)
+file_handler.setLevel(logging.INFO)
+file_handler.flush = lambda: file_handler.stream.flush()  # Force immediate flush
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("elt_pipeline.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[file_handler, stream_handler],
+    force=True  # Override any existing logging configuration
 )
+
+print(f"ETL Pipeline logging to: {log_file_path}")
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -408,11 +427,31 @@ class IntelligentELTPipeline:
                 if monitoring.get('alert_on_failure', False):
                     self.send_monitoring_alert(table_name, 'TIME_EXCEEDED', f"Extraction time: {processing_time:.2f}min")
             
-            # Verify extraction
-            if not self.mysql_replicator.verify_extraction(table_name):
+            # Verify extraction with intelligent tolerance
+            if not self.mysql_replicator.verify_extraction(table_name, is_incremental=use_incremental):
                 logger.error(f"Extraction verification failed for {table_name}")
                 if monitoring.get('alert_on_failure', False):
-                    self.send_monitoring_alert(table_name, 'VERIFICATION_FAILED', "Data verification failed")
+                    # Get actual counts for better error message
+                    try:
+                        with self.source_engine.connect() as conn:
+                            conn.execute(text(f"USE {self.source_db}"))
+                            source_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                        with self.replication_engine.connect() as conn:
+                            conn.execute(text(f"USE {self.replication_db}"))
+                            target_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                        
+                        difference = abs(source_count - target_count)
+                        alert_msg = f"Verification failed: source={source_count:,}, target={target_count:,}, difference={difference:,} rows"
+                        
+                        # For large tables, explain tolerance policy
+                        if target_count > 100000:
+                            tolerance = max(10, int(target_count * 0.001))
+                            alert_msg += f" (tolerance for large tables: {tolerance:,} rows)"
+                            
+                    except Exception:
+                        alert_msg = "Data verification failed"
+                        
+                    self.send_monitoring_alert(table_name, 'VERIFICATION_FAILED', alert_msg)
                 return False
             
             # Update extraction status
@@ -462,10 +501,26 @@ class IntelligentELTPipeline:
         if importance == 'critical':
             logger.critical(alert_msg)
     
-    def load_to_analytics(self, table_name: str) -> bool:
+    def get_table_row_count_from_target(self, table_name: str) -> int:
+        """Get actual row count from target replication database."""
+        try:
+            if not self._connections_available():
+                return 0
+                
+            with self.replication_engine.connect() as conn:
+                conn.execute(text(f"USE {self.replication_db}"))
+                count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                return int(count) if count is not None else 0
+                
+        except Exception as e:
+            logger.warning(f"Could not get row count for {table_name}: {str(e)}")
+            return 0
+    
+    def load_to_analytics(self, table_name: str, is_incremental: bool = False) -> bool:
         """
         Intelligent LOAD phase with data quality validation.
         Applies PostgreSQL conversions and monitors data quality.
+        Supports both full replacement and incremental loading strategies.
         """
         self._require_connections()  # Ensure database connections are available
         
@@ -473,16 +528,45 @@ class IntelligentELTPipeline:
         monitoring = self.get_monitoring_config(table_name)
         
         try:
-            # Read from replication MySQL
+            # Read from replication MySQL - for incremental loads, only get recent data
             with self.replication_engine.connect() as conn:
-                source_count_query = f"SELECT COUNT(*) FROM {table_name}"
-                source_count = conn.execute(text(source_count_query)).scalar()
+                if is_incremental:
+                    # For incremental loads, only load data added since the last analytics load
+                    # Get the last loaded timestamp from analytics tracking
+                    with self.analytics_engine.connect() as analytics_conn:
+                        last_loaded_query = f"""
+                            SELECT last_loaded FROM {self.analytics_schema}.etl_load_status 
+                            WHERE table_name = :table_name
+                        """
+                        result = analytics_conn.execute(text(last_loaded_query).bindparams(table_name=table_name))
+                        row = result.fetchone()
+                        last_loaded = row[0] if row else datetime(1970, 1, 1)
+                    
+                    # Get incremental column for filtering
+                    incremental_column = self.get_incremental_column(table_name)
+                    if incremental_column:
+                        incremental_query = f"""
+                            SELECT * FROM {table_name} 
+                            WHERE {incremental_column} > %(last_loaded)s
+                            ORDER BY {incremental_column}
+                        """
+                        df = pd.read_sql(incremental_query, conn, params={'last_loaded': last_loaded})
+                        source_count = len(df)
+                        logger.info(f"Loading {source_count} incremental rows from {table_name} since {last_loaded}")
+                    else:
+                        # No incremental column - skip incremental loading to avoid duplication
+                        logger.warning(f"No incremental column found for {table_name}, skipping incremental load to prevent duplication")
+                        return True
+                else:
+                    # For full loads, get all data
+                    source_count_query = f"SELECT COUNT(*) FROM {table_name}"
+                    source_count = conn.execute(text(source_count_query)).scalar()
+                    df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+                    logger.info(f"Loading {source_count} total rows from {table_name} (full load)")
                 
                 if source_count == 0:
                     logger.info(f"No data to load for {table_name}")
                     return True
-                
-                df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
             
             # Apply basic PostgreSQL compatibility conversions
             df_clean = self.apply_basic_postgres_conversions(df, table_name)
@@ -498,6 +582,13 @@ class IntelligentELTPipeline:
                     self.send_monitoring_alert(table_name, 'DATA_QUALITY_FAILED', error_msg)
                 return False
             
+            # Determine loading strategy based on extraction type
+            if_exists_strategy = 'append' if is_incremental else 'replace'
+            logger.info(f"Loading {table_name} to analytics using strategy: {if_exists_strategy}")
+            
+            # Note: For production incremental loads, consider implementing UPSERT logic
+            # to handle potential duplicates if the same incremental data is loaded multiple times
+            
             # Load to PostgreSQL analytics with intelligent batching
             batch_size = min(self.get_batch_size(table_name), 10000)  # Cap at 10k for memory
             
@@ -506,7 +597,7 @@ class IntelligentELTPipeline:
                     table_name,
                     conn,
                     schema=self.analytics_schema,
-                    if_exists='replace',
+                    if_exists=if_exists_strategy,
                     index=False,
                     method='multi',
                     chunksize=batch_size
@@ -517,14 +608,27 @@ class IntelligentELTPipeline:
                 target_count_query = f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}"
                 target_count = conn.execute(text(target_count_query)).scalar()
                 
-                final_quality_score = target_count / source_count if source_count > 0 else 1.0
-                
-                if final_quality_score < quality_threshold:
-                    error_msg = f"Final data quality check failed: {final_quality_score:.3f} < {quality_threshold}"
-                    logger.error(f"[FAIL] {table_name} - {error_msg}")
-                    if monitoring.get('alert_on_failure', False):
-                        self.send_monitoring_alert(table_name, 'LOAD_QUALITY_FAILED', error_msg)
-                    return False
+                # For incremental loads, verify the data was appended correctly
+                if is_incremental:
+                    # For incremental, we just verify that the new data was loaded
+                    if target_count < source_count:
+                        error_msg = f"Incremental load verification failed: expected at least {source_count} new rows, but analytics table only has {target_count} total rows"
+                        logger.error(f"[FAIL] {table_name} - {error_msg}")
+                        if monitoring.get('alert_on_failure', False):
+                            self.send_monitoring_alert(table_name, 'INCREMENTAL_LOAD_FAILED', error_msg)
+                        return False
+                    logger.info(f"Incremental load verified: {source_count} new rows appended to analytics (total: {target_count})")
+                else:
+                    # For full loads, verify the complete data quality
+                    final_quality_score = target_count / source_count if source_count > 0 else 1.0
+                    
+                    if final_quality_score < quality_threshold:
+                        error_msg = f"Full load quality check failed: {final_quality_score:.3f} < {quality_threshold}"
+                        logger.error(f"[FAIL] {table_name} - {error_msg}")
+                        if monitoring.get('alert_on_failure', False):
+                            self.send_monitoring_alert(table_name, 'LOAD_QUALITY_FAILED', error_msg)
+                        return False
+                    logger.info(f"Full load verified: {target_count} rows loaded with quality score {final_quality_score:.3f}")
             
             # Update load status using PostgreSQL syntax
             with self.analytics_engine.begin() as conn:
@@ -546,8 +650,12 @@ class IntelligentELTPipeline:
             processing_time = (time.time() - start_time) / 60
             table_config = self.get_table_config(table_name)
             importance = table_config.get('table_importance', 'reference')
+            load_type = "incremental" if is_incremental else "full"
             
-            logger.info(f"[PASS] Successfully loaded {target_count} rows to analytics for {table_name} ({importance}) - Quality: {final_quality_score:.3f} in {processing_time:.2f} minutes")
+            if is_incremental:
+                logger.info(f"[PASS] Successfully loaded {source_count} new rows to analytics for {table_name} ({importance}) - {load_type} load in {processing_time:.2f} minutes (total: {target_count} rows)")
+            else:
+                logger.info(f"[PASS] Successfully loaded {target_count} rows to analytics for {table_name} ({importance}) - {load_type} load with quality: {final_quality_score:.3f} in {processing_time:.2f} minutes")
             return True
             
         except Exception as e:
@@ -610,13 +718,23 @@ class IntelligentELTPipeline:
             
             logger.info(f"[START] Starting ETL pipeline for {table_name} ({importance})")
             
+            # Determine extraction strategy (same logic as in extract_to_replication)
+            with self.replication_engine.connect() as conn:
+                conn.execute(text(f"USE {self.replication_db}"))
+                query = text("SELECT last_extracted FROM etl_extract_status WHERE table_name = :table_name")
+                result = conn.execute(query.bindparams(table_name=table_name))
+                row = result.fetchone()
+                last_extracted = row[0] if row else None
+            
+            use_incremental = self.should_use_incremental(table_name) and not force_full and last_extracted
+            
             # Extract to replication
             if not self.extract_to_replication(table_name, force_full):
                 logger.error(f"[FAIL] Extraction failed for {table_name}")
                 return False
             
-            # Load to analytics
-            if not self.load_to_analytics(table_name):
+            # Load to analytics with extraction type information
+            if not self.load_to_analytics(table_name, is_incremental=use_incremental):
                 logger.error(f"[FAIL] Loading failed for {table_name}")
                 return False
             
@@ -629,13 +747,14 @@ class IntelligentELTPipeline:
             logger.error(f"[FAIL] Error in ETL pipeline for {table_name} after {total_time:.2f} minutes: {str(e)}")
             return False
     
-    def process_tables_by_priority(self, importance_levels: List[str] = None, max_workers: int = 5) -> Dict[str, List[str]]:
+    def process_tables_by_priority(self, importance_levels: List[str] = None, max_workers: int = 5, force_full: bool = False) -> Dict[str, List[str]]:
         """
         Process tables by priority with intelligent parallelization.
         
         Args:
             importance_levels: List of importance levels to process (default: all)
             max_workers: Maximum number of parallel workers for critical tables
+            force_full: Whether to force full extraction for all tables
             
         Returns:
             Dict with success/failure lists for each importance level
@@ -655,10 +774,10 @@ class IntelligentELTPipeline:
             
             if importance == 'critical' and len(tables) > 1:
                 # Process critical tables in parallel for speed
-                success_tables, failed_tables = self.process_tables_parallel(tables, max_workers)
+                success_tables, failed_tables = self.process_tables_parallel(tables, max_workers, force_full)
             else:
                 # Process other tables sequentially to manage resources
-                success_tables, failed_tables = self.process_tables_sequential(tables)
+                success_tables, failed_tables = self.process_tables_sequential(tables, force_full)
             
             results[importance] = {
                 'success': success_tables,
@@ -675,7 +794,7 @@ class IntelligentELTPipeline:
         
         return results
     
-    def process_tables_parallel(self, tables: List[str], max_workers: int = 5) -> Tuple[List[str], List[str]]:
+    def process_tables_parallel(self, tables: List[str], max_workers: int = 5, force_full: bool = False) -> Tuple[List[str], List[str]]:
         """Process tables in parallel using ThreadPoolExecutor."""
         success_tables = []
         failed_tables = []
@@ -683,9 +802,9 @@ class IntelligentELTPipeline:
         logger.info(f"[START] Processing {len(tables)} tables in parallel (max workers: {max_workers})")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
+            # Submit all tasks with force_full parameter
             future_to_table = {
-                executor.submit(self.run_elt_pipeline, table): table 
+                executor.submit(self.run_elt_pipeline, table, force_full): table 
                 for table in tables
             }
             
@@ -704,7 +823,7 @@ class IntelligentELTPipeline:
         
         return success_tables, failed_tables
     
-    def process_tables_sequential(self, tables: List[str]) -> Tuple[List[str], List[str]]:
+    def process_tables_sequential(self, tables: List[str], force_full: bool = False) -> Tuple[List[str], List[str]]:
         """Process tables sequentially."""
         success_tables = []
         failed_tables = []
@@ -713,7 +832,7 @@ class IntelligentELTPipeline:
         
         for table in tables:
             try:
-                success = self.run_elt_pipeline(table)
+                success = self.run_elt_pipeline(table, force_full)
                 if success:
                     success_tables.append(table)
                 else:
@@ -758,6 +877,12 @@ def main():
     """Main entry point for the intelligent ETL pipeline."""
     import argparse
     
+    # Log the start of the ETL run
+    logger.info("=" * 80)
+    logger.info("INTELLIGENT ETL PIPELINE - RUN STARTED")
+    logger.info("=" * 80)
+    logger.info(f"Log file: {log_file_path}")
+    
     parser = argparse.ArgumentParser(description='Intelligent OpenDental ETL Pipeline')
     parser.add_argument('--phase', choices=['1', '2', '3', '4'], default='1',
                        help='Implementation phase to run (default: 1)')
@@ -771,6 +896,7 @@ def main():
                        help='Path to table configuration file')
     
     args = parser.parse_args()
+    logger.info(f"Arguments: {vars(args)}")
     
     try:
         # Initialize intelligent pipeline
@@ -836,13 +962,20 @@ def main():
             results = pipeline.process_tables_by_priority()
         
         logger.info("[PASS] ETL Pipeline completed successfully!")
+        logger.info("=" * 80)
+        logger.info("INTELLIGENT ETL PIPELINE - RUN COMPLETED SUCCESSFULLY")
+        logger.info("=" * 80)
             
     except Exception as e:
         logger.error(f"[FAIL] Pipeline failed: {str(e)}")
+        logger.error("=" * 80)
+        logger.error("INTELLIGENT ETL PIPELINE - RUN FAILED")
+        logger.error("=" * 80)
         sys.exit(1)
     finally:
         if 'pipeline' in locals():
             pipeline.cleanup()
+        logger.info(f"Run completed. Full logs available in: {log_file_path}")
 
 if __name__ == "__main__":
     main()
