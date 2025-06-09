@@ -75,18 +75,25 @@ RecentPayments as (
     group by fp.patient_id, fp.provider_id, fp.payment_date
 ),
 
-PaymentPlans as (
-    select 
-        pp.patient_id,
-        count(*) as active_payment_plans,
-        sum(pp.payment_plan_amount) as total_payment_plan_amount,
-        sum(pp.payment_plan_balance) as total_payment_plan_balance,
-        min(pp.payment_plan_date) as earliest_plan_date,
-        max(pp.payment_plan_date) as latest_plan_date
-    from {{ ref('stg_opendental__payplan') }} pp
-    where pp.is_closed = false
-    group by pp.patient_id
-),
+/*
+TODO - PAYMENT PLAN FUNCTIONALITY:
+The PaymentPlans CTE has been temporarily disabled because stg_opendental__payplan
+staging model has not been implemented yet. The clinic does not currently use 
+payment plans, so this functionality is planned for future implementation.
+
+When payment plan functionality is needed, implement stg_opendental__payplan:
+1. Create stg_opendental__payplan staging model from payplan source table  
+2. Include standard transformations: patient_id, payment_plan_amount, payment_plan_balance
+3. Add business logic for is_closed, payment_plan_date, and status tracking
+4. Consider payment plan templates and charge schedules
+
+Expected structure when implemented:
+- patient_id for linking to patient records
+- active_payment_plans count for patients with open plans
+- total_payment_plan_amount for original plan amounts
+- total_payment_plan_balance for remaining balances
+- earliest_plan_date and latest_plan_date for temporal analysis
+*/
 
 ARSnapshot as (
     select 
@@ -124,10 +131,10 @@ ARSnapshot as (
         max(rp.last_payment_date) as last_payment_date,
         avg(rp.avg_payment_amount) as avg_payment_amount,
         
-        -- Payment Plan Information
-        coalesce(ppl.active_payment_plans, 0) as active_payment_plans,
-        coalesce(ppl.total_payment_plan_amount, 0) as payment_plan_amount,
-        coalesce(ppl.total_payment_plan_balance, 0) as payment_plan_balance,
+        -- Payment Plan Information (Not implemented - clinic doesn't use payment plans)
+        0 as active_payment_plans,  -- TODO: Restore when stg_opendental__payplan is implemented
+        0 as payment_plan_amount,   -- TODO: Restore when stg_opendental__payplan is implemented
+        0 as payment_plan_balance,  -- TODO: Restore when stg_opendental__payplan is implemented
         
         -- Patient Characteristics
         pb.has_insurance_flag,
@@ -141,14 +148,16 @@ ARSnapshot as (
     left join RecentPayments rp
         on pb.patient_id = rp.patient_id
         and pb.primary_provider_id = rp.provider_id
-    left join PaymentPlans ppl
-        on pb.patient_id = ppl.patient_id
+    -- TODO: Restore when stg_opendental__payplan is implemented:
+    -- left join PaymentPlans ppl
+    --     on pb.patient_id = ppl.patient_id
     group by 
         pb.patient_id, pb.primary_provider_id, pb.clinic_id,
         pb.total_balance, pb.balance_0_30_days, pb.balance_31_60_days,
         pb.balance_61_90_days, pb.balance_over_90_days, pb.insurance_estimate,
-        pb.payment_plan_due, pb.has_insurance_flag, pb.patient_status, pb.guarantor_id,
-        ppl.active_payment_plans, ppl.total_payment_plan_amount, ppl.total_payment_plan_balance
+        pb.payment_plan_due, pb.has_insurance_flag, pb.patient_status, pb.guarantor_id
+        -- TODO: Restore when stg_opendental__payplan is implemented:
+        -- ppl.active_payment_plans, ppl.total_payment_plan_amount, ppl.total_payment_plan_balance
 ),
 
 Final as (
