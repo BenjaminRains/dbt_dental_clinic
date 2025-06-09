@@ -40,6 +40,22 @@ class ConnectionFactory:
         Returns:
             SQLAlchemy Engine instance
         """
+        # Validate required parameters
+        missing_params = []
+        if not host:
+            missing_params.append('host')
+        if not port:
+            missing_params.append('port')
+        if not database:
+            missing_params.append('database')
+        if not user:
+            missing_params.append('user')
+        if not password:
+            missing_params.append('password')
+        
+        if missing_params:
+            raise ValueError(f"Missing required MySQL connection parameters: {', '.join(missing_params)}")
+        
         try:
             connection_string = (
                 f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
@@ -81,6 +97,26 @@ class ConnectionFactory:
         Returns:
             SQLAlchemy Engine instance
         """
+        # Validate required parameters
+        missing_params = []
+        if not host:
+            missing_params.append('host')
+        if not port:
+            missing_params.append('port')
+        if not database:
+            missing_params.append('database')
+        if not user:
+            missing_params.append('user')
+        if not password:
+            missing_params.append('password')
+        
+        if missing_params:
+            raise ValueError(f"Missing required PostgreSQL connection parameters: {', '.join(missing_params)}")
+        
+        # Default schema if not provided
+        if not schema:
+            schema = 'raw'
+        
         try:
             connection_string = (
                 f"postgresql://{user}:{password}@{host}:{port}/{database}"
@@ -103,49 +139,144 @@ class ConnectionFactory:
             raise
     
     @classmethod
-    def get_source_connection(cls) -> Engine:
-        """Get connection to source OpenDental MySQL database."""
+    def get_opendental_source_connection(cls) -> Engine:
+        """Get connection to source OpenDental MySQL database (read-only)."""
+        # Get environment variables with fallback to old naming
+        host = os.getenv('OPENDENTAL_SOURCE_HOST') or os.getenv('SOURCE_MYSQL_HOST')
+        port = os.getenv('OPENDENTAL_SOURCE_PORT') or os.getenv('SOURCE_MYSQL_PORT')
+        database = os.getenv('OPENDENTAL_SOURCE_DB') or os.getenv('SOURCE_MYSQL_DB')
+        user = os.getenv('OPENDENTAL_SOURCE_USER') or os.getenv('SOURCE_MYSQL_USER')
+        password = os.getenv('OPENDENTAL_SOURCE_PASSWORD') or os.getenv('SOURCE_MYSQL_PASSWORD')
+        
         return cls.create_mysql_connection(
-            host=os.getenv('SOURCE_MYSQL_HOST'),
-            port=os.getenv('SOURCE_MYSQL_PORT'),
-            database=os.getenv('SOURCE_MYSQL_DB'),
-            user=os.getenv('SOURCE_MYSQL_USER'),
-            password=os.getenv('SOURCE_MYSQL_PASSWORD'),
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            readonly=True
+        )
+    
+    @classmethod
+    def get_mysql_replication_connection(cls) -> Engine:
+        """Get connection to local MySQL replication database (full access)."""
+        # Get environment variables with fallback to old naming
+        host = os.getenv('MYSQL_REPLICATION_HOST') or os.getenv('REPLICATION_MYSQL_HOST')
+        port = os.getenv('MYSQL_REPLICATION_PORT') or os.getenv('REPLICATION_MYSQL_PORT')
+        database = os.getenv('MYSQL_REPLICATION_DB') or os.getenv('REPLICATION_MYSQL_DB')
+        user = os.getenv('MYSQL_REPLICATION_USER') or os.getenv('REPLICATION_MYSQL_USER')
+        password = os.getenv('MYSQL_REPLICATION_PASSWORD') or os.getenv('REPLICATION_MYSQL_PASSWORD')
+        
+        return cls.create_mysql_connection(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password
+        )
+    
+    @classmethod
+    def get_postgres_analytics_connection(cls) -> Engine:
+        """Get connection to PostgreSQL analytics database."""
+        # Get environment variables with fallback to old naming
+        host = os.getenv('POSTGRES_ANALYTICS_HOST') or os.getenv('ANALYTICS_POSTGRES_HOST')
+        port = os.getenv('POSTGRES_ANALYTICS_PORT') or os.getenv('ANALYTICS_POSTGRES_PORT')
+        database = os.getenv('POSTGRES_ANALYTICS_DB') or os.getenv('ANALYTICS_POSTGRES_DB')
+        schema = os.getenv('POSTGRES_ANALYTICS_SCHEMA') or os.getenv('ANALYTICS_POSTGRES_SCHEMA', 'raw')
+        user = os.getenv('POSTGRES_ANALYTICS_USER') or os.getenv('ANALYTICS_POSTGRES_USER')
+        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD') or os.getenv('ANALYTICS_POSTGRES_PASSWORD')
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password
+        )
+    
+    @classmethod
+    def get_staging_connection(cls) -> Engine:
+        """Get connection to staging/replication MySQL database (DEPRECATED: use get_mysql_replication_connection)."""
+        return cls.get_mysql_replication_connection()
+    
+    @classmethod
+    def get_target_connection(cls) -> Engine:
+        """Get connection to target PostgreSQL analytics database (DEPRECATED: use get_postgres_analytics_connection)."""
+        return cls.get_postgres_analytics_connection()
+    
+    @classmethod
+    def get_source_connection(cls) -> Engine:
+        """Get connection to source OpenDental MySQL database (DEPRECATED: use get_opendental_source_connection)."""
+        # Try improved naming first, fall back to old naming
+        host = os.getenv('OPENDENTAL_SOURCE_HOST') or os.getenv('SOURCE_MYSQL_HOST')
+        port = os.getenv('OPENDENTAL_SOURCE_PORT') or os.getenv('SOURCE_MYSQL_PORT')
+        database = os.getenv('OPENDENTAL_SOURCE_DB') or os.getenv('SOURCE_MYSQL_DB')
+        user = os.getenv('OPENDENTAL_SOURCE_USER') or os.getenv('SOURCE_MYSQL_USER')
+        password = os.getenv('OPENDENTAL_SOURCE_PASSWORD') or os.getenv('SOURCE_MYSQL_PASSWORD')
+        
+        return cls.create_mysql_connection(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
             readonly=True
         )
     
     @classmethod
     def get_replication_connection(cls) -> Engine:
-        """Get connection to local MySQL replication database."""
+        """Get connection to local MySQL replication database (DEPRECATED: use get_mysql_replication_connection)."""
+        # Try improved naming first, fall back to old naming
+        host = os.getenv('MYSQL_REPLICATION_HOST') or os.getenv('REPLICATION_MYSQL_HOST')
+        port = os.getenv('MYSQL_REPLICATION_PORT') or os.getenv('REPLICATION_MYSQL_PORT')
+        database = os.getenv('MYSQL_REPLICATION_DB') or os.getenv('REPLICATION_MYSQL_DB')
+        user = os.getenv('MYSQL_REPLICATION_USER') or os.getenv('REPLICATION_MYSQL_USER')
+        password = os.getenv('MYSQL_REPLICATION_PASSWORD') or os.getenv('REPLICATION_MYSQL_PASSWORD')
+        
         return cls.create_mysql_connection(
-            host=os.getenv('REPLICATION_MYSQL_HOST'),
-            port=os.getenv('REPLICATION_MYSQL_PORT'),
-            database=os.getenv('REPLICATION_MYSQL_DB'),
-            user=os.getenv('REPLICATION_MYSQL_USER'),
-            password=os.getenv('REPLICATION_MYSQL_PASSWORD')
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password
         )
     
     @classmethod
     def get_analytics_connection(cls) -> Engine:
-        """Get connection to PostgreSQL analytics database."""
+        """Get connection to PostgreSQL analytics database (DEPRECATED: use get_postgres_analytics_connection)."""
+        # Try improved naming first, fall back to old naming
+        host = os.getenv('POSTGRES_ANALYTICS_HOST') or os.getenv('ANALYTICS_POSTGRES_HOST')
+        port = os.getenv('POSTGRES_ANALYTICS_PORT') or os.getenv('ANALYTICS_POSTGRES_PORT')
+        database = os.getenv('POSTGRES_ANALYTICS_DB') or os.getenv('ANALYTICS_POSTGRES_DB')
+        schema = os.getenv('POSTGRES_ANALYTICS_SCHEMA') or os.getenv('ANALYTICS_POSTGRES_SCHEMA', 'raw')
+        user = os.getenv('POSTGRES_ANALYTICS_USER') or os.getenv('ANALYTICS_POSTGRES_USER')
+        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD') or os.getenv('ANALYTICS_POSTGRES_PASSWORD')
+        
         return cls.create_postgres_connection(
-            host=os.getenv('ANALYTICS_POSTGRES_HOST'),
-            port=os.getenv('ANALYTICS_POSTGRES_PORT'),
-            database=os.getenv('ANALYTICS_POSTGRES_DB'),
-            schema=os.getenv('ANALYTICS_POSTGRES_SCHEMA'),
-            user=os.getenv('ANALYTICS_POSTGRES_USER'),
-            password=os.getenv('ANALYTICS_POSTGRES_PASSWORD')
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password
         )
     
     @classmethod
     def test_connections(cls) -> dict:
         """
-        Test all database connections.
+        Test all database connections using improved naming methods.
         
         Returns:
             Dictionary with connection test results
         """
+        from sqlalchemy import text
+        
         results = {
+            'opendental_source': False,
+            'mysql_replication': False,
+            'postgres_analytics': False,
+            # Legacy keys for backward compatibility
             'source': False,
             'replication': False,
             'analytics': False
@@ -153,32 +284,35 @@ class ConnectionFactory:
         
         try:
             # Test source connection
-            source_engine = cls.get_source_connection()
+            source_engine = cls.get_opendental_source_connection()
             with source_engine.connect() as conn:
-                conn.execute("SELECT 1")
-            results['source'] = True
+                conn.execute(text("SELECT 1"))
+            results['opendental_source'] = True
+            results['source'] = True  # Legacy compatibility
             source_engine.dispose()
         except Exception as e:
-            logger.error(f"Source connection test failed: {str(e)}")
+            logger.error(f"OpenDental source connection test failed: {str(e)}")
         
         try:
             # Test replication connection
-            replication_engine = cls.get_replication_connection()
+            replication_engine = cls.get_mysql_replication_connection()
             with replication_engine.connect() as conn:
-                conn.execute("SELECT 1")
-            results['replication'] = True
+                conn.execute(text("SELECT 1"))
+            results['mysql_replication'] = True
+            results['replication'] = True  # Legacy compatibility
             replication_engine.dispose()
         except Exception as e:
-            logger.error(f"Replication connection test failed: {str(e)}")
+            logger.error(f"MySQL replication connection test failed: {str(e)}")
         
         try:
             # Test analytics connection
-            analytics_engine = cls.get_analytics_connection()
+            analytics_engine = cls.get_postgres_analytics_connection()
             with analytics_engine.connect() as conn:
-                conn.execute("SELECT 1")
-            results['analytics'] = True
+                conn.execute(text("SELECT 1"))
+            results['postgres_analytics'] = True
+            results['analytics'] = True  # Legacy compatibility
             analytics_engine.dispose()
         except Exception as e:
-            logger.error(f"Analytics connection test failed: {str(e)}")
+            logger.error(f"PostgreSQL analytics connection test failed: {str(e)}")
         
         return results
