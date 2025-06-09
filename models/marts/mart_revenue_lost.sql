@@ -138,7 +138,7 @@ TreatmentPlanDelays as (
             else 'High'
         end as recovery_potential
         
-    from {{ ref('stg_opendental__treatmentplan') }} tp
+    from {{ ref('stg_opendental__treatplan') }} tp
     where tp.treatment_plan_status in ('Inactive', 'Active')
         and tp.treatment_plan_date >= current_date - interval '2 years'
         and tp.treatment_plan_total_amount > 0
