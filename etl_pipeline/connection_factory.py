@@ -62,29 +62,47 @@ def check_connection_health(*args, **kwargs):
 def dispose_all(*args, **kwargs):
     return ConnectionFactory.dispose_all(*args, **kwargs)
 
-def get_source_connection():
-    """Get connection to source MySQL database."""
+def get_opendental_source_connection():
+    """Get connection to source MySQL database (DEPRECATED: use ConnectionFactory.get_opendental_source_connection)."""
+    # Use improved environment variable names with fallback to old names
+    host = os.getenv('OPENDENTAL_SOURCE_HOST') or os.getenv('SOURCE_MYSQL_HOST')
+    port = os.getenv('OPENDENTAL_SOURCE_PORT') or os.getenv('SOURCE_MYSQL_PORT')
+    database = os.getenv('OPENDENTAL_SOURCE_DB') or os.getenv('SOURCE_MYSQL_DB')
+    user = os.getenv('OPENDENTAL_SOURCE_USER') or os.getenv('SOURCE_MYSQL_USER')
+    password = os.getenv('OPENDENTAL_SOURCE_PASSWORD') or os.getenv('SOURCE_MYSQL_PASSWORD')
+    
     return create_engine(
-        f"mysql+pymysql://{os.getenv('SOURCE_MYSQL_USER')}:{os.getenv('SOURCE_MYSQL_PASSWORD')}@"
-        f"{os.getenv('SOURCE_MYSQL_HOST')}:{os.getenv('SOURCE_MYSQL_PORT')}/{os.getenv('SOURCE_MYSQL_DB')}",
+        f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}",
         pool_pre_ping=True,
         pool_recycle=3600
     )
 
-def get_staging_connection():
-    """Get connection to staging MySQL database."""
+def get_mysql_replication_connection():
+    """Get connection to staging MySQL database (DEPRECATED: use ConnectionFactory.get_mysql_replication_connection)."""
+    # Use improved environment variable names with fallback to old names
+    host = os.getenv('MYSQL_REPLICATION_HOST') or os.getenv('REPLICATION_MYSQL_HOST')
+    port = os.getenv('MYSQL_REPLICATION_PORT') or os.getenv('REPLICATION_MYSQL_PORT')
+    database = os.getenv('MYSQL_REPLICATION_DB') or os.getenv('REPLICATION_MYSQL_DB')
+    user = os.getenv('MYSQL_REPLICATION_USER') or os.getenv('REPLICATION_MYSQL_USER')
+    password = os.getenv('MYSQL_REPLICATION_PASSWORD') or os.getenv('REPLICATION_MYSQL_PASSWORD')
+    
     return create_engine(
-        f"mysql+pymysql://{os.getenv('REPLICATION_MYSQL_USER')}:{os.getenv('REPLICATION_MYSQL_PASSWORD')}@"
-        f"{os.getenv('REPLICATION_MYSQL_HOST')}:{os.getenv('REPLICATION_MYSQL_PORT')}/{os.getenv('REPLICATION_MYSQL_DB')}",
+        f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}",
         pool_pre_ping=True,
         pool_recycle=3600
     )
 
-def get_target_connection():
-    """Get connection to target PostgreSQL database."""
+def get_postgres_analytics_connection():
+    """Get connection to target PostgreSQL database (DEPRECATED: use ConnectionFactory.get_postgres_analytics_connection)."""
+    # Use improved environment variable names with fallback to old names
+    host = os.getenv('POSTGRES_ANALYTICS_HOST') or os.getenv('ANALYTICS_POSTGRES_HOST')
+    port = os.getenv('POSTGRES_ANALYTICS_PORT') or os.getenv('ANALYTICS_POSTGRES_PORT')
+    database = os.getenv('POSTGRES_ANALYTICS_DB') or os.getenv('ANALYTICS_POSTGRES_DB')
+    user = os.getenv('POSTGRES_ANALYTICS_USER') or os.getenv('ANALYTICS_POSTGRES_USER')
+    password = os.getenv('POSTGRES_ANALYTICS_PASSWORD') or os.getenv('ANALYTICS_POSTGRES_PASSWORD')
+    
     return create_engine(
-        f"postgresql://{os.getenv('ANALYTICS_POSTGRES_USER')}:{os.getenv('ANALYTICS_POSTGRES_PASSWORD')}@"
-        f"{os.getenv('ANALYTICS_POSTGRES_HOST')}:{os.getenv('ANALYTICS_POSTGRES_PORT')}/{os.getenv('ANALYTICS_POSTGRES_DB')}",
+        f"postgresql://{user}:{password}@{host}:{port}/{database}",
         pool_pre_ping=True,
         pool_recycle=3600
     )
