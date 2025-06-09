@@ -24,7 +24,8 @@ renamed_columns as (
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
             created_at_column='"DateTStamp"',
-            updated_at_column='"DateTStamp"'
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
         ) }}
 
     from source_data
