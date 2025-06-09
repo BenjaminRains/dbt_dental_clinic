@@ -18,98 +18,60 @@ Key features:
 - Response and engagement tracking
 - Communication timing and frequency
 - Patient preference adherence
+
+TODO - APPOINTMENT CONFIRMATION ENHANCEMENT:
+When stg_opendental__confirmrequest staging model is created, add back:
+1. ConfirmationRequests CTE to transform confirmation request data
+2. Add 'union all select * from ConfirmationRequests' to main query
+3. This will include confirmation requests as a communication type alongside
+   emails, SMS, and commlog entries for complete communication tracking
 */
 
 with CommunicationBase as (
     select * from {{ ref('stg_opendental__commlog') }}
 ),
 
-ConfirmationRequests as (
-    select 
-        cr.confirmation_request_id as communication_id,
-        cr.appointment_id,
-        cr.patient_id,
-        cr.date_time_entry as communication_datetime,
-        cr.date_time_confirmed as response_datetime,
-        'Confirmation Request' as communication_type,
-        case cr.confirmation_status
-            when 0 then 'None'
-            when 1 then 'Confirmed'
-            when 2 then 'Call'
-            when 3 then 'Rescheduled'
-            when 4 then 'CancelledByPatient'
-            when 5 then 'CancelledByOffice'
-            else 'Unknown'
-        end as communication_status,
-        'Appointment' as communication_category,
-        cr.confirmation_method as communication_method,
-        null as provider_id,
-        null as user_id,
-        cr.note as communication_note,
-        case when cr.date_time_confirmed is not null then true else false end as has_response,
-        case when cr.confirmation_status = 1 then true else false end as is_successful
-    from {{ ref('stg_opendental__confirmrequest') }} cr
-),
+/*
+TODO - EMAIL MESSAGE INTEGRATION:
+The EmailMessages CTE has been temporarily removed because stg_opendental__emailmessage
+staging model does not exist. A new approach needs to be developed for incorporating
+email message information into the communication fact table.
 
-EmailMessages as (
-    select 
-        em.email_message_id as communication_id,
-        null as appointment_id,
-        em.patient_id,
-        em.msg_date_time as communication_datetime,
-        em.date_read as response_datetime,
-        'Email' as communication_type,
-        case em.sent_or_received
-            when 0 then 'Received'
-            when 1 then 'Sent'
-            when 2 then 'Sent Encrypted'
-            else 'Unknown'
-        end as communication_status,
-        case 
-            when em.subject like '%appointment%' or em.subject like '%reminder%' then 'Appointment'
-            when em.subject like '%payment%' or em.subject like '%balance%' then 'Financial'
-            when em.subject like '%treatment%' or em.subject like '%care%' then 'Clinical'
-            else 'General'
-        end as communication_category,
-        'Email' as communication_method,
-        em.provider_id,
-        em.user_id,
-        em.subject || ' - ' || left(em.body_text, 100) as communication_note,
-        case when em.date_read is not null then true else false end as has_response,
-        case when em.sent_or_received = 1 and em.date_read is not null then true else false end as is_successful
-    from {{ ref('stg_opendental__emailmessage') }} em
-),
+Potential approaches:
+1. Create stg_opendental__emailmessage staging model from emailmessage source table
+2. Integrate email data through alternative communication tracking mechanisms
+3. Use commlog entries that may contain email communication records
 
-TextMessages as (
-    select 
-        sm.sms_message_id as communication_id,
-        null as appointment_id,
-        sm.patient_id,
-        sm.date_time_sent as communication_datetime,
-        sm.date_time_delivered as response_datetime,
-        'SMS' as communication_type,
-        case sm.sms_status
-            when 0 then 'Pending'
-            when 1 then 'Sent'
-            when 2 then 'Delivered'
-            when 3 then 'Failed'
-            when 4 then 'Received'
-            else 'Unknown'
-        end as communication_status,
-        case 
-            when sm.message_text like '%appointment%' or sm.message_text like '%reminder%' then 'Appointment'
-            when sm.message_text like '%payment%' or sm.message_text like '%balance%' then 'Financial'
-            when sm.message_text like '%confirm%' then 'Confirmation'
-            else 'General'
-        end as communication_category,
-        'SMS' as communication_method,
-        null as provider_id,
-        sm.user_id,
-        sm.message_text as communication_note,
-        case when sm.sms_status in (2, 4) then true else false end as has_response,
-        case when sm.sms_status = 2 then true else false end as is_successful
-    from {{ ref('stg_opendental__smsmessage') }} sm
-),
+When implementing email message integration, restore the following structure:
+- communication_id from email_message_id
+- Email communication type classification
+- Sent/Received/Encrypted status mapping
+- Subject-based categorization (Appointment/Financial/Clinical/General)
+- Response tracking via date_read
+- Success metrics for sent encrypted emails
+*/
+
+/*
+TODO - SMS MESSAGE INTEGRATION:
+The TextMessages CTE has been temporarily removed because stg_opendental__smsmessage
+staging model does not exist. A new approach needs to be developed for incorporating
+SMS message information into the communication fact table.
+
+Potential approaches:
+1. Create stg_opendental__smsmessage staging model from smsmessage source table
+2. Integrate SMS data through alternative communication tracking mechanisms  
+3. Use commlog entries that may contain SMS communication records
+4. Consider external SMS service integration logs
+
+When implementing SMS message integration, restore the following structure:
+- communication_id from sms_message_id
+- SMS communication type classification
+- Status mapping (Pending/Sent/Delivered/Failed/Received)
+- Message text categorization (Appointment/Financial/Confirmation/General)
+- Response tracking via delivery status
+- Success metrics for delivered messages
+- User tracking for sent messages
+*/
 
 Final as (
     select
@@ -195,19 +157,19 @@ Final as (
         select * from CommunicationBase
         where communication_datetime is not null
         
-        union all
+        -- TODO: Add back when stg_opendental__confirmrequest is available:
+        -- union all
+        -- select * from ConfirmationRequests
         
-        select * from ConfirmationRequests
+        -- TODO: Add back when stg_opendental__emailmessage is available:
+        -- union all
+        -- select * from EmailMessages
+        -- where communication_datetime is not null
         
-        union all
-        
-        select * from EmailMessages
-        where communication_datetime is not null
-        
-        union all
-        
-        select * from TextMessages
-        where communication_datetime is not null
+        -- TODO: Add back when stg_opendental__smsmessage is available:
+        -- union all
+        -- select * from TextMessages
+        -- where communication_datetime is not null
         
     ) cb
 )
