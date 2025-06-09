@@ -35,14 +35,24 @@ PaymentSplits as (
     group by payment_id
 ),
 
-PaymentPlans as (
-    select 
-        payment_id,
-        payment_plan_id,
-        payment_plan_charge_id
-    from {{ ref('stg_opendental__payplancharge') }}
-    where payment_id is not null
-),
+/*
+TODO - PAYMENT PLAN CHARGE INTEGRATION:
+The PaymentPlans CTE has been temporarily removed because stg_opendental__payplancharge
+staging model does not exist. A new approach needs to be developed for incorporating
+payment plan charge information into the payment fact table.
+
+Potential approaches:
+1. Create stg_opendental__payplancharge staging model from payplancharge source table
+2. Integrate payment plan data through the existing paysplit model (PayPlanChargeNum)
+3. Create a dedicated payment plan fact table that references payments
+4. Use payplan source table to track payment plan relationships
+
+When implementing payment plan charge integration, restore the following structure:
+- payment_id linkage to connect charges to payments
+- payment_plan_id for plan identification
+- payment_plan_charge_id for specific charge tracking
+- Consider charge amounts, due dates, and payment allocations
+*/
 
 Final as (
     select
@@ -55,7 +65,7 @@ Final as (
         pb.clinic_id,
         pb.payment_type_id,
         pb.deposit_id,
-        pp.payment_plan_id,
+        null as payment_plan_id,  -- TODO: Restore when payplancharge integration is available
 
         -- Date and Time
         pb.payment_date,
@@ -159,8 +169,9 @@ Final as (
     from PaymentBase pb
     left join PaymentSplits ps
         on pb.payment_id = ps.payment_id
-    left join PaymentPlans pp
-        on pb.payment_id = pp.payment_id
+    -- TODO: Restore when payplancharge integration is available:
+    -- left join PaymentPlans pp
+    --     on pb.payment_id = pp.payment_id
 )
 
 select * from Final
