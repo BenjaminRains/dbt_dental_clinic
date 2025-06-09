@@ -4,58 +4,79 @@
     schema='staging'
 ) }}
 
-WITH Source AS (
-    SELECT * 
-    FROM {{ source('opendental', 'payment') }}
-    WHERE "PayDate" >= '2023-01-01'::date  
-        AND "PayDate" <= CURRENT_DATE
-        AND "PayDate" > '2000-01-01'::date  
+with source_data as (
+    select * 
+    from {{ source('opendental', 'payment') }}
+    where "PayDate" >= '2023-01-01'::date  
+        and "PayDate" <= current_date
+        and "PayDate" > '2000-01-01'::date  
     {% if is_incremental() %}
-        AND "PayDate" > (SELECT max(payment_date) FROM {{ this }})
+        and "PayDate" > (select max(payment_date) from {{ this }})
     {% endif %}
 ),
 
-Renamed AS (
-    SELECT
-        -- Primary key (matches DDL primary key constraint)
-        "PayNum" AS payment_id,
-
-        -- Relationships (following DDL index order)
-        "PatNum" AS patient_id,            -- Has index: payment_indexPatNum
-        "ClinicNum" AS clinic_id,          -- Has index: payment_ClinicNum
-        "PayType" AS payment_type_id,      -- Has index: payment_PayType
-        "DepositNum" AS deposit_id,        -- Has index: payment_DepositNum
-        "SecUserNumEntry" AS created_by_user_id,  -- Has index: payment_SecUserNumEntry
+renamed_columns as (
+    select
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"PayNum"', 'target': 'payment_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
+            {'source': '"PayType"', 'target': 'payment_type_id'},
+            {'source': 'NULLIF("DepositNum", 0)', 'target': 'deposit_id'}
+        ]) }},
 
         -- Payment details
-        "PayDate" AS payment_date,         -- Has index: payment_idx_ml_payment_window
-        "PayAmt" AS payment_amount,        -- DDL default: 0
-        COALESCE("MerchantFee", 0.0) AS merchant_fee,  -- Using 0.0 to match double precision
-        NULLIF(TRIM("CheckNum"), '') AS check_number,   -- varchar(25)
-        NULLIF(TRIM("BankBranch"), '') AS bank_branch,  -- varchar(25)
-        NULLIF(TRIM("ExternalId"), '') AS external_id,  -- varchar(255)
+        "PayDate" as payment_date,
+        "PayAmt"::double precision as payment_amount,
+        coalesce("MerchantFee", 0.0)::double precision as merchant_fee,
+        nullif(trim("CheckNum"), '') as check_number,
+        nullif(trim("BankBranch"), '') as bank_branch,
+        nullif(trim("ExternalId"), '') as external_id,
+        nullif(trim("PayNote"), '') as payment_notes,
+        nullif(trim("Receipt"), '') as receipt_text,
 
-        -- Status flags (all smallint in DDL, default 0)
-        CASE WHEN COALESCE("IsSplit", 0) = 1 THEN TRUE ELSE FALSE END AS is_split_flag,
-        CASE WHEN COALESCE("IsRecurringCC", 0) = 1 THEN TRUE ELSE FALSE END AS is_recurring_cc_flag,
-        CASE WHEN COALESCE("IsCcCompleted", 0) = 1 THEN TRUE ELSE FALSE END AS is_cc_completed_flag,
-        COALESCE("PaymentStatus", 0)::smallint AS payment_status,
-        COALESCE("ProcessStatus", 0)::smallint AS process_status,  -- Has index: payment_ProcessStatus
-        COALESCE("PaymentSource", 0)::smallint AS payment_source,
+        -- Status and type fields
+        "PaymentStatus"::smallint as payment_status,
+        "ProcessStatus"::smallint as process_status,
+        "PaymentSource"::smallint as payment_source,
 
-        -- Dates
-        NULLIF("RecurringChargeDate", '1900-01-01'::date) AS recurring_charge_date,
-        NULLIF("DateEntry", '1900-01-01'::date) AS entry_date,
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsSplit"') }} as is_split,
+        {{ convert_opendental_boolean('"IsRecurringCC"') }} as is_recurring_cc,
+        {{ convert_opendental_boolean('"IsCcCompleted"') }} as is_cc_completed,
 
-        -- Text fields (handle empty strings)
-        NULLIF(TRIM("PayNote"), '') AS payment_notes,    -- text
-        NULLIF(TRIM("Receipt"), '') AS receipt_text,     -- text
+        -- Date fields using macro
+        {{ clean_opendental_date('"RecurringChargeDate"') }} as recurring_charge_date,
+        {{ clean_opendental_date('"DateEntry"') }} as entry_date,
 
-        -- Metadata
-        current_timestamp AS _loaded_at,
-        NULLIF("DateEntry", '1900-01-01'::date) AS _created_at,  -- Source creation timestamp
-        COALESCE("SecDateTEdit", current_timestamp) AS _updated_at  -- Source update timestamp
-    FROM Source
+        -- Business logic flags
+        case 
+            when "PayAmt" > 0 then 'payment'
+            when "PayAmt" < 0 then 'refund'
+            else 'zero'
+        end as payment_type,
+
+        case
+            when "PayAmt" >= 1000 then 'large'
+            when "PayAmt" >= 500 then 'medium'
+            when "PayAmt" >= 100 then 'small'
+            else 'minimal'
+        end as payment_size,
+
+        case
+            when "ProcessStatus" = 1 then true
+            else false
+        end::boolean as is_processed,
+
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
+
+    from source_data
 )
 
-SELECT * FROM Renamed
+select * from renamed_columns
