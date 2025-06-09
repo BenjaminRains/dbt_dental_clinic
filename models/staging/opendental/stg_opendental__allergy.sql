@@ -1,23 +1,33 @@
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'allergy') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        "AllergyNum" as allergy_id,
-        "AllergyDefNum" as allergy_def_id,
-        "PatNum" as patient_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"AllergyNum"', 'target': 'allergy_id'},
+            {'source': '"AllergyDefNum"', 'target': 'allergy_def_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'}
+        ]) }},
+        
+        -- Clinical information
         "Reaction" as reaction,
-        "StatusIsActive" as is_active,
-        "DateTStamp" as date_timestamp,
-        "DateAdverseReaction" as adverse_reaction_date,
         "SnomedReaction" as snomed_reaction,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTStamp" as _created_at,     -- Rename source creation timestamp
-        "DateTStamp" as _updated_at      -- Rename source update timestamp
-    from source
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"StatusIsActive"') }} as is_active,
+        
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateAdverseReaction"') }} as adverse_reaction_date,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"'
+        ) }}
+
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
