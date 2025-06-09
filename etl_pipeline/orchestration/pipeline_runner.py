@@ -31,9 +31,9 @@ class PipelineRunner:
         
         # Initialize connections if not provided
         if not connection_factory:
-            self.source_engine = self.connection_factory.get_source_connection()
-            self.staging_engine = self.connection_factory.get_staging_connection()
-            self.target_engine = self.connection_factory.get_target_connection()
+            self.source_engine = self.connection_factory.get_opendental_source_connection()
+            self.staging_engine = self.connection_factory.get_mysql_replication_connection()
+            self.target_engine = self.connection_factory.get_postgres_analytics_connection()
     
     def register_task(self, task_id: str, 
                      task_func: Callable,
