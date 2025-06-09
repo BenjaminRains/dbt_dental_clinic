@@ -1,36 +1,32 @@
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'provider') }}
 ),
 
-staged as (
+renamed_columns as (
     select
-        -- Primary key
-        -- Note: provider_id = 0 is a special case used for system-generated communications
-        -- including automated notifications, system messages, and staff-initiated communications
-        "ProvNum" as provider_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"ProvNum"', 'target': 'provider_id'},
+            {'source': '"FeeSched"', 'target': 'fee_schedule_id'},
+            {'source': '"Specialty"', 'target': 'specialty_id'},
+            {'source': '"SchoolClassNum"', 'target': 'school_class_id'},
+            {'source': 'NULLIF("ProvNumBillingOverride", 0)', 'target': 'billing_override_provider_id'},
+            {'source': 'NULLIF("EmailAddressNum", 0)', 'target': 'email_address_id'}
+        ]) }},
         
-        -- Provider identifiers
+        -- Provider identifiers and names
         "Abbr" as provider_abbreviation,
-        "ItemOrder" as provider_item_order,
-        "LName" as provider_last_name,
-        "FName" as provider_first_name,
-        "MI" as provider_middle_initial,
-        "Suffix" as provider_suffix,
-        "PreferredName" as provider_preferred_name,
-        "CustomID" as provider_custom_id,
+        "ItemOrder" as display_order,
+        "LName" as last_name,
+        "FName" as first_name,
+        "MI" as middle_initial,
+        "Suffix" as name_suffix,
+        "PreferredName" as preferred_name,
+        "CustomID" as custom_id,
         
-        -- Provider classifications
-        "FeeSched" as fee_schedule_id,
-        "Specialty" as specialty_id,
-        "ProvStatus" as provider_status,
-        "AnesthProvType" as anesthesia_provider_type,
-        "SchoolClassNum" as school_class_number,
-        "EhrMuStage" as ehr_mu_stage,
-        "ProvNumBillingOverride" as provider_billing_override_id,
-        
-        -- Provider identifiers and numbers
-        "SSN" as ssn,
-        "StateLicense" as state_license,
+        -- Professional identifiers
+        "SSN" as social_security_number,
+        "StateLicense" as state_license_number,
         "DEANum" as dea_number,
         "BlueCrossID" as blue_cross_id,
         "MedicaidID" as medicaid_id,
@@ -39,9 +35,12 @@ staged as (
         "EcwID" as ecw_id,
         "StateRxID" as state_rx_id,
         "StateWhereLicensed" as state_where_licensed,
-        
-        -- Taxonomy and classification
         "TaxonomyCodeOverride" as taxonomy_code_override,
+        
+        -- Classification and status
+        "ProvStatus" as provider_status,
+        "AnesthProvType" as anesthesia_provider_type,
+        "EhrMuStage" as ehr_mu_stage,
         
         -- UI and display properties
         "ProvColor" as provider_color,
@@ -50,34 +49,43 @@ staged as (
         "WebSchedDescript" as web_schedule_description,
         "WebSchedImageLocation" as web_schedule_image_location,
         
-        -- Financial and goals
+        -- Financial goals
         "HourlyProdGoalAmt" as hourly_production_goal_amount,
         
-        -- Boolean flags (keeping as smallint to match source)
-        "IsSecondary" as is_secondary,
-        "IsHidden" as is_hidden,
-        "UsingTIN" as is_using_tin,
-        "SigOnFile" as has_signature_on_file,
-        "IsCDAnet" as is_cdanet,
-        "IsNotPerson" as is_not_person,
-        "IsInstructor" as is_instructor,
-        "IsHiddenReport" as is_hidden_report,
-        "IsErxEnabled" as is_erx_enabled,
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsSecondary"') }} as is_secondary,
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ convert_opendental_boolean('"UsingTIN"') }} as is_using_tin,
+        {{ convert_opendental_boolean('"SigOnFile"') }} as has_signature_on_file,
+        {{ convert_opendental_boolean('"IsCDAnet"') }} as is_cdanet,
+        {{ convert_opendental_boolean('"IsNotPerson"') }} as is_not_person,
+        {{ convert_opendental_boolean('"IsInstructor"') }} as is_instructor,
+        {{ convert_opendental_boolean('"IsHiddenReport"') }} as is_hidden_report,
+        {{ convert_opendental_boolean('"IsErxEnabled"') }} as is_erx_enabled,
         
-        -- Dates
-        "Birthdate" as birth_date,
-        "DateTerm" as termination_date,
-        "DateTStamp" as record_updated_at,
+        -- Date fields using macro
+        {{ clean_opendental_date('"Birthdate"') }} as birth_date,
+        {{ clean_opendental_date('"DateTerm"') }} as termination_date,
         
-        -- Relations
-        "EmailAddressNum" as email_address_id,
+        -- Business logic flags
+        CASE 
+            WHEN "ProvNum" = 0 THEN true
+            ELSE false
+        END::boolean as is_system_provider,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        source."DateTStamp" as _created_at,
-        source."DateTStamp" as _updated_at
+        CASE
+            WHEN "IsHidden" = 0 AND "ProvStatus" = 0 THEN true
+            ELSE false
+        END::boolean as is_active_provider,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from staged
+select * from renamed_columns
