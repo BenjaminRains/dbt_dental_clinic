@@ -1,4 +1,4 @@
-from etl_pipeline.connection_factory import get_source_connection, get_staging_connection, get_target_connection
+# Updated to use the core connections module directly
 from sqlalchemy import text
 import os
 from dotenv import load_dotenv
