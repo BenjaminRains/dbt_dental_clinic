@@ -361,9 +361,11 @@ def validate_data(config: str, table: Optional[str], rules: Optional[str],
         # Perform validation
         if tables:
             for tbl in tables:
-                with connection_factory.get_source_connection() as conn:
-                    data = conn.execute(f"SELECT * FROM {tbl} LIMIT 1000").fetchall()
+                source_engine = ConnectionFactory.get_opendental_source_connection()
+                with source_engine.connect() as conn:
+                    data = conn.execute(text(f"SELECT * FROM {tbl} LIMIT 1000")).fetchall()
                 results = validator.validate_data(tbl, data)
+                source_engine.dispose()
                 
                 if output:
                     with open(output, 'w') as f:
@@ -489,11 +491,11 @@ def discover_schema(config: str, source: str, output: Optional[str]) -> None:
         with open(config, 'r') as f:
             config_data = yaml.safe_load(f)
         
-        # Explicitly use readonly user for source connection
+        # Use improved connection methods
         from etl_pipeline.core.connections import ConnectionFactory
-        source_engine = ConnectionFactory.get_source_connection(readonly=True)
-        # For target, use staging connection (or as appropriate)
-        target_engine = ConnectionFactory.get_staging_connection()
+        source_engine = ConnectionFactory.get_opendental_source_connection()
+        # For target, use MySQL replication connection (staging/replication database)
+        target_engine = ConnectionFactory.get_mysql_replication_connection()
         
         from etl_pipeline.core.schema_discovery import SchemaDiscovery
         schema_discovery = SchemaDiscovery(source_engine, target_engine, source, 'staging')
@@ -820,11 +822,7 @@ def generate_report(config: str, output: Optional[str]) -> None:
             'configuration': config_data,
             'schema': schema_discovery.discover_schema(),
             'performance': performance_monitor.get_performance_summary(),
-            'connections': {
-                'source': connection_factory.test_connection('source'),
-                'staging': connection_factory.test_connection('staging'),
-                'target': connection_factory.test_connection('target')
-            }
+            'connections': ConnectionFactory.test_connections()
         }
         
         if output:
