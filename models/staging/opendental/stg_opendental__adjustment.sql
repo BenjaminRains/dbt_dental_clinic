@@ -72,7 +72,7 @@ renamed_columns as (
             WHEN "AdjType" = 550 THEN 'admin_adjustment'
             WHEN EXISTS (
                 SELECT 1 
-                FROM paysplit ps 
+                FROM {{ source('opendental', 'paysplit') }} ps 
                 WHERE ps."AdjNum" = source_data."AdjNum" 
                 AND ps."UnearnedType" IN (288, 439)
             ) THEN 'unearned_income'
@@ -116,13 +116,13 @@ renamed_columns as (
         CASE 
             WHEN EXISTS (
                 SELECT 1 
-                FROM paysplit ps 
+                FROM {{ source('opendental', 'paysplit') }} ps 
                 WHERE ps."AdjNum" = source_data."AdjNum" 
                 AND ps."UnearnedType" = 288
             ) THEN 288
             WHEN EXISTS (
                 SELECT 1 
-                FROM paysplit ps 
+                FROM {{ source('opendental', 'paysplit') }} ps 
                 WHERE ps."AdjNum" = source_data."AdjNum" 
                 AND ps."UnearnedType" = 439
             ) THEN 439
