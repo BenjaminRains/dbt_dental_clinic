@@ -27,9 +27,9 @@ load_dotenv()
 def test_database_connection():
     """Test database connectivity and basic queries."""
     try:
-        # Get readonly source connection
-        source_engine = ConnectionFactory.get_source_connection()
-        replication_engine = ConnectionFactory.get_replication_connection()
+        # Initialize connections
+        source_engine = ConnectionFactory.get_opendental_source_connection()
+        replication_engine = ConnectionFactory.get_mysql_replication_connection()
         
         # Test both connections
         with source_engine.connect() as conn:
