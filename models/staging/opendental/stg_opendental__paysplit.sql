@@ -1,59 +1,94 @@
 {{ config(
     materialized='incremental',
-    unique_key='paysplit_id'
+    unique_key='paysplit_id',
+    schema='staging'
 ) }}
 
-WITH Source AS (
-    SELECT * 
-    FROM {{ source('opendental', 'paysplit') }}
-    WHERE "DatePay" >= '2023-01-01'::date
-        AND "DatePay" <= CURRENT_DATE
-        AND "DatePay" > '2000-01-01'::date
+with source_data as (
+    select * 
+    from {{ source('opendental', 'paysplit') }}
+    where "DatePay" >= '2023-01-01'::date
+        and "DatePay" <= current_date
+        and "DatePay" > '2000-01-01'::date
     {% if is_incremental() %}
-        AND "DatePay" > (SELECT max(payment_date) FROM {{ this }})
+        and "DatePay" > (select max(payment_date) from {{ this }})
     {% endif %}
 ),
 
-Renamed AS (
-    SELECT
-        -- Primary key
-        "SplitNum" AS paysplit_id,
-        
-        -- Relationships
-        "PayNum" AS payment_id,
-        "PatNum" AS patient_id,
-        "ClinicNum" AS clinic_id,
-        "ProvNum" AS provider_id,
-        "ProcNum" AS procedure_id,
-        "AdjNum" AS adjustment_id,
-        "PayPlanNum" AS payplan_id,
-        "PayPlanChargeNum" AS payplan_charge_id,
-        "FSplitNum" AS forward_split_id,
-        "SecUserNumEntry" AS created_by_user_id,
+renamed_columns as (
+    select
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"SplitNum"', 'target': 'paysplit_id'},
+            {'source': '"PayNum"', 'target': 'payment_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
+            {'source': 'NULLIF("ProvNum", 0)', 'target': 'provider_id'},
+            {'source': 'NULLIF("ProcNum", 0)', 'target': 'procedure_id'},
+            {'source': 'NULLIF("AdjNum", 0)', 'target': 'adjustment_id'},
+            {'source': 'NULLIF("PayPlanNum", 0)', 'target': 'payplan_id'},
+            {'source': 'NULLIF("PayPlanChargeNum", 0)', 'target': 'payplan_charge_id'},
+            {'source': 'NULLIF("FSplitNum", 0)', 'target': 'forward_split_id'}
+        ]) }},
 
         -- Split details
-        "SplitAmt" AS split_amount,
-        "DatePay" AS payment_date,
-        "ProcDate" AS procedure_date,
+        "SplitAmt"::double precision as split_amount,
+        "DatePay" as payment_date,
+        "ProcDate" as procedure_date,
         
-        -- Flags and types
-        CASE 
-            WHEN "IsDiscount" = 1 THEN TRUE 
-            ELSE FALSE 
-        END AS is_discount_flag,
-        "DiscountType" AS discount_type,
-        "UnearnedType" AS unearned_type,
-        "PayPlanDebitType" AS payplan_debit_type,
+        -- Type and category fields
+        "DiscountType" as discount_type,
+        "UnearnedType" as unearned_type,
+        "PayPlanDebitType" as payplan_debit_type,
 
-        -- Dates and metadata
-        "DateEntry" AS entry_date,
-        "SecDateTEdit" AS updated_at,
-        
-        -- Required metadata columns
-        "DateEntry" AS _created_at,
-        "SecDateTEdit" AS _updated_at,
-        current_timestamp AS _loaded_at
-    FROM Source
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsDiscount"') }} as is_discount,
+
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateEntry"') }} as entry_date,
+
+        -- Business logic flags
+        case 
+            when "SplitAmt" > 0 then 'positive'
+            when "SplitAmt" < 0 then 'negative'
+            else 'zero'
+        end as split_direction,
+
+        case
+            when "UnearnedType" > 0 then true
+            else false
+        end::boolean as is_unearned_income,
+
+        case
+            when "ProcNum" > 0 then true
+            else false
+        end::boolean as is_procedure_split,
+
+        case
+            when "AdjNum" > 0 then true
+            else false
+        end::boolean as is_adjustment_split,
+
+        case
+            when "PayPlanNum" > 0 then true
+            else false
+        end::boolean as is_payplan_split,
+
+        case
+            when abs("SplitAmt") >= 1000 then 'large'
+            when abs("SplitAmt") >= 500 then 'medium'
+            when abs("SplitAmt") >= 100 then 'small'
+            else 'minimal'
+        end as split_size,
+
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
+
+    from source_data
 )
 
-SELECT * FROM Renamed
+select * from renamed_columns
