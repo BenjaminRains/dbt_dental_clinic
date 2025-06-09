@@ -21,183 +21,290 @@ def print_section(title):
     print(f"\n{title}")
     print("-" * 50)
 
-def test_source_mysql_connection():
-    """Test connection to source MySQL database."""
-    print("\nTesting source MySQL connection...")
+def get_env_with_fallback(new_var, old_var):
+    """Get environment variable with fallback and show which one is used."""
+    new_val = os.getenv(new_var)
+    old_val = os.getenv(old_var)
     
-    # Print environment variables
-    print(f"SOURCE_MYSQL_HOST: {os.getenv('SOURCE_MYSQL_HOST')}")
-    print(f"SOURCE_MYSQL_PORT: {os.getenv('SOURCE_MYSQL_PORT')}")
-    print(f"SOURCE_MYSQL_DB: {os.getenv('SOURCE_MYSQL_DB')}")
-    print(f"SOURCE_MYSQL_USER: {os.getenv('SOURCE_MYSQL_USER')}")
-    print(f"SOURCE_MYSQL_PASSWORD: {'SET' if os.getenv('SOURCE_MYSQL_PASSWORD') else 'MISSING'}")
+    if new_val:
+        return new_val, f"{new_var} (improved)"
+    elif old_val:
+        return old_val, f"{old_var} (legacy fallback)"
+    else:
+        return None, f"MISSING (checked {new_var}, {old_var})"
+
+def test_opendental_source_connection():
+    """Test connection to OpenDental source MySQL database."""
+    print("\nTesting OpenDental source MySQL connection...")
+    
+    # Print environment variables with improved naming
+    host, host_source = get_env_with_fallback('OPENDENTAL_SOURCE_HOST', 'SOURCE_MYSQL_HOST')
+    port, port_source = get_env_with_fallback('OPENDENTAL_SOURCE_PORT', 'SOURCE_MYSQL_PORT')
+    database, db_source = get_env_with_fallback('OPENDENTAL_SOURCE_DB', 'SOURCE_MYSQL_DB')
+    user, user_source = get_env_with_fallback('OPENDENTAL_SOURCE_USER', 'SOURCE_MYSQL_USER')
+    password, pwd_source = get_env_with_fallback('OPENDENTAL_SOURCE_PASSWORD', 'SOURCE_MYSQL_PASSWORD')
+    
+    print(f"HOST: {host} [{host_source}]")
+    print(f"PORT: {port} [{port_source}]")
+    print(f"DATABASE: {database} [{db_source}]")
+    print(f"USER: {user} [{user_source}]")
+    print(f"PASSWORD: {'SET' if password else 'MISSING'} [{pwd_source}]")
     
     try:
-        # Create connection
-        conn_str = (
-            f"mysql+pymysql://{os.getenv('SOURCE_MYSQL_USER')}:{os.getenv('SOURCE_MYSQL_PASSWORD')}@"
-            f"{os.getenv('SOURCE_MYSQL_HOST')}:{os.getenv('SOURCE_MYSQL_PORT')}/{os.getenv('SOURCE_MYSQL_DB')}"
-        )
-        engine = create_engine(conn_str)
-        conn = engine.connect()
+        # Test both new and legacy connection methods
+        print("\n🔧 Testing improved ConnectionFactory method...")
+        new_engine = ConnectionFactory.get_opendental_source_connection()
+        with new_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ New method (get_opendental_source_connection) successful")
         
-        # Test connection
-        result = conn.execute(text("SELECT 1"))
-        assert result.scalar() == 1
-        print("✅ Source MySQL connection successful")
+        print("\n🔧 Testing legacy ConnectionFactory method...")
+        legacy_engine = ConnectionFactory.get_source_connection()
+        with legacy_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ Legacy method (get_source_connection) successful")
         
-        # List tables
-        conn.execute(text(f"USE {os.getenv('SOURCE_MYSQL_DB')}"))
-        result = conn.execute(
-            text("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = :db_name
-            """),
-            {"db_name": os.getenv('SOURCE_MYSQL_DB')}
-        )
+        # List tables using the new connection
+        with new_engine.connect() as conn:
+            conn.execute(text(f"USE {database}"))
+            result = conn.execute(
+                text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = :db_name
+                    LIMIT 10
+                """),
+                {"db_name": database}
+            )
+            
+            tables = [row[0] for row in result]
+            if tables:
+                print(f"\n📋 Sample tables in {database}:")
+                for table in tables[:10]:  # Show first 10 tables
+                    print(f"  - {table}")
+                if len(tables) == 10:
+                    print("  ... (showing first 10 tables)")
+            else:
+                print(f"\nDatabase: {database} (empty)")
         
-        tables = [row[0] for row in result]
-        if tables:
-            print(f"📋 Tables in {os.getenv('SOURCE_MYSQL_DB')}:")
-            for table in tables:
-                print(f"  - {table}")
-        else:
-            print(f"Database: {os.getenv('SOURCE_MYSQL_DB')} (empty)")
-        
-        # Close connection
-        conn.close()
+        # Cleanup
+        new_engine.dispose()
+        legacy_engine.dispose()
         return True
         
     except SQLAlchemyError as e:
-        print(f"❌ Source MySQL connection failed: {str(e)}")
+        print(f"❌ OpenDental source connection failed: {str(e)}")
         return False
 
-def test_replication_mysql_connection():
-    """Test connection to replication MySQL database."""
-    print("\nTesting replication MySQL connection...")
+def test_mysql_replication_connection():
+    """Test connection to MySQL replication database."""
+    print("\nTesting MySQL replication connection...")
     
-    # Print environment variables
-    print(f"REPLICATION_MYSQL_HOST: {os.getenv('REPLICATION_MYSQL_HOST')}")
-    print(f"REPLICATION_MYSQL_PORT: {os.getenv('REPLICATION_MYSQL_PORT')}")
-    print(f"REPLICATION_MYSQL_DB: {os.getenv('REPLICATION_MYSQL_DB')}")
-    print(f"REPLICATION_MYSQL_USER: {os.getenv('REPLICATION_MYSQL_USER')}")
-    print(f"REPLICATION_MYSQL_PASSWORD: {'SET' if os.getenv('REPLICATION_MYSQL_PASSWORD') else 'MISSING'}")
+    # Print environment variables with improved naming
+    host, host_source = get_env_with_fallback('MYSQL_REPLICATION_HOST', 'REPLICATION_MYSQL_HOST')
+    port, port_source = get_env_with_fallback('MYSQL_REPLICATION_PORT', 'REPLICATION_MYSQL_PORT')
+    database, db_source = get_env_with_fallback('MYSQL_REPLICATION_DB', 'REPLICATION_MYSQL_DB')
+    user, user_source = get_env_with_fallback('MYSQL_REPLICATION_USER', 'REPLICATION_MYSQL_USER')
+    password, pwd_source = get_env_with_fallback('MYSQL_REPLICATION_PASSWORD', 'REPLICATION_MYSQL_PASSWORD')
+    
+    print(f"HOST: {host} [{host_source}]")
+    print(f"PORT: {port} [{port_source}]")
+    print(f"DATABASE: {database} [{db_source}]")
+    print(f"USER: {user} [{user_source}]")
+    print(f"PASSWORD: {'SET' if password else 'MISSING'} [{pwd_source}]")
     
     try:
-        # Create connection
-        conn_str = (
-            f"mysql+pymysql://{os.getenv('REPLICATION_MYSQL_USER')}:{os.getenv('REPLICATION_MYSQL_PASSWORD')}@"
-            f"{os.getenv('REPLICATION_MYSQL_HOST')}:{os.getenv('REPLICATION_MYSQL_PORT')}/{os.getenv('REPLICATION_MYSQL_DB')}"
-        )
-        engine = create_engine(conn_str)
-        conn = engine.connect()
+        # Test both new and legacy connection methods
+        print("\n🔧 Testing improved ConnectionFactory method...")
+        new_engine = ConnectionFactory.get_mysql_replication_connection()
+        with new_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ New method (get_mysql_replication_connection) successful")
         
-        # Test connection
-        result = conn.execute(text("SELECT 1"))
-        assert result.scalar() == 1
-        print("✅ Replication MySQL connection successful")
+        print("\n🔧 Testing legacy ConnectionFactory methods...")
+        staging_engine = ConnectionFactory.get_staging_connection()
+        with staging_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ Legacy method (get_staging_connection) successful")
         
-        # List tables
-        conn.execute(text(f"USE {os.getenv('REPLICATION_MYSQL_DB')}"))
-        result = conn.execute(
-            text("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = :db_name
-            """),
-            {"db_name": os.getenv('REPLICATION_MYSQL_DB')}
-        )
+        replication_engine = ConnectionFactory.get_replication_connection()
+        with replication_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ Legacy method (get_replication_connection) successful")
         
-        tables = [row[0] for row in result]
-        if tables:
-            print(f"📋 Tables in {os.getenv('REPLICATION_MYSQL_DB')}:")
-            for table in tables:
-                print(f"  - {table}")
-        else:
-            print(f"Database: {os.getenv('REPLICATION_MYSQL_DB')} (empty)")
+        # List tables using the new connection
+        with new_engine.connect() as conn:
+            conn.execute(text(f"USE {database}"))
+            result = conn.execute(
+                text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = :db_name
+                """),
+                {"db_name": database}
+            )
+            
+            tables = [row[0] for row in result]
+            if tables:
+                print(f"\n📋 Tables in {database}:")
+                for table in tables:
+                    print(f"  - {table}")
+            else:
+                print(f"\nDatabase: {database} (empty)")
         
-        # Close connection
-        conn.close()
+        # Cleanup
+        new_engine.dispose()
+        staging_engine.dispose()
+        replication_engine.dispose()
         return True
         
     except SQLAlchemyError as e:
-        print(f"❌ Replication MySQL connection failed: {str(e)}")
+        print(f"❌ MySQL replication connection failed: {str(e)}")
         return False
 
-def test_analytics_postgres_connection():
-    """Test connection to analytics PostgreSQL database."""
-    print("\nTesting analytics PostgreSQL connection...")
+def test_postgres_analytics_connection():
+    """Test connection to PostgreSQL analytics database."""
+    print("\nTesting PostgreSQL analytics connection...")
     
-    # Print environment variables
-    print(f"ANALYTICS_POSTGRES_HOST: {os.getenv('ANALYTICS_POSTGRES_HOST')}")
-    print(f"ANALYTICS_POSTGRES_PORT: {os.getenv('ANALYTICS_POSTGRES_PORT')}")
-    print(f"ANALYTICS_POSTGRES_DB: {os.getenv('ANALYTICS_POSTGRES_DB')}")
-    print(f"ANALYTICS_POSTGRES_USER: {os.getenv('ANALYTICS_POSTGRES_USER')}")
-    print(f"ANALYTICS_POSTGRES_SCHEMA: {os.getenv('ANALYTICS_POSTGRES_SCHEMA')}")
-    print(f"ANALYTICS_POSTGRES_PASSWORD: {'SET' if os.getenv('ANALYTICS_POSTGRES_PASSWORD') else 'MISSING'}")
+    # Print environment variables with improved naming
+    host, host_source = get_env_with_fallback('POSTGRES_ANALYTICS_HOST', 'ANALYTICS_POSTGRES_HOST')
+    port, port_source = get_env_with_fallback('POSTGRES_ANALYTICS_PORT', 'ANALYTICS_POSTGRES_PORT')
+    database, db_source = get_env_with_fallback('POSTGRES_ANALYTICS_DB', 'ANALYTICS_POSTGRES_DB')
+    user, user_source = get_env_with_fallback('POSTGRES_ANALYTICS_USER', 'ANALYTICS_POSTGRES_USER')
+    password, pwd_source = get_env_with_fallback('POSTGRES_ANALYTICS_PASSWORD', 'ANALYTICS_POSTGRES_PASSWORD')
+    schema, schema_source = get_env_with_fallback('POSTGRES_ANALYTICS_SCHEMA', 'ANALYTICS_POSTGRES_SCHEMA')
+    
+    print(f"HOST: {host} [{host_source}]")
+    print(f"PORT: {port} [{port_source}]")
+    print(f"DATABASE: {database} [{db_source}]")
+    print(f"USER: {user} [{user_source}]")
+    print(f"SCHEMA: {schema} [{schema_source}]")
+    print(f"PASSWORD: {'SET' if password else 'MISSING'} [{pwd_source}]")
     
     try:
-        # Create connection
-        conn_str = (
-            f"postgresql://{os.getenv('ANALYTICS_POSTGRES_USER')}:{os.getenv('ANALYTICS_POSTGRES_PASSWORD')}@"
-            f"{os.getenv('ANALYTICS_POSTGRES_HOST')}:{os.getenv('ANALYTICS_POSTGRES_PORT')}/{os.getenv('ANALYTICS_POSTGRES_DB')}"
-        )
-        engine = create_engine(conn_str)
-        conn = engine.connect()
+        # Test both new and legacy connection methods
+        print("\n🔧 Testing improved ConnectionFactory method...")
+        new_engine = ConnectionFactory.get_postgres_analytics_connection()
+        with new_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ New method (get_postgres_analytics_connection) successful")
         
-        # Test connection
-        result = conn.execute(text("SELECT 1"))
-        assert result.scalar() == 1
-        print("✅ Analytics PostgreSQL connection successful")
+        print("\n🔧 Testing legacy ConnectionFactory methods...")
+        target_engine = ConnectionFactory.get_target_connection()
+        with target_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ Legacy method (get_target_connection) successful")
         
-        # List tables
-        result = conn.execute(
-            text("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = :schema_name
-            """),
-            {"schema_name": os.getenv('ANALYTICS_POSTGRES_SCHEMA')}
-        )
+        analytics_engine = ConnectionFactory.get_analytics_connection()
+        with analytics_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            print("✅ Legacy method (get_analytics_connection) successful")
         
-        tables = [row[0] for row in result]
-        if tables:
-            print(f"📋 Tables in {os.getenv('ANALYTICS_POSTGRES_SCHEMA')} schema:")
-            for table in tables:
-                print(f"  - {table}")
-        else:
-            print(f"Schema: {os.getenv('ANALYTICS_POSTGRES_SCHEMA')} (empty)")
+        # List tables using the new connection
+        with new_engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = :schema_name
+                """),
+                {"schema_name": schema or 'raw'}
+            )
+            
+            tables = [row[0] for row in result]
+            if tables:
+                print(f"\n📋 Tables in {schema or 'raw'} schema:")
+                for table in tables:
+                    print(f"  - {table}")
+            else:
+                print(f"\nSchema: {schema or 'raw'} (empty)")
         
-        # Close connection
-        conn.close()
+        # Cleanup
+        new_engine.dispose()
+        target_engine.dispose()
+        analytics_engine.dispose()
         return True
         
     except SQLAlchemyError as e:
-        print(f"❌ Analytics PostgreSQL connection failed: {str(e)}")
+        print(f"❌ PostgreSQL analytics connection failed: {str(e)}")
+        return False
+
+def test_connection_factory_batch():
+    """Test the ConnectionFactory.test_connections() method."""
+    print("\nTesting ConnectionFactory.test_connections() method...")
+    
+    try:
+        results = ConnectionFactory.test_connections()
+        
+        print("\n📊 ConnectionFactory Test Results:")
+        print("New naming convention results:")
+        print(f"  - opendental_source: {'✅' if results.get('opendental_source') else '❌'}")
+        print(f"  - mysql_replication: {'✅' if results.get('mysql_replication') else '❌'}")
+        print(f"  - postgres_analytics: {'✅' if results.get('postgres_analytics') else '❌'}")
+        
+        print("\nLegacy compatibility results:")
+        print(f"  - source: {'✅' if results.get('source') else '❌'}")
+        print(f"  - replication: {'✅' if results.get('replication') else '❌'}")
+        print(f"  - analytics: {'✅' if results.get('analytics') else '❌'}")
+        
+        return all([
+            results.get('opendental_source', False),
+            results.get('mysql_replication', False),
+            results.get('postgres_analytics', False)
+        ])
+        
+    except Exception as e:
+        print(f"❌ ConnectionFactory.test_connections() failed: {str(e)}")
         return False
 
 def main():
     """Run all connection tests."""
-    print("🔍 Testing database connections...")
+    print_header("Database Connection Tests - Improved Naming Conventions")
+    print("🔍 Testing database connections with improved naming conventions...")
+    print("📝 This test shows both new and legacy environment variable usage")
     
-    # Test source MySQL
-    mysql_success = test_source_mysql_connection()
+    # Test OpenDental source MySQL
+    print_section("OpenDental Source Database (MySQL)")
+    source_success = test_opendental_source_connection()
     
-    # Test replication MySQL
-    replication_success = test_replication_mysql_connection()
+    # Test MySQL replication
+    print_section("MySQL Replication Database")
+    replication_success = test_mysql_replication_connection()
     
-    # Test analytics PostgreSQL
-    postgres_success = test_analytics_postgres_connection()
+    # Test PostgreSQL analytics
+    print_section("PostgreSQL Analytics Database")
+    postgres_success = test_postgres_analytics_connection()
     
-    # Print summary
-    print("\n📊 Connection Test Summary:")
-    print(f"Source MySQL: {'✅' if mysql_success else '❌'}")
-    print(f"Replication MySQL: {'✅' if replication_success else '❌'}")
-    print(f"Analytics PostgreSQL: {'✅' if postgres_success else '❌'}")
+    # Test batch connection method
+    print_section("ConnectionFactory Batch Test")
+    batch_success = test_connection_factory_batch()
     
-    # Return success if all connections work
-    return all([mysql_success, replication_success, postgres_success])
+    # Print final summary
+    print_header("Connection Test Summary")
+    print(f"OpenDental Source (MySQL): {'✅' if source_success else '❌'}")
+    print(f"MySQL Replication: {'✅' if replication_success else '❌'}")
+    print(f"PostgreSQL Analytics: {'✅' if postgres_success else '❌'}")
+    print(f"ConnectionFactory Batch Test: {'✅' if batch_success else '❌'}")
+    
+    all_success = all([source_success, replication_success, postgres_success, batch_success])
+    
+    if all_success:
+        print("\n🎉 All connection tests passed!")
+        print("✅ Improved naming conventions are working correctly")
+        print("✅ Legacy compatibility is maintained")
+    else:
+        print("\n❌ Some connection tests failed")
+        print("💡 Check your .env file and ensure all required environment variables are set")
+    
+    return all_success
 
 if __name__ == "__main__":
     success = main()
