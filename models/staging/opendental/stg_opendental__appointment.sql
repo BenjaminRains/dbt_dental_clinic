@@ -4,54 +4,49 @@
     schema='staging'
 ) }}
 
-with source as (
-    
+with source_data as (
     select * from {{ source('opendental', 'appointment') }}
     where "AptDateTime" >= '2023-01-01'::timestamp  -- Only include appointments from 2023 onwards
     {% if is_incremental() %}
-        AND "DateTStamp" > (SELECT max(date_timestamp) FROM {{ this }})
+        AND "DateTStamp" > (SELECT max(_updated_at) FROM {{ this }})
     {% endif %}
-
 ),
 
-renamed as (
-
+renamed_columns as (
     select
-        -- Primary Key
-        "AptNum"::integer as appointment_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"AptNum"', 'target': 'appointment_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"ProvNum"', 'target': 'provider_id'},
+            {'source': '"ProvHyg"', 'target': 'hygienist_id'},
+            {'source': '"Assistant"', 'target': 'assistant_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"Op"', 'target': 'operatory_id'},
+            {'source': '"NextAptNum"', 'target': 'next_appointment_id'},
+            {'source': '"AppointmentTypeNum"', 'target': 'appointment_type_id'},
+            {'source': '"InsPlan1"', 'target': 'insurance_plan_1_id'},
+            {'source': '"InsPlan2"', 'target': 'insurance_plan_2_id'},
+            {'source': '"UnschedStatus"', 'target': 'unscheduled_status_id'},
+            {'source': '"SecUserNumEntry"', 'target': 'entered_by_user_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "PatNum"::bigint as patient_id,
-        "ProvNum"::bigint as provider_id,
-        "ProvHyg"::bigint as hygienist_id,
-        "Assistant"::bigint as assistant_id,
-        "ClinicNum"::bigint as clinic_id,
-        "Op"::bigint as operatory_id,
-        "NextAptNum"::bigint as next_appointment_id,
-        "AppointmentTypeNum"::bigint as appointment_type_id,
-        "InsPlan1"::bigint as insurance_plan_1_id,
-        "InsPlan2"::bigint as insurance_plan_2_id,
-        "UnschedStatus"::bigint as unscheduled_status_id,
-        "SecUserNumEntry"::bigint as entered_by_user_id,
+        -- Date fields using macro
+        {{ clean_opendental_date('"AptDateTime"') }} as appointment_datetime,
+        {{ clean_opendental_date('"DateTimeArrived"') }} as arrival_datetime,
+        {{ clean_opendental_date('"DateTimeSeated"') }} as seated_datetime, 
+        {{ clean_opendental_date('"DateTimeDismissed"') }} as dismissed_datetime,
+        {{ clean_opendental_date('"DateTimeAskedToArrive"') }} as asked_to_arrive_datetime,
         
-        -- Timestamps
-        "AptDateTime"::timestamp as appointment_datetime,
-        "DateTStamp"::timestamp as date_timestamp,
-        "DateTimeArrived"::timestamp as arrival_datetime,
-        "DateTimeSeated"::timestamp as seated_datetime, 
-        "DateTimeDismissed"::timestamp as dismissed_datetime,
-        "DateTimeAskedToArrive"::timestamp as asked_to_arrive_datetime,
-        "SecDateTEntry"::timestamp as entry_datetime,
-        
-        -- Status Fields
+        -- Status and Enum Fields (keep as-is for business logic)
         "AptStatus"::smallint as appointment_status,
         "Confirmed"::bigint as confirmation_status,
-        "IsNewPatient"::smallint as is_new_patient,
-        "IsHygiene"::smallint as is_hygiene,
         "Priority"::smallint as priority,
         
-        -- Boolean Fields
-        "TimeLocked"::boolean as is_time_locked,
+        -- Boolean Fields using macro
+        {{ convert_opendental_boolean('"IsNewPatient"') }} as is_new_patient,
+        {{ convert_opendental_boolean('"IsHygiene"') }} as is_hygiene,
+        {{ convert_opendental_boolean('"TimeLocked"') }} as is_time_locked,
         
         -- Text Fields
         "Pattern"::varchar as pattern,
@@ -66,13 +61,14 @@ renamed as (
         "ItemOrderPlanned"::integer as item_order_planned,
         "SecurityHash"::varchar as security_hash,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "SecDateTEntry" as _created_at,   -- Rename source creation timestamp
-        "DateTStamp" as _updated_at       -- Rename source update timestamp
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateTEntry"',
+            updated_at_column='"DateTStamp"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
-
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
