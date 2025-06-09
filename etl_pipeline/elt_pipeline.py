@@ -61,20 +61,23 @@ class IntelligentELTPipeline:
         This phase loads configuration and validates environment without creating
         database connections. Call initialize_connections() for database operations.
         """
-        # Load environment variables
-        self.source_db = os.getenv('SOURCE_MYSQL_DB')
-        self.replication_db = os.getenv('REPLICATION_MYSQL_DB')
-        self.analytics_db = os.getenv('ANALYTICS_POSTGRES_DB')
-        self.analytics_schema = os.getenv('ANALYTICS_POSTGRES_SCHEMA', 'raw')
+        # Load environment variables using improved naming with fallbacks
+        self.opendental_source_engine = None
+        self.mysql_replication_engine = None
+        self.postgres_analytics_engine = None
+        self.source_db = os.getenv('OPENDENTAL_SOURCE_DB') or os.getenv('SOURCE_MYSQL_DB') or "opendental_source"
+        self.replication_db = os.getenv('MYSQL_REPLICATION_DB') or os.getenv('REPLICATION_MYSQL_DB') or "opendental_replication"
+        self.analytics_db = os.getenv('POSTGRES_ANALYTICS_DB') or os.getenv('ANALYTICS_POSTGRES_DB') or "opendental_analytics"
+        self.analytics_schema = os.getenv('POSTGRES_ANALYTICS_SCHEMA') or os.getenv('ANALYTICS_POSTGRES_SCHEMA', 'raw')
         
         # Validate required environment variables
         missing_dbs = []
         if not self.source_db:
-            missing_dbs.append('SOURCE_MYSQL_DB')
+            missing_dbs.append('OPENDENTAL_SOURCE_DB')
         if not self.replication_db:
-            missing_dbs.append('REPLICATION_MYSQL_DB')
+            missing_dbs.append('MYSQL_REPLICATION_DB')
         if not self.analytics_db:
-            missing_dbs.append('ANALYTICS_POSTGRES_DB')
+            missing_dbs.append('POSTGRES_ANALYTICS_DB')
         
         if missing_dbs:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_dbs)}")
@@ -84,9 +87,6 @@ class IntelligentELTPipeline:
         self.table_config = self.load_table_configuration()
         
         # Initialize connection state (Phase 2 will populate these)
-        self.source_engine = None
-        self.replication_engine = None
-        self.analytics_engine = None
         self.mysql_replicator = None
         
         # Initialize metrics
@@ -196,11 +196,11 @@ class IntelligentELTPipeline:
         missing_dbs = []
         
         if not self.source_db:
-            missing_dbs.append('SOURCE_MYSQL_DB')
+            missing_dbs.append('OPENDENTAL_SOURCE_DB')
         if not self.replication_db:
-            missing_dbs.append('REPLICATION_MYSQL_DB')
+            missing_dbs.append('MYSQL_REPLICATION_DB')
         if not self.analytics_db:
-            missing_dbs.append('ANALYTICS_POSTGRES_DB')
+            missing_dbs.append('POSTGRES_ANALYTICS_DB')
         
         if missing_dbs:
             error_msg = f"Missing required database names: {', '.join(missing_dbs)}"
@@ -227,14 +227,14 @@ class IntelligentELTPipeline:
             logger.info("Initializing database connections...")
             
             # Create database connections
-            self.source_engine = ConnectionFactory.get_source_connection()
-            self.replication_engine = ConnectionFactory.get_replication_connection()
-            self.analytics_engine = ConnectionFactory.get_analytics_connection()
+            self.opendental_source_engine = ConnectionFactory.get_opendental_source_connection()
+            self.mysql_replication_engine = ConnectionFactory.get_mysql_replication_connection()
+            self.postgres_analytics_engine = ConnectionFactory.get_postgres_analytics_connection()
             
             # Initialize the MySQL replicator
             self.mysql_replicator = ExactMySQLReplicator(
-                source_engine=self.source_engine,
-                target_engine=self.replication_engine,
+                source_engine=self.opendental_source_engine,
+                target_engine=self.mysql_replication_engine,
                 source_db=self.source_db,
                 target_db=self.replication_db
             )
@@ -255,19 +255,19 @@ class IntelligentELTPipeline:
     def cleanup(self):
         """Clean up database connections and reset state."""
         try:
-            if self.source_engine:
-                self.source_engine.dispose()
-                self.source_engine = None
+            if self.opendental_source_engine:
+                self.opendental_source_engine.dispose()
+                self.opendental_source_engine = None
                 logger.info("Closed source database connection")
             
-            if self.replication_engine:
-                self.replication_engine.dispose()
-                self.replication_engine = None
+            if self.mysql_replication_engine:
+                self.mysql_replication_engine.dispose()
+                self.mysql_replication_engine = None
                 logger.info("Closed replication database connection")
             
-            if self.analytics_engine:
-                self.analytics_engine.dispose()
-                self.analytics_engine = None
+            if self.postgres_analytics_engine:
+                self.postgres_analytics_engine.dispose()
+                self.postgres_analytics_engine = None
                 logger.info("Closed analytics database connection")
             
             # Reset state
@@ -303,7 +303,7 @@ class IntelligentELTPipeline:
             logger.info("Creating tracking tables...")
             
             # Create extract tracking table in replication MySQL
-            with self.replication_engine.begin() as conn:
+            with self.mysql_replication_engine.begin() as conn:
                 conn.execute(text(f"USE {self.replication_db}"))
                 
                 conn.execute(text("""
@@ -320,7 +320,7 @@ class IntelligentELTPipeline:
                 """))
             
             # Create load tracking table in PostgreSQL
-            with self.analytics_engine.begin() as conn:
+            with self.postgres_analytics_engine.begin() as conn:
                 # Ensure schema exists
                 conn.execute(text(f"""
                     CREATE SCHEMA IF NOT EXISTS {self.analytics_schema}
@@ -348,9 +348,9 @@ class IntelligentELTPipeline:
     def _connections_available(self) -> bool:
         """Check if all required database connections are available."""
         return all([
-            self.source_engine is not None,
-            self.replication_engine is not None,
-            self.analytics_engine is not None
+            self.opendental_source_engine is not None,
+            self.mysql_replication_engine is not None,
+            self.postgres_analytics_engine is not None
         ])
     
     def _require_connections(self):
@@ -374,7 +374,7 @@ class IntelligentELTPipeline:
         
         try:
             # Get last extraction info
-            with self.replication_engine.connect() as conn:
+            with self.mysql_replication_engine.connect() as conn:
                 conn.execute(text(f"USE {self.replication_db}"))
                 
                 query = text("""
@@ -433,10 +433,10 @@ class IntelligentELTPipeline:
                 if monitoring.get('alert_on_failure', False):
                     # Get actual counts for better error message
                     try:
-                        with self.source_engine.connect() as conn:
+                        with self.opendental_source_engine.connect() as conn:
                             conn.execute(text(f"USE {self.source_db}"))
                             source_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
-                        with self.replication_engine.connect() as conn:
+                        with self.mysql_replication_engine.connect() as conn:
                             conn.execute(text(f"USE {self.replication_db}"))
                             target_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
                         
@@ -455,7 +455,7 @@ class IntelligentELTPipeline:
                 return False
             
             # Update extraction status
-            with self.replication_engine.begin() as conn:
+            with self.mysql_replication_engine.begin() as conn:
                 conn.execute(text("""
                     INSERT INTO etl_extract_status 
                     (table_name, last_extracted, rows_extracted, extraction_status, schema_hash)
@@ -507,7 +507,7 @@ class IntelligentELTPipeline:
             if not self._connections_available():
                 return 0
                 
-            with self.replication_engine.connect() as conn:
+            with self.mysql_replication_engine.connect() as conn:
                 conn.execute(text(f"USE {self.replication_db}"))
                 count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
                 return int(count) if count is not None else 0
@@ -529,11 +529,11 @@ class IntelligentELTPipeline:
         
         try:
             # Read from replication MySQL - for incremental loads, only get recent data
-            with self.replication_engine.connect() as conn:
+            with self.mysql_replication_engine.connect() as conn:
                 if is_incremental:
                     # For incremental loads, only load data added since the last analytics load
                     # Get the last loaded timestamp from analytics tracking
-                    with self.analytics_engine.connect() as analytics_conn:
+                    with self.postgres_analytics_engine.connect() as analytics_conn:
                         last_loaded_query = f"""
                             SELECT last_loaded FROM {self.analytics_schema}.etl_load_status 
                             WHERE table_name = :table_name
@@ -592,7 +592,7 @@ class IntelligentELTPipeline:
             # Load to PostgreSQL analytics with intelligent batching
             batch_size = min(self.get_batch_size(table_name), 10000)  # Cap at 10k for memory
             
-            with self.analytics_engine.begin() as conn:
+            with self.postgres_analytics_engine.begin() as conn:
                 df_clean.to_sql(
                     table_name,
                     conn,
@@ -604,7 +604,7 @@ class IntelligentELTPipeline:
                 )
             
             # Verify load success
-            with self.analytics_engine.connect() as conn:
+            with self.postgres_analytics_engine.connect() as conn:
                 target_count_query = f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}"
                 target_count = conn.execute(text(target_count_query)).scalar()
                 
@@ -631,7 +631,7 @@ class IntelligentELTPipeline:
                     logger.info(f"Full load verified: {target_count} rows loaded with quality score {final_quality_score:.3f}")
             
             # Update load status using PostgreSQL syntax
-            with self.analytics_engine.begin() as conn:
+            with self.postgres_analytics_engine.begin() as conn:
                 conn.execute(text(f"""
                     INSERT INTO {self.analytics_schema}.etl_load_status 
                     (table_name, last_loaded, rows_loaded, load_status)
@@ -719,7 +719,7 @@ class IntelligentELTPipeline:
             logger.info(f"[START] Starting ETL pipeline for {table_name} ({importance})")
             
             # Determine extraction strategy (same logic as in extract_to_replication)
-            with self.replication_engine.connect() as conn:
+            with self.mysql_replication_engine.connect() as conn:
                 conn.execute(text(f"USE {self.replication_db}"))
                 query = text("SELECT last_extracted FROM etl_extract_status WHERE table_name = :table_name")
                 result = conn.execute(query.bindparams(table_name=table_name))
