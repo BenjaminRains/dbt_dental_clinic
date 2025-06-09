@@ -4,7 +4,7 @@
     schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'adjustment') }}
     where "AdjDate" >= '2023-01-01'::date
@@ -14,24 +14,25 @@ with source as (
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Keys (matching PostgreSQL data types)
-        "AdjNum"::integer as adjustment_id,  
-        "PatNum"::bigint as patient_id,      
-        -- Preserve 0 values for procedure_id as they represent general account adjustments
-        "ProcNum"::bigint as procedure_id,  
-        NULLIF("ProvNum", 0)::bigint as provider_id,   
-        NULLIF("ClinicNum", 0)::bigint as clinic_id,   
-        NULLIF("StatementNum", 0)::bigint as statement_id,  
-        "AdjType"::bigint as adjustment_type_id,       
-        NULLIF("TaxTransID", 0)::bigint as tax_transaction_id,  
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"AdjNum"', 'target': 'adjustment_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"ProcNum"', 'target': 'procedure_id'},
+            {'source': 'NULLIF("ProvNum", 0)', 'target': 'provider_id'},
+            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
+            {'source': 'NULLIF("StatementNum", 0)', 'target': 'statement_id'},
+            {'source': '"AdjType"', 'target': 'adjustment_type_id'},
+            {'source': 'NULLIF("TaxTransID", 0)', 'target': 'tax_transaction_id'}
+        ]) }},
         
         -- Adjustment details
         "AdjAmt"::double precision as adjustment_amount,  
         NULLIF("AdjNote", '')::text as adjustment_note,  
         
-        -- Dates
+        -- Date fields
         "AdjDate"::date as adjustment_date,    
         "ProcDate"::date as procedure_date,    
         "DateEntry"::date as entry_date,       
@@ -72,7 +73,7 @@ renamed as (
             WHEN EXISTS (
                 SELECT 1 
                 FROM paysplit ps 
-                WHERE ps."AdjNum" = source."AdjNum" 
+                WHERE ps."AdjNum" = source_data."AdjNum" 
                 AND ps."UnearnedType" IN (288, 439)
             ) THEN 'unearned_income'
             ELSE 'other'
@@ -116,13 +117,13 @@ renamed as (
             WHEN EXISTS (
                 SELECT 1 
                 FROM paysplit ps 
-                WHERE ps."AdjNum" = source."AdjNum" 
+                WHERE ps."AdjNum" = source_data."AdjNum" 
                 AND ps."UnearnedType" = 288
             ) THEN 288
             WHEN EXISTS (
                 SELECT 1 
                 FROM paysplit ps 
-                WHERE ps."AdjNum" = source."AdjNum" 
+                WHERE ps."AdjNum" = source_data."AdjNum" 
                 AND ps."UnearnedType" = 439
             ) THEN 439
             ELSE NULL
@@ -160,22 +161,21 @@ renamed as (
             ELSE false
         END::boolean as is_unearned_income,
         
-        -- Metadata fields
+        -- Additional metadata fields
         NULLIF("SecUserNumEntry", 0)::bigint as created_by_user_id,
         CASE 
             WHEN "SecDateTEdit" > current_timestamp THEN NULL
             ELSE "SecDateTEdit"
         END::timestamp without time zone as last_modified_at,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data into data warehouse
-        "DateEntry"::timestamp without time zone as _created_at,  -- Rename source creation timestamp
-        CASE 
-            WHEN "SecDateTEdit" > current_timestamp THEN "DateEntry"
-            ELSE "SecDateTEdit"
-        END::timestamp without time zone as _updated_at  -- Rename source update timestamp
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
