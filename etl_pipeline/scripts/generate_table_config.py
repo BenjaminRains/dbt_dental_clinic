@@ -529,8 +529,8 @@ def main():
         os.makedirs('etl_pipeline/logs', exist_ok=True)
         
         # Get database connections
-        source_engine = ConnectionFactory.get_source_connection()
-        replication_engine = ConnectionFactory.get_replication_connection()
+        source_engine = ConnectionFactory.get_opendental_source_connection()
+        replication_engine = ConnectionFactory.get_mysql_replication_connection()
         
         # Initialize SchemaDiscovery
         source_db = os.getenv('SOURCE_MYSQL_DB')
