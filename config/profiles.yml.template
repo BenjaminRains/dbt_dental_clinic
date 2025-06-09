@@ -1,5 +1,5 @@
 # dbt Profile Template - Copy this file to ~/.dbt/profiles.yml
-# Uses environment variables from dbt_dental_practice/.dbt-env
+# Uses environment variables from config/.env or etl_pipeline/.env
 
 dbt_dental_clinic:
   # Default target environment. Can be set with DBT_TARGET env var
@@ -8,14 +8,14 @@ dbt_dental_clinic:
     # Development environment configuration
     dev:
       type: postgres
-      host: "{{ env_var('DBT_PG_HOST', 'localhost') }}"
-      port: "{{ env_var('DBT_PG_PORT', 5432) }}"
-      database: "{{ env_var('DBT_PG_DATABASE', 'opendental_analytics') }}"
-      schema: "{{ env_var('DBT_PG_SCHEMA', 'public') }}"
-      user: "{{ env_var('DBT_PG_USER') }}"
-      password: "{{ env_var('DBT_PG_PASSWORD') }}"
+      host: "{{ env_var('POSTGRES_DEV_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_DEV_PORT', 5432) }}"
+      database: "{{ env_var('POSTGRES_DEV_DB', 'opendental_dev') }}"
+      schema: "{{ env_var('POSTGRES_DEV_SCHEMA', 'analytics') }}"
+      user: "{{ env_var('POSTGRES_DEV_USER') }}"
+      password: "{{ env_var('POSTGRES_DEV_PASSWORD') }}"
       # PostgreSQL specific settings
-      search_path: "$user, public"
+      search_path: "$user, analytics, staging, intermediate, marts, raw, public"
       keepalives_idle: 0
       connect_timeout: 10
       retries: 3
@@ -24,17 +24,17 @@ dbt_dental_clinic:
       lc_collate: "en-US"
       lc_ctype: "en-US"
 
-    # Production configuration (when needed)
+    # Production/Analytics configuration (uses the analytics database)
     prod:
       type: postgres
-      host: "{{ env_var('DBT_PROD_PG_HOST') }}"
-      port: "{{ env_var('DBT_PROD_PG_PORT', 5432) }}"
-      database: "{{ env_var('DBT_PROD_PG_DATABASE') }}"
-      schema: "{{ env_var('DBT_PROD_PG_SCHEMA', 'public') }}"
-      user: "{{ env_var('DBT_PROD_PG_USER') }}"
-      password: "{{ env_var('DBT_PROD_PG_PASSWORD') }}"
+      host: "{{ env_var('POSTGRES_ANALYTICS_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_ANALYTICS_PORT', 5432) }}"
+      database: "{{ env_var('POSTGRES_ANALYTICS_DB', 'opendental_analytics') }}"
+      schema: "{{ env_var('POSTGRES_ANALYTICS_SCHEMA', 'raw') }}"
+      user: "{{ env_var('POSTGRES_ANALYTICS_USER') }}"
+      password: "{{ env_var('POSTGRES_ANALYTICS_PASSWORD') }}"
       # PostgreSQL specific settings
-      search_path: "$user, public"
+      search_path: "$user, raw, public_staging, public_intermediate, public_marts, public"
       keepalives_idle: 0
       connect_timeout: 10
       retries: 3
@@ -43,13 +43,22 @@ dbt_dental_clinic:
       lc_collate: "en-US"
       lc_ctype: "en-US"
 
-# Example environment variables to set in .dbt-env:
+# Example environment variables to set in config/.env:
 # Development:
 # DBT_TARGET=dev
-# DBT_PG_HOST=localhost
-# DBT_PG_PORT=5432
-# DBT_PG_DATABASE=opendental_analytics
-# DBT_PG_SCHEMA=public
-# DBT_PG_USER=your_username
-# DBT_PG_PASSWORD=your_password
+# POSTGRES_DEV_HOST=localhost
+# POSTGRES_DEV_PORT=5432
+# POSTGRES_DEV_DB=opendental_dev
+# POSTGRES_DEV_SCHEMA=analytics
+# POSTGRES_DEV_USER=dev_user
+# POSTGRES_DEV_PASSWORD=your_password
+
+# Production/Analytics:
+# DBT_TARGET=prod
+# POSTGRES_ANALYTICS_HOST=localhost
+# POSTGRES_ANALYTICS_PORT=5432
+# POSTGRES_ANALYTICS_DB=opendental_analytics
+# POSTGRES_ANALYTICS_SCHEMA=raw
+# POSTGRES_ANALYTICS_USER=analytics_user
+# POSTGRES_ANALYTICS_PASSWORD=your_password
     
