@@ -8,10 +8,7 @@ import yaml
 from sqlalchemy import create_engine
 from etl_pipeline.config import DatabaseConfig, PipelineConfig, load_config
 from etl_pipeline.core.connections import (
-    ConnectionFactory,
-    get_source_connection,
-    get_staging_connection,
-    get_target_connection
+    ConnectionFactory
 )
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
@@ -269,9 +266,9 @@ def test_config_integration():
         assert target_config['password'] == test_env['ANALYTICS_POSTGRES_PASSWORD']
         
         # Test connection creation
-        source_conn = get_source_connection()
-        staging_conn = get_staging_connection()
-        target_conn = get_target_connection()
+        source_conn = ConnectionFactory.get_opendental_source_connection()
+        staging_conn = ConnectionFactory.get_mysql_replication_connection()
+        target_conn = ConnectionFactory.get_postgres_analytics_connection()
         
         # Verify connection URLs
         assert source_conn.url.host == test_env['SOURCE_MYSQL_HOST']
@@ -306,9 +303,9 @@ def test_connection_factory_integration(test_env, test_config_path):
     config.load_config(test_config_path)
     
     # Get connections
-    source_conn = ConnectionFactory.get_source_connection()
-    staging_conn = ConnectionFactory.get_staging_connection()
-    target_conn = ConnectionFactory.get_target_connection()
+    source_conn = ConnectionFactory.get_opendental_source_connection()
+    staging_conn = ConnectionFactory.get_mysql_replication_connection()
+    target_conn = ConnectionFactory.get_postgres_analytics_connection()
     
     # Verify connection URLs
     assert source_conn.url.host == test_env['SOURCE_MYSQL_HOST']
@@ -330,8 +327,8 @@ def test_postgres_loader_integration(test_env, test_config_path):
     config.load_config(test_config_path)
     
     # Get connections
-    source_conn = ConnectionFactory.get_source_connection()
-    target_conn = ConnectionFactory.get_target_connection()
+    source_conn = ConnectionFactory.get_opendental_source_connection()
+    target_conn = ConnectionFactory.get_postgres_analytics_connection()
     
     # Create loader
     loader = PostgresLoader(source_conn, target_conn)
