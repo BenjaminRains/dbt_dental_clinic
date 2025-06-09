@@ -17,31 +17,20 @@ Key features:
 - Scheduling efficiency metrics
 - Confirmation and reminder tracking
 - Revenue and time utilization analysis
+
+TODO - APPOINTMENT CONFIRMATION ENHANCEMENT:
+When stg_opendental__confirmrequest staging model is created, add back:
+1. AppointmentConfirmations CTE to aggregate confirmation data
+2. Left join to AppointmentConfirmations in Final CTE
+3. Replace default confirmation columns with actual data:
+   - confirmation_count (currently defaults to 0)
+   - last_confirmation_date (currently null)
+   - confirmation_statuses (currently null array)
+   - has_confirmations (currently false)
 */
 
 with AppointmentBase as (
     select * from {{ ref('stg_opendental__appointment') }}
-),
-
-AppointmentConfirmations as (
-    select 
-        appointment_id,
-        count(*) as confirmation_count,
-        max(date_time_confirmed) as last_confirmation_date,
-        array_agg(distinct confirmation_status::text) as confirmation_statuses
-    from {{ ref('stg_opendental__confirmrequest') }}
-    group by appointment_id
-),
-
-AppointmentProcedures as (
-    select 
-        appointment_id,
-        count(*) as procedure_count,
-        sum(procedure_fee) as total_scheduled_production,
-        array_agg(procedure_code::text) as procedure_codes,
-        array_agg(procedure_id::text) as procedure_ids
-    from {{ ref('stg_opendental__appointmentprocedure') }}
-    group by appointment_id
 ),
 
 Final as (
@@ -132,19 +121,19 @@ Final as (
 
         -- Financial Information
         ab.production_goal,
-        ap.total_scheduled_production,
-        coalesce(ap.total_scheduled_production, 0) as scheduled_production_amount,
+        0.00 as total_scheduled_production,
+        0.00 as scheduled_production_amount,
         
-        -- Procedure Details
-        ap.procedure_count,
-        ap.procedure_codes,
-        ap.procedure_ids,
+        -- Procedure Details (removed - no procedure data available)
+        0 as procedure_count,
+        null::text[] as procedure_codes,
+        null::text[] as procedure_ids,
 
-        -- Confirmation Details
-        ac.confirmation_count,
-        ac.last_confirmation_date,
-        ac.confirmation_statuses,
-        case when ac.confirmation_count > 0 then true else false end as has_confirmations,
+        -- Confirmation Details (TODO: restore when stg_opendental__confirmrequest is available)
+        0 as confirmation_count,                    -- TODO: Replace with ac.confirmation_count
+        null::timestamp as last_confirmation_date,  -- TODO: Replace with ac.last_confirmation_date
+        null::text[] as confirmation_statuses,      -- TODO: Replace with ac.confirmation_statuses
+        false as has_confirmations,                 -- TODO: Replace with case when ac.confirmation_count > 0
 
         -- Appointment Outcome Flags
         case when ab.appointment_status in (2, 7) then true else false end as is_completed,
@@ -164,10 +153,6 @@ Final as (
         current_timestamp as _loaded_at
 
     from AppointmentBase ab
-    left join AppointmentConfirmations ac
-        on ab.appointment_id = ac.appointment_id
-    left join AppointmentProcedures ap
-        on ab.appointment_id = ap.appointment_id
 )
 
 select * from Final
