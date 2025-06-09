@@ -2,21 +2,21 @@
     materialized='table'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'patient') }}
 ),
 
-staged as (
+renamed_columns as (
     select
-        -- Primary Key
-        "PatNum" as patient_id,
-        
-        -- Relationships
-        "Guarantor" as guarantor_id,
-        "PriProv" as primary_provider_id,
-        "SecProv" as secondary_provider_id,
-        "ClinicNum" as clinic_id,
-        "FeeSched" as fee_schedule_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"Guarantor"', 'target': 'guarantor_id'},
+            {'source': '"PriProv"', 'target': 'primary_provider_id'},
+            {'source': '"SecProv"', 'target': 'secondary_provider_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"FeeSched"', 'target': 'fee_schedule_id'}
+        ]) }},
         
         -- Demographics
         "MiddleI" as middle_initial,
@@ -29,26 +29,17 @@ staged as (
         "Position" as position_code,
         "StudentStatus" as student_status,
         "Urgency" as urgency,
-        case 
-            when COALESCE("Premed", '0') = '0' then false
-            when COALESCE("Premed", '0') = '1' then true
-            else false
-        end as premedication_required,
+        
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"Premed"') }} as premedication_required,
+        {{ convert_opendental_boolean('"TxtMsgOk"') }} as text_messaging_consent,
+        {{ convert_opendental_boolean('"PreferContactConfidential"') }} as prefer_confidential_contact,
+        {{ convert_opendental_boolean('"HasIns"') }} as has_insurance_flag,
         
         -- Contact Preferences
         "PreferConfirmMethod" as preferred_confirmation_method,
         "PreferContactMethod" as preferred_contact_method,
         "PreferRecallMethod" as preferred_recall_method,
-        case 
-            when COALESCE("TxtMsgOk", '0') = '0' then false
-            when COALESCE("TxtMsgOk", '0') = '1' then true
-            else false
-        end as text_messaging_consent,
-        case 
-            when COALESCE("PreferContactConfidential", '0') = '0' then false
-            when COALESCE("PreferContactConfidential", '0') = '1' then true
-            else false
-        end as prefer_confidential_contact,
         
         -- Financial Information
         "EstBalance" as estimated_balance,
@@ -59,21 +50,13 @@ staged as (
         "BalOver90" as balance_over_90_days,
         "InsEst" as insurance_estimate,
         "PayPlanDue" as payment_plan_due,
-        case 
-            when COALESCE("HasIns", '0') = '0' then false
-            when COALESCE("HasIns", '0') = '1' then true
-            else false
-        end as has_insurance_flag,
         "BillingCycleDay" as billing_cycle_day,
         
-        -- Dates
+        -- Date fields using macro (includes age calculation)
         "Birthdate" as birth_date,
         DATE_PART('year', AGE("Birthdate"))::integer as age,
         "DateFirstVisit" as first_visit_date,
-        case 
-            when "DateTimeDeceased" = '0001-01-01 00:00:00.000' then null
-            else "DateTimeDeceased"
-        end as deceased_datetime,
+        {{ clean_opendental_date('"DateTimeDeceased"') }} as deceased_datetime,
         "AdmitDate" as admit_date,
         
         -- Scheduling Preferences
@@ -85,16 +68,14 @@ staged as (
         -- Business Logic
         "PlannedIsDone" as planned_treatment_complete,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        case 
-            when "SecDateEntry" = '0001-01-01' then null
-            else "SecDateEntry"
-        end as _created_at,   -- When the record was created in source
-        "DateTStamp" as _updated_at,     -- Last update timestamp
-        "SecUserNumEntry" as _created_by_user_id  -- User who created the record
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"DateTStamp"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from staged
+select * from renamed_columns
