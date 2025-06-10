@@ -1,35 +1,36 @@
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'appointmenttype') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- primary key
-        "AppointmentTypeNum" as appointment_type_id,
+        -- Primary Key
+        {{ transform_id_columns([
+            {'source': '"AppointmentTypeNum"', 'target': 'appointment_type_id'}
+        ]) }},
         
-        -- attributes
+        -- Attributes
         "AppointmentTypeName" as appointment_type_name,
         "AppointmentTypeColor" as appointment_type_color,
         "ItemOrder" as item_order,
-        CASE 
-            WHEN "IsHidden" = 1 THEN true
-            WHEN "IsHidden" = 0 THEN false
-            ELSE null 
-        END as is_hidden,
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
         "Pattern" as pattern,
         "CodeStr" as code_str,
         "CodeStrRequired" as code_str_required,
         "RequiredProcCodesNeeded" as required_proc_codes_needed,
         "BlockoutTypes" as blockout_types,
         
-        -- metadata columns
-        current_timestamp as _loaded_at,
-        current_timestamp as _created_at,
-        current_timestamp as _updated_at
-    from source
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
+
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
 
 union all
 
@@ -45,7 +46,8 @@ select
     null as required_proc_codes_needed,
     null as blockout_types,
     
-    -- metadata columns
+    -- Metadata columns for default record
     current_timestamp as _loaded_at,
-    current_timestamp as _created_at,
-    current_timestamp as _updated_at
+    null as _created_at,
+    null as _updated_at,
+    null as _created_by_user_id
