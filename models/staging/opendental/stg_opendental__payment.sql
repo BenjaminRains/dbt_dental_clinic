@@ -50,25 +50,6 @@ renamed_columns as (
         {{ clean_opendental_date('"RecurringChargeDate"') }} as recurring_charge_date,
         {{ clean_opendental_date('"DateEntry"') }} as entry_date,
 
-        -- Business logic flags
-        case 
-            when "PayAmt" > 0 then 'payment'
-            when "PayAmt" < 0 then 'refund'
-            else 'zero'
-        end as payment_type,
-
-        case
-            when "PayAmt" >= 1000 then 'large'
-            when "PayAmt" >= 500 then 'medium'
-            when "PayAmt" >= 100 then 'small'
-            else 'minimal'
-        end as payment_size,
-
-        case
-            when "ProcessStatus" = 1 then true
-            else false
-        end::boolean as is_processed,
-
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
             created_at_column='"DateEntry"',
