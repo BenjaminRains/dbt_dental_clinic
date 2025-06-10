@@ -3,22 +3,70 @@ version: 2
 models:
   - name: stg_opendental__eobattach
     description: >-
-      Staging model for EOB (Explanation of Benefits) attachments. Contains file attachments for
-      insurance claim payments including scanned documents and electronic files.
-      Note: This table contains data from 2020-2025, while the claim payments table only contains
-      data from 2023-2025. When joining to claim payments, filter for dates >= 2023 to maintain
-      referential integrity.
-      Note: Relationship test warnings may occur for EOB attachments referencing claim payments with
-      CheckDate < 2023-01-01 or for attachments without corresponding claim payments in the source.
+      Staging model for EOB (Explanation of Benefits) attachments from OpenDental.
+      Contains file attachments associated with insurance claim payments including
+      scanned documents, PDFs, and other electronic files used for claim processing
+      and payment reconciliation.
+      
+      This model captures the relationship between claim payments and their supporting
+      documentation, enabling audit trails and compliance tracking for insurance
+      payment processing.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~50,000 records (2020-2025)"
+      data_scope: "EOB attachments from 2020-2025 (broader range than claim payments table which starts 2023)"
+      
+      known_issues:
+        - description: "EOB attachments exist for claim payments before 2023, but claim payments table only contains data from 2023-2025"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          test: "relationships test configured with severity: warn"
+        - description: "Some EOB attachments may not have corresponding claim payment records in the source"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          test: "relationships test configured with severity: warn"
+      
+      business_rules:
+        - rule: "EOB attachments are immutable once created - they cannot be updated after upload"
+          impact: "created_at and updated_at timestamps will always be identical"
+        - rule: "Base64 content should be validated for file integrity before processing"
+          impact: "Raw data may contain corrupted or incomplete file data"
+      
+      usage_notes: >
+        When joining to claim payments, filter for dates >= 2023-01-01 to maintain
+        referential integrity. Relationship test warnings may occur for EOB attachments
+        referencing claim payments with CheckDate < 2023-01-01 or for attachments
+        without corresponding claim payments in the source system.
+        
+        The raw_base64 column contains large binary data and should be excluded from
+        most analytical queries unless specifically needed for file processing.
+
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "_created_at = _updated_at"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "date_created = _created_at"
+      - dbt_utils.expression_is_true:
+          expression: "date_created >= '2020-01-01'::date"
+      - dbt_utils.expression_is_true:
+          expression: "date_created <= current_date"
+
     columns:
       - name: eob_attach_id
-        description: Primary key of the EOB attachment record
+        description: "Primary key - Unique identifier for each EOB attachment record (maps to EobAttachNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
       
       - name: claim_payment_id
-        description: Foreign key to the claim payment record this attachment is associated with
+        description: >
+          Foreign key to the claim payment record this attachment is associated with.
+          Links EOB documentation to specific insurance payment transactions for audit
+          and reconciliation purposes (maps to ClaimPaymentNum in OpenDental).
         tests:
           - relationships:
               to: ref('stg_opendental__claimpayment')
@@ -27,31 +75,48 @@ models:
                 severity: warn
                 where: "_created_at >= '2023-01-01'"
       
-      - name: created_at
-        description: Timestamp when the EOB attachment was created
-        tests:
-          - not_null
-      
       - name: file_name
-        description: Name of the attached file
+        description: >
+          Name of the attached file including extension. Typically contains EOB PDFs,
+          scanned documents, or other supporting documentation for claim payments.
+          Used for file identification and organization in the document management system.
         tests:
           - not_null
+          - dbt_utils.not_empty_string
       
       - name: raw_base64
-        description: Base64 encoded content of the attached file
+        description: >
+          Base64 encoded content of the attached file. Contains the complete file data
+          for EOB documents, PDFs, images, and other attachment types. This column
+          contains large binary data and should be excluded from most analytical queries
+          unless specifically needed for file processing or extraction.
+      
+      - name: date_created
+        description: >
+          Business date when the EOB attachment was uploaded to OpenDental.
+          Represents the timestamp when the file was attached to the claim payment
+          record for business reporting purposes.
+        tests:
+          - not_null
 
-      # Metadata columns
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
 
       - name: _created_at
         description: >
           Timestamp when the EOB attachment was created in the source system (OpenDental).
-          This is the same as the created_at field since EOB attachments are created
-          when they are uploaded.
+          Maps to DateTCreated column. Represents the exact timestamp when the attachment
+          record was inserted into the OpenDental database.
+        tests:
+          - not_null
 
       - name: _updated_at
         description: >
           Timestamp when the EOB attachment was last updated in the source system (OpenDental).
-          For EOB attachments, this is the same as created_at since attachments are immutable
-          and don't get updated after creation.
+          For EOB attachments, this is the same as _created_at since attachments are immutable
+          and don't get updated after creation. Maps to DateTCreated column.
+        tests:
+          - not_null
