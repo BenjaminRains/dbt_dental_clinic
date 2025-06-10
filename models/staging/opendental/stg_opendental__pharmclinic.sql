@@ -4,25 +4,27 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'pharmclinic') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "PharmClinicNum" as pharm_clinic_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"PharmClinicNum"', 'target': 'pharm_clinic_id'},
+            {'source': '"PharmacyNum"', 'target': 'pharmacy_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "PharmacyNum" as pharmacy_id,
-        "ClinicNum" as clinic_id,
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        current_timestamp as _created_at,  -- Using current_timestamp as no source timestamp available
-        current_timestamp as _updated_at   -- Using current_timestamp as no source timestamp available
-        
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
