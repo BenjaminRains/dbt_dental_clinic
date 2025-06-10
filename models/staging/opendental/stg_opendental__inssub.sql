@@ -2,7 +2,7 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'inssub') }}
     where 
         -- Include records modified in 2023+
@@ -18,7 +18,7 @@ with source as (
         )
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "InsSubNum" as inssub_id,
@@ -26,34 +26,37 @@ renamed as (
         -- Foreign Keys
         "PlanNum" as insurance_plan_id,
         "Subscriber" as subscriber_id,
-        "SecUserNumEntry" as user_entry_id,
         
-        -- Dates
-        "DateEffective" as effective_date,
-        "DateTerm" as termination_date,
-        "SecDateEntry" as entry_date,
-        "SecDateTEdit" as last_modified_at,
-        
-        -- Attributes
-        "ReleaseInfo" as is_release_info,
-        "AssignBen" as is_assign_benefits,
+        -- String Fields
         "SubscriberID" as subscriber_external_id,
         "BenefitNotes" as benefit_notes,
         "SubscNote" as subscriber_notes,
         
-        -- Metadata
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"ReleaseInfo"') }} as is_release_info,
+        {{ convert_opendental_boolean('"AssignBen"') }} as is_assign_benefits,
+        
+        -- Date Fields
+        {{ clean_opendental_date('"DateEffective"') }} as effective_date,
+        {{ clean_opendental_date('"DateTerm"') }} as termination_date,
+        {{ clean_opendental_date('"SecDateEntry"') }} as date_created,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
+        
+        -- Derived Status Field
         CASE 
             WHEN "DateTerm" < CURRENT_DATE THEN 'TERMINATED'
             WHEN "DateTerm" IS NULL THEN 'ACTIVE'
             ELSE 'FUTURE_TERMINATED'
         END as subscriber_status,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "SecDateEntry" as _created_at,
-        "SecDateTEdit" as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
