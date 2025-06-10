@@ -4,24 +4,30 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'autocode') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
-        "AutoCodeNum" as autocode_id,
+        {{ transform_id_columns([
+            {'source': '"AutoCodeNum"', 'target': 'autocode_id'}
+        ]) }},
         
         -- Attributes
         "Description" as description,
-        CASE WHEN "IsHidden" = 1 THEN true WHEN "IsHidden" = 0 THEN false ELSE null END as is_hidden,
-        CASE WHEN "LessIntrusive" = 1 THEN true WHEN "LessIntrusive" = 0 THEN false ELSE null END as is_less_intrusive,
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ convert_opendental_boolean('"LessIntrusive"') }} as is_less_intrusive,
         
-        -- Metadata
-        current_timestamp as _loaded_at
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
     
-    from Source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
