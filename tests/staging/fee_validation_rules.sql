@@ -1,22 +1,22 @@
 -- Test 1: Check for records before 2023 and future dates
 select 
     fee_id,
-    created_at,
-    updated_at,
+    date_created,
+    date_updated,
     'Invalid Date' as validation_check,
     'error' as severity
 from {{ ref('stg_opendental__fee') }}
-where created_at < '2023-01-01'::date
-    or created_at > {{ current_date() }}
-    or updated_at > {{ current_date() }}
+where date_created < '2023-01-01'::date
+    or date_created > {{ current_date() }}
+    or date_updated > {{ current_date() }}
 
 UNION ALL
 
 -- Test 2: Check for unreasonable fee amounts (excluding known exceptions)
 select 
     fee_id,
-    created_at,
-    updated_at,
+    date_created,
+    date_updated,
     'Unreasonable Amount' as validation_check,
     'error' as severity
 from {{ ref('stg_opendental__fee') }}
@@ -29,8 +29,8 @@ UNION ALL
 -- Test 3: Check for duplicate fee configurations
 select 
     f1.fee_id,
-    f1.created_at,
-    f1.updated_at,
+    f1.date_created,
+    f1.date_updated,
     'Duplicate Fee Configuration' as validation_check,
     'error' as severity
 from {{ ref('stg_opendental__fee') }} f1
@@ -47,8 +47,8 @@ UNION ALL
 -- Test 4: Check for high fee variations by procedure code (excluding known variations)
 select 
     f.fee_id,
-    f.created_at,
-    f.updated_at,
+    f.date_created,
+    f.date_updated,
     'High Fee Variation' as validation_check,
     'warn' as severity
 from {{ ref('stg_opendental__fee') }} f
@@ -72,12 +72,12 @@ UNION ALL
 -- Test 5: Check default fees with zero amounts
 select 
     fee_id,
-    created_at,
-    updated_at,
+    date_created,
+    date_updated,
     'Invalid Default Fee' as validation_check,
     'warn' as severity
 from {{ ref('stg_opendental__fee') }}
-where is_default_fee = 1
+where is_default_fee = true
     and fee_amount = 0
     and procedure_code_id in (
         select f2.procedure_code_id
@@ -91,8 +91,8 @@ UNION ALL
 -- Test 6: Check fee schedule usage
 select 
     fee_id,
-    created_at,
-    updated_at,
+    date_created,
+    date_updated,
     'Underutilized Fee Schedule' as validation_check,
     'warn' as severity
 from {{ ref('stg_opendental__fee') }}
@@ -108,8 +108,8 @@ UNION ALL
 -- Test 7: Check for statistical outliers in fee amounts by procedure
 select 
     f.fee_id,
-    f.created_at,
-    f.updated_at,
+    f.date_created,
+    f.date_updated,
     'Statistical Outlier' as validation_check,
     'warn' as severity
 from {{ ref('stg_opendental__fee') }} f
@@ -129,8 +129,8 @@ UNION ALL
 -- Add test for orphaned procedure codes
 select 
     fee_id,
-    created_at,
-    updated_at,
+    date_created,
+    date_updated,
     'Orphaned Procedure Code' as validation_check,
     'warn' as severity
 from {{ ref('stg_opendental__fee') }} f
