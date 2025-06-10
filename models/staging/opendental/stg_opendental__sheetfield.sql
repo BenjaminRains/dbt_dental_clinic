@@ -3,7 +3,7 @@
     unique_key = 'sheet_field_id'
 ) }}
 
-with source as (
+with source_data as (
     select sf.*, s."DateTimeSheet", s."DateTSheetEdited"
     from {{ source('opendental', 'sheetfield') }} sf
     left join {{ source('opendental', 'sheet') }} s 
@@ -13,48 +13,58 @@ with source as (
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "SheetFieldNum" as sheet_field_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"SheetFieldNum"', 'target': 'sheet_field_id'},
+            {'source': '"SheetNum"', 'target': 'sheet_id'},
+            {'source': 'NULLIF("SheetFieldDefNum", 0)', 'target': 'sheet_field_def_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "SheetNum" as sheet_id,
-        "SheetFieldDefNum" as sheet_field_def_id,
+        -- Field Properties
+        "FieldType"::integer as field_type,
+        nullif(trim("FieldName"), '') as field_name,
+        nullif(trim("FieldValue"), '') as field_value,
+        "FontSize"::real as font_size,
+        nullif(trim("FontName"), '') as font_name,
+        "XPos"::integer as x_position,
+        "YPos"::integer as y_position,
+        "Width"::integer as width,
+        "Height"::integer as height,
+        "GrowthBehavior"::integer as growth_behavior,
         
-        -- Regular Fields
-        "FieldType" as field_type,
-        "FieldName" as field_name,
-        "FieldValue" as field_value,
-        "FontSize" as font_size,
-        "FontName" as font_name,
-        "FontIsBold" as is_font_bold,
-        "XPos" as x_position,
-        "YPos" as y_position,
-        "Width" as width,
-        "Height" as height,
-        "GrowthBehavior" as growth_behavior,
-        "RadioButtonValue" as radio_button_value,
-        "RadioButtonGroup" as radio_button_group,
-        "IsRequired" as is_required,
-        "TabOrder" as tab_order,
-        "ReportableName" as reportable_name,
-        "TextAlign" as text_align,
-        "ItemColor" as item_color,
-        "DateTimeSig" as date_time_signature,
-        "IsLocked" as is_locked,
-        "TabOrderMobile" as tab_order_mobile,
-        "UiLabelMobile" as ui_label_mobile,
-        "UiLabelMobileRadioButton" as ui_label_mobile_radio_button,
-        "CanElectronicallySign" as can_electronically_sign,
-        "IsSigProvRestricted" as is_sig_prov_restricted,
+        -- Radio Button Properties
+        nullif(trim("RadioButtonValue"), '') as radio_button_value,
+        nullif(trim("RadioButtonGroup"), '') as radio_button_group,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        coalesce("DateTimeSheet", "DateTimeSig") as _created_at,   -- When the record was created in source
-        coalesce("DateTSheetEdited", "DateTimeSig") as _updated_at -- Last update timestamp
+        -- Additional Properties
+        "TabOrder"::integer as tab_order,
+        nullif(trim("ReportableName"), '') as reportable_name,
+        "TextAlign"::smallint as text_align,
+        "ItemColor"::integer as item_color,
+        "TabOrderMobile"::integer as tab_order_mobile,
+        nullif(trim("UiLabelMobile"), '') as ui_label_mobile,
+        nullif(trim("UiLabelMobileRadioButton"), '') as ui_label_mobile_radio_button,
+        
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"FontIsBold"') }} as is_font_bold,
+        {{ convert_opendental_boolean('"IsRequired"') }} as is_required,
+        {{ convert_opendental_boolean('"IsLocked"') }} as is_locked,
+        {{ convert_opendental_boolean('"CanElectronicallySign"') }} as can_electronically_sign,
+        {{ convert_opendental_boolean('"IsSigProvRestricted"') }} as is_sig_prov_restricted,
+        
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateTimeSig"') }} as date_time_signature,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='coalesce("DateTimeSheet", "DateTimeSig")',
+            updated_at_column='coalesce("DateTSheetEdited", "DateTimeSig")',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

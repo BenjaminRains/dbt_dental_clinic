@@ -1,4 +1,4 @@
-with source as (
+with source_data as (
     select 
         sfd.*,
         sd."DateTCreated"
@@ -7,49 +7,57 @@ with source as (
         on sfd."SheetDefNum" = sd."SheetDefNum"
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "SheetFieldDefNum" as sheet_field_def_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"SheetFieldDefNum"', 'target': 'sheet_field_def_id'},
+            {'source': '"SheetDefNum"', 'target': 'sheet_def_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "SheetDefNum" as sheet_def_id,
+        -- Field Properties
+        "FieldType"::integer as field_type,
+        nullif(trim("FieldName"), '') as field_name,
+        nullif(trim("FieldValue"), '') as field_value,
+        "FontSize"::real as font_size,
+        nullif(trim("FontName"), '') as font_name,
+        "XPos"::integer as x_position,
+        "YPos"::integer as y_position,
+        "Width"::integer as width,
+        "Height"::integer as height,
+        "GrowthBehavior"::integer as growth_behavior,
         
-        -- Regular Fields
-        "FieldType" as field_type,
-        "FieldName" as field_name,
-        "FieldValue" as field_value,
-        "FontSize" as font_size,
-        "FontName" as font_name,
-        "FontIsBold" as is_font_bold,
-        "XPos" as x_position,
-        "YPos" as y_position,
-        "Width" as width,
-        "Height" as height,
-        "GrowthBehavior" as growth_behavior,
-        "RadioButtonValue" as radio_button_value,
-        "RadioButtonGroup" as radio_button_group,
-        "IsRequired" as is_required,
-        "TabOrder" as tab_order,
-        "ReportableName" as reportable_name,
-        "TextAlign" as text_align,
-        "IsPaymentOption" as is_payment_option,
-        "ItemColor" as item_color,
-        "IsLocked" as is_locked,
-        "TabOrderMobile" as tab_order_mobile,
-        "UiLabelMobile" as ui_label_mobile,
-        "UiLabelMobileRadioButton" as ui_label_mobile_radio_button,
-        "LayoutMode" as layout_mode,
-        "Language" as language,
-        "CanElectronicallySign" as can_electronically_sign,
-        "IsSigProvRestricted" as is_sig_prov_restricted,
+        -- Radio Button Properties
+        nullif(trim("RadioButtonValue"), '') as radio_button_value,
+        nullif(trim("RadioButtonGroup"), '') as radio_button_group,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTCreated" as _created_at,   -- When the record was created in source
-        "DateTCreated" as _updated_at    -- Last update timestamp (using creation date since no update timestamp is available)
+        -- Additional Properties
+        "TabOrder"::integer as tab_order,
+        nullif(trim("ReportableName"), '') as reportable_name,
+        "TextAlign"::smallint as text_align,
+        "ItemColor"::integer as item_color,
+        "TabOrderMobile"::integer as tab_order_mobile,
+        nullif(trim("UiLabelMobile"), '') as ui_label_mobile,
+        nullif(trim("UiLabelMobileRadioButton"), '') as ui_label_mobile_radio_button,
+        "LayoutMode"::smallint as layout_mode,
+        nullif(trim("Language"), '') as language,
+        
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"FontIsBold"') }} as is_font_bold,
+        {{ convert_opendental_boolean('"IsRequired"') }} as is_required,
+        {{ convert_opendental_boolean('"IsPaymentOption"') }} as is_payment_option,
+        {{ convert_opendental_boolean('"IsLocked"') }} as is_locked,
+        {{ convert_opendental_boolean('"CanElectronicallySign"') }} as can_electronically_sign,
+        {{ convert_opendental_boolean('"IsSigProvRestricted"') }} as is_sig_prov_restricted,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTCreated"',
+            updated_at_column='"DateTCreated"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

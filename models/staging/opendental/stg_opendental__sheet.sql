@@ -1,46 +1,52 @@
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'sheet') }}
+    where "DateTimeSheet" >= '2023-01-01'
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "SheetNum" as sheet_id,
-        
-        -- Foreign Keys
-        "PatNum" as patient_id,
-        "SheetDefNum" as sheet_def_id,
-        "DocNum" as doc_id,
-        "ClinicNum" as clinic_id,
-        "WebFormSheetID" as web_form_sheet_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"SheetNum"', 'target': 'sheet_id'},
+            {'source': 'NULLIF("PatNum", 0)', 'target': 'patient_id'},
+            {'source': 'NULLIF("SheetDefNum", 0)', 'target': 'sheet_def_id'},
+            {'source': 'NULLIF("DocNum", 0)', 'target': 'doc_id'},
+            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
+            {'source': 'NULLIF("WebFormSheetID", 0)', 'target': 'web_form_sheet_id'}
+        ]) }},
         
         -- Sheet Properties
-        "SheetType" as sheet_type,
-        "FontSize" as font_size,
-        "FontName" as font_name,
-        "Width" as width,
-        "Height" as height,
+        "SheetType"::integer as sheet_type,
+        "FontSize"::real as font_size,
+        nullif(trim("FontName"), '') as font_name,
+        "Width"::integer as width,
+        "Height"::integer as height,
         
-        -- Flags
-        CASE WHEN "IsLandscape" = 1 THEN true ELSE false END as is_landscape,
-        CASE WHEN "ShowInTerminal" = 1 THEN true ELSE false END as show_in_terminal,
-        CASE WHEN "IsWebForm" = 1 THEN true ELSE false END as is_web_form,
-        CASE WHEN "IsMultiPage" = 1 THEN true ELSE false END as is_multi_page,
-        CASE WHEN "IsDeleted" = 1 THEN true ELSE false END as is_deleted,
-        CASE WHEN "HasMobileLayout" = 1 THEN true ELSE false END as has_mobile_layout,
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsLandscape"') }} as is_landscape,
+        {{ convert_opendental_boolean('"ShowInTerminal"') }} as show_in_terminal,
+        {{ convert_opendental_boolean('"IsWebForm"') }} as is_web_form,
+        {{ convert_opendental_boolean('"IsMultiPage"') }} as is_multi_page,
+        {{ convert_opendental_boolean('"IsDeleted"') }} as is_deleted,
+        {{ convert_opendental_boolean('"HasMobileLayout"') }} as has_mobile_layout,
         
         -- Additional Fields
-        "InternalNote" as internal_note,
-        "Description" as description,
-        "RevID" as revision_id,
+        nullif(trim("InternalNote"), '') as internal_note,
+        nullif(trim("Description"), '') as description,
+        "RevID"::integer as revision_id,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTimeSheet" as _created_at,   -- When the record was created in source
-        "DateTSheetEdited" as _updated_at -- Last update timestamp
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateTimeSheet"') }} as sheet_datetime,
+        {{ clean_opendental_date('"DateTSheetEdited"') }} as sheet_edited_datetime,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTimeSheet"',
+            updated_at_column='"DateTSheetEdited"',
+            created_by_column=none
+        ) }}
 
-    from source
-    where "DateTimeSheet" >= '2023-01-01'
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

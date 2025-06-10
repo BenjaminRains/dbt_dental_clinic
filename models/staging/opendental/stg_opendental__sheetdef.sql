@@ -1,34 +1,43 @@
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'sheetdef') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "SheetDefNum" as sheet_def_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"SheetDefNum"', 'target': 'sheet_def_id'},
+            {'source': 'NULLIF("AutoCheckSaveImageDocCategory", 0)', 'target': 'auto_check_save_image_doc_category_id'}
+        ]) }},
         
-        -- Attributes
-        "Description" as description,
-        "SheetType" as sheet_type,
-        "FontSize" as font_size,
-        "FontName" as font_name,
-        "Width" as width,
-        "Height" as height,
-        "IsLandscape" as is_landscape,
-        "PageCount" as page_count,
-        "IsMultiPage" as is_multi_page,
-        "BypassGlobalLock" as bypass_global_lock,
-        "HasMobileLayout" as has_mobile_layout,
-        "RevID" as rev_id,
-        "AutoCheckSaveImage" as auto_check_save_image,
-        "AutoCheckSaveImageDocCategory" as auto_check_save_image_doc_category,
+        -- Sheet Definition Properties
+        nullif(trim("Description"), '') as description,
+        "SheetType"::integer as sheet_type,
+        "FontSize"::real as font_size,
+        nullif(trim("FontName"), '') as font_name,
+        "Width"::integer as width,
+        "Height"::integer as height,
+        "PageCount"::integer as page_count,
+        "RevID"::integer as rev_id,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTCreated" as _created_at,   -- When the record was created in source
-        "DateTCreated" as _updated_at    -- Last update timestamp (using creation date since no update timestamp available)
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsLandscape"') }} as is_landscape,
+        {{ convert_opendental_boolean('"IsMultiPage"') }} as is_multi_page,
+        {{ convert_opendental_boolean('"BypassGlobalLock"') }} as bypass_global_lock,
+        {{ convert_opendental_boolean('"HasMobileLayout"') }} as has_mobile_layout,
+        {{ convert_opendental_boolean('"AutoCheckSaveImage"') }} as auto_check_save_image,
+        
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateTCreated"') }} as date_created,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTCreated"',
+            updated_at_column='"DateTCreated"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
