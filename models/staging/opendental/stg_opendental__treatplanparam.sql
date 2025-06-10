@@ -1,41 +1,39 @@
 {{ config(
-    materialized='incremental',
-    unique_key='treatplan_param_id'
+    materialized='view',
+    schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'treatplanparam') }}
-    {% if is_incremental() %}
-        -- Note: Since treatplanparam doesn't appear to have a direct timestamp field,
-        -- we'll need to join with treatplan in downstream models for proper incremental logic
-        where 1=1
-    {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "TreatPlanParamNum" as treatplan_param_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"TreatPlanParamNum"', 'target': 'treatplan_param_id'},
+            {'source': 'NULLIF("PatNum", 0)', 'target': 'patient_id'},
+            {'source': 'NULLIF("TreatPlanNum", 0)', 'target': 'treatplan_id'}
+        ]) }},
         
-        -- Foreign keys
-        "PatNum" as patient_id,
-        "TreatPlanNum" as treatplan_id,
+        -- Display parameters using boolean conversion macro
+        {{ convert_opendental_boolean('"ShowDiscount"') }} as show_discount,
+        {{ convert_opendental_boolean('"ShowMaxDed"') }} as show_max_deductible,
+        {{ convert_opendental_boolean('"ShowSubTotals"') }} as show_subtotals,
+        {{ convert_opendental_boolean('"ShowTotals"') }} as show_totals,
+        {{ convert_opendental_boolean('"ShowCompleted"') }} as show_completed,
+        {{ convert_opendental_boolean('"ShowFees"') }} as show_fees,
+        {{ convert_opendental_boolean('"ShowIns"') }} as show_insurance,
         
-        -- Display parameters
-        "ShowDiscount" as show_discount,
-        "ShowMaxDed" as show_max_deductible,
-        "ShowSubTotals" as show_subtotals,
-        "ShowTotals" as show_totals,
-        "ShowCompleted" as show_completed,
-        "ShowFees" as show_fees,
-        "ShowIns" as show_insurance,
+        -- Standardized metadata using macro (no timestamps in source)
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        current_timestamp as _created_at, -- Since no creation timestamp exists in source
-        current_timestamp as _updated_at  -- Since no update timestamp exists in source
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
