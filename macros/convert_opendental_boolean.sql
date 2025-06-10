@@ -5,14 +5,14 @@
     OpenDental boolean fields can contain:
     - 1 (true)
     - 0 (false) 
-    - "N" (null/not applicable)
-    - Empty strings or other non-numeric values (null)
+    - "N" (defaults to false)
+    - Empty strings or other non-numeric values (defaults to false)
     
     Args:
         column_name (str): The quoted column name from OpenDental (e.g., '"IsHidden"')
         
     Returns:
-        SQL expression that safely converts values to true/false/null
+        SQL expression that safely converts values to true/false (defaults unknown values to false)
         
     Example usage:
         {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
@@ -21,6 +21,6 @@
     CASE 
         WHEN {{ column_name }}::text = '1' THEN true
         WHEN {{ column_name }}::text = '0' THEN false
-        ELSE null 
+        ELSE false  -- Default NULL/unknown values to false for data consistency
     END
 {% endmacro %} 
