@@ -3,56 +3,72 @@ version: 2
 models:
   - name: stg_opendental__adjustment
     description: >
-      Staged adjustment data from OpenDental system.
-      Contains financial adjustments including insurance write-offs, discounts, refunds, and other account modifications.
-      Filtered to include data from 2022-01-01 onwards with basic data quality checks.
+      Staged adjustment data from OpenDental system following refined naming conventions.
+      This staging model focuses on basic data type conversions and standardization, 
+      with complex business logic moved to the intermediate layer (int_adjustments).
+      
+      Refactoring Changes:
+      - Applied transform_id_columns() macro for all ID field conversions
+      - Used clean_opendental_date() macro for proper date handling
+      - Used standardize_metadata_columns() macro for consistent metadata
+      - Converted CTEs to snake_case following dbt best practices
+      - Removed complex business logic (moved to int_adjustments)
+      - Kept only essential staging transformations
       
       Key characteristics:
       - procedure_id = 0 represents general account adjustments not tied to specific procedures
       - These general adjustments affect the overall patient balance
       - Both procedure-specific and general adjustments are included
       - General adjustments (procedure_id = 0) are valid and important for AR analysis
-      - Note: Some small reallocations (type 235) and insurance writeoffs (type 188) are missing documentation but are valid business transactions
+      - Filtered to include data from 2023-01-01 onwards with incremental updates
 
     columns:
       - name: adjustment_id
-        description: Primary key, unique identifier for each adjustment record
+        description: Primary key, unique identifier for each adjustment record (transformed from AdjNum)
         tests:
           - unique
           - not_null
 
       - name: patient_id
-        description: Foreign key to the patient table
+        description: Foreign key to the patient table (transformed from PatNum)
         tests:
           - not_null
 
       - name: procedure_id
         description: >
-          Foreign key to the procedure table.
-          - Non-zero values link to specific procedures
-          - Zero (0) indicates a general account adjustment not tied to any procedure
-          - These general adjustments affect the overall patient balance
+          Foreign key to the procedure table (transformed from ProcNum, with NULLIF for 0 values).
+          - NULL values indicate general account adjustments not tied to any procedure
+          - Non-null values link to specific procedures
+          - General adjustments affect the overall patient balance
           - Both types are valid and important for AR analysis
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
-              config:
-                severity: error
-                description: "procedure_id must be non-negative"
 
       - name: provider_id
-        description: Foreign key to the provider table who authorized the adjustment
+        description: Foreign key to the provider table who authorized the adjustment (transformed from ProvNum, with NULLIF for 0 values)
 
       - name: clinic_id
-        description: Foreign key to the clinic table where adjustment was made
+        description: Foreign key to the clinic table where adjustment was made (transformed from ClinicNum, with NULLIF for 0 values)
+
+      - name: statement_id
+        description: Foreign key to billing statement (transformed from StatementNum, with NULLIF for 0 values)
+
+      - name: adjustment_type_id
+        description: Foreign key to definition table for adjustment type (transformed from AdjType)
+        tests:
+          - not_null
+
+      - name: tax_transaction_id
+        description: Foreign key to tax transaction (transformed from TaxTransID, with NULLIF for 0 values)
 
       - name: adjustment_amount
         description: The monetary value of the adjustment (positive for credits, negative for debits)
         tests:
           - not_null
 
+      - name: adjustment_note
+        description: Freetext note describing the adjustment (nullified if empty string)
+
       - name: adjustment_date
-        description: Date when the adjustment was applied
+        description: Date when the adjustment was applied (cleaned using date macro)
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
@@ -61,94 +77,54 @@ models:
               max_value: current_date
 
       - name: procedure_date
-        description: Date of the associated procedure, if applicable
+        description: Date of the associated procedure (cleaned using date macro)
 
-      - name: adjustment_category
+      - name: entry_date
+        description: Date when the adjustment was entered into the system (cleaned using date macro)
+
+      - name: adjustment_direction
         description: >
-          Categorized type of adjustment including:
-          - insurance_writeoff
-          - provider_discount
-          - senior_discount
-          - reallocation
-          - employee_discount
-          - cash_discount
-          - patient_refund
-          - referral_credit
-          - new_patient_discount
-          - admin_correction
-          - admin_adjustment
-          - unearned_income
-          - other
-
-      - name: adjustment_size
-        description: Categorization of adjustment amount (large >= 1000, medium >= 500, small >= 100, minimal < 100)
+          Basic categorization of adjustment amount direction.
+          Values: 'positive', 'negative', 'zero'
         tests:
           - accepted_values:
-              values: ['large', 'medium', 'small', 'minimal']
+              values: ['positive', 'negative', 'zero']
 
       - name: is_procedure_adjustment
         description: >
           Boolean flag indicating if adjustment is linked to a specific procedure.
           - true = linked to a specific procedure (procedure_id > 0)
-          - false = general account adjustment (procedure_id = 0)
+          - false = general account adjustment (procedure_id = 0 or NULL)
         tests:
           - accepted_values:
               values: [true, false]
-          - dbt_utils.expression_is_true:
-              expression: "= (CASE WHEN procedure_id > 0 THEN true ELSE false END)"
-              config:
-                severity: error
-                description: "is_procedure_adjustment must match procedure_id value"
+          - not_null
 
       - name: is_retroactive_adjustment
         description: Boolean flag indicating if adjustment date differs from procedure date
         tests:
           - accepted_values:
               values: [true, false]
+          - not_null
 
-      - name: is_provider_discretion
-        description: Boolean flag indicating if adjustment was made at provider's discretion
-        tests:
-          - accepted_values:
-              values: [true, false]
-
-      - name: is_employee_discount
-        description: Boolean flag for employee-specific discounts
-        tests:
-          - accepted_values:
-              values: [true, false]
-
-      - name: is_military_discount
-        description: Boolean flag for military-specific discounts
-        tests:
-          - accepted_values:
-              values: [true, false]
-
-      - name: is_courtesy_adjustment
-        description: Boolean flag for courtesy or warranty-related adjustments
-        tests:
-          - accepted_values:
-              values: [true, false]
-
-      - name: last_modified_at
-        description: Timestamp of when the record was last modified in the source system
-
-      # Required metadata columns
+      # Required metadata columns (using standardize_metadata_columns macro)
       - name: _loaded_at
         description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
         tests:
           - not_null
       
       - name: _created_at
-        description: Timestamp when the record was created in OpenDental (source system)
+        description: Timestamp when the record was created in OpenDental (from DateEntry)
         tests:
           - not_null
       
       - name: _updated_at
-        description: Timestamp when the record was last updated in OpenDental (source system)
+        description: Timestamp when the record was last updated in OpenDental (from SecDateTEdit)
         tests:
           - not_null
 
+      - name: _created_by_user_id
+        description: User ID who created the record in OpenDental (from SecUserNumEntry)
 
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
@@ -157,8 +133,8 @@ models:
       
       - dbt_utils.expression_is_true:
           expression: >
-            (procedure_id = 0 AND is_procedure_adjustment = false) OR
-            (procedure_id > 0 AND is_procedure_adjustment = true)
+            (procedure_id IS NULL AND is_procedure_adjustment = false) OR
+            (procedure_id IS NOT NULL AND is_procedure_adjustment = true)
           config:
             severity: error
             description: "procedure_id and is_procedure_adjustment must be consistent"

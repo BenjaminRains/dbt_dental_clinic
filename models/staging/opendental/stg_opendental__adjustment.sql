@@ -7,10 +7,10 @@
 with source_data as (
     select * 
     from {{ source('opendental', 'adjustment') }}
-    where "AdjDate" >= '2023-01-01'::date
-        and "AdjDate" <= '{{ var("max_valid_date") }}'::date
+    where {{ clean_opendental_date('"AdjDate"') }} >= '2023-01-01'::date
+        and {{ clean_opendental_date('"AdjDate"') }} <= '{{ var("max_valid_date") }}'::date
     {% if is_incremental() %}
-        and "AdjDate" > (select max(adjustment_date) from {{ this }})
+        and {{ clean_opendental_date('"AdjDate"') }} > (select max(adjustment_date) from {{ this }})
     {% endif %}
 ),
 
@@ -20,7 +20,7 @@ renamed_columns as (
         {{ transform_id_columns([
             {'source': '"AdjNum"', 'target': 'adjustment_id'},
             {'source': '"PatNum"', 'target': 'patient_id'},
-            {'source': '"ProcNum"', 'target': 'procedure_id'},
+            {'source': 'NULLIF("ProcNum", 0)', 'target': 'procedure_id'},
             {'source': 'NULLIF("ProvNum", 0)', 'target': 'provider_id'},
             {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
             {'source': 'NULLIF("StatementNum", 0)', 'target': 'statement_id'},
@@ -30,142 +30,29 @@ renamed_columns as (
         
         -- Adjustment details
         "AdjAmt"::double precision as adjustment_amount,  
-        NULLIF("AdjNote", '')::text as adjustment_note,  
+        nullif("AdjNote", '')::text as adjustment_note,  
         
-        -- Date fields
-        "AdjDate"::date as adjustment_date,    
-        "ProcDate"::date as procedure_date,    
-        "DateEntry"::date as entry_date,       
+        -- Date fields using macro
+        {{ clean_opendental_date('"AdjDate"') }} as adjustment_date,
+        {{ clean_opendental_date('"ProcDate"') }} as procedure_date,
+        {{ clean_opendental_date('"DateEntry"') }} as entry_date,
         
-        -- Calculated fields
-        CASE 
-            WHEN "AdjAmt" > 0 THEN 'positive'
-            WHEN "AdjAmt" < 0 THEN 'negative'
-            ELSE 'zero'
-        END as adjustment_direction,
+        -- Basic calculated fields only (minimal staging logic)
+        case 
+            when "AdjAmt" > 0 then 'positive'
+            when "AdjAmt" < 0 then 'negative'
+            else 'zero'
+        end as adjustment_direction,
         
-        -- Modified to handle both 0 and NULL cases
-        CASE 
-            WHEN "ProcNum" > 0 THEN true
-            ELSE false
-        END::boolean as is_procedure_adjustment,
+        case 
+            when "ProcNum" > 0 then true
+            else false
+        end as is_procedure_adjustment,
         
-        CASE
-            WHEN "ProcDate" != "AdjDate" THEN true
-            ELSE false
-        END::boolean as is_retroactive_adjustment,
-        
-        -- Enhanced calculated fields
-        CASE
-            WHEN "AdjType" = 188 THEN 'insurance_writeoff'
-            WHEN "AdjType" = 474 THEN 'provider_discount'
-            WHEN "AdjType" = 186 THEN 'senior_discount'
-            WHEN "AdjType" = 235 THEN 'reallocation'
-            WHEN "AdjType" = 472 THEN 'employee_discount'
-            WHEN "AdjType" = 475 THEN 'provider_discount'
-            WHEN "AdjType" IN (9, 185) THEN 'cash_discount'
-            WHEN "AdjType" IN (18, 337) THEN 'patient_refund'
-            WHEN "AdjType" = 483 THEN 'referral_credit'
-            WHEN "AdjType" = 537 THEN 'new_patient_discount'
-            WHEN "AdjType" = 485 THEN 'employee_discount'
-            WHEN "AdjType" = 549 THEN 'admin_correction'
-            WHEN "AdjType" = 550 THEN 'admin_adjustment'
-            WHEN EXISTS (
-                SELECT 1 
-                FROM {{ source('opendental', 'paysplit') }} ps 
-                WHERE ps."AdjNum" = source_data."AdjNum" 
-                AND ps."UnearnedType" IN (288, 439)
-            ) THEN 'unearned_income'
-            ELSE 'other'
-        END as adjustment_category,
-
-        -- Additional flags based on data patterns
-        CASE 
-            WHEN LOWER("AdjNote") LIKE '%n/c%' 
-              OR LOWER("AdjNote") LIKE '%nc %'
-              OR LOWER("AdjNote") LIKE '%no charge%' THEN true
-            ELSE false
-        END::boolean as is_no_charge,
-
-        CASE
-            WHEN LOWER("AdjNote") LIKE '%military%' THEN true
-            ELSE false
-        END::boolean as is_military_discount,
-
-        CASE
-            WHEN LOWER("AdjNote") LIKE '%warranty%' 
-              OR LOWER("AdjNote") LIKE '%courtesy%' THEN true
-            ELSE false
-        END::boolean as is_courtesy_adjustment,
-
-        CASE
-            WHEN "AdjType" IN (474, 475) 
-              OR LOWER("AdjNote") LIKE '%per dr%'
-              OR LOWER("AdjNote") LIKE '%dr.%' THEN true
-            ELSE false
-        END::boolean as is_provider_discretion,
-
-        CASE
-            WHEN ABS("AdjAmt") >= 1000 THEN 'large'
-            WHEN ABS("AdjAmt") >= 500 THEN 'medium'
-            WHEN ABS("AdjAmt") >= 100 THEN 'small'
-            ELSE 'minimal'
-        END as adjustment_size,
-
-        -- Unearned income flag from paysplit
-        CASE 
-            WHEN EXISTS (
-                SELECT 1 
-                FROM {{ source('opendental', 'paysplit') }} ps 
-                WHERE ps."AdjNum" = source_data."AdjNum" 
-                AND ps."UnearnedType" = 288
-            ) THEN 288
-            WHEN EXISTS (
-                SELECT 1 
-                FROM {{ source('opendental', 'paysplit') }} ps 
-                WHERE ps."AdjNum" = source_data."AdjNum" 
-                AND ps."UnearnedType" = 439
-            ) THEN 439
-            ELSE NULL
-        END as unearned_type_id,
-        
-        -- Additional flags
-        CASE 
-            WHEN "AdjType" IN (472, 485, 655) THEN true
-            ELSE false
-        END::boolean as is_employee_discount,
-        
-        CASE
-            WHEN "AdjType" IN (482, 486) THEN true
-            ELSE false
-        END::boolean as is_family_discount,
-        
-        CASE
-            WHEN "AdjType" IN (474, 475, 601) THEN true
-            ELSE false
-        END::boolean as is_provider_discount,
-        
-        -- Additional flags for financial analysis
-        CASE 
-            WHEN "AdjType" IN (486, 474) AND "AdjAmt" < -1000 THEN true
-            ELSE false
-        END::boolean as is_large_adjustment,
-        
-        CASE
-            WHEN "AdjType" IN (186, 9) AND "AdjAmt" > -50 THEN true
-            ELSE false
-        END::boolean as is_minor_adjustment,
-        
-        CASE 
-            WHEN "AdjType" IN (288, 439) THEN true
-            ELSE false
-        END::boolean as is_unearned_income,
-        
-        -- Additional metadata fields
-        CASE 
-            WHEN "SecDateTEdit" > current_timestamp THEN NULL
-            ELSE "SecDateTEdit"
-        END::timestamp without time zone as last_modified_at,
+        case
+            when {{ clean_opendental_date('"ProcDate"') }} != {{ clean_opendental_date('"AdjDate"') }} then true
+            else false
+        end as is_retroactive_adjustment,
         
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
