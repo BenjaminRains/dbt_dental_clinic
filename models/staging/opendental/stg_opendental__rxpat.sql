@@ -1,22 +1,35 @@
-with source as (
+{{ config(
+    materialized='incremental',
+    unique_key='rx_id',
+    schema='staging'
+) }}
+
+with source_data as (
     select * from {{ source('opendental', 'rxpat') }}
+    {% if is_incremental() %}
+        where "DateTStamp" > (select max(_updated_at) from {{ this }})
+    {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
-        "RxNum" as rx_id,
+        {{ transform_id_columns([
+            {'source': '"RxNum"', 'target': 'rx_id'}
+        ]) }},
         
         -- Foreign Keys
-        "PatNum" as patient_id,
-        "ProvNum" as provider_id,
-        "PharmacyNum" as pharmacy_id,
-        "ProcNum" as procedure_id,
-        "ClinicNum" as clinic_id,
-        "UserNum" as user_id,
+        {{ transform_id_columns([
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"ProvNum"', 'target': 'provider_id'},
+            {'source': '"PharmacyNum"', 'target': 'pharmacy_id'},
+            {'source': '"ProcNum"', 'target': 'procedure_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"UserNum"', 'target': 'user_id'}
+        ]) }},
         
         -- Dates
-        "RxDate" as rx_date,
+        {{ clean_opendental_date('"RxDate"') }} as rx_date,
         
         -- Prescription Details
         "Drug" as drug_name,
@@ -24,7 +37,7 @@ renamed as (
         "Disp" as dispense_instructions,
         "Refills" as refills,
         "Notes" as notes,
-        CASE WHEN "IsControlled" = 1 THEN true ELSE false END as is_controlled,
+        {{ convert_opendental_boolean('"IsControlled"') }} as is_controlled,
         "SendStatus" as send_status,
         "RxCui" as rx_cui,
         "DosageCode" as dosage_code,
@@ -33,17 +46,19 @@ renamed as (
         
         -- E-Prescription Related
         "ErxGuid" as erx_guid,
-        CASE WHEN "IsErxOld" = 1 THEN true ELSE false END as is_erx_old,
+        {{ convert_opendental_boolean('"IsErxOld"') }} as is_erx_old,
         "ErxPharmacyInfo" as erx_pharmacy_info,
-        CASE WHEN "IsProcRequired" = 1 THEN true ELSE false END as is_proc_required,
+        {{ convert_opendental_boolean('"IsProcRequired"') }} as is_proc_required,
         "RxType" as rx_type,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTStamp" as _created_at,     -- When the record was created in source
-        "DateTStamp" as _updated_at      -- Last update timestamp
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
