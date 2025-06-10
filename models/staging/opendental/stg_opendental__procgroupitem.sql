@@ -3,31 +3,29 @@
     unique_key='procgroup_item_id'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'procgroupitem') }}
     {% if is_incremental() %}
         where current_timestamp > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "ProcGroupItemNum" as procgroup_item_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"ProcGroupItemNum"', 'target': 'procgroup_item_id'},
+            {'source': '"ProcNum"', 'target': 'procedure_id'},
+            {'source': '"GroupNum"', 'target': 'group_id'}
+        ]) }},
         
-        -- Foreign keys
-        "ProcNum" as procedure_id,
-        "GroupNum" as group_id,
-        
-        -- Required metadata columns
-        current_timestamp as _loaded_at,                    -- When ETL pipeline loaded the data
-        current_timestamp as _created_at,                   -- When record was created in source system
-        current_timestamp as _updated_at,                   -- When record was last updated
-        
-        -- Optional metadata
-        '{{ invocation_id }}' as _invocation_id,           -- dbt invocation ID for lineage tracking
-        current_timestamp as _extract_timestamp            -- When data was extracted from source
-    from source
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
