@@ -1,67 +1,79 @@
 {{ config(
     materialized='incremental',
-    unique_key='CodeNum',
+    unique_key='procedure_code_id',
     schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'procedurecode') }}
     
     {% if is_incremental() %}
-    AND "DateTStamp"::timestamp > (select max(date_timestamp) from {{ this }})
+    AND "DateTStamp"::timestamp > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "CodeNum"::integer as procedure_code_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"CodeNum"', 'target': 'procedure_code_id'},
+            {'source': 'NULLIF("ProcCat", 0)', 'target': 'procedure_category_id'},
+            {'source': 'NULLIF("GTypeNum", 0)', 'target': 'graphic_type_id'},
+            {'source': 'NULLIF("ProvNumDefault", 0)', 'target': 'default_provider_id'}
+        ]) }},
         
-        -- Attributes
+        -- Core procedure attributes
         "ProcCode"::varchar as procedure_code,
         -- Extracts D-prefix only for CDT codes, will be NULL for numeric procedure codes
         REGEXP_SUBSTR("ProcCode", '^D[0-9]') as code_prefix,
-        "Descript"::varchar as description,
-        "AbbrDesc"::varchar as abbreviated_description,
-        "ProcTime"::varchar as procedure_time,
-        "ProcCat"::bigint as procedure_category_id,
+        nullif(trim("Descript"), '') as description,
+        nullif(trim("AbbrDesc"), '') as abbreviated_description,
+        nullif(trim("ProcTime"), '') as procedure_time,
+        nullif(trim("DefaultNote"), '') as default_note,
+        nullif(trim("LaymanTerm"), '') as layman_term,
+        nullif(trim("DefaultClaimNote"), '') as default_claim_note,
+        nullif(trim("DefaultTPNote"), '') as default_treatment_plan_note,
+        
+        -- Classification and treatment fields
         "TreatArea"::smallint as treatment_area,
-        "NoBillIns"::smallint as no_bill_insurance_flag,
-        "IsProsth"::smallint as is_prosthetic_flag,
-        "DefaultNote"::text as default_note,
-        "IsHygiene"::smallint as is_hygiene_flag,
-        "GTypeNum"::smallint as graphic_type_id,
-        "AlternateCode1"::varchar as alternate_code1,
-        "MedicalCode"::varchar as medical_code,
-        "IsTaxed"::smallint as is_taxed_flag,
         "PaintType"::smallint as paint_type,
         "GraphicColor"::integer as graphic_color,
-        "LaymanTerm"::varchar as layman_term,
-        "IsCanadianLab"::smallint as is_canadian_lab_flag,
-        "PreExisting"::boolean as pre_existing_flag,
-        "BaseUnits"::integer as base_units,
-        "SubstitutionCode"::varchar as substitution_code,
-        "SubstOnlyIf"::integer as substitution_only_if,
-        "DateTStamp"::timestamp as date_timestamp,
-        "IsMultiVisit"::smallint as is_multi_visit_flag,
-        "DrugNDC"::varchar as drug_ndc,
-        "RevenueCodeDefault"::varchar as default_revenue_code,
-        "ProvNumDefault"::bigint as default_provider_id,
-        "CanadaTimeUnits"::float as canada_time_units,
-        "IsRadiology"::smallint as is_radiology_flag,
-        "DefaultClaimNote"::text as default_claim_note,
-        "DefaultTPNote"::text as default_treatment_plan_note,
-        "BypassGlobalLock"::smallint as bypass_global_lock_flag,
-        "TaxCode"::varchar as tax_code,
-        "PaintText"::varchar as paint_text,
-        "AreaAlsoToothRange"::smallint as area_also_tooth_range_flag,
-        "DiagnosticCodes"::varchar as diagnostic_codes,
+        nullif(trim("PaintText"), '') as paint_text,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "DateTStamp"::timestamp as _created_at,  -- Using DateTStamp as creation timestamp
-        "DateTStamp"::timestamp as _updated_at   -- Using DateTStamp as update timestamp
-    from source
+        -- Medical and insurance codes
+        nullif(trim("AlternateCode1"), '') as alternate_code1,
+        nullif(trim("MedicalCode"), '') as medical_code,
+        nullif(trim("SubstitutionCode"), '') as substitution_code,
+        "SubstOnlyIf"::integer as substitution_only_if,
+        nullif(trim("DrugNDC"), '') as drug_ndc,
+        nullif(trim("RevenueCodeDefault"), '') as default_revenue_code,
+        nullif(trim("TaxCode"), '') as tax_code,
+        nullif(trim("DiagnosticCodes"), '') as diagnostic_codes,
+        
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"NoBillIns"') }} as no_bill_insurance,
+        {{ convert_opendental_boolean('"IsProsth"') }} as is_prosthetic,
+        {{ convert_opendental_boolean('"IsHygiene"') }} as is_hygiene,
+        {{ convert_opendental_boolean('"IsTaxed"') }} as is_taxed,
+        {{ convert_opendental_boolean('"IsCanadianLab"') }} as is_canadian_lab,
+        {{ convert_opendental_boolean('"IsMultiVisit"') }} as is_multi_visit,
+        {{ convert_opendental_boolean('"IsRadiology"') }} as is_radiology,
+        {{ convert_opendental_boolean('"BypassGlobalLock"') }} as bypass_global_lock,
+        {{ convert_opendental_boolean('"AreaAlsoToothRange"') }} as area_also_tooth_range,
+        
+        -- Numeric and specialized fields
+        "BaseUnits"::integer as base_units,
+        "CanadaTimeUnits"::double precision as canada_time_units,
+        "PreExisting"::boolean as pre_existing_flag,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
+        
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
