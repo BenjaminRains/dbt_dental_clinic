@@ -1,21 +1,26 @@
 {% macro convert_opendental_boolean(column_name) %}
 {#- 
-    Converts OpenDental boolean fields (0/1 integers) to PostgreSQL boolean
-    Note: For columns that are already boolean in PostgreSQL, use them directly
+    Converts OpenDental boolean fields to PostgreSQL boolean with proper null handling
+    
+    OpenDental boolean fields can contain:
+    - 1 (true)
+    - 0 (false) 
+    - "N" (null/not applicable)
+    - Empty strings or other non-numeric values (null)
     
     Args:
         column_name (str): The quoted column name from OpenDental (e.g., '"IsHidden"')
         
     Returns:
-        SQL expression that converts 0/1 integers to false/true/null
+        SQL expression that safely converts values to true/false/null
         
     Example usage:
-        {{ convert_opendental_boolean('"PasswordIsStrong"') }} as has_strong_password,
-        "IsHidden"::boolean as is_hidden  -- For columns already boolean
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ convert_opendental_boolean('"IsProsthesis"') }} as is_prosthesis
 -#}
     CASE 
-        WHEN COALESCE({{ column_name }}::integer, 0) = 1 THEN true
-        WHEN COALESCE({{ column_name }}::integer, 0) = 0 THEN false
+        WHEN {{ column_name }}::text = '1' THEN true
+        WHEN {{ column_name }}::text = '0' THEN false
         ELSE null 
     END
 {% endmacro %} 
