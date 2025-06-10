@@ -12,34 +12,42 @@
     restrictions, and clinic-specific configurations.
 */
 
-select
-    "ApptViewNum" as appt_view_id,
-    "Description" as view_description,
-    "ItemOrder" as sort_order,
-    "RowsPerIncr" as rows_per_increment,
-    "OnlyScheduledProvs" as only_scheduled_providers,
-    "OnlySchedBeforeTime" as only_scheduled_before_time,
-    "OnlySchedAfterTime" as only_scheduled_after_time,
-    "StackBehavUR" as stack_behavior_up_right,
-    "StackBehavLR" as stack_behavior_left_right,
-    "ClinicNum" as clinic_id,
-    "ApptTimeScrollStart" as appointment_time_scroll_start,
-    CASE 
-        WHEN "IsScrollStartDynamic" = 1 THEN true
-        WHEN "IsScrollStartDynamic" = 0 THEN false
-        ELSE null 
-    END as is_scroll_start_dynamic,
-    CASE 
-        WHEN "IsApptBubblesDisabled" = 1 THEN true
-        WHEN "IsApptBubblesDisabled" = 0 THEN false
-        ELSE null 
-    END as is_appointment_bubbles_disabled,
-    "WidthOpMinimum" as width_operatory_minimum,
-    "WaitingRmName" as waiting_room_name,
-    "OnlyScheduledProvDays" as only_scheduled_provider_days,
-    
-    -- Required metadata columns
-    current_timestamp as _loaded_at,
-    current_timestamp as _created_at,  -- No creation timestamp in source
-    current_timestamp as _updated_at   -- No update timestamp in source
-from {{ source('opendental', 'apptview') }}
+with source_data as (
+    select * from {{ source('opendental', 'apptview') }}
+),
+
+renamed_columns as (
+    select
+        -- Primary Key
+        {{ transform_id_columns([
+            {'source': '"ApptViewNum"', 'target': 'appt_view_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'}
+        ]) }},
+        
+        -- Attributes
+        "Description" as view_description,
+        "ItemOrder" as sort_order,
+        "RowsPerIncr" as rows_per_increment,
+        "OnlyScheduledProvs" as only_scheduled_providers,
+        "OnlySchedBeforeTime" as only_scheduled_before_time,
+        "OnlySchedAfterTime" as only_scheduled_after_time,
+        "StackBehavUR" as stack_behavior_up_right,
+        "StackBehavLR" as stack_behavior_left_right,
+        "ApptTimeScrollStart" as appointment_time_scroll_start,
+        {{ convert_opendental_boolean('"IsScrollStartDynamic"') }} as is_scroll_start_dynamic,
+        {{ convert_opendental_boolean('"IsApptBubblesDisabled"') }} as is_appointment_bubbles_disabled,
+        "WidthOpMinimum" as width_operatory_minimum,
+        "WaitingRmName" as waiting_room_name,
+        "OnlyScheduledProvDays" as only_scheduled_provider_days,
+        
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
+
+    from source_data
+)
+
+select * from renamed_columns
