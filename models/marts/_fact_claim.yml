@@ -76,13 +76,15 @@ models:
       - Amount fields use descriptive suffixes (_amount)
       - Status fields use descriptive prefixes (is_, has_)
 
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [claim_id, procedure_id, claim_procedure_id]
+
     columns:
       - name: claim_id
         description: Primary key for the claim
         tests:
           - not_null
-          - unique:
-              combination_of: [claim_id, procedure_id, claim_procedure_id]
 
       - name: procedure_id
         description: Foreign key to the procedure
