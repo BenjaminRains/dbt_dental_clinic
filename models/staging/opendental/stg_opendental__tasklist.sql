@@ -1,30 +1,41 @@
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'tasklist') }}
     where "DateTimeEntry" >= '2023-01-01'
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "TaskListNum" as task_list_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"TaskListNum"', 'target': 'task_list_id'},
+            {'source': 'NULLIF("Parent", 0)', 'target': 'parent_id'},
+            {'source': 'NULLIF("FromNum", 0)', 'target': 'from_id'}
+        ]) }},
         
-        -- Attributes
+        -- Task list attributes
         "Descript" as description,
-        "Parent" as parent_id,
-        "DateTL" as task_date,
-        "IsRepeating" as is_repeating,
-        "DateType" as date_type,
-        "FromNum" as from_id,
-        "ObjectType" as object_type,
-        "DateTimeEntry" as entry_datetime,
         "GlobalTaskFilterType" as global_task_filter_type,
         "TaskListStatus" as task_status,
+        "ObjectType" as object_type,
+        "DateType" as date_type,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "DateTimeEntry" as _created_at,
-        "DateTimeEntry" as _updated_at
-    from source
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateTL"') }} as task_date,
+        
+        -- Timestamps
+        "DateTimeEntry" as entry_datetime,
+        
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsRepeating"') }} as is_repeating,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTimeEntry"',
+            updated_at_column='"DateTimeEntry"',
+            created_by_column=none
+        ) }}
+        
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

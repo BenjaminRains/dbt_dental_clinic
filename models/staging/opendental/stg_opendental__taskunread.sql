@@ -2,32 +2,35 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'taskunread') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "TaskUnreadNum" as task_unread_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"TaskUnreadNum"', 'target': 'task_unread_id'},
+            {'source': 'NULLIF("TaskNum", 0)', 'target': 'task_id'},
+            {'source': 'NULLIF("UserNum", 0)', 'target': 'user_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "TaskNum" as task_id,
-        "UserNum" as user_id,
+        -- Standardized metadata using macro (no creation/update timestamps in source)
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        current_timestamp as _created_at,  -- Using current_timestamp as there's no creation timestamp in source
-        current_timestamp as _updated_at   -- Using current_timestamp as there's no update timestamp in source
-    from source
+    from source_data
 ),
 
-filtered as (
+filtered_data as (
     select r.*
-    from renamed r
-    inner join public.task t
-        on r.task_id = t."TaskNum"
-    where t."DateTimeOriginal" >= '2023-01-01'
+    from renamed_columns r
+    inner join {{ ref('stg_opendental__task') }} t
+        on r.task_id = t.task_id
+    where t.original_timestamp >= '2023-01-01'
 )
 
-select * from filtered
+select * from filtered_data
