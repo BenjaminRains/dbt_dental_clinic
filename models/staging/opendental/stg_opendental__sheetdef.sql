@@ -1,3 +1,8 @@
+{{ config(
+    materialized='view',
+    schema='staging'
+) }}
+
 with source_data as (
     select * from {{ source('opendental', 'sheetdef') }}
 ),
