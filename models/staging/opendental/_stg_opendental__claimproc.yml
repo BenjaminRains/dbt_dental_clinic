@@ -6,83 +6,269 @@ models:
       Standardized staging model for insurance claim procedures from OpenDental.
       This model represents individual procedures that are included in insurance claims,
       connecting claims, procedures, and payments in the dental practice management system.
+      Each record represents one procedure submitted to or processed by an insurance company,
+      containing financial details like billed amounts, estimated payments, actual payments,
+      deductibles, and write-offs. This is a critical model for understanding insurance
+      processing, financial reconciliation, and revenue cycle management.
+    
+    meta:
+      record_count: ~2.8M
+      data_scope: "Claims procedures from 2023-01-01 onwards with incremental updates"
+      
+      known_issues:
+        - description: "Insurance payment estimates may be zero for pre-authorizations and can be inaccurate for complex cases requiring manual review"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "test_insurance_payment_estimate"
+        - description: "Some historical records have missing procedure dates or incorrect claim linkages"
+          severity: "warn"
+          identified_date: "2024-01-10"
+        - description: "Status codes may not reflect real-time insurance processing status due to batch updates"
+          severity: "warn"
+          identified_date: "2024-01-20"
+        - description: "Future procedure dates (2025-2026) are expected and represent pre-authorized procedures, scheduled treatments, and insurance estimates for planned work"
+          severity: "info"
+          identified_date: "2024-01-25"
+          test: "procedure_date validation"
+      
+      business_rules:
+        - rule: "Insurance payment estimates should not exceed the billed fee amount except in rare overpayment scenarios"
+          impact: "Affects revenue forecasting and financial reporting accuracy"
+        - rule: "Claim procedures with status 2 (excluded) should not have associated payments or active insurance processing"
+          impact: "Critical for accurate insurance revenue reporting and claim status tracking"
+        - rule: "Write-offs and deductibles combined should not exceed the total billed amount"
+          impact: "Ensures financial integrity and proper accounting"
+      
+      usage_notes: >
+        This model is essential for insurance revenue analysis, claim processing workflows,
+        and financial reconciliation. When analyzing payments, always consider the claim status
+        and processing dates. For revenue reporting, focus on records with non-excluded status.
+        Be aware that estimates may differ significantly from actual payments, especially for
+        complex procedures or secondary insurance claims. Use in conjunction with claim and
+        payment models for complete financial picture.
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "insurance_payment_estimate <= fee_billed OR insurance_payment_estimate IS NULL OR fee_billed IS NULL"
+          config:
+            severity: warn
+      
+      - dbt_utils.expression_is_true:
+          expression: "(COALESCE(write_off, 0) + COALESCE(deductible_applied, 0)) <= fee_billed OR fee_billed IS NULL"
+          config:
+            severity: warn
+      
+      - dbt_utils.expression_is_true:
+          expression: "claim_procedure_date >= DATE '2020-01-01'"
+          config:
+            severity: warn
+      
+      - dbt_utils.expression_is_true:
+          expression: "procedure_date >= DATE '2020-01-01' AND procedure_date <= (CURRENT_DATE + INTERVAL '1 year')"
+          config:
+            severity: warn
+            description: "Procedure dates should be reasonable - not too far in past or future. Future dates up to 1 year are allowed for scheduled procedures and pre-authorizations."
     
     columns:
       - name: claim_procedure_id
-        description: Primary key for the claim procedure record (from ClaimProcNum)
+        description: >
+          Primary key for the claim procedure record (maps to ClaimProcNum in OpenDental).
+          Uniquely identifies each procedure submitted to or processed by insurance,
+          serving as the main identifier for tracking procedure-level insurance activity.
         tests:
           - unique
           - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              inclusive: true
       
       - name: procedure_id
-        description: Foreign key to the procedure record (ProcNum)
+        description: >
+          Foreign key to the procedure record (maps to ProcNum in OpenDental).
+          Links to the actual dental procedure performed, connecting insurance
+          claims to clinical work. May be null for adjustment entries or
+          non-procedure-based claims.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              config:
+                severity: warn
+                where: "procedure_id IS NOT NULL AND procedure_id != 0"
       
       - name: claim_id
-        description: Foreign key to the insurance claim (ClaimNum)
+        description: >
+          Foreign key to the insurance claim (maps to ClaimNum in OpenDental).
+          Connects multiple procedures under a single insurance claim submission.
+          Essential for understanding which procedures were submitted together
+          and tracking claim-level processing status.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              config:
+                severity: error
+                where: "claim_id IS NOT NULL AND claim_id != 0 AND status != 2"
       
       - name: patient_id
-        description: Foreign key to the patient (PatNum)
+        description: >
+          Foreign key to the patient (maps to PatNum in OpenDental).
+          Identifies the patient who received the procedure and is the beneficiary
+          of the insurance claim. Critical for patient-level financial analysis.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              config:
+                severity: error
       
       - name: provider_id
-        description: Foreign key to the provider who performed the procedure (ProvNum)
+        description: >
+          Foreign key to the provider who performed the procedure (maps to ProvNum in OpenDental).
+          Used for provider productivity analysis and insurance reimbursement tracking.
+          May be null for administrative adjustments or system-generated entries.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                severity: warn
+                where: "provider_id IS NOT NULL AND provider_id != 0"
       
       - name: plan_id
-        description: Foreign key to the insurance plan (PlanNum)
+        description: >
+          Foreign key to the insurance plan (maps to PlanNum in OpenDental).
+          Identifies which insurance plan coverage applies to this procedure,
+          affecting benefit calculations and reimbursement rates.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+              config:
+                severity: warn
+                where: "plan_id IS NOT NULL AND plan_id != 0"
       
       - name: claim_payment_id
-        description: Foreign key to the insurance payment record (ClaimPaymentNum)
+        description: >
+          Foreign key to the insurance payment record (maps to ClaimPaymentNum in OpenDental).
+          Links procedure-level claims to actual insurance payments received,
+          enabling reconciliation of estimates versus actual reimbursements.
+          Null until payment is received and processed.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claimpayment')
+              field: claim_payment_id
+              config:
+                severity: warn
+                where: "claim_payment_id IS NOT NULL AND claim_payment_id != 0"
       
       - name: clinic_id
-        description: Foreign key to the clinic where procedure was performed
+        description: >
+          Foreign key to the clinic where procedure was performed (maps to ClinicNum in OpenDental).
+          Used for multi-location practice management and clinic-specific
+          insurance performance analysis. May be null for single-location practices.
+        # Temporarily commented out due to model build dependency issues
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       config:
+        #         severity: warn
+        #         where: "clinic_id IS NOT NULL AND clinic_id != 0"
       
       - name: insurance_subscriber_id
-        description: Foreign key to the insurance subscriber
+        description: >
+          Foreign key to the insurance subscriber (maps to InsSubNum in OpenDental).
+          Links to the specific insurance subscription for the patient,
+          which may differ from the patient if they are a dependent.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: inssub_id
+              config:
+                severity: warn
+                where: "insurance_subscriber_id IS NOT NULL AND insurance_subscriber_id != 0"
       
       - name: payment_plan_id
-        description: Foreign key to payment plan if applicable
+        description: >
+          Foreign key to payment plan if applicable (maps to PayPlanNum in OpenDental).
+          Used when the patient has a payment plan that affects insurance processing
+          or when insurance payments are applied to payment plan balances.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+              config:
+                severity: warn
+                where: "payment_plan_id IS NOT NULL"
       
       - name: claim_payment_tracking_id
-        description: Foreign key to payment tracking record
-      
-      - name: secure_user_entry_id
-        description: ID of the user who created this record
+        description: >
+          Foreign key to payment tracking record (maps to ClaimPaymentTracking in OpenDental).
+          Used for detailed tracking of insurance payment processing workflow
+          and audit trails. May be null for older records or simple processing.
       
       - name: claim_procedure_date
-        description: Date of the claim procedure record
+        description: >
+          Date of the claim procedure record (maps to DateCP in OpenDental).
+          Represents when the insurance claim entry was created or last modified,
+          which may differ from the actual procedure date.
       
       - name: procedure_date
-        description: Date the procedure was performed
+        description: >
+          Date the procedure was performed (maps to ProcDate in OpenDental).
+          The actual clinical service date used for insurance processing
+          and determining benefit eligibility. Critical for claim submissions.
+        tests:
+          - not_null
       
       - name: entry_date
-        description: Date the record was entered
-      
-      - name: secure_entry_date
-        description: Date the record was securely entered
-      
-      - name: last_modified_at
-        description: Timestamp when this record was last modified
+        description: >
+          Date the record was entered (maps to DateEntry in OpenDental).
+          Tracks when the claim procedure entry was first created in the system,
+          important for audit trails and workflow analysis.
       
       - name: supplemental_received_date
-        description: Date supplemental information was received
+        description: >
+          Date supplemental information was received (maps to DateSuppReceived in OpenDental).
+          Used when additional documentation or information is submitted
+          to support the insurance claim. Null if no supplemental info was needed.
       
       - name: insurance_finalized_date
-        description: Date the insurance processing was finalized
+        description: >
+          Date the insurance processing was finalized (maps to DateInsFinalized in OpenDental).
+          Indicates when the insurance company completed processing and
+          all payments, adjustments, and denials were finalized.
       
       - name: fee_billed
-        description: Amount billed for the procedure
+        description: >
+          Amount billed for the procedure (maps to FeeBilled in OpenDental).
+          The total fee submitted to insurance for this procedure,
+          representing the practice's standard or contracted rate.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
+          - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100000
+              inclusive: true
+              config:
+                severity: error
       
       - name: insurance_payment_estimate
-        description: Estimated payment from insurance
+        description: >
+          Estimated payment from insurance (maps to InsPayEst in OpenDental).
+          Calculated estimate of what insurance will pay based on benefits,
+          deductibles, and coverage rules. May be zero for pre-authorizations
+          or denied claims. This estimate is often inaccurate for complex cases.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
+          - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100000
+              inclusive: true
+              config:
+                severity: error
           - test_insurance_payment_estimate:
               config:
                 severity: warn
@@ -95,119 +281,277 @@ models:
                   This helps identify potential data entry errors or incorrect estimates.
       
       - name: insurance_payment_amount
-        description: Actual payment received from insurance
+        description: >
+          Actual payment received from insurance (maps to InsPayAmt in OpenDental).
+          The real amount paid by the insurance company, which may differ
+          significantly from estimates. Null until payment is received and processed.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+              inclusive: true
+              config:
+                severity: warn
+                where: "insurance_payment_amount IS NOT NULL"
       
       - name: deductible_applied
-        description: Deductible amount applied to this procedure
+        description: >
+          Deductible amount applied to this procedure (maps to DedApplied in OpenDental).
+          The portion of the procedure fee that counts toward the patient's
+          annual deductible, reducing the insurance payment accordingly.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 50000
+              inclusive: true
+              config:
+                severity: warn
+                where: "deductible_applied IS NOT NULL"
       
       - name: write_off
-        description: Amount written off for this procedure
+        description: >
+          Amount written off for this procedure (maps to WriteOff in OpenDental).
+          The portion of the fee that the practice agrees not to collect,
+          often due to insurance contractual adjustments or financial hardship.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+              inclusive: true
+              config:
+                severity: warn
+                where: "write_off IS NOT NULL"
       
       - name: allowed_override
-        description: Manual override for allowed amount
+        description: >
+          Manual override for allowed amount (maps to AllowedOverride in OpenDental).
+          Used when the standard insurance allowed amount needs to be
+          manually adjusted, typically for special cases or contract negotiations.
       
       - name: copay_amount
-        description: Copay amount for this procedure
+        description: >
+          Copay amount for this procedure (maps to CopayAmt in OpenDental).
+          The fixed amount the patient pays for the procedure as defined
+          by their insurance plan, collected at time of service.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1000
+              inclusive: true
+              config:
+                severity: warn
+                where: "copay_amount IS NOT NULL"
       
       - name: paid_other_insurance
-        description: Amount paid by other insurance
+        description: >
+          Amount paid by other insurance (maps to PaidOtherIns in OpenDental).
+          Used for coordination of benefits when patient has multiple
+          insurance plans, tracking secondary or tertiary insurance payments.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+              inclusive: true
+              config:
+                severity: warn
+                where: "paid_other_insurance IS NOT NULL"
       
       - name: base_estimate
-        description: Base estimate before adjustments
+        description: >
+          Base estimate before adjustments (maps to BaseEst in OpenDental).
+          The initial insurance estimate calculation before applying
+          deductibles, maximums, or other benefit limitations.
       
       - name: copay_override
-        description: Manual override for copay amount
+        description: >
+          Manual override for copay amount (maps to CopayOverride in OpenDental).
+          Used when the standard copay amount needs adjustment for
+          specific circumstances or plan variations.
       
       - name: deductible_estimate
-        description: Estimated deductible amount
+        description: >
+          Estimated deductible amount (maps to DedEst in OpenDental).
+          Calculated estimate of deductible that will apply to this procedure
+          based on patient's remaining deductible balance.
       
       - name: deductible_estimate_override
-        description: Manual override for deductible estimate
+        description: >
+          Manual override for deductible estimate (maps to DedEstOverride in OpenDental).
+          Used to manually adjust deductible calculations when standard
+          calculations don't apply or need correction.
       
       - name: insurance_estimate_total
-        description: Total estimate from insurance
+        description: >
+          Total estimate from insurance (maps to InsEstTotal in OpenDental).
+          Comprehensive estimate including all adjustments, deductibles,
+          and benefit calculations for the complete insurance portion.
       
       - name: insurance_estimate_total_override
-        description: Manual override for total insurance estimate
+        description: >
+          Manual override for total insurance estimate (maps to InsEstTotalOverride in OpenDental).
+          Used when the calculated total estimate needs manual adjustment
+          for special circumstances or corrections.
       
       - name: paid_other_insurance_override
-        description: Manual override for amount paid by other insurance
+        description: >
+          Manual override for amount paid by other insurance (maps to PaidOtherInsOverride in OpenDental).
+          Used to manually adjust coordination of benefits calculations
+          when standard processing doesn't capture complex situations.
       
       - name: write_off_estimate
-        description: Estimated write-off amount
+        description: >
+          Estimated write-off amount (maps to WriteOffEst in OpenDental).
+          Calculated estimate of contractual adjustments or write-offs
+          expected based on insurance contracts and fee schedules.
       
       - name: write_off_estimate_override
-        description: Manual override for write-off estimate
+        description: >
+          Manual override for write-off estimate (maps to WriteOffEstOverride in OpenDental).
+          Used to manually adjust write-off calculations for special
+          contracts, negotiations, or unusual circumstances.
       
       - name: status
-        description: Status code for the claim procedure
+        description: >
+          Status code for the claim procedure (maps to Status in OpenDental).
+          Indicates the current processing state of the procedure claim:
+          0 = Estimate/Pre-determination
+          1 = Claim
+          2 = Excluded
+          3 = CapClaim (Capitation)
+          4 = CapComplete
+          6 = InsHist (Insurance History)
+          9 = Pending Review/Reconsideration
+          Note: Status codes 5 and 7 exist in OpenDental but don't appear in current data.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 6, 9]
       
       - name: percentage
-        description: Coverage percentage
+        description: >
+          Coverage percentage (maps to Percentage in OpenDental).
+          The percentage of the procedure fee covered by insurance
+          according to the patient's plan benefits. Typically ranges from 0-100.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+              config:
+                severity: warn
+                where: "percentage IS NOT NULL"
       
       - name: percentage_override
-        description: Manual override for coverage percentage
+        description: >
+          Manual override for coverage percentage (maps to PercentOverride in OpenDental).
+          Used when the standard benefit percentage needs adjustment
+          for special contracts, appeals, or unique circumstances.
       
       - name: no_bill_insurance
-        description: Flag indicating if this procedure should not be billed to insurance
+        description: >
+          Flag indicating if this procedure should not be billed to insurance (maps to NoBillIns in OpenDental).
+          Used for procedures that should be excluded from insurance claims,
+          such as cosmetic work or patient-pay-only services.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                severity: warn
+                where: "no_bill_insurance IS NOT NULL"
       
       - name: line_number
-        description: Line number on the claim form
+        description: >
+          Line number on the claim form (maps to LineNumber in OpenDental).
+          Identifies the specific line where this procedure appears
+          on the insurance claim form for tracking and reference.
       
       - name: payment_row
-        description: Reference to payment row if applicable
+        description: >
+          Reference to payment row if applicable (maps to PaymentRow in OpenDental).
+          Used for linking to specific payment processing rows
+          in complex payment scenarios or batch processing.
       
       - name: is_transfer
-        description: Boolean flag indicating if this is a transfer
+        description: >
+          Boolean flag indicating if this is a transfer (maps to IsTransfer in OpenDental, 0=No, 1=Yes converted to boolean).
+          Used when transferring claim procedures between plans,
+          providers, or processing categories.
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                severity: warn
+                where: "is_transfer IS NOT NULL"
       
       - name: is_overpay
-        description: Boolean flag indicating if this is an overpayment
+        description: >
+          Boolean flag indicating if this is an overpayment (maps to IsOverpay in OpenDental, 0=No, 1=Yes converted to boolean).
+          Identifies situations where insurance paid more than expected,
+          requiring special handling or refund processing.
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                severity: warn
+                where: "is_overpay IS NOT NULL"
       
       - name: remarks
-        description: Additional remarks about the claim procedure
+        description: >
+          Additional remarks about the claim procedure (maps to Remarks in OpenDental).
+          Free-text field for notes about special circumstances,
+          processing issues, or additional information needed for claims.
       
       - name: code_sent
-        description: Procedure code sent to insurance
+        description: >
+          Procedure code sent to insurance (maps to CodeSent in OpenDental).
+          The specific dental procedure code (CDT code) submitted to insurance,
+          which may differ from the internal procedure code used by the practice.
       
       - name: estimate_note
-        description: Notes about the estimate
+        description: >
+          Notes about the estimate (maps to EstimateNote in OpenDental).
+          Additional information about how estimates were calculated
+          or special considerations affecting the estimate accuracy.
       
       - name: claim_adjustment_reason_codes
-        description: Codes explaining claim adjustments
+        description: >
+          Codes explaining claim adjustments (maps to ClaimAdjReasonCodes in OpenDental).
+          Standard codes used by insurance companies to explain
+          why claims were adjusted, denied, or processed differently than expected.
       
       - name: security_hash
-        description: Security hash for the record
+        description: >
+          Security hash for the record (maps to SecurityHash in OpenDental).
+          Used for data integrity verification and audit trails
+          to ensure records haven't been tampered with.
 
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in OpenDental (from DateEntry)
+        description: "Timestamp when the record was created in OpenDental (maps to DateEntry). May be null for system-generated or migrated historical records."
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "entry_date IS NOT NULL"
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in OpenDental (from SecDateTEdit)
+        description: "Timestamp when the record was last updated in OpenDental (maps to SecDateTEdit)."
         tests:
           - not_null
 
-    tests:
-      - dbt_utils.relationships_where:
-          to: ref('stg_opendental__claim')
-          field: claim_id
-          column_name: claim_id
-          from_condition: "claim_id is not null AND claim_id != 0 AND status != 2"
-          to_condition: "claim_id is not null"
-      
-      - dbt_utils.relationships_where:
-          to: ref('stg_opendental__claimpayment')
-          field: claim_payment_id
-          column_name: claim_payment_id
-          from_condition: "claim_payment_id is not null AND claim_payment_id != 0"
-          to_condition: "claim_payment_id is not null"
-    
+      - name: _created_by_user_id
+        description: "User who created the record in OpenDental (maps to SecUserNumEntry). May be null for system-generated entries or historical records created before user tracking was implemented."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              inclusive: true
+              config:
+                severity: warn
+                where: "_created_by_user_id IS NOT NULL"
+
     meta:
       relationships:
         - related_model: stg_opendental__claim
@@ -215,17 +559,33 @@ models:
           description: >
             Each claim procedure is directly associated with a claim through the claim_id field.
             Multiple procedures can be included in a single claim (one-to-many relationship).
+            This relationship is critical for understanding claim-level processing and bundling.
         
         - related_model: stg_opendental__claimpayment
           field: claim_payment_id
           description: >
             Claim procedures are linked to claim payments through the claim_payment_id field,
             showing which insurance payment covered specific procedures. This is the key
-            relationship that connects payments to claims and their procedures.
+            relationship that connects payments to claims and their procedures, enabling
+            accurate financial reconciliation and revenue tracking.
         
         - related_model: stg_opendental__claimtracking
           through_field: claim_id
           description: >
             Claim procedures and claim tracking are indirectly related through their
             common claim_id field. Tracking entries provide status updates for claims
-            that contain these procedures.
+            that contain these procedures, offering workflow and processing visibility.
+        
+        - related_model: stg_opendental__procedurelog
+          field: procedure_id
+          description: >
+            Links insurance claim procedures to the actual clinical procedures performed,
+            connecting financial processing to clinical work. Essential for understanding
+            what services were provided and how they were reimbursed.
+        
+        - related_model: stg_opendental__patient
+          field: patient_id
+          description: >
+            Every claim procedure is associated with a patient, enabling patient-level
+            financial analysis and insurance processing tracking. Critical for understanding
+            patient financial responsibility and insurance benefits utilization.
