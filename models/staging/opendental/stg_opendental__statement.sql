@@ -4,31 +4,35 @@
     schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'statement') }}
-    where "DateSent" >= '2023-01-01'::date
-        and "DateSent" <= current_date
-        and "DateSent" > '2000-01-01'::date
+    where {{ clean_opendental_date('"DateSent"') }} >= '2023-01-01'::date
+        and {{ clean_opendental_date('"DateSent"') }} <= current_date
+        and {{ clean_opendental_date('"DateSent"') }} > '2000-01-01'::date
     {% if is_incremental() %}
-        and "DateSent" > (select max(date_sent) from {{ this }})
+        and "DateTStamp" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
-        "StatementNum" as statement_id,
+        {{ transform_id_columns([
+            {'source': '"StatementNum"', 'target': 'statement_id'}
+        ]) }},
         
         -- Foreign Keys
-        "PatNum" as patient_id,
-        "DocNum" as document_id,
-        "SuperFamily" as super_family_id,
+        {{ transform_id_columns([
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"DocNum"', 'target': 'document_id'},
+            {'source': '"SuperFamily"', 'target': 'super_family_id'}
+        ]) }},
         
         -- Timestamps and Dates
-        "DateSent" as date_sent,
-        "DateRangeFrom" as date_range_from,
-        "DateRangeTo" as date_range_to,
+        {{ clean_opendental_date('"DateSent"') }} as date_sent,
+        {{ clean_opendental_date('"DateRangeFrom"') }} as date_range_from,
+        {{ clean_opendental_date('"DateRangeTo"') }} as date_range_to,
         
         -- Text Fields
         "Note" as note,
@@ -46,23 +50,25 @@ renamed as (
         "BalTotal" as balance_total,
         
         -- Boolean/Status Fields
-        "HidePayment"::boolean as is_payment_hidden,
-        "SinglePatient"::boolean as is_single_patient,
-        "Intermingled"::boolean as is_intermingled,
-        "IsSent"::boolean as is_sent,
-        "IsReceipt"::smallint as is_receipt,
-        "IsInvoice"::smallint as is_invoice,
-        "IsInvoiceCopy"::smallint as is_invoice_copy,
-        "IsBalValid"::smallint as is_balance_valid,
+        {{ convert_opendental_boolean('"HidePayment"') }} as is_payment_hidden,
+        {{ convert_opendental_boolean('"SinglePatient"') }} as is_single_patient,
+        {{ convert_opendental_boolean('"Intermingled"') }} as is_intermingled,
+        {{ convert_opendental_boolean('"IsSent"') }} as is_sent,
+        {{ convert_opendental_boolean('"IsReceipt"') }} as is_receipt,
+        {{ convert_opendental_boolean('"IsInvoice"') }} as is_invoice,
+        {{ convert_opendental_boolean('"IsInvoiceCopy"') }} as is_invoice_copy,
+        {{ convert_opendental_boolean('"IsBalValid"') }} as is_balance_valid,
         "SmsSendStatus"::smallint as sms_send_status,
-        "LimitedCustomFamily"::smallint as limited_custom_family,
+        {{ convert_opendental_boolean('"LimitedCustomFamily"') }} as limited_custom_family,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTStamp" as _created_at,     -- When the record was created in source
-        "DateTStamp" as _updated_at      -- Last update timestamp
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
