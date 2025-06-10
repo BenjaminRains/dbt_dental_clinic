@@ -4,20 +4,11 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'employer') }}
 ),
 
-entry_logs as (
-    select 
-        "FKey" as employer_id,
-        min("EntryDateTime") as first_entry_datetime
-    from {{ source('opendental', 'entrylog') }}
-    where "FKeyType" = 0  -- Assuming 0 is the type for employer records
-    group by "FKey"
-),
-
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "EmployerNum" as employer_id,
@@ -31,14 +22,14 @@ renamed as (
         "Zip" as zip,
         "Phone" as phone,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        el.first_entry_datetime as _created_at,
-        current_timestamp as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
 
-    from source s
-    left join entry_logs el
-        on s."EmployerNum" = el.employer_id
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
