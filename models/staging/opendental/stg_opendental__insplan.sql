@@ -2,14 +2,14 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'insplan') }}
     -- Removed date filter to include all insurance plans
     -- This ensures we have access to all plans that might be referenced by other models
     -- Plan status is tracked via is_hidden and hide_from_verify_list flags
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "PlanNum" as insurance_plan_id,
@@ -17,7 +17,6 @@ renamed as (
         -- Foreign Keys
         "EmployerNum" as employer_id,
         "CarrierNum" as carrier_id,
-        "SecUserNumEntry" as user_entry_id,
         
         -- Fee Schedule Related
         "FeeSched" as fee_schedule_id,
@@ -33,29 +32,16 @@ renamed as (
         "DivisionNo" as division_number,
         "TrojanID" as trojan_id,
         
-        -- Flags and Settings
-        CASE 
-            WHEN "IsMedical" = 1 THEN TRUE
-            ELSE FALSE
-        END as is_medical,
-        CASE 
-            WHEN "IsHidden" = 1 THEN TRUE
-            ELSE FALSE
-        END as is_hidden,
-        "ShowBaseUnits"::boolean as show_base_units,
-        "CodeSubstNone"::boolean as code_subst_none,
-        CASE 
-            WHEN "HideFromVerifyList" = 1 THEN TRUE
-            ELSE FALSE
-        END as hide_from_verify_list,
-        CASE 
-            WHEN "HasPpoSubstWriteoffs" = 1 THEN TRUE
-            ELSE FALSE
-        END as has_ppo_subst_writeoffs,
-        CASE 
-            WHEN "IsBlueBookEnabled" = 1 THEN TRUE
-            ELSE FALSE
-        END as is_blue_book_enabled,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"IsMedical"') }} as is_medical,
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ convert_opendental_boolean('"ShowBaseUnits"') }} as show_base_units,
+        {{ convert_opendental_boolean('"CodeSubstNone"') }} as code_subst_none,
+        {{ convert_opendental_boolean('"HideFromVerifyList"') }} as hide_from_verify_list,
+        {{ convert_opendental_boolean('"HasPpoSubstWriteoffs"') }} as has_ppo_subst_writeoffs,
+        {{ convert_opendental_boolean('"IsBlueBookEnabled"') }} as is_blue_book_enabled,
+        {{ convert_opendental_boolean('"UseAltCode"') }} as use_alt_code,
+        {{ convert_opendental_boolean('"ClaimsUseUCR"') }} as claims_use_ucr,
         
         -- Ortho Related
         "OrthoType" as ortho_type,
@@ -70,14 +56,6 @@ renamed as (
         
         -- Other Fields
         "ClaimFormNum" as claim_form_id,
-        CASE 
-            WHEN "UseAltCode" = 1 THEN TRUE
-            ELSE FALSE
-        END as use_alt_code,
-        CASE 
-            WHEN "ClaimsUseUCR" = 1 THEN TRUE
-            ELSE FALSE
-        END as claims_use_ucr,
         "FilingCode" as filing_code,
         "FilingCodeSubtype" as filing_code_subtype,
         "MonthRenew" as month_renew,
@@ -87,12 +65,18 @@ renamed as (
         "BillingType" as billing_type,
         "ExclusionFeeRule" as exclusion_fee_rule,
         
-        -- Required Metadata Columns
-        current_timestamp as _loaded_at,
-        "SecDateEntry" as _created_at,
-        "SecDateTEdit" as _updated_at
+        -- Date Fields
+        {{ clean_opendental_date('"SecDateEntry"') }} as date_created,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
