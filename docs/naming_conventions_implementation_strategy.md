@@ -2,14 +2,16 @@
 ## MDC Analytics - ETL Pipeline & dbt Migration Plan
 
 **Document Version:** 1.0  
-**Created:** December 6, 2025  
+**Created:** June 9th, 2025  
 **Status:** Planning Phase  
 
 ---
 
 ## Executive Summary
 
-This document outlines the strategic implementation plan for migrating from our current dual-convention naming system to the improved, simplified naming conventions documented in `Improved_naming_conventions.md`. The implementation will follow a phased approach to minimize risk and ensure system stability.
+This document outlines the strategic implementation plan for migrating from our current dual-convention 
+naming system to the improved, simplified naming conventions documented in `Improved_naming_conventions.md`. 
+The implementation will follow a phased approach to minimize risk and ensure system stability.
 
 **Key Decision:** Complete ETL pipeline baseline first, then implement improved conventions for all new development.
 
