@@ -1,54 +1,57 @@
 {{
     config(
         materialized='incremental',
-        unique_key='commlog_num',
+        unique_key='commlog_id',
         incremental_strategy='delete+insert',
         on_schema_change='fail'
     )
 }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'commlog') }}
     where "CommDateTime" >= '2023-01-01'
     {% if is_incremental() %}
-        and "CommDateTime" > (select max(comm_date_time) from {{ this }})
+        and "CommDateTime" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "CommlogNum" as commlog_id,
+        -- Primary Key and Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"CommlogNum"', 'target': 'commlog_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"UserNum"', 'target': 'user_id'},
+            {'source': '"ProgramNum"', 'target': 'program_id'},
+            {'source': '"ReferralNum"', 'target': 'referral_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "PatNum" as patient_id,
-        "UserNum" as user_id,
-        "ProgramNum" as program_id,
-        "ReferralNum" as referral_id,
+        -- Date/Timestamp Fields
+        {{ clean_opendental_date('"CommDateTime"') }} as communication_datetime,
+        {{ clean_opendental_date('"DateTimeEnd"') }} as communication_end_datetime,
+        {{ clean_opendental_date('"DateTEntry"') }} as entry_datetime,
         
-        -- Timestamps
-        "CommDateTime" as communication_datetime,
-        "DateTimeEnd" as communication_end_datetime,
-        "DateTEntry" as entry_datetime,
-        "DateTStamp" as created_at,
-        
-        -- Regular fields
+        -- Attributes
         "CommType" as communication_type,
         "Note" as note,
         "Mode_" as mode,
-        "SentOrReceived" as is_sent,  -- assuming 1 for sent, 0 for received
         "Signature" as signature,
-        "SigIsTopaz" as is_topaz_signature,
         "CommSource" as communication_source,
         "CommReferralBehavior" as referral_behavior,
         
-        -- Metadata
-        current_timestamp as _loaded_at,
-        "DateTEntry" as _created_at,
-        "DateTStamp" as _updated_at
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"SentOrReceived"') }} as is_sent,
+        {{ convert_opendental_boolean('"SigIsTopaz"') }} as is_topaz_signature,
+        
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTEntry"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
