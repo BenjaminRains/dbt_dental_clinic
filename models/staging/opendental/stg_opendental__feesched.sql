@@ -3,7 +3,7 @@
     schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'feesched') }}
     where "SecDateEntry" >= '2023-01-01'::date
@@ -11,7 +11,7 @@ with source as (
         and "SecDateEntry" > '2000-01-01'::date
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary key
         "FeeSchedNum" as fee_schedule_id,
@@ -20,22 +20,23 @@ renamed as (
         "Description" as fee_schedule_description,
         "FeeSchedType" as fee_schedule_type_id,
         "ItemOrder" as display_order,
-        CASE 
-            WHEN "IsHidden"::integer = 1 THEN true
-            WHEN "IsHidden"::integer = 0 THEN false
-            ELSE null 
-        END as is_hidden,
-        "IsGlobal"::smallint as is_global_flag,
         
-        -- Meta fields
-        "SecUserNumEntry" as created_by_user_id,
+        -- Boolean fields
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ convert_opendental_boolean('"IsGlobal"') }} as is_global_flag,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "SecDateEntry"::timestamp as _created_at,
-        coalesce("SecDateTEdit", "SecDateEntry")::timestamp as _updated_at
+        -- Date fields
+        {{ clean_opendental_date('"SecDateEntry"') }} as date_created,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed 
+select * from renamed_columns 
