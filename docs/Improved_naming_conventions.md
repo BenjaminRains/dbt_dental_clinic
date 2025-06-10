@@ -112,6 +112,14 @@ postgres_analytics_loader.py
 "ProcNum" as procedure_id   -- Consistent across all models
 ```
 
+**CRITICAL RULE**: All OpenDental columns ending in "Num" are ID fields and MUST be transformed to
+ snake_case with "_id" suffix. Exceptions can be considered on a case by case basis.
+
+Examples:
+- `"CanadianNetworkNum"` → `canadian_network_id` (NOT `canadian_network_num`)
+- `"FeatureNum"` → `feature_id` (NOT `feature_num`)
+- `"CategoryNum"` → `category_id` (NOT `category_num`)
+
 ## Metadata Strategy (Simplified)
 
 ### Single Metadata Approach
