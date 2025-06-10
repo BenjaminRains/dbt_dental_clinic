@@ -17,14 +17,14 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary Key
-        "FeeNum"::integer as fee_id,
-        
-        -- Foreign Keys
-        "FeeSched"::bigint as fee_schedule_id,
-        "CodeNum"::bigint as procedure_code_id,
-        "ClinicNum" as clinic_id,
-        "ProvNum"::bigint as provider_id,
+        -- Primary Key and Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"FeeNum"', 'target': 'fee_id'},
+            {'source': '"FeeSched"', 'target': 'fee_schedule_id'},
+            {'source': '"CodeNum"', 'target': 'procedure_code_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"ProvNum"', 'target': 'provider_id'}
+        ]) }},
         
         -- Regular Fields
         "Amount"::double precision as fee_amount,
