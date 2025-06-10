@@ -5,21 +5,26 @@
     )
 }}
 
-with source as (
+with source_data as (
     select m.* 
     from {{ source('opendental', 'periomeasure') }} m
     join {{ source('opendental', 'perioexam') }} e
         on m."PerioExamNum" = e."PerioExamNum"
     where e."ExamDate" >= '2023-01-01'
     {% if is_incremental() %}
-        and m."SecDateTEdit" > (select max(edit_timestamp) from {{ this }})
+        and m."SecDateTEdit" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        "PerioMeasureNum" as periomeasure_id,
-        "PerioExamNum" as perioexam_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"PerioMeasureNum"', 'target': 'periomeasure_id'},
+            {'source': '"PerioExamNum"', 'target': 'perioexam_id'}
+        ]) }},
+        
+        -- Measurement Details
         "SequenceType" as sequence_type,
         "IntTooth" as tooth_number,
         "ToothValue" as tooth_value,
@@ -29,13 +34,18 @@ renamed as (
         "MLvalue" as mesial_lingual_value,
         "Lvalue" as lingual_value,
         "DLvalue" as distal_lingual_value,
-        "SecDateTEntry" as entry_timestamp,
-        "SecDateTEdit" as edit_timestamp,
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "SecDateTEntry" as _created_at,  -- Using SecDateTEntry as creation timestamp
-        "SecDateTEdit" as _updated_at    -- Using SecDateTEdit as update timestamp
-    from source
+        
+        -- Date Fields
+        {{ clean_opendental_date('"SecDateTEntry"') }} as entry_timestamp,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as edit_timestamp,
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateTEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column=none
+        ) }}
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
