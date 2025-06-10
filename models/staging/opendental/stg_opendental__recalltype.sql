@@ -4,31 +4,37 @@
     schema='staging'
 ) }}
 
-with Source as (
+with source_data as (
     select * from {{ source('opendental', 'recalltype') }}
     {% if is_incremental() %}
         where current_timestamp > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-Renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "RecallTypeNum" as recall_type_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"RecallTypeNum"', 'target': 'recall_type_id'}
+        ]) }},
         
         -- Description and configuration
-        "Description" as description,
-        "DefaultInterval" as default_interval,
-        "TimePattern" as time_pattern,
-        "Procedures" as procedures,
-        "AppendToSpecial" as append_to_special,
+        {{ clean_opendental_string('"Description"') }} as description,
+        "DefaultInterval"::integer as default_interval,
+        {{ clean_opendental_string('"TimePattern"') }} as time_pattern,
+        {{ clean_opendental_string('"Procedures"') }} as procedures,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        current_timestamp as _created_at,
-        current_timestamp as _updated_at
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"AppendToSpecial"') }} as append_to_special,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
     
-    from Source
+    from source_data
 )
 
-select * from Renamed
+select * from renamed_columns

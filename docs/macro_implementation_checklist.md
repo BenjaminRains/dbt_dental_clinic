@@ -50,10 +50,10 @@
 ## Phase 1C: Low-Priority Models (Batch process remaining ~100+ models)
 
 ### Simple Lookups
-- [ ] `stg_opendental__zipcode.sql`
-- [ ] `stg_opendental__recalltype.sql`
-- [ ] `stg_opendental__rxnorm.sql`
-- [ ] `stg_opendental__pharmacy.sql`
+- [x] `stg_opendental__zipcode.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__recalltype.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__rxnorm.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__pharmacy.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
 - [ ] All remaining simple models
 
 ## Implementation Standards Per Model

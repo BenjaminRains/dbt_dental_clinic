@@ -1,40 +1,47 @@
-{{
-    config(
-        materialized='table'
-    )
-}}
+{{ config(
+    materialized='table'
+) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'pharmacy') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "PharmacyNum" as pharmacy_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"PharmacyNum"', 'target': 'pharmacy_id'}
+        ]) }},
         
         -- Identifiers
-        "PharmID" as pharm_id,
+        {{ clean_opendental_string('"PharmID"') }} as pharm_id,
         
-        -- Attributes
-        "StoreName" as store_name,
-        "Phone" as phone,
-        "Fax" as fax,
-        "Address" as address,
-        "Address2" as address2,
-        "City" as city,
-        "State" as state,
-        "Zip" as zip,
-        "Note" as note,
+        -- Business attributes
+        {{ clean_opendental_string('"StoreName"') }} as store_name,
+        {{ clean_opendental_string('"Phone"') }} as phone,
+        {{ clean_opendental_string('"Fax"') }} as fax,
+        
+        -- Address information
+        {{ clean_opendental_string('"Address"') }} as address,
+        {{ clean_opendental_string('"Address2"') }} as address2,
+        {{ clean_opendental_string('"City"') }} as city,
+        {{ clean_opendental_string('"State"') }} as state,
+        {{ clean_opendental_string('"Zip"') }} as zip,
+        
+        -- Additional information
+        {{ clean_opendental_string('"Note"') }} as note,
         
         -- Timestamps
         "DateTStamp" as date_tstamp,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "DateTStamp" as _created_at,  -- Using DateTStamp as creation timestamp
-        "DateTStamp" as _updated_at   -- Using DateTStamp as update timestamp
-    from source
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
+        
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

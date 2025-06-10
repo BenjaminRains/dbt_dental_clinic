@@ -1,23 +1,31 @@
-with source as (
+{{ config(
+    materialized='view'
+) }}
+
+with source_data as (
     select * from {{ source('opendental', 'rxnorm') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "RxNormNum" as rxnorm_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"RxNormNum"', 'target': 'rxnorm_id'}
+        ]) }},
         
-        -- Attributes
-        "RxCui" as rx_cui,
-        "MmslCode" as mmsl_code,
-        "Description" as description,
+        -- Drug identification attributes
+        {{ clean_opendental_string('"RxCui"') }} as rx_cui,
+        {{ clean_opendental_string('"MmslCode"') }} as mmsl_code,
+        {{ clean_opendental_string('"Description"') }} as description,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        null::timestamp as _created_at,   -- No creation date available in source
-        current_timestamp as _updated_at  -- Last update is when we loaded it
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
     
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

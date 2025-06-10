@@ -2,28 +2,35 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'zipcode') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "ZipCodeNum" as zipcode_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"ZipCodeNum"', 'target': 'zipcode_id'}
+        ]) }},
         
-        -- Business Columns
+        -- Business Columns with enhanced data cleaning
         -- Clean zipcode: ensure it's exactly 5 digits, pad with leading zeros if needed
-        LPAD(REGEXP_REPLACE("ZipCodeDigits", '[^0-9]', '', 'g'), 5, '0') as zipcode,
-        "City" as city,
-        -- Clean state: ensure it's exactly 2 uppercase letters
-        UPPER(REGEXP_REPLACE("State", '[^A-Za-z]', '', 'g')) as state,
-        "IsFrequent" as is_frequent,
+        LPAD(REGEXP_REPLACE({{ clean_opendental_string('"ZipCodeDigits"') }}, '[^0-9]', '', 'g'), 5, '0') as zipcode,
+        {{ clean_opendental_string('"City"') }} as city,
+        -- Clean state: ensure it's exactly 2 uppercase letters  
+        UPPER(REGEXP_REPLACE({{ clean_opendental_string('"State"') }}, '[^A-Za-z]', '', 'g')) as state,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data into our warehouse
-        current_timestamp as _created_at, -- When the zipcode was created (using current_timestamp as source has no creation date)
-        current_timestamp as _updated_at  -- When the zipcode was last updated (using current_timestamp as source has no update date)
-    from source
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsFrequent"') }} as is_frequent,
+        
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
+        
+    from source_data
 )
 
-select * from renamed 
+select * from renamed_columns 
