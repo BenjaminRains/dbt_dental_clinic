@@ -1,7 +1,16 @@
+{{ config(
+    materialized='incremental',
+    unique_key='referral_id',
+    schema='staging'
+) }}
+
 with source_data as (
     select * 
     from {{ source('opendental', 'referral') }}
     where "DateTStamp" >= '2023-01-01'
+    {% if is_incremental() %}
+    and "DateTStamp" > (select max(_updated_at) from {{ this }})
+    {% endif %}
 ),
 
 renamed_columns as (
