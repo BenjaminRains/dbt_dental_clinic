@@ -3,7 +3,7 @@
     unique_key='proctp_id'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'proctp') }}
     where "DateTP" >= '2023-01-01'
     {% if is_incremental() %}
@@ -11,49 +11,53 @@ with source as (
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "ProcTPNum" as proctp_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"ProcTPNum"', 'target': 'proctp_id'},
+            {'source': '"TreatPlanNum"', 'target': 'treatment_plan_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"ProcNumOrig"', 'target': 'procedure_id_orig'},
+            {'source': '"ProvNum"', 'target': 'provider_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"SecUserNumEntry"', 'target': 'user_num_entry'}
+        ]) }},
         
-        -- Foreign keys
-        "TreatPlanNum" as treatment_plan_id,
-        "PatNum" as patient_id,
-        "ProcNumOrig" as procedure_id_orig,
-        "ProvNum" as provider_id,
-        "ClinicNum" as clinic_id,
-        "SecUserNumEntry" as user_num_entry,
-        
-        -- Regular fields
+        -- Treatment Plan Attributes
         "ItemOrder" as item_order,
         "Priority" as priority,
         "ToothNumTP" as tooth_num_tp,
         "Surf" as surface,
         "ProcCode" as procedure_code,
         "Descript" as description,
+        "ProcAbbr" as procedure_abbreviation,
+        "Prognosis" as prognosis,
+        "Dx" as diagnosis,
+        
+        -- Financial Fields
         "FeeAmt" as fee_amount,
         "PriInsAmt" as primary_insurance_amount,
         "SecInsAmt" as secondary_insurance_amount,
         "PatAmt" as patient_amount,
         "Discount" as discount,
-        "Prognosis" as prognosis,
-        "Dx" as diagnosis,
-        "ProcAbbr" as procedure_abbreviation,
         "FeeAllowed" as fee_allowed,
         "TaxAmt" as tax_amount,
         "CatPercUCR" as category_percent_ucr,
         
-        -- Dates
-        "DateTP" as treatment_plan_date,
-        "SecDateEntry" as entry_date,
-        "SecDateTEdit" as last_edit_timestamp,
+        -- Date Fields
+        {{ clean_opendental_date('"DateTP"') }} as treatment_plan_date,
+        {{ clean_opendental_date('"SecDateEntry"') }} as entry_date,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as last_edit_timestamp,
         
-        -- Metadata
-        current_timestamp as _loaded_at,
-        "SecDateEntry" as _created_at,
-        "SecDateTEdit" as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
     
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
