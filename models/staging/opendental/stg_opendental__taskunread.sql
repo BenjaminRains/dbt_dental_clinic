@@ -1,9 +1,14 @@
 {{ config(
-    materialized='view'
+    materialized='view',
+    schema='staging'
 ) }}
 
 with source_data as (
-    select * from {{ source('opendental', 'taskunread') }}
+    select tu.*
+    from {{ source('opendental', 'taskunread') }} tu
+    inner join {{ ref('stg_opendental__task') }} t
+        on NULLIF(tu."TaskNum", 0) = t.task_id
+    where t.original_timestamp >= '2023-01-01'
 ),
 
 renamed_columns as (
@@ -23,14 +28,6 @@ renamed_columns as (
         ) }}
         
     from source_data
-),
-
-filtered_data as (
-    select r.*
-    from renamed_columns r
-    inner join {{ ref('stg_opendental__task') }} t
-        on r.task_id = t.task_id
-    where t.original_timestamp >= '2023-01-01'
 )
 
-select * from filtered_data
+select * from renamed_columns
