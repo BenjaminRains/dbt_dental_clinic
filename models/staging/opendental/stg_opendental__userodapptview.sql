@@ -2,26 +2,28 @@
     materialized='view'
 ) }}
 
-with Source as (
+with source_data as (
     select * from {{ source('opendental', 'userodapptview') }}
 ),
 
-Renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "UserodApptViewNum" as userod_appt_view_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"UserodApptViewNum"', 'target': 'userod_appt_view_id'},
+            {'source': 'NULLIF("UserNum", 0)', 'target': 'user_id'},
+            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
+            {'source': 'NULLIF("ApptViewNum", 0)', 'target': 'appt_view_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "UserNum" as user_id,
-        "ClinicNum" as clinic_id,
-        "ApptViewNum" as appt_view_id,
-        
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data into our warehouse
-        current_timestamp as _created_at, -- When the view preference was created (using current_timestamp as source has no creation date)
-        current_timestamp as _updated_at  -- When the view preference was last updated (using current_timestamp as source has no update date)
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
 
-    from Source
+    from source_data
 )
 
-select * from Renamed
+select * from renamed_columns

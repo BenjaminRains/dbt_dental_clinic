@@ -21,31 +21,31 @@
 ## Phase 1B: Medium-Priority Models (20-30 models)
 
 ### Reference Data
-- [ ] `stg_opendental__referral.sql`
-- [ ] `stg_opendental__recall.sql`
+- [x] `stg_opendental__referral.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__recall.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
 - [x] `stg_opendental__adjustment.sql` - ✅ **COMPLETED** (fixed source references, uses macros)
 
 ### Pattern Groups (implement as batches)
 #### Sheet Models
-- [ ] `stg_opendental__sheet.sql`
-- [ ] `stg_opendental__sheetfield.sql`
-- [ ] `stg_opendental__sheetfielddef.sql`
-- [ ] `stg_opendental__sheetdef.sql`
+- [x] `stg_opendental__sheet.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__sheetfield.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__sheetfielddef.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__sheetdef.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
 
 #### Task Models  
-- [ ] `stg_opendental__task.sql`
-- [ ] `stg_opendental__taskhist.sql`
-- [ ] `stg_opendental__tasklist.sql`
-- [ ] `stg_opendental__tasknote.sql`
-- [ ] `stg_opendental__tasksubscription.sql`
-- [ ] `stg_opendental__taskunread.sql`
+- [x] `stg_opendental__task.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__taskhist.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__tasklist.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__tasknote.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__tasksubscription.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__taskunread.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
 
 #### User Models
-- [ ] `stg_opendental__userod.sql`
-- [ ] `stg_opendental__userodpref.sql`
-- [ ] `stg_opendental__userodapptview.sql`
-- [ ] `stg_opendental__usergroup.sql`
-- [ ] `stg_opendental__usergroupattach.sql`
+- [x] `stg_opendental__userod.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__userodpref.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__userodapptview.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__usergroup.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__usergroupattach.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
 
 ## Phase 1C: Low-Priority Models (Batch process remaining ~100+ models)
 

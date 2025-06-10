@@ -1,21 +1,30 @@
-with source as (
+{{ config(
+    materialized='view'
+) }}
+
+with source_data as (
     select * from {{ source('opendental', 'usergroup') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "UserGroupNum" as usergroup_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"UserGroupNum"', 'target': 'usergroup_id'},
+            {'source': 'NULLIF("UserGroupNumCEMT", 0)', 'target': 'usergroup_num_cemt'}
+        ]) }},
         
         -- Attributes
-        "Description" as description,
-        "UserGroupNumCEMT" as usergroup_num_cemt,
+        {{ clean_opendental_string('"Description"') }} as description,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        current_timestamp as _created_at, -- Since no creation timestamp exists in source
-        current_timestamp as _updated_at  -- Since no update timestamp exists in source
-    from source
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
+        
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

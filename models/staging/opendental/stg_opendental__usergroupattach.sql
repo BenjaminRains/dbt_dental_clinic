@@ -1,22 +1,28 @@
-with source as (
+{{ config(
+    materialized='view'
+) }}
+
+with source_data as (
     select * from {{ source('opendental', 'usergroupattach') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "UserGroupAttachNum" as user_group_attach_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"UserGroupAttachNum"', 'target': 'user_group_attach_id'},
+            {'source': 'NULLIF("UserNum", 0)', 'target': 'user_id'},
+            {'source': 'NULLIF("UserGroupNum", 0)', 'target': 'user_group_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "UserNum" as user_id,
-        "UserGroupNum" as user_group_id,
-        
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        current_timestamp as _created_at, -- Since no creation timestamp exists in source
-        current_timestamp as _updated_at  -- Since no update timestamp exists in source
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns

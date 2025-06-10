@@ -2,29 +2,32 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'userodpref') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "UserOdPrefNum" as user_od_pref_id,
-        
-        -- Foreign Keys
-        "UserNum" as user_id,
-        "ClinicNum" as clinic_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"UserOdPrefNum"', 'target': 'user_od_pref_id'},
+            {'source': 'NULLIF("UserNum", 0)', 'target': 'user_id'},
+            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
+            {'source': 'NULLIF("Fkey", 0)', 'target': 'fkey'}
+        ]) }},
         
         -- Business Columns
-        "Fkey" as fkey,
-        "FkeyType" as fkey_type,
-        "ValueString" as value_string,
+        "FkeyType"::smallint as fkey_type,
+        {{ clean_opendental_string('"ValueString"') }} as value_string,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data into our warehouse
-        current_timestamp as _created_at, -- When the preference was created (using current_timestamp as source has no creation date)
-        current_timestamp as _updated_at  -- When the preference was last updated (using current_timestamp as source has no update date)
-    from source
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
+        
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
