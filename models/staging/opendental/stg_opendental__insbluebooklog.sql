@@ -4,7 +4,7 @@
     incremental_strategy='delete+insert'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'insbluebooklog') }}
     where "DateTEntry" >= '2023-01-01'  -- Following pattern from other staging models
     {% if is_incremental() %}
@@ -12,13 +12,13 @@ with source as (
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "InsBlueBookLogNum" as insbluebooklog_id,
         
         -- Foreign Keys
-        "ClaimProcNum" as claimprocedure_id,
+        "ClaimProcNum" as claim_procedure_id,
         
         -- Numeric Fields
         "AllowedFee" as allowed_fee,
@@ -26,15 +26,17 @@ renamed as (
         -- String Fields
         "Description" as description,
         
-        -- Timestamps
-        "DateTEntry" as created_at,
+        -- Date Fields
+        {{ clean_opendental_date('"DateTEntry"') }} as date_created,
         
-        -- Required Metadata Columns
-        current_timestamp as _loaded_at,
-        "DateTEntry" as _created_at,
-        "DateTEntry" as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTEntry"',
+            updated_at_column='"DateTEntry"',
+            created_by_column=none
+        ) }}
         
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
