@@ -1,8 +1,14 @@
-with source as (
+{{
+    config(
+        materialized='view'
+    )
+}}
+
+with source_data as (
     select * from {{ source('opendental', 'employee') }}
 ),
 
-entry_logs as (
+employee_entry_logs as (
     select 
         "FKey" as employee_id,
         min("EntryDateTime") as first_entry_datetime
@@ -11,7 +17,7 @@ entry_logs as (
     group by "FKey"
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "EmployeeNum" as employee_id,
@@ -20,37 +26,28 @@ renamed as (
         "LName" as last_name,
         "FName" as first_name,
         "MiddleI" as middle_initial,
-        CASE 
-            WHEN "IsHidden" = 1 THEN true
-            WHEN "IsHidden" = 0 THEN false
-            ELSE null 
-        END as is_hidden,
         "ClockStatus" as clock_status,
         "PhoneExt" as phone_extension,
         "PayrollID" as payroll_id,
         "WirelessPhone" as wireless_phone,
         "EmailWork" as work_email,
         "EmailPersonal" as personal_email,
-        CASE 
-            WHEN "IsFurloughed" = 1 THEN true
-            WHEN "IsFurloughed" = 0 THEN false
-            ELSE null 
-        END as is_furloughed,
-        CASE 
-            WHEN "IsWorkingHome" = 1 THEN true
-            WHEN "IsWorkingHome" = 0 THEN false
-            ELSE null 
-        END as is_working_home,
         "ReportsTo" as reports_to_employee_id,
 
-        -- Required metadata columns
+        -- Boolean fields
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ convert_opendental_boolean('"IsFurloughed"') }} as is_furloughed,
+        {{ convert_opendental_boolean('"IsWorkingHome"') }} as is_working_home,
+
+        -- Metadata columns (custom implementation due to entrylog join)
         current_timestamp as _loaded_at,
         el.first_entry_datetime as _created_at,
-        current_timestamp as _updated_at
+        current_timestamp as _updated_at,
+        null as _created_by_user_id
 
-    from source s
-    left join entry_logs el
+    from source_data s
+    left join employee_entry_logs el
         on s."EmployeeNum" = el.employee_id
 )
 
-select * from renamed
+select * from renamed_columns
