@@ -13,12 +13,14 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary key
-        "FeeSchedNum" as fee_schedule_id,
+        -- Primary key and IDs
+        {{ transform_id_columns([
+            {'source': '"FeeSchedNum"', 'target': 'fee_schedule_id'},
+            {'source': '"FeeSchedType"', 'target': 'fee_schedule_type_id'}
+        ]) }},
         
         -- Attributes
         "Description" as fee_schedule_description,
-        "FeeSchedType" as fee_schedule_type_id,
         "ItemOrder" as display_order,
         
         -- Boolean fields
