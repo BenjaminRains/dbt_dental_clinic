@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='proctp_id'
+    unique_key='proctp_id',
+    schema='staging'
 ) }}
 
 with source_data as (

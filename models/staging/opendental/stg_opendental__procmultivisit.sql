@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='procmultivisit_id'
+    unique_key='procmultivisit_id',
+    schema='staging'
 ) }}
 
 with source_data as (

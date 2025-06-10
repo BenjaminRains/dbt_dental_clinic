@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='procnote_id'
+    unique_key='procnote_id',
+    schema='staging'
 ) }}
 
 with source_data as (

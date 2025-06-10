@@ -1,7 +1,8 @@
 {{
     config(
         materialized='incremental',
-        unique_key='periomeasure_id'
+        unique_key='periomeasure_id',
+        schema='staging'
     )
 }}
 

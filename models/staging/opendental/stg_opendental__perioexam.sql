@@ -1,7 +1,8 @@
 {{
     config(
         materialized='incremental',
-        unique_key='perioexam_id'
+        unique_key='perioexam_id',
+        schema='staging'
     )
 }}
 

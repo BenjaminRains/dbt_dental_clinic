@@ -1,7 +1,8 @@
 {{
     config(
         materialized='incremental',
-        unique_key='lab_case_id'
+        unique_key='lab_case_id',
+        schema='staging'
     )
 }}
 
