@@ -5,14 +5,14 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'eobattach') }}
     {% if is_incremental() %}
         where "DateTCreated" > (select max(_created_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "EobAttachNum" as eob_attach_id,
@@ -21,16 +21,20 @@ renamed as (
         "ClaimPaymentNum" as claim_payment_id,
         
         -- Attributes
-        "DateTCreated" as created_at,
         "FileName" as file_name,
         "RawBase64" as raw_base64,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "DateTCreated" as _created_at,
-        "DateTCreated" as _updated_at  -- Using DateTCreated since EOB attachments are immutable
+        -- Date fields
+        {{ clean_opendental_date('"DateTCreated"') }} as date_created,
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTCreated"',
+            updated_at_column='"DateTCreated"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
