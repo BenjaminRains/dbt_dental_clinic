@@ -14,9 +14,9 @@
 - [x] `stg_opendental__paysplit.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
 
 ### Complex Logic Models
-- [ ] `stg_opendental__histappointment.sql` (31KB yml - complex)
-- [ ] `stg_opendental__insverifyhist.sql` (10KB yml - complex)
-- [ ] `stg_opendental__procedurecode.sql` (12KB yml - complex)
+- [x] `stg_opendental__histappointment.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__insverifyhist.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
+- [x] `stg_opendental__procedurecode.sql` - ✅ **COMPLETED** (uses all macros, snake_case CTEs)
 
 ## Phase 1B: Medium-Priority Models (20-30 models)
 
