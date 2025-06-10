@@ -47,40 +47,6 @@ renamed_columns as (
         -- Date fields using macro
         {{ clean_opendental_date('"DateEntry"') }} as entry_date,
 
-        -- Business logic flags
-        case 
-            when "SplitAmt" > 0 then 'positive'
-            when "SplitAmt" < 0 then 'negative'
-            else 'zero'
-        end as split_direction,
-
-        case
-            when "UnearnedType" > 0 then true
-            else false
-        end::boolean as is_unearned_income,
-
-        case
-            when "ProcNum" > 0 then true
-            else false
-        end::boolean as is_procedure_split,
-
-        case
-            when "AdjNum" > 0 then true
-            else false
-        end::boolean as is_adjustment_split,
-
-        case
-            when "PayPlanNum" > 0 then true
-            else false
-        end::boolean as is_payplan_split,
-
-        case
-            when abs("SplitAmt") >= 1000 then 'large'
-            when abs("SplitAmt") >= 500 then 'medium'
-            when abs("SplitAmt") >= 100 then 'small'
-            else 'minimal'
-        end as split_size,
-
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
             created_at_column='"DateEntry"',
