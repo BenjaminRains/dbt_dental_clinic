@@ -3,227 +3,267 @@ version: 2
 models:
   - name: stg_opendental__appointment
     description: >
-      Staging model for appointments from the OpenDental system.
-      Contains normalized and cleaned appointment data with standardized naming conventions.
-      This represents both current and future appointments, while historical changes are tracked in histappointment.
-      Currently contains 20,384 appointment records.
+      Staging model for appointments from the OpenDental system. Contains normalized and cleaned 
+      appointment data with standardized naming conventions for dental practice scheduling and workflow management.
       
-      Key characteristics:
-      - Includes all appointments from 2023-01-01 onwards
-      - Contains future-dated appointments for treatment planning
-      - Supports scheduling and capacity planning
-      - Tracks appointment status transitions
-      - Links to procedures, providers, and patients
+      Business Context:
+      - Central to dental practice operations supporting scheduling, capacity planning, and patient flow management
+      - Includes both completed appointments (historical data) and scheduled appointments (future planning)
+      - Tracks complete patient journey from scheduling through arrival, seating, and dismissal
+      - Links appointments to procedures, providers, operatories, and insurance plans for comprehensive practice management
+      - Supports hygiene workflows, new patient processing, and appointment type categorization
+      - Critical for practice analytics, provider productivity, and patient care coordination
+      
+      Data Scope:
+      - Contains all appointments from 2023-01-01 onwards with incremental updates
+      - Includes future-dated appointments for treatment planning and capacity management
+      - Covers all appointment statuses: scheduled, completed, broken/missed, and unscheduled
+      - Links to patients, providers, operatories, appointment types, and insurance plans
+      - Historical changes tracked separately in histappointment table
     
-    tests:
-      # High-level model tests
-      - dbt_utils.expression_is_true:
-          expression: "appointment_status in (1,2,3,5,6)"
-          severity: error  # This must pass
-      
-      # Future appointments check - update to allow future dates
-      - dbt_utils.expression_is_true:
-          expression: "appointment_status != 2 OR appointment_datetime <= current_date"
-          severity: error  # Completed appointments cannot be in the future
-          
-    # Documentation of data quality tests that are defined as standalone SQL files
     meta:
-      data_quality_tests:
-        - name: appt_broken_wo_procs
-          description: >
-            Tests for broken/missed appointments missing procedure descriptions.
-            Returns actual records that need attention.
-          file_path: tests/staging/appt_broken_wo_procs.sql
-          expected_results: 0
-          
-        - name: appt_past_scheduled
-          description: >
-            Tests specifically for past appointments that are still marked as scheduled.
-            Returns actual records that need attention with days overdue calculation.
-          file_path: tests/staging/appt_past_scheduled.sql
-          expected_results: 0
-          
+      record_count: "~20,400 appointment records"
+      data_scope: "All appointments from 2023-01-01 onwards with incremental updates"
+      
       known_issues:
-        - description: "409 past appointments still marked as Scheduled (Status 1)"
+        - description: "409 past appointments still marked as Scheduled (Status 1) instead of Completed (Status 2)"
+          severity: "warn"
+          identified_date: "2025-01-01"
           jira_ticket: "DQ-123"
-          identified_date: "2025-03-25"
           test: "appt_past_scheduled"
-        
-        - description: "131 broken/missed appointments missing procedure descriptions"
+        - description: "131 broken/missed appointments missing procedure descriptions affecting workflow analysis"
+          severity: "warn"
+          identified_date: "2025-01-01"
           jira_ticket: "DQ-124"
-          identified_date: "2025-03-25"
           test: "appt_broken_wo_procs"
-
+      
+      business_rules:
+        - rule: "Completed appointments (status = 2) must be in the past with dismissed_datetime populated"
+          impact: "Essential for accurate practice productivity and billing analysis"
+        - rule: "Scheduled appointments (status = 1) can be future-dated to support treatment planning"
+          impact: "Enables capacity planning and patient scheduling workflows"
+        - rule: "Broken/Missed appointments (status = 5) should have procedure descriptions for workflow analysis"
+          impact: "Critical for understanding appointment failure patterns and practice efficiency"
+        - rule: "Patient flow timestamps (arrival, seated, dismissed) must follow chronological order"
+          impact: "Ensures accurate patient flow analysis and operatory efficiency metrics"
+      
       usage_notes: >
-        This model includes future appointments to support:
-        - Treatment planning and scheduling
-        - Capacity planning and resource allocation
-        - Patient appointment tracking
-        - Procedure and provider scheduling
-        
-        Future appointments are a critical part of dental practice management
-        and should be included in all relevant analyses.
+        - Future appointments are essential for scheduling and capacity planning - do not filter out
+        - Use appointment_status to filter by workflow state: 1=Scheduled, 2=Completed, 5=Broken/Missed
+        - Patient flow analysis requires arrival_datetime, seated_datetime, and dismissed_datetime
+        - Join with procedurelog for detailed procedure information and billing analysis
+        - is_hygiene flag distinguishes hygiene appointments from general dental procedures
+        - operatory_id and provider_id enable resource utilization and capacity analysis
+
+    tests:
+      - dbt_utils.expression_is_true:
+          name: valid_appointment_status
+          expression: "appointment_status in (1,2,3,5,6)"
+          severity: error
+      - dbt_utils.expression_is_true:
+          name: completed_appointments_in_past
+          expression: "appointment_status != 2 OR appointment_datetime <= current_date"
+          severity: error
+      - dbt_utils.expression_is_true:
+          name: scheduled_appointments_have_datetime
+          expression: "appointment_status != 1 OR appointment_datetime IS NOT NULL"
+          severity: error
 
     columns:
+      # Primary Key
       - name: appointment_id
-        description: Primary key - Unique identifier for each appointment
+        description: "Primary key - Unique identifier for each appointment (maps to AptNum in OpenDental)"
         tests:
           - unique
           - not_null
-          
+          - positive_values
+
+      # Core Foreign Keys
       - name: patient_id
-        description: Foreign key to the patient who has the appointment
+        description: "Foreign key to patient who has the appointment. Links to patient demographics and clinical history."
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
-        
+              severity: error
+
       - name: provider_id
-        description: Foreign key to the primary provider for this appointment
+        description: "Foreign key to the primary provider for this appointment. May be NULL for hygiene-only appointments."
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
-        
+              severity: warn
+              where: "provider_id IS NOT NULL"
+
       - name: hygienist_id
-        description: Foreign key to the hygienist assigned to this appointment
-        
+        description: "Foreign key to the hygienist assigned to this appointment. Used for hygiene appointments and provider coordination."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "hygienist_id IS NOT NULL"
+
+      # Operational Foreign Keys
       - name: assistant_id
-        description: Foreign key to the assistant assigned to this appointment
-        
+        description: "Foreign key to the dental assistant assigned to this appointment for procedure support."
+
       - name: clinic_id
-        description: Foreign key to the clinic where the appointment is scheduled
-        
+        description: "Foreign key to the clinic where the appointment is scheduled. Supports multi-location practices."
+
       - name: operatory_id
-        description: Foreign key to the operatory/room where the appointment is scheduled
-        
-      - name: next_appointment_id
-        description: Foreign key to the next appointment in a series, if applicable
-        
+        description: "Foreign key to the operatory/treatment room where the appointment is scheduled. Critical for capacity planning."
+
       - name: appointment_type_id
-        description: Foreign key to the appointment type classification
-        
+        description: >
+          Foreign key to appointment type classification (e.g., cleaning, emergency, consultation).
+          0 = 'None' (valid default for appointments without specific type designation).
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointmenttype')
+              field: appointment_type_id
+              severity: warn
+
+      # Scheduling and Workflow Foreign Keys
+      - name: next_appointment_id
+        description: "Foreign key to the next appointment in a treatment series. Supports multi-visit treatment planning."
+
       - name: insurance_plan_1_id
-        description: Foreign key to the primary insurance plan for this appointment
-        
+        description: "Foreign key to the primary insurance plan for this appointment. Used for benefits verification and billing."
+
       - name: insurance_plan_2_id
-        description: Foreign key to the secondary insurance plan for this appointment
-        
+        description: "Foreign key to the secondary insurance plan for this appointment. Supports dual coverage scenarios."
+
       - name: unscheduled_status_id
-        description: Status ID for unscheduled appointments
-        
+        description: "Status identifier for unscheduled appointments. Used in appointment request and scheduling workflows."
+
       - name: entered_by_user_id
-        description: Foreign key to the user who created this appointment record
-        
+        description: "Foreign key to the user who created this appointment record. Tracks scheduling responsibility."
+
+      # Critical Datetime Fields
       - name: appointment_datetime
         description: >
-          Date and time of the scheduled appointment. 
-          Can be in the future for planned appointments (status = 1).
-          Used for both scheduling and capacity planning.
+          Date and time of the scheduled appointment. Future dates are valid and essential for treatment planning.
+          Used for scheduling, capacity planning, and patient communication.
         tests:
           - not_null
-      
-      - name: date_timestamp
-        description: System timestamp when the record was last updated
-        
+
+      # Patient Flow Timestamps
       - name: arrival_datetime
-        description: Date and time when the patient arrived for their appointment
-        
+        description: >
+          Date and time when the patient arrived for their appointment.
+          NULL for future appointments or when patient arrival is not tracked.
+
       - name: seated_datetime
-        description: Date and time when the patient was seated/brought to the operatory
-        
+        description: >
+          Date and time when the patient was seated in the operatory.
+          Critical for operatory efficiency analysis and patient flow metrics.
+
       - name: dismissed_datetime
-        description: Date and time when the patient was dismissed/completed their appointment
-        
+        description: >
+          Date and time when the patient was dismissed after completing their appointment.
+          Required for completed appointments (status = 2) and used for duration analysis.
+
       - name: asked_to_arrive_datetime
-        description: Date and time when the patient was asked to arrive (may be earlier than appointment time)
-        
-      - name: entry_datetime
-        description: Date and time when this appointment record was created
-        
+        description: >
+          Date and time when the patient was asked to arrive (may be earlier than appointment_datetime).
+          Used for patient communication and check-in workflow management.
+
+      # Status and Classification
       - name: appointment_status
         description: >
-          Status code for the appointment:
-          1 = Scheduled (includes future appointments)
-          2 = Completed (must be in the past)
-          3 = Unknown (requires investigation)
-          5 = Broken/Missed
-          6 = Unscheduled
-          
-          Note: Status 1 (Scheduled) is valid for both upcoming and future appointments,
-          supporting treatment planning and capacity management.
+          Status code for the appointment workflow:
+          1 = Scheduled (includes future appointments for treatment planning)
+          2 = Completed (appointment finished, must be in past)
+          3 = Unknown (requires investigation and status correction)
+          5 = Broken/Missed (patient did not attend scheduled appointment)
+          6 = Unscheduled (appointment removed from schedule)
         tests:
           - not_null
           - accepted_values:
               values: [1, 2, 3, 5, 6]
-        
+
       - name: confirmation_status
-        description: Status code for appointment confirmation (e.g., unconfirmed, confirmed, etc.)
-        
-      - name: is_new_patient
-        description: Flag indicating if this is a new patient appointment (0=No, 1=Yes)
-        
-      - name: is_hygiene
-        description: Flag indicating if this is a hygiene appointment (0=No, 1=Yes)
-        
+        description: >
+          Status code for appointment confirmation (e.g., unconfirmed, confirmed, left message).
+          Used for patient communication workflows and appointment risk assessment.
+
       - name: priority
-        description: Priority level for the appointment
-        
+        description: "Priority level for the appointment (emergency, urgent, routine). Affects scheduling and resource allocation."
+
+      # Appointment Characteristics
+      - name: is_new_patient
+        description: "Boolean flag indicating if this is a new patient appointment (0=Existing, 1=New converted to boolean)"
+        tests:
+          - accepted_values:
+              values: [true, false]
+              quote: false
+
+      - name: is_hygiene
+        description: "Boolean flag indicating if this is a hygiene appointment (0=General, 1=Hygiene converted to boolean)"
+        tests:
+          - accepted_values:
+              values: [true, false]
+              quote: false
+
       - name: is_time_locked
-        description: Boolean flag indicating if the appointment time is locked and cannot be changed
-        
+        description: "Boolean flag indicating if the appointment time is locked and cannot be changed (0=Unlocked, 1=Locked converted to boolean)"
+        tests:
+          - accepted_values:
+              values: [true, false]
+              quote: false
+
+      # Scheduling and Display
       - name: pattern
-        description: Pattern string representing time units for the appointment (e.g., "X" blocks)
-        
+        description: >
+          Pattern string representing time units for the appointment schedule display.
+          Uses visual blocks (e.g., "XXX") to represent appointment duration in the scheduler.
+
       - name: pattern_secondary
-        description: Secondary pattern string for additional time allocation if needed
-        
-      - name: note
-        description: Free text notes related to the appointment
-        
-      - name: procedures_colored
-        description: Text describing procedures with color coding information
-        
-      - name: provider_bar_text
-        description: Text to display in the provider bar section of the scheduler
-        
+        description: "Secondary pattern string for additional time allocation or overlapping appointments."
+
       - name: color_override
-        description: Custom color code to override default display color for this appointment
-        
+        description: "Custom color code to override default display color for this appointment in the scheduler."
+
       - name: item_order_planned
-        description: Numeric value for ordering planned appointments
-        
-      - name: security_hash
-        description: Hash value for security purposes
-        
+        description: "Numeric value for ordering planned appointments in treatment planning workflows."
+
+      # Clinical and Administrative Notes
+      - name: note
+        description: "Free text notes related to the appointment including special instructions and patient requests."
+
       - name: procedure_description
         description: >
           Text description of procedures associated with this appointment.
-          Note: This field may be null for hygiene appointments (is_hygiene = 1)
-          as procedures are not required to be specified for these appointment types.
-        
+          May be NULL for hygiene appointments (is_hygiene = true) as procedures are often not pre-specified.
+
+      - name: procedures_colored
+        description: "Text describing procedures with color coding information for scheduler display."
+
+      - name: provider_bar_text
+        description: "Text to display in the provider bar section of the scheduler for quick reference."
+
+      # Security and System
+      - name: security_hash
+        description: "Hash value for security and audit purposes. Used for data integrity verification."
+
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system
+        description: "Timestamp when the record was created in the source system (OpenDental). Sourced from SecDateTEntry field."
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Sourced from DateTStamp field."
         tests:
           - not_null
 
-    # Custom data tests
-    custom_tests:
-      - name: test_appointment_status_transitions
-        description: >
-          Verify that appointment status transitions follow business rules:
-          - Status 6 (Unscheduled) should not have appointment_datetime
-          - Status 1 (Scheduled) must have appointment_datetime
-          - Status 2 (Completed) must have dismissed_datetime
-          - Status 5 (Broken/Missed) should have appointment_datetime
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental). Sourced from SecUserNumEntry field."
