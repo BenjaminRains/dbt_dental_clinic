@@ -2,24 +2,28 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'benefit') }}
     -- Removed date filter to include all benefits
     -- This ensures we have access to all benefits that might be referenced by other models
     -- Benefit status is tracked via patient_plan_id (0 for template benefits)
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
-        "BenefitNum" as benefit_id,
+        {{ transform_id_columns([
+            {'source': '"BenefitNum"', 'target': 'benefit_id'}
+        ]) }},
         
         -- Foreign Keys
-        "PlanNum" as insurance_plan_id,
-        "PatPlanNum" as patient_plan_id,
-        "CovCatNum" as coverage_category_id,
-        "CodeNum" as procedure_code_id,
-        "CodeGroupNum" as code_group_id,
+        {{ transform_id_columns([
+            {'source': '"PlanNum"', 'target': 'insurance_plan_id'},
+            {'source': '"PatPlanNum"', 'target': 'patient_plan_id'},
+            {'source': '"CovCatNum"', 'target': 'coverage_category_id'},
+            {'source': '"CodeNum"', 'target': 'procedure_code_id'},
+            {'source': '"CodeGroupNum"', 'target': 'code_group_id'}
+        ]) }},
         
         -- Benefit Details
         "BenefitType" as benefit_type,
@@ -32,11 +36,13 @@ renamed as (
         "TreatArea" as treatment_area,
         
         -- Metadata columns
-        current_timestamp as _loaded_at,
-        "SecDateTEntry" as _created_at,
-        "SecDateTEdit" as _updated_at
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateTEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
