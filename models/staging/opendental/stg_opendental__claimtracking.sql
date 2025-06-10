@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='claim_tracking_id'
+    unique_key='claim_tracking_id',
+    schema='staging'
 ) }}
 
 with source_data as (
