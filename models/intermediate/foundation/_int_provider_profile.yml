@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: int_provider_profile
+    description: >
+      Intermediate model that transforms provider data into business-friendly 
+      attributes and status flags. Contains provider classification, capabilities,
+      and business rules that determine what each provider can do in the system.
+    
+    columns:
+      - name: provider_id
+        description: "Unique identifier for the provider"
+        tests:
+          - not_null
+          - unique
+      
+      - name: provider_abbreviation
+        description: "Short abbreviation used to identify the provider"
+      
+      - name: display_order
+        description: "Order in which provider appears in lists"
+      
+      - name: last_name
+        description: "Provider's last name"
+      
+      - name: first_name
+        description: "Provider's first name"
+      
+      - name: preferred_name
+        description: "Name the provider prefers to be called"
+      
+      - name: provider_status
+        description: "Numeric status code from OpenDental (0=Active, 1=Hidden, etc.)"
+      
+      - name: specialty_id
+        description: "ID of the provider's specialty"
+      
+      - name: is_system_provider
+        description: "True if this is the system provider (provider_id = 0)"
+        tests:
+          - not_null
+      
+      - name: is_active_provider
+        description: "True if provider is not hidden and has active status"
+        tests:
+          - not_null
+      
+      - name: is_non_person_provider
+        description: "True if this represents a facility or non-person entity"
+        tests:
+          - not_null
+      
+      - name: is_terminated_provider
+        description: "True if provider has a termination date"
+        tests:
+          - not_null
+      
+      - name: can_prescribe_controlled_substances
+        description: "True if provider has a DEA number"
+        tests:
+          - not_null
+      
+      - name: has_state_license
+        description: "True if provider has a state license number"
+        tests:
+          - not_null
+      
+      - name: can_treat_patients
+        description: "True if provider is active, person, and not terminated"
+        tests:
+          - not_null
+      
+      - name: can_bill_procedures
+        description: "True if provider can bill (no billing override and is active)"
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "Timestamp when the provider record was last updated"
+        tests:
+          - not_null
