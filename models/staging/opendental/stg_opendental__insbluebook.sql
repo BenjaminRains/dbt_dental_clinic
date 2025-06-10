@@ -2,21 +2,21 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'insbluebook') }}
     where "DateTEntry" >= '2023-01-01'  -- Following pattern from benefit
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "InsBlueBookNum" as insbluebook_id,
         
         -- Foreign Keys
-        "ProcCodeNum" as proccode_id,
+        "ProcCodeNum" as procedure_code_id,
         "CarrierNum" as carrier_id,
         "PlanNum" as plan_id,
-        "ProcNum" as proc_id,
+        "ProcNum" as procedure_id,
         "ClaimNum" as claim_id,
         
         -- String Fields
@@ -27,16 +27,18 @@ renamed as (
         "InsPayAmt" as insurance_payment_amount,
         "AllowedOverride" as allowed_override_amount,
         
-        -- Timestamps and Dates
-        "DateTEntry" as created_at,
-        "ProcDate" as procedure_date,
+        -- Date Fields
+        {{ clean_opendental_date('"DateTEntry"') }} as date_created,
+        {{ clean_opendental_date('"ProcDate"') }} as procedure_date,
         
-        -- Required Metadata Columns
-        current_timestamp as _loaded_at,
-        "DateTEntry" as _created_at,
-        "DateTEntry" as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTEntry"',
+            updated_at_column='"DateTEntry"',
+            created_by_column=none
+        ) }}
     
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
