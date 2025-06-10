@@ -4,11 +4,11 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'entrylog') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "EntryLogNum" as entry_log_id,
@@ -20,14 +20,16 @@ renamed as (
         
         -- Attributes
         "LogSource" as log_source,
-        "EntryDateTime" as entry_datetime,
+        {{ clean_opendental_date('"EntryDateTime"') }} as entry_datetime,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "EntryDateTime" as _created_at,  -- Entry logs are created when they're written
-        "EntryDateTime" as _updated_at   -- Entry logs are immutable, so creation = update
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"EntryDateTime"',
+            updated_at_column='"EntryDateTime"',
+            created_by_column='"UserNum"'
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
