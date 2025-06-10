@@ -5,27 +5,37 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'perioexam') }}
     where "ExamDate" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTMeasureEdit" > (select max(measure_edit_timestamp) from {{ this }})
+        and "DateTMeasureEdit" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        "PerioExamNum" as perioexam_id,
-        "PatNum" as patient_id,
-        "ExamDate" as exam_date,
-        "ProvNum" as provider_id,
-        "DateTMeasureEdit" as measure_edit_timestamp,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"PerioExamNum"', 'target': 'perioexam_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"ProvNum"', 'target': 'provider_id'}
+        ]) }},
+        
+        -- Date Fields
+        {{ clean_opendental_date('"ExamDate"') }} as exam_date,
+        {{ clean_opendental_date('"DateTMeasureEdit"') }} as measure_edit_timestamp,
+        
+        -- Attributes
         "Note" as note,
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "ExamDate" as _created_at,  -- Using ExamDate as creation timestamp
-        "DateTMeasureEdit" as _updated_at  -- Using DateTMeasureEdit as update timestamp
-    from source
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"ExamDate"',
+            updated_at_column='"DateTMeasureEdit"',
+            created_by_column=none
+        ) }}
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
