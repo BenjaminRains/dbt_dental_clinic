@@ -3,20 +3,34 @@ version: 2
 models: 
   - name: int_adjustments
     description: >
-      Comprehensive model that combines adjustment data with procedure information and definitions
-      to track and analyze fee adjustments. Part of System A: Fee Processing & Verification workflow.
+      Enhanced adjustment model that combines staged adjustment data with business logic, 
+      procedure information, and definition mappings. Part of System A: Fee Processing & Verification workflow.
+      
+      Refactoring Changes:
+      - Migrated complex business logic from staging layer (stg_opendental__adjustment)
+      - Added comprehensive adjustment categorization based on adjustment types
+      - Implemented note-based classification flags (military, courtesy, no-charge, etc.)
+      - Added amount-based classifications (size categories, large/minor flags)
+      - Included discount type detection (employee, family, provider discounts)
+      - Added unearned income lookup via paysplit joins
+      - Follows snake_case conventions for all CTEs
+      - Maintains all metadata fields from staging layer
       
       Data Sources:
-      - stg_opendental__adjustment: Base adjustment records and amounts
+      - stg_opendental__adjustment: Base adjustment records (cleaned, standardized)
       - stg_opendental__definition: Adjustment type definitions and categories
+      - stg_opendental__paysplit: For unearned income type detection
       - int_procedure_complete: Procedure details and standard fees
       
-      Key features:
-      - Links adjustments to procedures and their standard fees
-      - Includes definition mappings for adjustment types
-      - Calculates adjusted fees and adjustment impacts
-      - Tracks various adjustment types and categories
-      - Supports fee adjustment analysis and reporting
+      Business Logic Features:
+      - Enhanced adjustment categorization (13 specific categories + other)
+      - Note-based flags (no_charge, military_discount, courtesy_adjustment, provider_discretion)
+      - Amount-based classification (large, medium, small, minimal)
+      - Discount type flags (employee, family, provider discounts)
+      - Financial analysis flags (large_adjustment, minor_adjustment, unearned_income)
+      - Unearned income detection via paysplit lookup (types 288, 439)
+      - Adjustment impact assessment (major, moderate, minor)
+      - Adjusted fee calculations and validation
 
       Note: As an out-of-network focused clinic:
       - Most adjustments are not insurance-related
@@ -243,6 +257,86 @@ models:
         description: Flag indicating if adjustment is a courtesy adjustment
         tests:
           - not_null
+
+      # Additional business logic fields migrated from staging
+      - name: adjustment_note
+        description: Freetext note describing the adjustment (from staging layer)
+
+      - name: entry_date
+        description: Date when the adjustment was entered into the system (from staging layer)
+
+      - name: statement_id
+        description: Foreign key to billing statement (from staging layer)
+
+      - name: tax_transaction_id
+        description: Foreign key to tax transaction (from staging layer)
+
+      - name: adjustment_direction
+        description: >
+          Basic categorization of adjustment amount direction.
+          Values: 'positive', 'negative', 'zero' (from staging layer)
+        tests:
+          - accepted_values:
+              values: ['positive', 'negative', 'zero']
+
+      - name: is_no_charge
+        description: >
+          Flag indicating if adjustment note contains no-charge indicators.
+          Detected via patterns: 'n/c', 'nc ', 'no charge'
+        tests:
+          - not_null
+
+      - name: is_family_discount
+        description: >
+          Flag indicating if adjustment is a family member discount.
+          Based on adjustment types: 482, 486
+        tests:
+          - not_null
+
+      - name: is_large_adjustment
+        description: >
+          Flag for financially significant adjustments.
+          true = adjustment types 486, 474 with amount < -1000
+        tests:
+          - not_null
+
+      - name: is_minor_adjustment
+        description: >
+          Flag for small adjustments.
+          true = adjustment types 186, 9 with amount > -50
+        tests:
+          - not_null
+
+      - name: is_unearned_income
+        description: >
+          Flag indicating if adjustment is related to unearned income.
+          Based on adjustment types: 288, 439
+        tests:
+          - not_null
+
+      - name: unearned_type_id
+        description: >
+          Specific unearned income type ID from paysplit lookup.
+          Values: 288, 439, or NULL if not unearned income
+
+      # Metadata fields (from staging layer)
+      - name: _loaded_at
+        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: Timestamp when the record was created in OpenDental (source system)
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: Timestamp when the record was last updated in OpenDental (source system)
+        tests:
+          - not_null
+
+      - name: _created_by_user_id
+        description: User ID who created the record in OpenDental (source system)
 
     tests:
       # Test: Validates overall table size
