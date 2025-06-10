@@ -11,18 +11,16 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary Key
-        "PlanNum" as insurance_plan_id,
-        
-        -- Foreign Keys
-        "EmployerNum" as employer_id,
-        "CarrierNum" as carrier_id,
-        
-        -- Fee Schedule Related
-        "FeeSched" as fee_schedule_id,
-        "CopayFeeSched" as copay_fee_schedule_id,
-        "AllowedFeeSched" as allowed_fee_schedule_id,
-        "ManualFeeSchedNum" as manual_fee_schedule_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"PlanNum"', 'target': 'insurance_plan_id'},
+            {'source': '"EmployerNum"', 'target': 'employer_id'},
+            {'source': '"CarrierNum"', 'target': 'carrier_id'},
+            {'source': '"FeeSched"', 'target': 'fee_schedule_id'},
+            {'source': '"CopayFeeSched"', 'target': 'copay_fee_schedule_id'},
+            {'source': '"AllowedFeeSched"', 'target': 'allowed_fee_schedule_id'},
+            {'source': '"ManualFeeSchedNum"', 'target': 'manual_fee_schedule_id'}
+        ]) }},
         
         -- Plan Details
         "GroupName" as group_name,
@@ -54,8 +52,10 @@ renamed_columns as (
         "PerVisitPatAmount" as per_visit_patient_amount,
         "PerVisitInsAmount" as per_visit_insurance_amount,
         
-        -- Other Fields
-        "ClaimFormNum" as claim_form_id,
+        -- Other ID Fields
+        {{ transform_id_columns([
+            {'source': '"ClaimFormNum"', 'target': 'claim_form_id'}
+        ]) }},
         "FilingCode" as filing_code,
         "FilingCodeSubtype" as filing_code_subtype,
         "MonthRenew" as month_renew,
