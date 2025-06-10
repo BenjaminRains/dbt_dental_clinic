@@ -1,11 +1,18 @@
-with source as (
+{{ config(
+    materialized='view',
+    schema='staging'
+) }}
+
+with source_data as (
     select * from {{ source('opendental', 'rxdef') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
-        "RxDefNum" as rx_def_id,
+        {{ transform_id_columns([
+            {'source': '"RxDefNum"', 'target': 'rx_def_id'}
+        ]) }},
         
         -- Attributes
         "Drug" as drug,
@@ -13,17 +20,19 @@ renamed as (
         "Disp" as disp,
         "Refills" as refills,
         "Notes" as notes,
-        "IsControlled" as is_controlled,
+        {{ convert_opendental_boolean('"IsControlled"') }} as is_controlled,
         "RxCui" as rx_cui,
-        "IsProcRequired" as is_proc_required,
+        {{ convert_opendental_boolean('"IsProcRequired"') }} as is_proc_required,
         "PatientInstruction" as patient_instruction,
         
-        -- Metadata
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        null::timestamp as _created_at,   -- No creation date available in source
-        current_timestamp as _updated_at  -- Last update is when we loaded it
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
     
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
