@@ -2,41 +2,44 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'insverifyhist') }}
     where "SecDateTEdit" >= '2023-01-01'
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "InsVerifyHistNum" as insurance_verify_history_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"InsVerifyHistNum"', 'target': 'insurance_verify_history_id'},
+            {'source': '"InsVerifyNum"', 'target': 'insurance_verify_id'},
+            {'source': 'NULLIF("UserNum", 0)', 'target': 'user_id'},
+            {'source': 'NULLIF("VerifyUserNum", 0)', 'target': 'verify_user_id'},
+            {'source': 'NULLIF("FKey", 0)', 'target': 'foreign_key_id'},
+            {'source': 'NULLIF("DefNum", 0)', 'target': 'definition_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "InsVerifyNum" as insurance_verify_id,
-        "UserNum" as user_id,
-        "VerifyUserNum" as verify_user_id,
-        "FKey" as foreign_key_id,
-        "DefNum" as definition_id,
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateLastVerified"') }} as last_verified_date,
+        {{ clean_opendental_date('"DateLastAssigned"') }} as last_assigned_date,
         
-        -- Dates and Timestamps
-        "DateLastVerified" as last_verified_date,
-        "DateLastAssigned" as last_assigned_date,
-        "DateTimeEntry" as entry_timestamp,
-        "SecDateTEdit" as last_modified_at,
+        -- Timestamp fields
+        "DateTimeEntry"::timestamp as entry_timestamp,
         
         -- Attributes
-        "VerifyType" as verify_type,
-        "Note" as note,
-        "HoursAvailableForVerification" as hours_available_for_verification,
+        "VerifyType"::smallint as verify_type,
+        nullif(trim("Note"), '') as note,
+        "HoursAvailableForVerification"::double precision as hours_available_for_verification,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "DateTimeEntry" as _created_at,
-        "SecDateTEdit" as _updated_at
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTimeEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
