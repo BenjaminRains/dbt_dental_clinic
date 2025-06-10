@@ -1,26 +1,30 @@
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'allergydef') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
-        "AllergyDefNum" as allergydef_id,
+        {{ transform_id_columns([
+            {'source': '"AllergyDefNum"', 'target': 'allergydef_id'},
+            {'source': '"MedicationNum"', 'target': 'medication_id'}
+        ]) }},
         
         -- Attributes
         "Description" as allergydef_description,
-        "IsHidden" as is_hidden,
-        "DateTStamp" as date_timestamp,
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_timestamp,
         "SnomedType" as snomed_type,
-        "MedicationNum" as medication_id,
         "UniiCode" as unii_code,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTStamp" as _created_at,     -- Rename source creation timestamp
-        "DateTStamp" as _updated_at      -- Rename source update timestamp
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
