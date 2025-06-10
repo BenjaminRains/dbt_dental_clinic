@@ -2,89 +2,164 @@ version: 2
 
 models:
   - name: stg_opendental__benefit
-    description: Staging model for insurance benefits. Contains specific coverage details, limitations, and rules for insurance plans and patient plan assignments.
+    description: >
+      Staging model for insurance benefits containing specific coverage details, limitations, and rules for insurance plans and patient plan assignments.
+      
+      This model captures the complex benefit structure of dental insurance plans, including coverage percentages, 
+      deductibles, limitations, and procedure-specific rules. Benefits can be associated with specific insurance plans 
+      (template benefits with patient_plan_id = 0) or individual patient plan assignments. The model supports multiple 
+      benefit types including coverage percentages, limitations/deductibles, and template/default rules.
+    
+    meta:
+      record_count: "98,234 template benefit records"
+      data_scope: "All template/default benefit rules from OpenDental system inception - contains only template benefits (patient_plan_id = 0)"
+      
+      known_issues:
+        - description: "ALL 98,234 records are template benefits (patient_plan_id = 0) - no patient-specific benefits in this table"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "patient_plan_id_zero_validation"
+        - description: "42,691 records have null _created_at timestamps for older benefit records that predate timestamp tracking"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "38,528 records have coverage_category_id = 0 indicating general/non-specific category benefits"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "Some benefits may have NULL procedure_code_id or code_group_id when applying to broad categories"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "Coverage percentages and monetary amounts may both be null for some benefit types"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "patient_plan_id = 0 indicates template/default benefits used as baseline rules"
+          impact: "Critical for understanding benefit inheritance and plan defaults"
+        - rule: "benefit_type determines how coverage_percent and monetary_amount should be interpreted"
+          impact: "Essential for accurate benefit calculations and claim processing"
+        - rule: "Benefits can be procedure-specific (procedure_code_id) or category-based (coverage_category_id)"
+          impact: "Affects benefit eligibility determination and coverage calculations"
+      
+      usage_notes: >
+        This table contains ONLY template benefits (all patient_plan_id = 0) which serve as default rules for insurance plans.
+        Patient-specific benefit assignments are likely stored in a different table (possibly stg_opendental__patplan or related).
+        These template benefits define the baseline coverage rules that get applied to patient plans. All benefits are both 
+        procedure-specific AND code-group-specific, suggesting a hierarchical benefit structure.
+
     columns:
       - name: benefit_id
-        description: Primary key - Unique identifier for each benefit record
+        description: "Primary key - Unique identifier for each benefit record (maps to BenefitNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
 
       - name: insurance_plan_id
-        description: Foreign key to stg_opendental__insplan. Links benefit to specific insurance plan
+        description: "Foreign key to stg_opendental__insplan - Links benefit to specific insurance plan (maps to PlanNum in OpenDental)"
         tests:
           - not_null
+          - positive_values
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
+              severity: error
 
       - name: patient_plan_id
         description: >
-          Foreign key to stg_opendental__patplan. Links benefit to patient's plan assignment.
+          Foreign key to stg_opendental__patplan - Links benefit to patient's plan assignment (maps to PatPlanNum in OpenDental).
           patient_plan_id = 0 represents template/default benefits, particularly common in:
           - Type 5 benefits (27k+ template rules)
-          - Type 2 benefits (limitations/deductibles)
+          - Type 2 benefits (limitations/deductibles)  
           - Type 1 benefits (coverage percentages)
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patplan')
               field: patplan_id
+              severity: warn
               where: "patient_plan_id != 0"  # Exclude template benefits from relationship test
 
       - name: coverage_category_id
-        description: Foreign key to coverage categories. Defines the type of service category this benefit applies to
+        description: "Foreign key to coverage categories - Defines the type of service category this benefit applies to (maps to CovCatNum in OpenDental). 0 = No specific category/general benefit."
         tests:
           - not_null
 
       - name: procedure_code_id
-        description: Foreign key to procedure codes. Links to specific dental procedure when benefit is procedure-specific
+        description: "Foreign key to procedure codes - Links to specific dental procedure when benefit is procedure-specific (maps to CodeNum in OpenDental). All 98,234 records have procedure codes populated."
+        tests:
+          - not_null
 
       - name: code_group_id
-        description: Foreign key to code groups. Links to group of procedures when benefit applies to multiple codes
+        description: "Foreign key to code groups - Links to group of procedures when benefit applies to multiple codes (maps to CodeGroupNum in OpenDental). All 98,234 records have code groups populated."
+        tests:
+          - not_null
 
       - name: benefit_type
         description: >
-          Type of benefit rule:
+          Type of benefit rule (maps to BenefitType in OpenDental):
           1 = Coverage percentage rules
-          2 = Limitations/Deductibles
+          2 = Limitations/Deductibles  
+          3 = Exclusions
+          4 = Waiting periods
           5 = Template/Default rules
           6 = Special category-specific rules
         tests:
           - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6]
 
       - name: coverage_percent
-        description: Percentage of coverage for this benefit
+        description: "Percentage of coverage for this benefit (maps to Percent in OpenDental). Used primarily with benefit_type = 1. Values typically range 0-100."
 
       - name: monetary_amount
-        description: Fixed dollar amount for this benefit (e.g., deductible amount, maximum benefit)
+        description: "Fixed dollar amount for this benefit (maps to MonetaryAmt in OpenDental). Used for deductibles, maximums, and co-pays depending on benefit_type."
 
       - name: time_period
-        description: Time period qualifier for the benefit (e.g., calendar year, lifetime)
+        description: >
+          Time period qualifier for the benefit (maps to TimePeriod in OpenDental):
+          0 = None
+          1 = Calendar year
+          2 = Service year  
+          3 = Lifetime
+          4 = Years
 
       - name: quantity_qualifier
-        description: Qualifier for the quantity field (e.g., visits, procedures)
+        description: >
+          Qualifier for the quantity field (maps to QuantityQualifier in OpenDental):
+          0 = None
+          1 = Months
+          2 = Years
+          3 = Visits
+          4 = Procedures
 
       - name: quantity
-        description: Numeric limit for the benefit (e.g., number of visits allowed)
+        description: "Numeric limit for the benefit (maps to Quantity in OpenDental). Interpretation depends on quantity_qualifier (e.g., number of visits, procedures, months)."
 
       - name: coverage_level
-        description: Level of coverage (e.g., individual, family)
+        description: >
+          Level of coverage (maps to CoverageLevel in OpenDental):
+          0 = None
+          1 = Individual
+          2 = Family
 
       - name: treatment_area
-        description: Specific treatment area this benefit applies to (e.g., tooth, quadrant)
+        description: >
+          Specific treatment area this benefit applies to (maps to TreatArea in OpenDental):
+          0 = None/Not specified
+          1 = Tooth
+          2 = Surface
+          3 = Arch
+          4 = Quadrant
 
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the benefit record was created in the source system
-        tests:
-          - not_null
+        description: "Timestamp when the benefit record was created in the source system (maps to SecDateTEntry in OpenDental). Null for 42k+ older records that predate timestamp tracking."
 
       - name: _updated_at
-        description: Timestamp when the benefit record was last modified in the source system
+        description: "Timestamp when the benefit record was last modified in the source system (maps to SecDateTEdit in OpenDental)."
         tests:
           - not_null
