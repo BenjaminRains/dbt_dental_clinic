@@ -4,48 +4,53 @@
     schema='staging'
 ) }}
 
-WITH Source AS (
-    SELECT * 
-    FROM {{ source('opendental', 'recall') }}
-    WHERE "DateDue" >= '2023-01-01'::date  
-        AND "DateDue" <= CURRENT_DATE
+with source_data as (
+    select * 
+    from {{ source('opendental', 'recall') }}
+    where "DateDue" >= '2023-01-01'::date  
+        and "DateDue" <= current_date
     {% if is_incremental() %}
-        AND "DateTStamp" > (SELECT max(_updated_at) FROM {{ this }})
+        and "DateTStamp" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-Renamed AS (
-    SELECT
-        -- Primary key
-        "RecallNum" AS recall_id,
+renamed_columns as (
+    select
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"RecallNum"', 'target': 'recall_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"RecallTypeNum"', 'target': 'recall_type_id'}
+        ]) }},
         
-        -- Relationships (following DDL index order)
-        "PatNum" AS patient_id,            -- Has index: recall_PatNum
-        "RecallTypeNum" AS recall_type_id, -- Has index: recall_RecallTypeNum
-        
-        -- Date fields
-        "DateDueCalc" AS date_due_calc,
-        "DateDue" AS date_due,             -- Has index: recall_DateDisabledType
-        "DatePrevious" AS date_previous,   -- Has index: recall_DatePrevious
-        "DateScheduled" AS date_scheduled, -- Has index: recall_DateScheduled
-        "DisableUntilDate" AS disable_until_date,
+        -- Date fields using macro
+        {{ clean_opendental_date('"DateDueCalc"') }} as date_due_calc,
+        {{ clean_opendental_date('"DateDue"') }} as date_due,
+        {{ clean_opendental_date('"DatePrevious"') }} as date_previous,
+        {{ clean_opendental_date('"DateScheduled"') }} as date_scheduled,
+        {{ clean_opendental_date('"DisableUntilDate"') }} as disable_until_date,
         
         -- Status and configuration
-        "RecallInterval" AS recall_interval,
-        "RecallStatus" AS recall_status,
-        CASE WHEN COALESCE("IsDisabled", 0) = 1 THEN TRUE ELSE FALSE END AS is_disabled_flag, -- Has index: recall_IsDisabled
-        "DisableUntilBalance" AS disable_until_balance,
-        COALESCE("Priority", 0)::smallint AS priority,
+        "RecallInterval"::integer as recall_interval,
+        "RecallStatus"::smallint as recall_status,
+        coalesce("Priority", 0)::smallint as priority,
+        "DisableUntilBalance"::double precision as disable_until_balance,
+        
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsDisabled"') }} as is_disabled,
         
         -- Text fields
-        NULLIF(TRIM("Note"), '') AS note,
-        NULLIF(TRIM("TimePatternOverride"), '') AS time_pattern_override,
+        nullif(trim("Note"), '') as note,
+        nullif(trim("TimePatternOverride"), '') as time_pattern_override,
         
-        -- Required metadata columns
-        current_timestamp AS _loaded_at,
-        "DateTStamp" AS _created_at,
-        "DateTStamp" AS _updated_at
-    FROM Source
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
+        
+    from source_data
 )
 
-SELECT * FROM Renamed
+select * from renamed_columns
