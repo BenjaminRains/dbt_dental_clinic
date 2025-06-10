@@ -1,11 +1,14 @@
-with source as (
+{{
+    config(
+        materialized='view'
+    )
+}}
 
+with source_data as (
     select * from {{ source('opendental', 'diseasedef') }}
-
 ),
 
-renamed as (
-
+renamed_columns as (
     select
         -- Primary Key
         "DiseaseDefNum" as disease_def_id,
@@ -13,23 +16,20 @@ renamed as (
         -- Attributes
         "DiseaseName" as disease_name,
         "ItemOrder" as item_order,
-        CASE 
-            WHEN "IsHidden" = 1 THEN true
-            WHEN "IsHidden" = 0 THEN false
-            ELSE null 
-        END as is_hidden,
-        "DateTStamp" as date_tstamp,
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_timestamp,
         "ICD9Code" as icd9_code,
         "SnomedCode" as snomed_code,
         "Icd10Code" as icd10_code,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "DateTStamp" as _created_at,
-        "DateTStamp" as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
-
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
