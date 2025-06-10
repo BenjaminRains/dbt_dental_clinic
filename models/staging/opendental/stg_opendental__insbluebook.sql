@@ -9,15 +9,15 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary Key
-        "InsBlueBookNum" as insbluebook_id,
-        
-        -- Foreign Keys
-        "ProcCodeNum" as procedure_code_id,
-        "CarrierNum" as carrier_id,
-        "PlanNum" as plan_id,
-        "ProcNum" as procedure_id,
-        "ClaimNum" as claim_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"InsBlueBookNum"', 'target': 'insbluebook_id'},
+            {'source': '"ProcCodeNum"', 'target': 'procedure_code_id'},
+            {'source': '"CarrierNum"', 'target': 'carrier_id'},
+            {'source': '"PlanNum"', 'target': 'plan_id'},
+            {'source': '"ProcNum"', 'target': 'procedure_id'},
+            {'source': '"ClaimNum"', 'target': 'claim_id'}
+        ]) }},
         
         -- String Fields
         "GroupNum" as group_id,
