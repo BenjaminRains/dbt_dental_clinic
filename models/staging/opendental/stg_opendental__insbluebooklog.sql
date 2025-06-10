@@ -14,11 +14,11 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary Key
-        "InsBlueBookLogNum" as insbluebooklog_id,
-        
-        -- Foreign Keys
-        "ClaimProcNum" as claim_procedure_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"InsBlueBookLogNum"', 'target': 'insbluebooklog_id'},
+            {'source': '"ClaimProcNum"', 'target': 'claim_procedure_id'}
+        ]) }},
         
         -- Numeric Fields
         "AllowedFee" as allowed_fee,
