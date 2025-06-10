@@ -4,34 +4,36 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'programproperty') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "ProgramPropertyNum" as program_property_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"ProgramPropertyNum"', 'target': 'program_property_id'},
+            {'source': '"ProgramNum"', 'target': 'program_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "ProgramNum" as program_id,
-        "ClinicNum" as clinic_id,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"IsMasked"') }} as is_masked,
+        {{ convert_opendental_boolean('"IsHighSecurity"') }} as is_high_security,
         
-        -- Regular columns
+        -- Property Configuration
         "PropertyDesc" as property_desc,
         "PropertyValue" as property_value,
         "ComputerName" as computer_name,
-        
-        -- Boolean/Flag columns
-        "IsMasked" = 1 as is_masked,
-        "IsHighSecurity" = 1 as is_high_security,
 
-        -- Metadata
-        current_timestamp as _loaded_at,
-        current_timestamp as _created_at,  -- Since this is a view of reference data, creation time is same as load time
-        current_timestamp as _updated_at   -- Since this is a view of reference data, update time is same as load time
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
