@@ -4,7 +4,7 @@
     schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'fee') }}
     where "SecDateEntry" >= '2023-01-01'::date
@@ -15,22 +15,7 @@ with source as (
     {% endif %}
 ),
 
-FeeStats as (
-    select 
-        "CodeNum" as procedure_code_id,
-        avg("Amount") as avg_fee_amount,
-        stddev("Amount") as fee_stddev,
-        count(*) as fee_count
-    from {{ source('opendental', 'fee') }}
-    group by "CodeNum"
-),
-
-ValidFeeSchedules as (
-    select distinct fee_schedule_id
-    from {{ ref('stg_opendental__feesched') }}
-),
-
-renamed as (
+renamed_columns as (
     select
         -- Primary Key
         "FeeNum"::integer as fee_id,
@@ -39,40 +24,28 @@ renamed as (
         "FeeSched"::bigint as fee_schedule_id,
         "CodeNum"::bigint as procedure_code_id,
         "ClinicNum" as clinic_id,
-        "ProvNum"::bigint as provider_id,  -- Source field is ProvNum, nullable
-        "SecUserNumEntry" as user_entry_id,
+        "ProvNum"::bigint as provider_id,
         
         -- Regular Fields
         "Amount"::double precision as fee_amount,
         "OldCode" as ada_code,
         
-        -- Fee Statistics
-        fs.avg_fee_amount,
-        fs.fee_stddev,
-        fs.fee_count,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"UseDefaultFee"') }} as is_default_fee,
+        {{ convert_opendental_boolean('"UseDefaultCov"') }} as is_default_coverage,
         
-        -- Smallint Fields
-        "UseDefaultFee"::smallint as is_default_fee,
-        "UseDefaultCov"::smallint as is_default_coverage,
+        -- Date Fields
+        {{ clean_opendental_date('"SecDateEntry"') }} as date_created,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
         
-        -- Dates and Timestamps
-        "SecDateEntry"::date as created_at,
-        "SecDateTEdit"::timestamp as updated_at,
-        
-        -- Missing Fee Schedule Flag
-        case 
-            when vfs.fee_schedule_id is null then true 
-            else false 
-        end as has_missing_fee_schedule,
-        
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "SecDateEntry"::timestamp as _created_at,
-        coalesce("SecDateTEdit", "SecDateEntry")::timestamp as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
-    left join FeeStats fs on fs.procedure_code_id = source."CodeNum"
-    left join ValidFeeSchedules vfs on vfs.fee_schedule_id = source."FeeSched"
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
