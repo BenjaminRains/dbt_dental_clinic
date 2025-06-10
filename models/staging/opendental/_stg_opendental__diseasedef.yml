@@ -2,50 +2,138 @@ version: 2
 
 models:
   - name: stg_opendental__diseasedef
-    description: Staging model for OpenDental disease definitions. Contains information about various diseases including their ICD9, ICD10, and SNOMED codes.
-    columns:
-      - name: disease_def_id
-        description: Primary key of the disease definition table
-        tests:
-          - unique
-          - not_null
-
-      - name: disease_name
-        description: The name or description of the disease
-        tests:
-          - not_null
-
-      - name: item_order
-        description: Numerical value indicating the display order of the disease definition
-        
-      - name: is_hidden
-        description: Flag indicating if the disease definition is hidden from view (0 = visible, 1 = hidden)
-
-      - name: date_tstamp
-        description: Timestamp of when the record was last updated
-        tests:
-          - not_null
-
-      - name: icd9_code
-        description: International Classification of Diseases, 9th Revision (ICD-9) code for the disease
-
-      - name: snomed_code
-        description: SNOMED CT (Systematized Nomenclature of Medicine -- Clinical Terms) code for the disease
-
-      - name: icd10_code
-        description: International Classification of Diseases, 10th Revision (ICD-10) code for the disease
-
-      # Metadata columns
-      - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
-
-      - name: _created_at
-        description: Timestamp when the disease definition was created in the source system (OpenDental)
-
-      - name: _updated_at
-        description: Timestamp when the disease definition was last updated in the source system (OpenDental)
-
+    description: >
+      Staging model for OpenDental disease definitions. Contains information about various diseases 
+      including their ICD9, ICD10, and SNOMED codes used for clinical documentation and billing.
+      
+      This table serves as a reference for standardized disease coding in the dental practice management 
+      system. It supports clinical documentation, insurance billing, and reporting requirements by 
+      providing structured disease definitions with multiple coding standards. The data includes both 
+      active and hidden disease definitions, with ordering information for display purposes.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~500-1000 disease definitions"
+      data_scope: "All disease definitions configured in OpenDental system"
+      
+      known_issues:
+        - description: "Some disease definitions may have incomplete coding (missing ICD9, ICD10, or SNOMED codes)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "test_coding_completeness"
+        - description: "Hidden disease definitions (is_hidden=true) may still be referenced in historical records"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Disease definitions with is_hidden=true should not be used for new clinical documentation"
+          impact: "Ensures consistency in current clinical coding practices"
+        - rule: "item_order determines display sequence in OpenDental user interface"
+          impact: "Affects user experience and selection efficiency"
+      
+      usage_notes: >
+        This model is primarily used for reference purposes in clinical and billing analytics.
+        When joining to clinical records, consider filtering out hidden definitions unless 
+        historical analysis is required. The multiple coding standards (ICD9, ICD10, SNOMED) 
+        support different reporting and billing requirements.
+    
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - disease_def_id
+    
+    columns:
+      # Primary Key
+      - name: disease_def_id
+        description: "Primary key - Unique identifier for each disease definition (maps to DiseaseDefNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Business Columns
+      - name: disease_name
+        description: >
+          The name or description of the disease as displayed in OpenDental interface.
+          Used for clinical documentation and provider reference. Should be descriptive
+          and clinically meaningful for dental practice use.
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+
+      - name: item_order
+        description: >
+          Numerical value indicating the display order of the disease definition in OpenDental
+          user interface. Lower numbers appear first in selection lists. Used to prioritize
+          commonly used disease definitions for efficient clinical workflow.
+        tests:
+          - non_negative_or_null
+
+      - name: is_hidden
+        description: >
+          Flag indicating if the disease definition is hidden from view in OpenDental interface
+          (false = visible, true = hidden converted from 0/1). Hidden definitions are typically
+          deprecated or no longer recommended for use but preserved for historical record integrity.
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: date_timestamp
+        description: >
+          Timestamp of when the disease definition record was last updated in OpenDental.
+          Critical for tracking changes to disease definitions and ensuring data currency.
+          Used for audit trails and change management.
+        tests:
+          - not_null
+
+      # Medical Coding Columns
+      - name: icd9_code
+        description: >
+          International Classification of Diseases, 9th Revision (ICD-9) code for the disease.
+          Legacy coding standard maintained for historical compatibility and specific reporting
+          requirements. May be null for newer disease definitions added after ICD-10 transition.
+        # Note: Format validation would require custom test macro
+        # Expected format: XXX or XXX.X or XXX.XX (e.g., 521.0, 525.12)
+
+      - name: snomed_code
+        description: >
+          SNOMED CT (Systematized Nomenclature of Medicine -- Clinical Terms) code for the disease.
+          Comprehensive clinical terminology used for detailed clinical documentation and
+          interoperability. May be null if SNOMED coding is not implemented for this definition.
+
+      - name: icd10_code
+        description: >
+          International Classification of Diseases, 10th Revision (ICD-10) code for the disease.
+          Current standard for disease coding used in billing, reporting, and clinical documentation.
+          Essential for insurance claims and regulatory reporting.
+        # Note: Format validation would require custom test macro  
+        # Expected format: AXX or AXX.XXXX (e.g., K02.1, M79.604)
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: >
+          Timestamp when the disease definition was created in the source system (OpenDental).
+          Maps to DateTStamp column as OpenDental does not maintain separate creation timestamps.
+          Represents the earliest known timestamp for this record.
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: >
+          Timestamp when the disease definition was last updated in the source system (OpenDental).
+          Maps to DateTStamp column which tracks the most recent modification to the record.
+        tests:
+          - not_null
+
+      - name: _created_by_user_id
+        description: >
+          User who created the disease definition record in OpenDental system.
+          This information is not tracked in the source diseasedef table, so this column
+          will be null for all records from this source.
+        # Note: This column should always be null for this source table
+        # No test needed as the macro sets it to null by design
