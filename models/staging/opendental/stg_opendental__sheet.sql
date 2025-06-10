@@ -1,6 +1,15 @@
+{{ config(
+    materialized='incremental',
+    unique_key='sheet_id',
+    schema='staging'
+) }}
+
 with source_data as (
     select * from {{ source('opendental', 'sheet') }}
     where "DateTimeSheet" >= '2023-01-01'
+    {% if is_incremental() %}
+        and "DateTSheetEdited" > (select max(_updated_at) from {{ this }})
+    {% endif %}
 ),
 
 renamed_columns as (
