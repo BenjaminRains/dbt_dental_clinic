@@ -3,18 +3,70 @@ version: 2
 models:
   - name: stg_opendental__entrylog
     description: >
-      Staging model for system entry logs. Contains audit trail information about 
-      user actions and system events, tracking who performed what action and when.
+      Staging model for system entry logs from OpenDental. Contains audit trail information about 
+      user actions and system events, tracking who performed what action and when. This is a 
+      critical audit table that provides transparency into all system activities for compliance
+      and troubleshooting purposes.
+    
+    meta:
+      # Data quality and business context
+      record_count: "Approximately 2.8M+ records"
+      data_scope: "All system activity logs from OpenDental inception to current"
+      
+      known_issues:
+        - description: "System-generated entries (user_id = 0) cannot be linked to specific users"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "relationships test with where clause exclusion"
+        - description: "Several inactive/system users (20, 36, 43, 45, 51, 54, 9280, 9281) excluded from foreign key validation"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "relationships test with where clause exclusion"
+        - description: "805 records (1.83%) have NULL user_id and _created_by_user_id for system-generated entries"
+          severity: "info"
+          identified_date: "2024-01-15"
+          test: "not_null test with where clause to allow system entries"
+        - description: "All entries currently have foreign_key_type = 0, indicating standard audit log entries"
+          severity: "info"
+          identified_date: "2024-01-15"
+          test: "accepted_values test validates only value 0"
+      
+      business_rules:
+        - rule: "Entry logs are immutable - once created they cannot be modified"
+          impact: "Ensures audit trail integrity; _created_at and _updated_at are always identical"
+        - rule: "System-generated entries use user_id = 0 for automated processes"
+          impact: "These entries represent system actions not attributable to specific users"
+      
+      usage_notes: >
+        This table is essential for audit trails and compliance reporting. All user actions
+        in OpenDental generate entries here. Use for tracking user activity, system events,
+        and troubleshooting. Note that user_id = 0 represents system-generated entries.
+        The foreign_key and foreign_key_type work together to reference related records
+        in other tables based on the specific log source.
+    
+    tests:
+      # Model-level validation tests
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - entry_log_id
+            - entry_datetime
+          config:
+            severity: error
+    
     columns:
+      # Primary Key
       - name: entry_log_id
-        description: "Primary key - Unique identifier for each log entry"
+        description: "Primary key - Unique identifier for each log entry (maps to EntryLogNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
       
+      # Foreign Keys
       - name: user_id
         description: >
-          Foreign key to stg_opendental__userod, represents the user who performed the action.
+          Foreign key to stg_opendental__userod, represents the user who performed the action
+          (maps to UserNum in OpenDental).
           
           Special cases:
           - user_id = 0: System-generated entries (no specific user)
@@ -36,44 +88,81 @@ models:
                   Warning expected for user_id = 0 (system-generated entries) 
                   and excluded inactive/system users.
       
-      - name: foreign_key_type
-        description: >
-          Type identifier for the foreign key reference. Indicates what type of 
-          record the foreign_key points to.
-        tests:
-          - not_null
-      
       - name: foreign_key
         description: >
-          Foreign key reference to the related record. The actual table referenced 
-          depends on the foreign_key_type value.
+          Foreign key reference to the related record (maps to FKey in OpenDental). 
+          The actual table referenced depends on the foreign_key_type value.
+          Used in conjunction with foreign_key_type to create polymorphic relationships
+          to various OpenDental entities that generate audit log entries.
         tests:
           - not_null
+          - positive_values
+      
+      # Business Columns
+      - name: foreign_key_type
+        description: >
+          Type identifier for the foreign key reference (maps to FKeyType in OpenDental). 
+          Indicates what type of record the foreign_key points to. In this dataset,
+          all entries currently have foreign_key_type = 0, which appears to be the
+          standard value for general audit log entries. This creates a polymorphic 
+          relationship where different foreign_key_type values could point to 
+          different tables in the OpenDental system.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0]
+              config:
+                description: "Currently all entries have foreign_key_type = 0"
       
       - name: log_source
         description: >
-          Source of the log entry. Indicates which system component or module 
-          generated the log entry.
+          Source of the log entry (maps to LogSource in OpenDental). Indicates which 
+          system component or module generated the log entry. This helps categorize
+          audit events by the system area where they originated (e.g., clinical,
+          financial, administrative modules).
         tests:
           - not_null
       
       - name: entry_datetime
-        description: "Timestamp when the log entry was created"
+        description: >
+          Timestamp when the log entry was created (maps to EntryDateTime in OpenDental).
+          This represents both when the action occurred and when it was logged, as 
+          entry logs are created in real-time. All timestamps are in the OpenDental
+          server timezone.
         tests:
           - not_null
 
-      # Metadata columns
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
 
       - name: _created_at
         description: >
           Timestamp when the log entry was created in the source system (OpenDental).
-          For entry logs, this is the same as entry_datetime since logs are created
-          when they are written.
+          Maps to EntryDateTime since logs are created when they are written.
+          For entry logs, this is always the same as entry_datetime since logs are 
+          immutable and created at the time of the event.
+        tests:
+          - not_null
 
       - name: _updated_at
         description: >
           Timestamp when the log entry was last updated in the source system (OpenDental).
-          For entry logs, this is the same as entry_datetime since logs are immutable
-          and don't get updated after creation.
+          Maps to EntryDateTime since logs are immutable and don't get updated after creation.
+          For entry logs, this is always the same as entry_datetime and _created_at.
+        tests:
+          - not_null
+
+      - name: _created_by_user_id
+        description: >
+          User who created the log entry in the source system (OpenDental).
+          Maps to UserNum, same as user_id since the user performing the action
+          is the one who generates the log entry. May be NULL for system-generated 
+          entries where no specific user is associated with the action (approximately 1.83% of records).
+        tests:
+          - not_null:
+              where: "user_id IS NOT NULL"
+              config:
+                description: "Should not be null when user_id is present; allows nulls for system entries"
