@@ -3,44 +3,53 @@
     unique_key=['claim_payment_id', '_updated_at']
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'claimpayment') }}
-    where "CheckDate" >= '2023-01-01'
+    where {{ clean_opendental_date('"CheckDate"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "ClaimPaymentNum" as claim_payment_id,
+        -- Primary Key
+        {{ transform_id_columns([
+            {'source': '"ClaimPaymentNum"', 'target': 'claim_payment_id'}
+        ]) }},
         
-        -- Date fields
-        "CheckDate" as check_date,
-        "DateIssued" as date_issued,
+        -- Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"DepositNum"', 'target': 'deposit_id'},
+            {'source': '"PayType"', 'target': 'payment_type_id'},
+            {'source': '"PayGroup"', 'target': 'payment_group_id'}
+        ]) }},
         
-        -- Amount and identification fields
+        -- Date Fields
+        {{ clean_opendental_date('"CheckDate"') }} as check_date,
+        {{ clean_opendental_date('"DateIssued"') }} as date_issued,
+        
+        -- Amount and Identification Fields
         "CheckAmt" as check_amount,
         "CheckNum" as check_number,
         "BankBranch" as bank_branch,
         
-        -- General attributes
-        "Note" as note,
-        "ClinicNum" as clinic_id,
-        "DepositNum" as deposit_id,
-        "CarrierName" as carrier_name,
-        ("IsPartial" = 1)::boolean as is_partial,
-        "PayType" as payment_type_id,
-        "PayGroup" as payment_group_id,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"IsPartial"') }} as is_partial,
         
-        -- Metadata fields
-        "SecUserNumEntry" as created_by_user_id,
-        "SecDateEntry" as _created_at,
-        "SecDateTEdit" as _updated_at,
-        current_timestamp as _loaded_at
+        -- General Attributes
+        "Note" as note,
+        "CarrierName" as carrier_name,
+        
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
     
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
