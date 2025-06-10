@@ -1,23 +1,29 @@
+{{ config(
+    materialized='view',
+    schema='staging'
+) }}
+
 with source_data as (
     select * from {{ source('opendental', 'allergydef') }}
 ),
 
 renamed_columns as (
     select
-        -- Primary Key
+        -- Primary and Foreign Key transformations using macro
         {{ transform_id_columns([
-            {'source': '"AllergyDefNum"', 'target': 'allergydef_id'},
-            {'source': '"MedicationNum"', 'target': 'medication_id'}
+            {'source': '"AllergyDefNum"', 'target': 'allergy_def_id'},
+            {'source': 'NULLIF("MedicationNum", 0)', 'target': 'medication_id'}
         ]) }},
         
-        -- Attributes
-        "Description" as allergydef_description,
-        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
-        {{ clean_opendental_date('"DateTStamp"') }} as date_timestamp,
-        "SnomedType" as snomed_type,
-        "UniiCode" as unii_code,
+        -- Definition attributes
+        nullif("Description", '')::text as allergy_description,
+        nullif("SnomedType", 0)::integer as snomed_type,
+        nullif("UniiCode", '')::text as unii_code,
         
-        -- Metadata columns
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        
+        -- Standardized metadata using macro
         {{ standardize_metadata_columns(
             created_at_column='"DateTStamp"',
             updated_at_column='"DateTStamp"',
