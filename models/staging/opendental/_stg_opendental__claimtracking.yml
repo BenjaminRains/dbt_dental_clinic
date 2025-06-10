@@ -5,50 +5,155 @@ models:
     description: >
       Standardized staging model for claim tracking events from OpenDental.
       This model represents the audit trail of events and status changes for insurance claims,
-      providing a historical record of claim processing activities.
+      providing a historical record of claim processing activities including status updates,
+      error tracking, and communication events. Each record represents a single tracking
+      event in the lifecycle of an insurance claim.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~50,000 records (varies by claim volume)"
+      data_scope: "2023-01-01 onwards (incremental from DateTimeEntry)"
+      
+      known_issues:
+        - description: "Some tracking entries reference claims that no longer exist in the system due to historical data cleanup"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "relationships_with_third_table"
+        - description: "tracking_error_definition_id may be null for non-error tracking events"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "user_id may be null for system-generated tracking entries"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Each claim can have multiple tracking entries representing different events in its lifecycle"
+          impact: "Critical for understanding claim processing timeline and status changes"
+        - rule: "Tracking entries are created for both successful and error events"
+          impact: "Enables comprehensive audit trail and error analysis"
+        - rule: "Entry timestamp represents when the tracking event occurred, not when it was logged"
+          impact: "Important for accurate timeline analysis"
+      
+      usage_notes: >
+        This model provides the complete audit trail for insurance claim processing.
+        Use this data to understand claim status changes, identify processing bottlenecks,
+        and track error patterns. When analyzing claim timelines, join with stg_opendental__claim
+        to get claim details. Note that some historical tracking entries may reference
+        claims that no longer exist due to data cleanup processes. The tracking_type field
+        categorizes different types of events (status changes, errors, communications).
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "entry_timestamp <= current_timestamp"
+          config:
+            severity: error
+      - relationships_with_third_table:
+          to: ref('stg_opendental__claim')
+          field: claim_id
+          column_name: claim_id
+          from_condition: "claim_id is not null AND claim_id > 15260"
+          third_table: ref('stg_opendental__claimproc')
+          third_table_field: claim_id
+          config:
+            severity: warn
     
     columns:
       - name: claim_tracking_id
-        description: Primary key for the claim tracking record (from ClaimTrackingNum)
+        description: >
+          Primary key for the claim tracking record (maps to ClaimTrackingNum in OpenDental).
+          Each tracking entry has a unique identifier that allows for precise audit trail tracking.
         tests:
           - unique
           - not_null
-      
+          - positive_values
+
       - name: claim_id
-        description: "Foreign key to the insurance claim (ClaimNum). Note: Some historical records may reference claims that no longer exist."
-      
+        description: >
+          Foreign key to the insurance claim (maps to ClaimNum in OpenDental).
+          Links this tracking entry to the specific claim being tracked.
+          Note: Some historical records may reference claims that no longer exist
+          in the system due to data cleanup processes.
+        tests:
+          - positive_values:
+              where: "claim_id is not null"
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              severity: warn
+              where: "claim_id is not null AND claim_id > 15260"
+
       - name: user_id
-        description: Foreign key to the user who created this tracking entry (UserNum)
-      
+        description: >
+          Foreign key to the user who created this tracking entry (maps to UserNum in OpenDental).
+          Identifies which staff member or system process generated this tracking event.
+          May be null for system-generated tracking entries.
+        tests:
+          - positive_values:
+              where: "user_id is not null"
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+              severity: warn
+              where: "user_id is not null"
+
       - name: tracking_definition_id
-        description: Foreign key to the tracking definition (TrackingDefNum)
-      
+        description: >
+          Foreign key to the tracking definition (maps to TrackingDefNum in OpenDental).
+          Defines the type or category of tracking event being recorded.
+          Links to predefined tracking definitions that categorize different types of claim events.
+        tests:
+          - positive_values:
+              where: "tracking_definition_id is not null"
+
       - name: tracking_error_definition_id
-        description: Foreign key to the tracking error definition (TrackingErrorDefNum)
-      
+        description: >
+          Foreign key to the tracking error definition (maps to TrackingErrorDefNum in OpenDental).
+          Used when the tracking entry represents an error condition or problem with claim processing.
+          Null for non-error tracking events. Links to predefined error definitions for categorization.
+        tests:
+          - positive_values:
+              where: "tracking_error_definition_id is not null"
+
       - name: entry_timestamp
-        description: Timestamp when this tracking entry was created
+        description: >
+          Timestamp when this tracking entry was created (maps to DateTimeEntry in OpenDental).
+          Represents the actual time when the tracked event occurred in the claim processing workflow.
+          Critical for understanding the chronological sequence of claim events.
         tests:
           - not_null
-      
+          - dbt_utils.expression_is_true:
+              expression: ">= '2023-01-01'"
+          - dbt_utils.expression_is_true:
+              expression: "<= current_timestamp"
+
       - name: tracking_type
-        description: Type of tracking event (e.g., status change, error, note)
-      
+        description: >
+          Type of tracking event being recorded (maps to TrackingType in OpenDental).
+          Categorizes the nature of the tracking entry (e.g., status change, error, note, communication).
+          Values include various predefined types that help classify different kinds of claim events.
+
       - name: note
-        description: Additional notes or details about the tracking event
+        description: >
+          Additional notes or details about the tracking event (maps to Note in OpenDental).
+          Free-text field containing human-readable details about what occurred during this tracking event.
+          May include error messages, status descriptions, or other relevant information.
 
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the tracking entry was created in OpenDental (from DateTimeEntry)
+        description: >
+          Timestamp when the tracking entry was created in OpenDental (maps to DateTimeEntry).
+          Represents when this specific tracking event was originally recorded in the source system.
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the tracking entry was last updated in OpenDental (from DateTimeEntry)
+        description: >
+          Timestamp when the tracking entry was last updated in OpenDental (maps to DateTimeEntry).
+          For tracking entries, this typically matches _created_at since tracking events are usually immutable once created.
         tests:
           - not_null
 
