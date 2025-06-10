@@ -3,50 +3,51 @@
     unique_key='claim_id'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'claim') }}
-    where "DateService" >= '2023-01-01'
+    where {{ clean_opendental_date('"DateService"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(secure_edit_timestamp) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "ClaimNum" as claim_id,
+        -- Primary Key
+        {{ transform_id_columns([
+            {'source': '"ClaimNum"', 'target': 'claim_id'}
+        ]) }},
         
-        -- Foreign keys
-        "PatNum" as patient_id,
-        "PlanNum" as plan_id,
-        "PlanNum2" as secondary_plan_id,
-        "ProvTreat" as treating_provider_id,
-        "ProvBill" as billing_provider_id,
-        "ReferringProv" as referring_provider_id,
-        "ClinicNum" as clinic_id,
-        "ClaimForm" as claim_form_id,
-        "InsSubNum" as insurance_subscriber_id,
-        "InsSubNum2" as secondary_insurance_subscriber_id,
-        "OrderingReferralNum" as ordering_referral_id,
-        "ProvOrderOverride" as provider_order_override_id,
-        "CustomTracking" as custom_tracking_id,
-        "SecUserNumEntry" as secure_user_entry_id,
+        -- Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"PlanNum"', 'target': 'plan_id'},
+            {'source': '"PlanNum2"', 'target': 'secondary_plan_id'},
+            {'source': '"ProvTreat"', 'target': 'treating_provider_id'},
+            {'source': '"ProvBill"', 'target': 'billing_provider_id'},
+            {'source': '"ReferringProv"', 'target': 'referring_provider_id'},
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"ClaimForm"', 'target': 'claim_form_id'},
+            {'source': '"InsSubNum"', 'target': 'insurance_subscriber_id'},
+            {'source': '"InsSubNum2"', 'target': 'secondary_insurance_subscriber_id'},
+            {'source': '"OrderingReferralNum"', 'target': 'ordering_referral_id'},
+            {'source': '"ProvOrderOverride"', 'target': 'provider_order_override_id'},
+            {'source': '"CustomTracking"', 'target': 'custom_tracking_id'}
+        ]) }},
         
-        -- Date fields
-        "DateService" as service_date,
-        "DateSent" as sent_date,
-        "DateReceived" as received_date,
-        "PriorDate" as prior_date,
-        "AccidentDate" as accident_date,
-        "OrthoDate" as ortho_date,
-        "DateResent" as resent_date,
-        "DateSentOrig" as original_sent_date,
-        "DateIllnessInjuryPreg" as illness_injury_pregnancy_date,
-        "DateOther" as other_date,
-        "SecDateEntry" as secure_entry_date,
-        "SecDateTEdit" as secure_edit_timestamp,
+        -- Date Fields
+        {{ clean_opendental_date('"DateService"') }} as service_date,
+        {{ clean_opendental_date('"DateSent"') }} as sent_date,
+        {{ clean_opendental_date('"DateReceived"') }} as received_date,
+        {{ clean_opendental_date('"PriorDate"') }} as prior_date,
+        {{ clean_opendental_date('"AccidentDate"') }} as accident_date,
+        {{ clean_opendental_date('"OrthoDate"') }} as ortho_date,
+        {{ clean_opendental_date('"DateResent"') }} as resent_date,
+        {{ clean_opendental_date('"DateSentOrig"') }} as original_sent_date,
+        {{ clean_opendental_date('"DateIllnessInjuryPreg"') }} as illness_injury_pregnancy_date,
+        {{ clean_opendental_date('"DateOther"') }} as other_date,
         
-        -- Numerical values
+        -- Numerical Values
         "ClaimFee" as claim_fee,
         "InsPayEst" as insurance_payment_estimate,
         "InsPayAmt" as insurance_payment_amount,
@@ -54,10 +55,14 @@ renamed as (
         "WriteOff" as write_off,
         "ShareOfCost" as share_of_cost,
         
-        -- Integer/status fields
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"EmployRelated"') }} as is_employment_related,
+        {{ convert_opendental_boolean('"IsOrtho"') }} as is_ortho,
+        {{ convert_opendental_boolean('"IsOutsideLab"') }} as is_outside_lab,
+        {{ convert_opendental_boolean('"IsProsthesis"') }} as is_prosthesis,
+        
+        -- Integer/Status Fields
         "PlaceService" as place_of_service,
-        "EmployRelated" as is_employment_related,
-        "IsOrtho" as is_ortho,
         "OrthoRemainM" as ortho_remaining_months,
         "PatRelat" as patient_relation,
         "PatRelat2" as secondary_patient_relation,
@@ -70,12 +75,10 @@ renamed as (
         "OrthoTotalM" as ortho_total_months,
         "DateIllnessInjuryPregQualifier" as illness_injury_pregnancy_date_qualifier,
         "DateOtherQualifier" as other_date_qualifier,
-        "IsOutsideLab" as is_outside_lab,
         
-        -- Character fields
+        -- Character Fields
         "ClaimStatus" as claim_status,
         "PreAuthString" as pre_auth_string,
-        "IsProsthesis" as is_prosthesis,
         "ReasonUnderPaid" as reason_under_paid,
         "ClaimNote" as claim_note,
         "ClaimType" as claim_type,
@@ -94,12 +97,14 @@ renamed as (
         "SecurityHash" as security_hash,
         "Narrative" as narrative,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "SecDateEntry" as _created_at,
-        "SecDateTEdit" as _updated_at
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
     
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
