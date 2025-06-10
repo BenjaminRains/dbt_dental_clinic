@@ -1,47 +1,51 @@
 {% macro transform_id_columns(transformations) %}
 {#- 
-    Transforms OpenDental ID columns to standardized snake_case naming
+    Transforms OpenDental ID columns using PostgreSQL's safe conversion approach
     
-    Args:
-        transformations (list): List of dicts with 'source' and 'target' keys
-        
-    Returns:
-        SQL columns for standardized ID transformations
-        
-    Example usage:
-        {{ transform_id_columns([
-            {'source': '"PatNum"', 'target': 'patient_id'},
-            {'source': '"ClinicNum"', 'target': 'clinic_id'},
-            {'source': '"PriProv"', 'target': 'primary_provider_id'}
-        ]) }}
+    Source columns are INTEGER type but may contain invalid data like "N"
+    so we need to cast to text first before pattern matching
 -#}
     {%- for transformation in transformations -%}
-        {{ transformation.source }} as {{ transformation.target }}
+        CASE 
+            WHEN {{ transformation.source }}::text ~ '^[1-9][0-9]*$' THEN {{ transformation.source }}::text::integer
+            ELSE NULL
+        END as {{ transformation.target }}
         {%- if not loop.last -%},{%- endif -%}
     {%- endfor -%}
 {% endmacro %}
 
 {% macro transform_common_id_columns() %}
 {#- 
-    Transforms the most common OpenDental ID columns using standardized patterns
-    
-    Returns:
-        SQL columns for the most frequently used ID transformations
-        
-    Example usage:
-        -- Primary key and common relationships
-        {{ transform_common_id_columns() }},
-        
-        -- Additional specific IDs
-        "FeeSched" as fee_schedule_id
+    Transforms common ID columns with safe conversion
 -#}
-        -- Primary key (most common pattern)
-        COALESCE("PatNum", "ClaimNum", "ProcNum", "PayNum", "ApptNum") as primary_id,
+        CASE 
+            WHEN COALESCE("PatNum", "ClaimNum", "ProcNum", "PayNum", "ApptNum")::text ~ '^[1-9][0-9]*$' 
+            THEN COALESCE("PatNum", "ClaimNum", "ProcNum", "PayNum", "ApptNum")::text::integer
+            ELSE NULL
+        END as primary_id,
         
-        -- Common relationship IDs
-        "PatNum" as patient_id,
-        "ClinicNum" as clinic_id,
-        "PriProv" as primary_provider_id,
-        "SecProv" as secondary_provider_id,
-        "Guarantor" as guarantor_id
+        CASE 
+            WHEN "PatNum"::text ~ '^[1-9][0-9]*$' THEN "PatNum"::text::integer
+            ELSE NULL
+        END as patient_id,
+        
+        CASE 
+            WHEN "ClinicNum"::text ~ '^[1-9][0-9]*$' THEN "ClinicNum"::text::integer
+            ELSE NULL
+        END as clinic_id,
+        
+        CASE 
+            WHEN "PriProv"::text ~ '^[1-9][0-9]*$' THEN "PriProv"::text::integer
+            ELSE NULL
+        END as primary_provider_id,
+        
+        CASE 
+            WHEN "SecProv"::text ~ '^[1-9][0-9]*$' THEN "SecProv"::text::integer
+            ELSE NULL
+        END as secondary_provider_id,
+        
+        CASE 
+            WHEN "Guarantor"::text ~ '^[1-9][0-9]*$' THEN "Guarantor"::text::integer
+            ELSE NULL
+        END as guarantor_id
 {% endmacro %} 
