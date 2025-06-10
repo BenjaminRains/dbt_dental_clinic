@@ -18,12 +18,12 @@ models:
           - not_null
 
       # Foreign Key Relationships
-      - name: claimprocedure_id
+      - name: claim_procedure_id
         description: Foreign key to claim procedures table
         tests:
           - relationships_with_source_filter:
               to: ref('stg_opendental__claimproc')
-              column_name: claimprocedure_id
+              column_name: claim_procedure_id
               field: claim_procedure_id
               source_relation: source('opendental', 'claimproc')
               source_column: '"ClaimProcNum"'
