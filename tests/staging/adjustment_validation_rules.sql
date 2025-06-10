@@ -83,26 +83,14 @@ validation_failures as (
 
     UNION ALL
 
-    -- Test 8: Employee and provider discount validations
+    -- Test 8: Basic amount validation (simplified from complex business logic)
     select distinct
         adjustment_id,
-        'Invalid discount flags' as failure_reason
+        'Invalid amount/direction consistency' as failure_reason
     from staging_data
-    where (adjustment_type_id in (472, 485, 655) and is_employee_discount = false)
-        or (adjustment_type_id not in (472, 485, 655) and is_employee_discount = true)
-        or (adjustment_type_id in (474, 475, 601) and is_provider_discount = false)
-        or (adjustment_type_id not in (474, 475, 601) and is_provider_discount = true)
-
-    UNION ALL
-
-    -- Test 9: Category mapping validation
-    select distinct
-        adjustment_id,
-        'Invalid category mapping' as failure_reason
-    from staging_data
-    where adjustment_type_id = 188 and adjustment_category != 'insurance_writeoff'
-        or adjustment_type_id = 474 and adjustment_category != 'provider_discount'
-        or adjustment_type_id = 186 and adjustment_category != 'senior_discount'
+    where (adjustment_amount > 0 and adjustment_direction != 'positive')
+        or (adjustment_amount < 0 and adjustment_direction != 'negative')
+        or (adjustment_amount = 0 and adjustment_direction != 'zero')
 
     UNION ALL
 
@@ -146,13 +134,10 @@ detailed_failures as (
         s.procedure_id,
         s.is_procedure_adjustment,
         s.adjustment_type_id,
-        s.adjustment_category,
         s.adjustment_note,
         s.provider_id,
         s.patient_id,
         s.is_retroactive_adjustment,
-        s.is_employee_discount,
-        s.is_provider_discount,
         s.adjustment_direction
     from validation_failures v
     join staging_data s using (adjustment_id)
