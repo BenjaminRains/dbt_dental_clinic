@@ -4,35 +4,41 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'program') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "ProgramNum" as program_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"ProgramNum"', 'target': 'program_id'}
+        ]) }},
         
-        -- Attributes
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"Enabled"') }} as is_enabled,
+        {{ convert_opendental_boolean('"IsDisabledByHq"') }} as is_disabled_by_hq,
+        
+        -- Program Configuration
         "ProgName" as program_name,
         "ProgDesc" as program_description,
-        "Enabled" as is_enabled,
         "Path" as program_path,
         "CommandLine" as command_line,
-        "Note" as note,
         "PluginDllName" as plugin_dll_name,
         "ButtonImage" as button_image,
         "FileTemplate" as file_template,
         "FilePath" as file_path,
-        "IsDisabledByHq" as is_disabled_by_hq,
+        "Note" as note,
         "CustErr" as custom_error,
 
-        -- Metadata
-        current_timestamp as _loaded_at,
-        current_timestamp as _created_at,  -- Since this is a view of reference data, creation time is same as load time
-        current_timestamp as _updated_at   -- Since this is a view of reference data, update time is same as load time
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
