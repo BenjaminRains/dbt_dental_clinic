@@ -1,5 +1,6 @@
 {{ config(
-    materialized='view'
+    materialized='view',
+    schema='staging'
 ) }}
 
 with source_data as (
@@ -20,7 +21,7 @@ renamed_columns as (
         ]) }},
         
         -- String Fields
-        "GroupNum" as group_id,
+        "GroupNum" as group_number,
         "ClaimType" as claim_type,
         
         -- Numeric Fields
