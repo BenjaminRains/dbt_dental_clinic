@@ -1,6 +1,7 @@
 {{ config(
-    materialized = 'incremental',
-    unique_key = 'sheet_field_id'
+    materialized='incremental',
+    unique_key='sheet_field_id',
+    schema='staging'
 ) }}
 
 with source_data as (
@@ -9,7 +10,7 @@ with source_data as (
     left join {{ source('opendental', 'sheet') }} s 
         on sf."SheetNum" = s."SheetNum"
     {% if is_incremental() %}
-        and s."DateTimeSheet" > (select max(_updated_at) from {{ this }})
+    where s."DateTSheetEdited" > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
