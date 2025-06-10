@@ -2,64 +2,195 @@ version: 2
 
 models:
   - name: stg_opendental__employee
-    description: Staging model for employee data from OpenDental
+    description: >
+      Staging model for employee data from OpenDental system, containing comprehensive 
+      employee information including personal details, contact information, reporting 
+      relationships, and employment status flags.
+      
+      This model serves as the foundation for HR analytics, payroll reporting, and 
+      organizational structure analysis. It includes all active and inactive employees 
+      with their current status and contact information. The model uses a special join 
+      with the entrylog table to determine creation timestamps since the employee table 
+      lacks native audit fields.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~150-200 employees (varies by practice size)"
+      data_scope: "All employees ever entered in OpenDental system, including terminated staff"
+      
+      known_issues:
+        - description: "Creation timestamp derived from entrylog table may not be accurate for historical records"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "not_null_where_recent"
+        - description: "Some legacy employee records may have missing email addresses"
+          severity: "warn" 
+          identified_date: "2024-01-15"
+        - description: "Reports_to relationships may reference inactive employees"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Employee IDs are system-generated sequential numbers and never reused"
+          impact: "Safe to use for historical tracking and foreign key relationships"
+        - rule: "Hidden employees are still active but not shown in most OpenDental interfaces"
+          impact: "Include in payroll but exclude from scheduling and assignment views"
+        - rule: "Clock status tracks current time clock state for payroll integration"
+          impact: "Critical for accurate payroll reporting and time tracking"
+      
+      usage_notes: >
+        This model is essential for all employee-related analytics and should be used as
+        the primary source for employee information. When analyzing active employees,
+        filter where is_hidden = false. For organizational hierarchy analysis, use the
+        reports_to_employee_id relationships but be aware of potential inactive managers.
+        Email addresses may be incomplete for older employee records.
+
+    tests:
+      # Model-level validation tests
+      - dbt_utils.expression_is_true:
+          expression: "employee_id is not null"
+          config:
+            severity: warn
+            
     columns:
+      # Primary Key
       - name: employee_id
-        description: Primary key - Unique identifier for each employee
+        description: >
+          Primary key - Unique identifier for each employee record in OpenDental
+          (maps to EmployeeNum in source system). System-generated sequential number
+          that is never reused, making it safe for historical tracking and relationships.
         tests:
           - unique
           - not_null
-      
+          - positive_values
+
+      # Personal Information
       - name: last_name
-        description: Employee's last name
-      
+        description: >
+          Employee's last name as entered in OpenDental. Required field for all
+          employee records and used in display throughout the system.
+        tests:
+          - not_null
+
       - name: first_name
-        description: Employee's first name
-      
+        description: >
+          Employee's first name as entered in OpenDental. Required field for all
+          employee records and used in display throughout the system.
+        tests:
+          - not_null
+
       - name: middle_initial
-        description: Employee's middle initial
-      
+        description: >
+          Employee's middle initial or middle name. Optional field that may be
+          blank for many employees.
+
+      # Status and Configuration
       - name: is_hidden
-        description: Flag indicating if the employee record is hidden from view
-      
+        description: >
+          Flag indicating if the employee record is hidden from standard OpenDental
+          views and interfaces (0=Visible, 1=Hidden converted to boolean). Hidden
+          employees are still active but not shown in scheduling, assignments, or
+          most dropdown lists.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
       - name: clock_status
-        description: Current clock status of the employee (e.g., 'in', 'out', etc.)
-      
+        description: >
+          Current time clock status of the employee for payroll tracking. Common
+          values include 'In', 'Out', 'Break', 'Lunch'. May be null if employee
+          doesn't use time clock functionality.
+
+      # Contact Information  
       - name: phone_extension
-        description: Employee's office phone extension
-      
-      - name: payroll_id
-        description: Employee's payroll identifier
-      
+        description: >
+          Employee's office phone extension number. Used for internal directory
+          and contact purposes. May be null if not assigned an extension.
+
       - name: wireless_phone
-        description: Employee's mobile/wireless phone number
-      
+        description: >
+          Employee's mobile/wireless phone number for emergency contact and
+          communication. Format varies and may include formatting characters.
+
       - name: work_email
-        description: Employee's work email address
-      
+        description: >
+          Employee's primary work email address used for business communication
+          and system notifications. May be null for employees without email access.
+
       - name: personal_email
-        description: Employee's personal email address
-      
+        description: >
+          Employee's personal email address for emergency contact or personal
+          communication. Often null as this is optional information.
+
+      # Employment Details
+      - name: payroll_id
+        description: >
+          Employee's identifier in the payroll system for integration purposes.
+          May be null if payroll integration is not used or employee is not
+          eligible for payroll processing.
+
       - name: is_furloughed
-        description: Flag indicating if the employee is currently furloughed
-      
+        description: >
+          Flag indicating if the employee is currently furloughed or on unpaid
+          leave (0=Active, 1=Furloughed converted to boolean). Affects payroll
+          and scheduling visibility.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
       - name: is_working_home
-        description: Flag indicating if the employee is working from home
-      
+        description: >
+          Flag indicating if the employee is currently working from home
+          (0=Office, 1=Home converted to boolean). Used for scheduling and
+          contact preferences.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      # Organizational Relationships
       - name: reports_to_employee_id
-        description: Foreign key reference to the employee's manager/supervisor
+        description: >
+          Foreign key reference to the employee's direct manager or supervisor.
+          References the employee_id of another employee record. May be null for
+          top-level employees or if reporting structure is not maintained.
         tests:
           - relationships:
               to: ref('stg_opendental__employee')
               field: employee_id
               severity: warn
+              where: "reports_to_employee_id is not null"
 
-      # Metadata columns
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL
+          pipeline (using current_timestamp). Always populated for audit tracking.
+        tests:
+          - not_null
 
       - name: _created_at
-        description: Timestamp when the employee record was created in the source system (OpenDental)
+        description: >
+          Timestamp when the employee record was created in the source system.
+          Derived from entrylog table join since employee table lacks native audit
+          fields. May be null for very old records that predate logging.
+        tests:
+          - not_null:
+              where: "_created_at >= '2020-01-01'"
+              config:
+                severity: warn
 
       - name: _updated_at
-        description: Timestamp when the employee record was last updated in the source system (OpenDental)
+        description: >
+          Timestamp when the employee record was last updated. Currently set to
+          current_timestamp as employee table lacks native update tracking.
+        tests:
+          - not_null
+
+      - name: _created_by_user_id
+        description: >
+          User who created the employee record in OpenDental. Currently null as
+          this information is not available in the source employee table structure.
+          Future enhancement may derive this from entrylog table.
