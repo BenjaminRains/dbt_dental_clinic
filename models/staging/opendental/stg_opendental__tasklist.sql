@@ -1,6 +1,15 @@
+{{ config(
+    materialized='incremental',
+    unique_key='task_list_id',
+    schema='staging'
+) }}
+
 with source_data as (
     select * from {{ source('opendental', 'tasklist') }}
     where "DateTimeEntry" >= '2023-01-01'
+    {% if is_incremental() %}
+        and "DateTimeEntry" > (select max(_updated_at) from {{ this }})
+    {% endif %}
 ),
 
 renamed_columns as (
