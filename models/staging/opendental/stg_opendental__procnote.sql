@@ -3,7 +3,7 @@
     unique_key='procnote_id'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'procnote') }}
     where "EntryDateTime" >= '2023-01-01'
     {% if is_incremental() %}
@@ -11,28 +11,34 @@ with source as (
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "ProcNoteNum" as procnote_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"ProcNoteNum"', 'target': 'procnote_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"ProcNum"', 'target': 'procedure_id'},
+            {'source': '"UserNum"', 'target': 'user_id'}
+        ]) }},
         
-        -- Foreign keys
-        "PatNum" as patient_id,
-        "ProcNum" as procedure_id,
-        "UserNum" as user_id,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"SigIsTopaz"') }} as is_topaz_signature,
         
-        -- Additional attributes
-        "EntryDateTime" as entry_timestamp,
+        -- Date Fields
+        {{ clean_opendental_date('"EntryDateTime"') }} as entry_timestamp,
+        
+        -- Additional Attributes
         "Note" as note,
-        "SigIsTopaz" as is_topaz_signature,
         "Signature" as signature,
         
-        -- Metadata
-        current_timestamp as _loaded_at,
-        "EntryDateTime" as _created_at,
-        "EntryDateTime" as _updated_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"EntryDateTime"',
+            updated_at_column='"EntryDateTime"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
