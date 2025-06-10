@@ -1,7 +1,8 @@
 {{ config(
     materialized='incremental',
     unique_key='insbluebooklog_id',
-    incremental_strategy='delete+insert'
+    incremental_strategy='delete+insert',
+    schema='staging'
 ) }}
 
 with source_data as (
