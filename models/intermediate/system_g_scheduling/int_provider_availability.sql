@@ -14,7 +14,7 @@
     3. Calculates daily availability windows
 */
 
-WITH ProviderSchedules AS (
+with provider_schedules as (
     SELECT
         schedule_id,
         schedule_date,
@@ -23,7 +23,7 @@ WITH ProviderSchedules AS (
         provider_id,
         schedule_type,
         status,
-        created_at
+        _created_at
     FROM {{ ref('stg_opendental__schedule') }}
     WHERE schedule_type = 0  -- Provider schedules
         AND provider_id IS NOT NULL
@@ -31,15 +31,15 @@ WITH ProviderSchedules AS (
 ),
 
 -- Handle overlapping schedule blocks by merging them
-MergedSchedules AS (
-    WITH ScheduleWithNextStart AS (
+merged_schedules as (
+    with schedule_with_next_start as (
         SELECT
             provider_id,
             schedule_date,
             start_time,
             end_time,
             LEAD(start_time) OVER (PARTITION BY provider_id, schedule_date ORDER BY start_time) as next_start_time
-        FROM ProviderSchedules
+        from provider_schedules
     )
     SELECT
         provider_id,
@@ -61,11 +61,11 @@ MergedSchedules AS (
             WHEN COUNT(*) = 1 THEN 'Single Block'
             ELSE 'No Schedule'
         END as schedule_status
-    FROM ScheduleWithNextStart
+    from schedule_with_next_start
     GROUP BY provider_id, schedule_date
 ),
 
-DailyAvailability AS (
+daily_availability as (
     SELECT
         md5(COALESCE(provider_id::text, '') || COALESCE(schedule_date::text, '')) as provider_schedule_id,
         provider_id,
@@ -78,7 +78,7 @@ DailyAvailability AS (
         END as is_day_off,
         COALESCE(available_minutes, 0) as available_minutes,
         schedule_status
-    FROM MergedSchedules
+    from merged_schedules
 )
 
 SELECT
@@ -92,7 +92,7 @@ SELECT
     schedule_status,
     CURRENT_TIMESTAMP as model_created_at,
     CURRENT_TIMESTAMP as model_updated_at
-FROM DailyAvailability
+from daily_availability
 
 {% if is_incremental() %}
 WHERE schedule_date >= (SELECT MAX(schedule_date) FROM {{ this }})
