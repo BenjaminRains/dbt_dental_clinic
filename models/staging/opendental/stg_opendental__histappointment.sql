@@ -4,7 +4,7 @@
     schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * 
     from {{ source('opendental', 'histappointment') }}
     where "HistDateTStamp" >= '2023-01-01'::timestamp
@@ -14,66 +14,68 @@ with source as (
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "HistApptNum"::integer as hist_appointment_id,
+        -- Primary and Foreign Key transformations using macro
+        {{ transform_id_columns([
+            {'source': '"HistApptNum"', 'target': 'hist_appointment_id'},
+            {'source': '"AptNum"', 'target': 'appointment_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': 'NULLIF("ProvNum", 0)', 'target': 'provider_id'},
+            {'source': 'NULLIF("ProvHyg", 0)', 'target': 'hygienist_id'},
+            {'source': 'NULLIF("Assistant", 0)', 'target': 'assistant_id'},
+            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
+            {'source': 'NULLIF("NextAptNum", 0)', 'target': 'next_appointment_id'},
+            {'source': 'NULLIF("AppointmentTypeNum", 0)', 'target': 'appointment_type_id'},
+            {'source': 'NULLIF("Op", 0)', 'target': 'operatory_id'},
+            {'source': '"HistUserNum"', 'target': 'history_user_id'},
+            {'source': '"SecUserNumEntry"', 'target': 'entry_user_id'},
+            {'source': 'NULLIF("InsPlan1", 0)', 'target': 'insurance_plan_1_id'},
+            {'source': 'NULLIF("InsPlan2", 0)', 'target': 'insurance_plan_2_id'},
+            {'source': 'NULLIF("UnschedStatus", 0)', 'target': 'unscheduled_status_id'},
+            {'source': 'NULLIF("Confirmed", 0)', 'target': 'confirmation_id'}
+        ]) }},
         
-        -- Foreign keys
-        "AptNum"::integer as appointment_id,
-        "PatNum"::bigint as patient_id,
-        "ProvNum"::bigint as provider_id,
-        "ProvHyg"::bigint as hygienist_id,
-        "Assistant"::bigint as assistant_id,
-        "ClinicNum"::bigint as clinic_id,
-        "NextAptNum"::bigint as next_appointment_id,
-        "AppointmentTypeNum"::bigint as appointment_type_id,
-        "Op"::bigint as operatory_id,
-        "HistUserNum"::bigint as history_user_id,
-        "SecUserNumEntry"::bigint as entry_user_id,
-        "InsPlan1"::bigint as insurance_plan_1_id,
-        "InsPlan2"::bigint as insurance_plan_2_id,
-        "UnschedStatus"::bigint as unscheduled_status_id,
-        "Confirmed"::bigint as confirmation_id,
-        
-        -- Timestamps
+        -- Timestamp fields
         "HistDateTStamp"::timestamp with time zone as history_timestamp,
-        "DateTStamp"::timestamp as created_timestamp,
         "AptDateTime"::timestamp as appointment_datetime,
         "DateTimeArrived"::timestamp as arrived_datetime,
         "DateTimeSeated"::timestamp as seated_datetime,
         "DateTimeDismissed"::timestamp as dismissed_datetime,
         "DateTimeAskedToArrive"::timestamp as asked_to_arrive_datetime,
-        "SecDateTEntry"::timestamp as entry_datetime,
         
-        -- Flags and status indicators
+        -- Status and classification fields
         "AptStatus"::smallint as appointment_status,
         "HistApptAction"::smallint as history_action,
         "ApptSource"::smallint as appointment_source,
-        CASE WHEN COALESCE("TimeLocked", 0) = 1 THEN TRUE ELSE FALSE END as is_time_locked,
-        "IsNewPatient"::smallint as is_new_patient,
-        "IsHygiene"::smallint as is_hygiene,
         "Priority"::smallint as priority,
         
-        -- Text fields and descriptors
-        NULLIF(TRIM("Pattern"), '') as pattern,
-        NULLIF(TRIM("PatternSecondary"), '') as pattern_secondary,
-        NULLIF(TRIM("Note"), '') as note,
-        NULLIF(TRIM("ProcDescript"), '') as procedure_description,
-        NULLIF(TRIM("ProcsColored"), '') as procedures_colored,
-        NULLIF(TRIM("ProvBarText"), '') as provider_bar_text,
+        -- Boolean fields using macro
+        {{ convert_opendental_boolean('"TimeLocked"') }} as is_time_locked,
+        {{ convert_opendental_boolean('"IsNewPatient"') }} as is_new_patient,
+        {{ convert_opendental_boolean('"IsHygiene"') }} as is_hygiene,
+        
+        -- Text and description fields
+        nullif(trim("Pattern"), '') as pattern,
+        nullif(trim("PatternSecondary"), '') as pattern_secondary,
+        nullif(trim("Note"), '') as note,
+        nullif(trim("ProcDescript"), '') as procedure_description,
+        nullif(trim("ProcsColored"), '') as procedures_colored,
+        nullif(trim("ProvBarText"), '') as provider_bar_text,
+        nullif(trim("SecurityHash"), '') as security_hash,
         
         -- Other attributes
         "ColorOverride"::integer as color_override,
-        NULLIF(TRIM("SecurityHash"), '') as security_hash,
         "ItemOrderPlanned"::integer as item_order_planned,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "HistDateTStamp"::timestamp as _created_at,
-        coalesce("DateTStamp", "HistDateTStamp")::timestamp as _updated_at
+        -- Standardized metadata using macro
+        {{ standardize_metadata_columns(
+            created_at_column='"HistDateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
