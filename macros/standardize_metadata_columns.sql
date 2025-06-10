@@ -58,9 +58,14 @@
                 OR {{ created_at_column }} = '1900-01-01'::date 
                 OR {{ created_at_column }} = '0001-01-01 00:00:00.000'::timestamp
                 OR {{ created_at_column }} = '1900-01-01 00:00:00.000'::timestamp
-            THEN null
-            ELSE {{ created_at_column }}
-        END as _created_at,                                 -- Original creation timestamp
+            THEN {%- if updated_at_column and updated_at_column != none and updated_at_column != '' %} {{ updated_at_column }}
+                 {%- elif fallback_created_at_column and fallback_created_at_column != none and fallback_created_at_column != '' %} {{ fallback_created_at_column }}
+                 {%- else %} null {%- endif %}
+            ELSE COALESCE({{ created_at_column }}, 
+                         {%- if updated_at_column and updated_at_column != none and updated_at_column != '' %} {{ updated_at_column }}
+                         {%- elif fallback_created_at_column and fallback_created_at_column != none and fallback_created_at_column != '' %} {{ fallback_created_at_column }}
+                         {%- else %} null {%- endif %})
+        END as _created_at,                                 -- Original creation timestamp with fallback to update timestamp
         {%- elif fallback_created_at_column and fallback_created_at_column != none and fallback_created_at_column != '' %}
         CASE 
             WHEN {{ fallback_created_at_column }} = '0001-01-01'::date 
