@@ -5,44 +5,46 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'labcase') }}
     where "DateTimeCreated" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTimeCreated" > (select max(created_at) from {{ this }})
+        and "DateTimeCreated" > (select max(_created_at) from {{ this }})
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "LabCaseNum" as lab_case_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"LabCaseNum"', 'target': 'lab_case_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"LaboratoryNum"', 'target': 'laboratory_id'},
+            {'source': '"AptNum"', 'target': 'appointment_id'},
+            {'source': '"PlannedAptNum"', 'target': 'planned_appointment_id'},
+            {'source': '"ProvNum"', 'target': 'provider_id'}
+        ]) }},
         
-        -- Foreign keys
-        "PatNum" as patient_id,
-        "LaboratoryNum" as laboratory_id,
-        "AptNum" as appointment_id,
-        "PlannedAptNum" as planned_appointment_id,
-        "ProvNum" as provider_id,
+        -- Date/Timestamp Fields
+        {{ clean_opendental_date('"DateTimeDue"') }} as due_at,
+        {{ clean_opendental_date('"DateTimeCreated"') }} as created_at,
+        {{ clean_opendental_date('"DateTimeSent"') }} as sent_at,
+        {{ clean_opendental_date('"DateTimeRecd"') }} as received_at,
+        {{ clean_opendental_date('"DateTimeChecked"') }} as checked_at,
+        {{ clean_opendental_date('"DateTStamp"') }} as updated_at,
         
-        -- Timestamps
-        "DateTimeDue" as due_at,
-        "DateTimeCreated" as created_at,
-        "DateTimeSent" as sent_at,
-        "DateTimeRecd" as received_at,
-        "DateTimeChecked" as checked_at,
-        "DateTStamp" as updated_at,
-        
-        -- Additional attributes
+        -- Additional Attributes
         "Instructions" as instructions,
         "LabFee" as lab_fee,
         "InvoiceNum" as invoice_number,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        "DateTimeCreated" as _created_at,
-        coalesce("DateTStamp", "DateTimeCreated") as _updated_at
-    from source
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTimeCreated"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
