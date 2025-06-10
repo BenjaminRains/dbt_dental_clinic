@@ -3,14 +3,11 @@
     unique_key='document_id'
 ) }}
 
-with source as (
-
+with source_data as (
     select * from {{ source('opendental', 'document') }}
-
 ),
 
-renamed as (
-
+renamed_columns as (
     select
         -- Primary Key
         "DocNum" as document_id,
@@ -35,28 +32,33 @@ renamed as (
         
         -- Numeric Fields
         "ImgType" as image_type,
-        "IsFlipped" as is_flipped,
         "DegreesRotated" as degrees_rotated,
-        "SigIsTopaz" as is_signature_topaz,
         "CropX" as crop_x,
         "CropY" as crop_y,
         "CropW" as crop_width,
         "CropH" as crop_height,
         "WindowingMin" as windowing_min,
         "WindowingMax" as windowing_max,
-        "IsCropOld" as is_crop_old,
         "ImageCaptureType" as image_capture_type,
-        "PrintHeading" as print_heading,
         
-        -- Timestamps
-        "DateCreated" as _created_at,
-        "DateTStamp" as _updated_at,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"IsFlipped"') }} as is_flipped,
+        {{ convert_opendental_boolean('"SigIsTopaz"') }} as is_signature_topaz,
+        {{ convert_opendental_boolean('"IsCropOld"') }} as is_crop_old,
+        {{ convert_opendental_boolean('"PrintHeading"') }} as print_heading,
+        
+        -- Date Fields
+        {{ clean_opendental_date('"DateCreated"') }} as date_created,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_timestamp,
 
-        -- Required metadata columns
-        current_timestamp as _loaded_at
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateCreated"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
-
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
