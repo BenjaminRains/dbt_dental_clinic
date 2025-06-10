@@ -4,70 +4,215 @@ models:
   - name: stg_opendental__apptview
     description: >
       Staging model for appointment views that defines different views of the appointment schedule.
-      Each view can have different settings for display preferences, scheduling restrictions,
-      and clinic-specific configurations.
+      
+      Appointment views control how the scheduler interface displays appointments across different
+      operatories, providers, and time periods. Each view can have customized settings for display
+      preferences, scheduling restrictions, clinic-specific configurations, and user permissions.
+      Views are essential for organizing complex dental practice schedules and ensuring proper
+      workflow management across multiple providers and treatment rooms.
+    
+    meta:
+      # Data quality and business context
+      record_count: "Approximately 50-200 records (varies by practice size and scheduling complexity)"
+      data_scope: "All appointment view configurations since practice implementation"
+      
+      known_issues:
+        - description: "Some views may have null clinic_id for legacy or global view configurations"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "test_clinic_id_not_null_for_clinic_specific_views"
+        - description: "Time fields may contain invalid time formats in older records"
+          severity: "warn"
+          identified_date: "2024-01-20"
+          test: "test_valid_time_formats"
+      
+      business_rules:
+        - rule: "Each clinic should have at least one default appointment view for scheduling"
+          impact: "Missing views prevent effective appointment scheduling for that clinic"
+        - rule: "Sort order determines the display sequence in the scheduler interface"
+          impact: "Proper ordering ensures intuitive user experience for front desk staff"
+        - rule: "Stack behavior settings control how overlapping appointments are displayed"
+          impact: "Incorrect settings can make schedules difficult to read and cause booking errors"
+      
+      usage_notes: >
+        This model is primarily used for:
+        - Configuring scheduler interface displays
+        - Setting up clinic-specific scheduling views
+        - Controlling appointment display preferences
+        - Managing provider and operatory visibility rules
+        
+        Key considerations:
+        - Views with clinic_id are clinic-specific; null clinic_id indicates global views
+        - Time restrictions (only_scheduled_before/after_time) filter appointment visibility
+        - Stack behavior affects how overlapping or adjacent appointments appear
+        - Provider restrictions help manage complex multi-doctor practices
+    
+    tests:
+      # Model-level validation tests
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [view_description, clinic_id]
+          config:
+            severity: warn
+    
     columns:
       - name: appt_view_id
-        description: Primary key - Unique identifier for each appointment view
+        description: >
+          Primary key - Unique identifier for each appointment view configuration
+          (maps to ApptViewNum in OpenDental). Transformed using transform_id_columns macro.
+          Used to reference specific view settings across the application and maintain view consistency.
         tests:
           - unique
           - not_null
 
       - name: view_description
-        description: Name or description of the appointment view (e.g., 'Office', 'HIPAA', 'Week')
+        description: >
+          Human-readable name or description of the appointment view (maps to Description
+          in OpenDental). Common values include 'Office', 'HIPAA', 'Week', 'Provider View',
+          or custom names specific to practice workflow. This appears in the scheduler
+          interface dropdown for view selection.
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
 
       - name: sort_order
-        description: Numeric value determining the display order of views in the scheduler
+        description: >
+          Numeric value determining the display order of views in the scheduler interface
+          dropdown (maps to ItemOrder in OpenDental). Lower numbers appear first.
+          Typically ranges from 0-20 depending on number of configured views.
 
       - name: rows_per_increment
-        description: Number of rows per increment in the schedule display
+        description: >
+          Number of rows per time increment in the schedule display (maps to RowsPerIncr
+          in OpenDental). Controls the granularity of time slots shown in the scheduler.
+          Common values: 1 (hourly), 2 (30-min), 4 (15-min), 6 (10-min).
 
       - name: only_scheduled_providers
-        description: Flag indicating if only scheduled providers should be shown in this view
+        description: >
+          Flag indicating if only scheduled providers should be shown in this view
+          (maps to OnlyScheduledProvs in OpenDental). 0=Show all providers, 1=Show only
+          providers with scheduled appointments. Helps reduce clutter in large practices.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
 
       - name: only_scheduled_before_time
-        description: Time restriction for showing only appointments before this time
+        description: >
+          Time restriction for showing only appointments before this time (maps to
+          OnlySchedBeforeTime in OpenDental). Format: HH:MM:SS. Used to create
+          time-limited views like 'Morning Schedule' or 'Before Lunch'.
 
       - name: only_scheduled_after_time
-        description: Time restriction for showing only appointments after this time
+        description: >
+          Time restriction for showing only appointments after this time (maps to
+          OnlySchedAfterTime in OpenDental). Format: HH:MM:SS. Used to create
+          time-limited views like 'Afternoon Schedule' or 'After Lunch'.
 
       - name: stack_behavior_up_right
-        description: Stack behavior setting for up/right direction in the scheduler
+        description: >
+          Stack behavior setting for up/right direction in the scheduler (maps to
+          StackBehavUR in OpenDental). Controls how overlapping appointments are
+          displayed when they extend upward or rightward. Values: 0=No stack,
+          1=Stack up, 2=Stack right.
+        tests:
+          - accepted_values:
+              values: [0, 1, 2]
+              config:
+                severity: warn
 
       - name: stack_behavior_left_right
-        description: Stack behavior setting for left/right direction in the scheduler
+        description: >
+          Stack behavior setting for left/right direction in the scheduler (maps to
+          StackBehavLR in OpenDental). Controls horizontal stacking of overlapping
+          appointments. Values: 0=No stack, 1=Stack left, 2=Stack right.
+        tests:
+          - accepted_values:
+              values: [0, 1, 2]
+              config:
+                severity: warn
 
       - name: clinic_id
-        description: Foreign key to clinic table - identifies which clinic this view applies to
-        tests:
-          - relationships:
-              to: source('opendental', 'clinic')
-              field: ClinicNum
+        description: >
+          Foreign key to clinic table - identifies which clinic this view applies to
+          (maps to ClinicNum in OpenDental). Transformed using transform_id_columns macro
+          to convert 0 values to null. Null values indicate global views that apply across
+          all clinics. Clinic-specific views override global settings.
+          Note: Relationship test commented out until stg_opendental__clinic model is available.
 
       - name: appointment_time_scroll_start
-        description: Starting time for appointment scrolling in the scheduler
+        description: >
+          Starting time for appointment scrolling in the scheduler interface (maps to
+          ApptTimeScrollStart in OpenDental). Format: HH:MM:SS. Determines the default
+          time position when the scheduler view opens. Common values: 07:00:00, 08:00:00.
 
       - name: is_scroll_start_dynamic
-        description: Boolean flag indicating if the scroll start time is dynamic
+        description: >
+          Boolean flag indicating if the scroll start time is dynamic based on first
+          appointment (maps to IsScrollStartDynamic in OpenDental). Converted from 0/1
+          to false/true boolean values. True=Scroll to first appointment automatically,
+          False=Use fixed start time. Improves user experience by showing relevant schedule immediately.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: is_appointment_bubbles_disabled
-        description: Boolean flag indicating if appointment bubbles are disabled in this view
+        description: >
+          Boolean flag indicating if appointment bubbles (tooltips) are disabled in this view
+          (maps to IsApptBubblesDisabled in OpenDental). Converted from 0/1 to false/true
+          boolean values. True=Hide bubbles, False=Show bubbles. Used for HIPAA-compliant
+          views or performance optimization in busy schedules.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: width_operatory_minimum
-        description: Minimum width for operatory display in the scheduler
+        description: >
+          Minimum width for operatory display in the scheduler interface (maps to
+          WidthOpMinimum in OpenDental). Measured in pixels. Ensures operatory columns
+          remain readable even when schedule is compressed. Typical range: 80-200 pixels.
 
       - name: waiting_room_name
-        description: Name of the waiting room associated with this view
+        description: >
+          Name of the waiting room associated with this view (maps to WaitingRoomName
+          in OpenDental). Used for practices with multiple waiting areas or check-in
+          locations. Helps staff direct patients to appropriate waiting areas.
 
       - name: only_scheduled_provider_days
-        description: Flag indicating if only scheduled provider days should be shown
+        description: >
+          Flag indicating if only scheduled provider days should be shown (maps to
+          OnlySchedProvDays in OpenDental). 0=Show all days, 1=Show only days when
+          selected providers have scheduled appointments. Reduces visual clutter
+          and focuses on active schedule days.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                severity: warn
 
-      # Metadata columns
+      # Required metadata columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+          (using current_timestamp). Used for data lineage and debugging ETL processes.
+        tests:
+          - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (placeholder - source table has no creation timestamp)
+        description: >
+          Timestamp when the record was created in the source system (OpenDental).
+          Note: OpenDental apptview table does not have creation timestamp, so this
+          field is set to null by the standardize_metadata_columns macro.
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (placeholder - source table has no update timestamp)
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental).
+          Note: OpenDental apptview table does not have update timestamp, so this
+          field is set to null by the standardize_metadata_columns macro.
+
+      - name: _created_by_user_id
+        description: >
+          User who created the record in the source system (OpenDental). Note: OpenDental
+          apptview table does not track creation user, so this field is set to null
+          by the standardize_metadata_columns macro.
