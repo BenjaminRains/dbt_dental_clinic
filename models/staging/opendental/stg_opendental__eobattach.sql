@@ -1,7 +1,8 @@
 {{
     config(
         materialized='incremental',
-        unique_key='eob_attach_id'
+        unique_key='eob_attach_id',
+        schema='staging'
     )
 }}
 
@@ -14,12 +15,12 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary Key
-        "EobAttachNum" as eob_attach_id,
-        
-        -- Foreign Keys
-        "ClaimPaymentNum" as claim_payment_id,
-        
+        -- Primary Key and Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"EobAttachNum"', 'target': 'eob_attach_id'},
+            {'source': '"ClaimPaymentNum"', 'target': 'claim_payment_id'}
+        ]) }},
+
         -- Attributes
         "FileName" as file_name,
         "RawBase64" as raw_base64,
