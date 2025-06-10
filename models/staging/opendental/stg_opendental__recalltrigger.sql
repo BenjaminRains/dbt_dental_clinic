@@ -4,28 +4,34 @@
     schema='staging'
 ) }}
 
-with Source as (
+with source_data as (
     select * from {{ source('opendental', 'recalltrigger') }}
     {% if is_incremental() %}
         where current_timestamp > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-Renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "RecallTriggerNum" as recall_trigger_id,
+        -- Primary Key
+        {{ transform_id_columns([
+            {'source': '"RecallTriggerNum"', 'target': 'recall_trigger_id'}
+        ]) }},
         
-        -- Relationships
-        "RecallTypeNum" as recall_type_id,
-        "CodeNum" as code_id,
+        -- Foreign Keys  
+        {{ transform_id_columns([
+            {'source': '"RecallTypeNum"', 'target': 'recall_type_id'},
+            {'source': '"CodeNum"', 'target': 'code_id'}
+        ]) }},
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,
-        current_timestamp as _created_at,
-        current_timestamp as _updated_at
+        -- Metadata
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
 
-    from Source
+    from source_data
 )
 
-select * from Renamed
+select * from renamed_columns
