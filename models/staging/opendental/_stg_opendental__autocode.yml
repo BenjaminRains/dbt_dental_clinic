@@ -2,30 +2,85 @@ version: 2
 
 models:
   - name: stg_opendental__autocode
-    description: Staging model for OpenDental autocodes. This is a small lookup table (~37 records) containing dental procedure autocodes and their attributes.
+    description: >
+      Staging model for OpenDental autocodes - a reference lookup table containing dental procedure 
+      autocodes and their attributes. Autocodes are used in OpenDental to define automated 
+      procedure coding rules and treatment planning logic.
+      
+      This is a small, relatively static reference table containing standardized dental procedure 
+      autocodes with flags for visibility and procedure invasiveness levels. The table supports 
+      clinical workflow automation and procedure categorization within the dental practice management system.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~37 records"
+      data_scope: "Complete snapshot of autocode reference data"
+      
+      known_issues:
+        - description: "No audit trail columns available - this reference table lacks created_at, updated_at, and created_by_user_id metadata"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "N/A - by design"
+      
+      business_rules:
+        - rule: "Autocodes marked as hidden (is_hidden=true) should not appear in standard user interfaces"
+          impact: "Affects clinical workflow UI and treatment planning displays"
+        - rule: "Less intrusive procedures (is_less_intrusive=true) may have different treatment planning priorities"
+          impact: "Influences automated treatment sequencing and patient care protocols"
+      
+      usage_notes: >
+        This is a reference/lookup table primarily used for joining with clinical procedure data.
+        Use for procedure categorization and clinical workflow logic. The small size (~37 records) 
+        makes this suitable for broadcasting in joins. Note that this table has no audit trail 
+        metadata due to its reference nature - only _loaded_at is tracked.
+
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: source('opendental', 'autocode')
+          config:
+            severity: warn
+
     columns:
       - name: autocode_id
-        description: Primary key for the autocode table
+        description: >
+          Primary key for the autocode table - unique identifier for each dental procedure autocode 
+          (maps to AutoCodeNum in OpenDental source system). Used for joining with clinical procedure 
+          records and treatment planning data.
         tests:
           - unique
           - not_null
+          - positive_values
 
       - name: description
-        description: Description of the autocode and its purpose
+        description: >
+          Human-readable description of the autocode and its clinical purpose. Provides context 
+          for dental professionals about the autocode's intended use in procedure coding and 
+          treatment planning workflows.
         tests:
           - not_null
 
       - name: is_hidden
-        description: Boolean flag indicating if the autocode is hidden from normal view
+        description: >
+          Boolean flag indicating if the autocode should be hidden from normal user interfaces 
+          and procedure selection lists (0=Visible, 1=Hidden converted to boolean). Hidden autocodes 
+          may be deprecated or for internal system use only.
         tests:
           - not_null
+          - boolean_values
 
       - name: is_less_intrusive
-        description: Boolean flag indicating if the procedure is considered less intrusive
+        description: >
+          Boolean flag indicating if procedures associated with this autocode are considered 
+          less intrusive or minimally invasive (0=Standard invasiveness, 1=Less intrusive converted to boolean). 
+          Used in treatment planning algorithms to prioritize less invasive treatment options.
         tests:
           - not_null
+          - boolean_values
 
       - name: _loaded_at
-        description: Timestamp of when this record was loaded into the warehouse
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL pipeline 
+          (using current_timestamp). This is the only audit metadata available for this 
+          reference table as it lacks created/updated tracking in the source system.
         tests:
           - not_null
