@@ -1,6 +1,7 @@
 {{
     config(
-        materialized='view'
+        materialized='view',
+        schema='staging'
     )
 }}
 
@@ -10,15 +11,16 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary Key
-        "EntryLogNum" as entry_log_id,
-        
-        -- Foreign Keys
-        "UserNum" as user_id,
-        "FKeyType" as foreign_key_type,
-        "FKey" as foreign_key,
+        -- Primary Key and Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"EntryLogNum"', 'target': 'entry_log_id'},
+            {'source': '"UserNum"', 'target': 'user_id'},
+            {'source': '"FKey"', 'target': 'foreign_key'}
+        ]) }},
         
         -- Attributes
+        "FKeyType" as foreign_key_type,
+        
         "LogSource" as log_source,
         {{ clean_opendental_date('"EntryDateTime"') }} as entry_datetime,
 
