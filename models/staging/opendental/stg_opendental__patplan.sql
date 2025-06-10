@@ -2,34 +2,40 @@
     materialized='view'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'patplan') }}
     where "SecDateTEdit" >= '2023-01-01'  -- Following pattern from other staging models
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "PatPlanNum" as patplan_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"PatPlanNum"', 'target': 'patplan_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'},
+            {'source': '"InsSubNum"', 'target': 'insurance_subscriber_id'}
+        ]) }},
         
-        -- Foreign Keys
-        "PatNum" as patient_id,
-        "InsSubNum" as insurance_subscriber_id,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"IsPending"') }} as is_pending,
         
         -- Additional Attributes
         "Ordinal" as ordinal,
-        "IsPending" as is_pending,
         "Relationship" as relationship,
         "PatID" as patient_external_id,
         "OrthoAutoFeeBilledOverride" as ortho_auto_fee_billed_override,
-        "OrthoAutoNextClaimDate" as ortho_auto_next_claim_date,
         
-        -- Metadata
-        current_timestamp as _loaded_at,
-        COALESCE("SecDateTEntry", "SecDateTEdit") as _created_at,
-        "SecDateTEdit" as _updated_at
+        -- Date Fields
+        {{ clean_opendental_date('"OrthoAutoNextClaimDate"') }} as ortho_auto_next_claim_date,
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateTEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
