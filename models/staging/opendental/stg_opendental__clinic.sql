@@ -23,14 +23,20 @@
     schema='staging'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'clinic') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "ClinicNum" as clinic_id,
+        -- Primary Key and Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"ClinicNum"', 'target': 'clinic_id'},
+            {'source': '"EmailAddressNum"', 'target': 'email_address_id'},
+            {'source': '"DefaultProv"', 'target': 'default_provider_id'},
+            {'source': '"InsBillingProv"', 'target': 'insurance_billing_provider_id'},
+            {'source': '"Region"', 'target': 'region_id'}
+        ]) }},
         
         -- Basic Information
         "Description" as clinic_name,
@@ -45,7 +51,6 @@ renamed as (
         "Zip" as zip_code,
         "Phone" as phone_number,
         "Fax" as fax_number,
-        "EmailAddressNum" as email_address_id,
         "EmailAliasOverride" as email_alias,
         
         -- Billing Information
@@ -61,38 +66,37 @@ renamed as (
         "PayToState" as pay_to_state,
         "PayToZip" as pay_to_zip,
         
-        -- Provider References
-        "DefaultProv" as default_provider_id,
-        "InsBillingProv" as insurance_billing_provider_id,
-        
-        -- Configuration Flags
+        -- Configuration Flags (Boolean Fields)
         "DefaultPlaceService" as default_place_of_service,
-        "IsMedicalOnly" as is_medical_only,
-        "UseBillAddrOnClaims" as use_billing_address_on_claims,
-        "IsInsVerifyExcluded" as is_insurance_verification_excluded,
-        "IsConfirmEnabled" as is_confirmation_enabled,
-        "IsConfirmDefault" as is_confirmation_default,
-        "IsNewPatApptExcluded" as is_new_patient_appointment_excluded,
-        "IsHidden" as is_hidden,
-        "HasProcOnRx" as has_procedure_on_prescription,
+        {{ convert_opendental_boolean('"IsMedicalOnly"') }} as is_medical_only,
+        {{ convert_opendental_boolean('"UseBillAddrOnClaims"') }} as use_billing_address_on_claims,
+        {{ convert_opendental_boolean('"IsInsVerifyExcluded"') }} as is_insurance_verification_excluded,
+        {{ convert_opendental_boolean('"IsConfirmEnabled"') }} as is_confirmation_enabled,
+        {{ convert_opendental_boolean('"IsConfirmDefault"') }} as is_confirmation_default,
+        {{ convert_opendental_boolean('"IsNewPatApptExcluded"') }} as is_new_patient_appointment_excluded,
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
+        {{ convert_opendental_boolean('"HasProcOnRx"') }} as has_procedure_on_prescription,
         
         -- Additional Settings
-        "Region" as region_id,
         "TimeZone" as timezone,
         "SchedNote" as scheduling_note,
         "MedLabAccountNum" as medical_lab_account_number,
         "ExternalID" as external_id,
         
+        -- Date Fields
+        {{ clean_opendental_date('"SmsContractDate"') }} as sms_contract_date,
+        
         -- SMS Settings
-        "SmsContractDate" as sms_contract_date,
         "SmsMonthlyLimit" as sms_monthly_limit,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "date_entry" as _created_at,      -- Rename source creation timestamp
-        coalesce("date_tstamp", "date_entry") as _updated_at  -- Rename source update timestamp
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateEntry"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed 
+select * from renamed_columns 
