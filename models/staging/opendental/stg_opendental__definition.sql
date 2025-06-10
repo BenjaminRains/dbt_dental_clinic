@@ -4,27 +4,35 @@
     )
 }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'definition') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "DefNum" as definition_id,
+        -- Primary Key and Foreign Keys
+        {{ transform_id_columns([
+            {'source': '"DefNum"', 'target': 'definition_id'},
+            {'source': '"Category"', 'target': 'category_id'}
+        ]) }},
         
         -- Attributes
-        "Category" as category_id,
         "ItemOrder" as item_order,
         "ItemName" as item_name,
         "ItemValue" as item_value,
         "ItemColor" as item_color,
-        "IsHidden" as is_hidden,
+        
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
 
-        -- Metadata
-        current_timestamp as _loaded_at
+        -- Metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column=none,
+            updated_at_column=none,
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
