@@ -10,13 +10,13 @@ with source_data as (
 
 renamed_columns as (
     select
-        -- Primary Key
-        "InsVerifyNum" as insurance_verify_id,
-        
-        -- Foreign Keys
-        "UserNum" as user_id,
-        "FKey" as foreign_key_id,
-        "DefNum" as definition_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"InsVerifyNum"', 'target': 'insurance_verify_id'},
+            {'source': '"UserNum"', 'target': 'user_id'},
+            {'source': '"FKey"', 'target': 'foreign_key_id'},
+            {'source': '"DefNum"', 'target': 'definition_id'}
+        ]) }},
         
         -- Attributes
         "VerifyType" as verify_type,
