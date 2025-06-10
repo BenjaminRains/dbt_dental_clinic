@@ -25,9 +25,9 @@ with provider_schedules as (
         status,
         _created_at
     FROM {{ ref('stg_opendental__schedule') }}
-    WHERE schedule_type = 0  -- Provider schedules
+    WHERE schedule_type = 1  -- Individual provider schedules
         AND provider_id IS NOT NULL
-        AND schedule_date >= CURRENT_DATE - INTERVAL '{{ var("schedule_window_days") }} days'
+        AND schedule_date >= CURRENT_DATE - INTERVAL '{{ var("schedule_window_days", "365") }} days'
 ),
 
 -- Handle overlapping schedule blocks by merging them
