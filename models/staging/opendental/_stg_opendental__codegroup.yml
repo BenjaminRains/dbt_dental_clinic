@@ -2,45 +2,108 @@ version: 2
 
 models:
   - name: stg_opendental__codegroup
-    description: Staging model for OpenDental code groups. Contains groupings of dental procedure codes with their attributes and display settings.
+    description: >
+      Staging model for OpenDental code groups that define collections of dental procedure codes for organizational and reporting purposes.
+      
+      Code groups are used in OpenDental to organize related procedure codes together, making it easier to manage fees, 
+      create reports, and control display settings. Each code group contains a collection of procedure codes that can be 
+      referenced by their group name, with configurable display ordering and visibility settings.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~50-100 groups"
+      data_scope: "All code groups defined in OpenDental system"
+      
+      known_issues:
+        - description: "Some code groups may have overlapping procedure codes across different groups"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "n/a"
+        - description: "ProcCodes field is stored as text and may require parsing for individual code extraction"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "n/a"
+      
+      business_rules:
+        - rule: "Code groups with is_fixed=true cannot be modified by users in OpenDental"
+          impact: "Fixed groups represent system-required groupings that should not be changed"
+        - rule: "ItemOrder determines display sequence in OpenDental interface"
+          impact: "Lower numbers display first in dropdowns and lists"
+        - rule: "Hidden groups (is_hidden=true) are not visible in normal user interface"
+          impact: "Used for administrative or deprecated groupings"
+      
+      usage_notes: >
+        Use this model for understanding procedure code organization and creating reports that group procedures 
+        by business function. The proc_codes field contains comma-separated procedure codes and may need parsing 
+        for analysis. Be aware that procedure codes can belong to multiple groups.
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "item_order >= 0"
+          config:
+            severity: warn
+    
     columns:
       - name: codegroup_id
-        description: Primary key for the code group table
+        description: "Primary key for the code group table - unique identifier for each procedure code group (maps to CodeGroupNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
 
       - name: group_name
-        description: Name of the code group (limited to 50 characters)
+        description: >
+          Name of the code group used for display and identification purposes. Limited to 50 characters in OpenDental.
+          Examples include 'Preventive', 'Restorative', 'Oral Surgery', etc. Used in reports and fee management.
         tests:
           - not_null
+          - dbt_utils.not_empty_string
 
       - name: proc_codes
-        description: Text field containing the procedure codes associated with this group
+        description: >
+          Text field containing comma-separated list of procedure codes (ADA codes) associated with this group.
+          Format typically like 'D0120,D0140,D0210' for diagnostic procedures. This field may require parsing 
+          to extract individual procedure codes for analysis.
         tests:
           - not_null
 
       - name: item_order
-        description: Integer representing the display order of the code group
+        description: >
+          Integer representing the display order of the code group in OpenDental interface lists and dropdowns.
+          Lower values appear first. Used to control the sequence in which code groups are presented to users.
         tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
 
       - name: is_fixed
-        description: Boolean flag indicating if the code group is fixed/unchangeable
+        description: >
+          Boolean flag indicating if the code group is system-fixed and cannot be modified by users 
+          (0=No, 1=Yes converted to boolean). Fixed groups represent core system functionality that 
+          should not be altered.
         tests:
           - not_null
+          - boolean_values
 
       - name: is_hidden
-        description: Boolean flag indicating if the code group is hidden from normal view
+        description: >
+          Boolean flag indicating if the code group is hidden from normal user interface views 
+          (0=No, 1=Yes converted to boolean). Hidden groups may be used for administrative purposes 
+          or deprecated functionality.
         tests:
           - not_null
+          - boolean_values
 
       - name: show_in_age_limit
-        description: Boolean flag indicating if the code group should be shown in age limit settings
+        description: >
+          Boolean flag indicating if the code group should be displayed in age limit configuration settings 
+          (0=No, 1=Yes converted to boolean). Used to control which code groups are available when setting 
+          age-based treatment limitations.
         tests:
           - not_null
+          - boolean_values
 
       - name: _loaded_at
-        description: Timestamp of when this record was loaded into the warehouse
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
