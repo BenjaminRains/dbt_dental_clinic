@@ -162,7 +162,6 @@ renamed_columns as (
         END::boolean as is_unearned_income,
         
         -- Additional metadata fields
-        NULLIF("SecUserNumEntry", 0)::bigint as created_by_user_id,
         CASE 
             WHEN "SecDateTEdit" > current_timestamp THEN NULL
             ELSE "SecDateTEdit"
