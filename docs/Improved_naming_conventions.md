@@ -180,6 +180,38 @@ marts.mart_financial_performance
 
 ## dbt Configuration Updates
 
+### Staging Model Configuration
+**Rule**: All staging models MUST include a config block with schema specification
+
+```sql
+-- For transactional/fact tables (with timestamps for tracking changes)
+{{ config(
+    materialized='incremental',
+    unique_key='<primary_key>_id',
+    schema='staging'
+) }}
+
+-- For reference/dimension tables (slowly changing or static data)
+{{ config(
+    materialized='view',
+    schema='staging'
+) }}
+```
+
+**Guidelines for choosing materialization:**
+- Use `incremental` for:
+  - Tables with DateTStamp or similar update tracking columns
+  - High-volume transactional data (appointments, procedures, payments)
+  - Tables that benefit from processing only new/changed records
+  
+- Use `view` for:
+  - Reference/lookup tables (definitions, types, categories)
+  - Tables without timestamp columns
+  - Low-volume or rarely changing data
+  - Tables that join to others for timestamp metadata
+
+**Important**: The `schema='staging'` parameter is REQUIRED in all staging model configs to ensure proper schema organization.
+
 ### Updated dbt_project.yml
 ```yaml
 models:
