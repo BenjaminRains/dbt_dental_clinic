@@ -6,6 +6,14 @@
 
 #### **ID Columns:**
 - [ ] Replace manual ID transformations with `{{ transform_id_columns([...]) }}`
+  - **Note**: Use dictionary structure with `source` and `target` keys:
+    ```sql
+    {{ transform_id_columns([
+        {'source': '"RefAttachNum"', 'target': 'ref_attach_id'},
+        {'source': '"PatNum"', 'target': 'patient_id'}
+    ]) }}
+    ```
+  - Always include quotes around source column names (e.g., `'"PatNum"'`)
 - [ ] Standardize primary key naming: `*_id` pattern
 - [ ] Group related ID transformations together
 
@@ -21,6 +29,22 @@
 
 #### **Metadata Columns:**
 - [ ] Replace manual metadata with `{{ standardize_metadata_columns() }}`
+  - **Usage**: Always include this macro. Pass source columns as parameters, or `none` if not available:
+    ```sql
+    -- When all metadata columns exist:
+    {{ standardize_metadata_columns(
+        created_at_column='"DateTStamp"',
+        updated_at_column='"DateTStamp"'
+    ) }}
+    
+    -- When some columns don't exist:
+    {{ standardize_metadata_columns(
+        created_at_column='"DateTEntry"',
+        updated_at_column='"DateTEntry"',
+        created_by_column=none
+    ) }}
+    ```
+  - **Important**: Always include this macro even if source table lacks metadata columns
 - [ ] Ensure consistent `_loaded_at`, `_created_at`, `_updated_at`, `_created_by_user_id`
 - [ ] Verify source column mapping is correct
 
