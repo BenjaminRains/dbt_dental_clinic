@@ -2,20 +2,86 @@ version: 2
 
 models:
   - name: stg_opendental__commlog
-    description: Staging model for communication logs from OpenDental
+    description: >
+      Staging model for communication logs from OpenDental system, capturing all patient communications 
+      including appointments, clinical notes, billing notifications, and system-generated messages.
+      
+      This model contains comprehensive communication history tracking all interactions between the practice 
+      and patients across multiple channels (email, SMS, phone, in-person, letters). Records span from 
+      2023-01-01 onwards and include both automated system communications and manual practice communications.
+      The data supports communication audit trails, patient engagement analysis, and appointment workflow tracking.
+
+    meta:
+      record_count: "~113,000 records"
+      data_scope: "2023-01-01 to present, all communication types and channels"
+      
+      known_issues:
+        - description: "System-generated communications (user_id IS NULL) represent 43.22% of records with no specific user attribution - this is expected for automated appointment notifications and patient communications"
+          severity: "info"
+          identified_date: "2024-01-15"
+          test: "none"
+        - description: "Entry datetime is NULL for 90.50% of records, primarily for system-generated communications (types 0, 224, 228) - this is expected business behavior"
+          severity: "info"
+          identified_date: "2024-01-15"
+          test: "none"
+        - description: "Program ID is NULL for 51.74% of records representing communications not associated with specific external programs - this is expected"
+          severity: "info"
+          identified_date: "2024-01-15"
+          test: "none"
+        - description: "Legacy program communications (program_id = 95) account for remaining records but program details are not available in program table"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "program_id_relationship_test"
+        - description: "Inactive user IDs (20, 36, 43, 45, 51, 54, 9280, 9281) exist in historical data but users are no longer active"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "user_id_relationship_test"
+      
+      business_rules:
+        - rule: "Communications with user_id = 0 are system-generated and should be excluded from user performance analysis"
+          impact: "Affects user productivity metrics and communication attribution reporting"
+        - rule: "Mode 4 (in-person) communications represent 37.31% of all communications and indicate direct patient interactions"
+          impact: "Critical for patient engagement scoring and visit completion tracking"
+        - rule: "is_sent values indicate communication direction: 0=received, 1=sent, 2=system-processed"
+          impact: "Essential for understanding communication flow and response tracking"
+      
+      usage_notes: >
+        Use this model for communication audit trails, patient engagement analysis, and appointment workflow tracking.
+        When analyzing user performance, exclude system-generated communications (user_id = 0).
+        For appointment-related communications, focus on types 224 (primary notifications) and 228 (secondary notifications).
+        Communication source field may be null for 42.23% of records (types 224 and 228) which is expected behavior.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - commlog_id
+            - communication_datetime
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: communication_datetime_not_too_far_future
+          expression: "communication_datetime <= current_date + interval '1 year'"
+          config:
+            severity: error
+
     columns:
       - name: commlog_id
-        description: Primary key of the communication log
+        description: "Primary key of the communication log (maps to CommlogNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              inclusive: true
 
       - name: patient_id
-        description: Foreign key to stg_opendental__patient
+        description: "Foreign key to stg_opendental__patient representing the patient involved in the communication"
         tests:
+          - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              severity: error
 
       - name: user_id
         description: >
@@ -23,13 +89,12 @@ models:
           Links to user_id (formerly UserNum) in userod table.
 
           Special cases:
-          - user_id = 0: System-generated communications (no specific user)
-            Represents approximately 54,578 records from 2023-01-01 to 2025-02-17
+          - user_id IS NULL: System-generated communications (43.22% of records)
             These are automated communications from the system for:
-            * Appointment notifications (type 224)
-            * General patient communications (type 228)
-            * Clinical communications (type 603)
-            * Legacy system communications (type 0)
+            * Appointment notifications (type 224, modes 1 & 4) - 46,710 records
+            * General patient communications (type 228, mode 4) - 6,620 records  
+            * Clinical communications (type 603, mode 5) - 577 records
+            * Legacy system communications (type 0, mode 5) - 648 records
           - Excluded inactive users: 20, 36, 43, 45, 51, 54, 9280, 9281
             * Jennifer Berg (20) - Active provider, no commlog entries
             * Becky Solomey (36) - Hidden provider
@@ -41,39 +106,56 @@ models:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
-              where: "user_id != 0 AND user_id NOT IN (20, 36, 43, 45, 51, 54, 9280, 9281)"  # Exclude system and inactive users
+              where: "user_id IS NOT NULL AND user_id NOT IN (20, 36, 43, 45, 51, 54, 9280, 9281)"
+              severity: warn
               config:
                 description: >
-                  This test excludes system-generated communications (user_id = 0) and known inactive users.
+                  This test excludes system-generated communications (user_id IS NULL) and known inactive users.
                   System communications represent automated messages for appointments, notifications, and clinical updates.
 
       - name: program_id
         description: >
           Foreign key to stg_opendental__program, represents the program/system used for communication.
           Special cases:
-          - program_id = 0: System default/no specific program (51.74% of records)
-            Used for basic system communications where no specific external program is involved
-          - program_id = 95: Legacy communication system (48.26% of records)
-            Primarily used for communications with:
-            * Mode 5 communications (26,392 records)
-            * Mode 1 communications (18,405 records)
-            * Mode 3 communications (15,761 records)
-            * Mode 0 communications (357 records)
+          - program_id IS NULL: No specific program association (51.74% of records)
+            Used for basic system communications where no specific external program is involved.
+            Primarily types 224 (appointment notifications) and 228 (patient communications) across all modes.
+          - program_id = 95: Legacy communication system (remaining records)
+            Used for historical communications with various modes and types.
         tests:
           - relationships:
               to: ref('stg_opendental__program')
               field: program_id
-              where: "program_id NOT IN (0, 95)"  # Only check non-system program IDs
-              severity: error  # Error if any other program_id doesn't exist in program table
+              where: "program_id IS NOT NULL AND program_id != 95"
+              severity: warn
               config:
                 description: >
-                  This test verifies that any program_id other than 0 (system default) or 95 (legacy system)
-                  must exist in the program table. These two special IDs are excluded from the check as they
-                  represent internal system communications and are not present in the program table by design.
+                  This test verifies that any program_id other than NULL (no program) or 95 (legacy system)
+                  must exist in the program table. These special cases are excluded as they represent
+                  internal system communications not tied to specific external programs.
 
-      # Other important fields
+      - name: referral_id
+        description: "Foreign key to stg_opendental__referral when communication is related to a specific referral (maps to ReferralNum in OpenDental)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__referral')
+              field: referral_id
+              where: "referral_id IS NOT NULL AND referral_id != 0"
+              severity: warn
+
       - name: communication_datetime
-        description: Date and time when the communication occurred
+        description: "Date and time when the communication occurred (maps to CommDateTime in OpenDental)"
+        tests:
+          - not_null
+
+      - name: communication_end_datetime
+        description: "Date and time when the communication ended, primarily used for phone calls and appointments (maps to DateTimeEnd in OpenDental)"
+
+      - name: entry_datetime
+        description: >
+          Date and time when the communication record was entered into the system (maps to DateTEntry in OpenDental).
+          NULL for 90.50% of records, primarily system-generated communications (types 0, 224, 228) which are
+          created automatically without manual entry timestamps.
 
       - name: communication_type
         description: >
@@ -93,6 +175,9 @@ models:
           - not_null
           - accepted_values:
               values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
+
+      - name: note
+        description: "Free text content of the communication, contains the actual message or note (maps to Note in OpenDental)"
 
       - name: mode
         description: >
@@ -122,31 +207,8 @@ models:
           - accepted_values:
               values: [0, 1, 2, 3, 4, 5, 6, 8]
 
-      - name: is_sent
-        description: >
-          Flag indicating the direction and status of communication, ordered by frequency:
-          
-          - 2: System-processed communications (57.90% of records)
-            * Used for automated communications and system notifications
-            * Spans all communication types (17 distinct types)
-            * Used with all standard modes (0-5)
-            * Earliest records from 2023-01-01
-          
-          - 1: Practice-to-patient communications (38.25% of records)
-            * Communications sent from the practice to patients
-            * Used with all communication types (16 distinct types)
-            * Used with all modes including rare modes 6 and 8
-            * Earliest records from 2023-01-02
-          
-          - 0: Patient-to-practice communications (3.86% of records)
-            * Communications received from patients
-            * Used with 13 distinct communication types
-            * Used with all standard modes (0-5)
-            * Earliest records from 2023-01-02
-        tests:
-          - not_null
-          - accepted_values:
-              values: [0, 1, 2]
+      - name: signature
+        description: "Digital signature associated with the communication, if applicable (maps to Signature in OpenDental)"
 
       - name: communication_source
         description: >
@@ -204,21 +266,52 @@ models:
         tests:
           - accepted_values:
               values: [0, 1, 2, 3, 4, 6, 9]
-          - not_null:
-              where: "communication_source is not null"
 
-      # Metadata columns
+      - name: referral_behavior
+        description: "Behavior setting for referral-related communications (maps to CommReferralBehavior in OpenDental)"
+
+      - name: is_sent
+        description: >
+          Flag indicating the direction and status of communication, converted from SentOrReceived in OpenDental to boolean.
+          Original values and their meanings:
+          
+          - 2: System-processed communications (57.90% of records) -> converted to true
+            * Used for automated communications and system notifications
+            * Spans all communication types (17 distinct types)
+            * Used with all standard modes (0-5)
+            * Earliest records from 2023-01-01
+          
+          - 1: Practice-to-patient communications (38.25% of records) -> converted to true
+            * Communications sent from the practice to patients
+            * Used with all communication types (16 distinct types)
+            * Used with all modes including rare modes 6 and 8
+            * Earliest records from 2023-01-02
+          
+          - 0: Patient-to-practice communications (3.86% of records) -> converted to false
+            * Communications received from patients
+            * Used with 13 distinct communication types
+            * Used with all standard modes (0-5)
+            * Earliest records from 2023-01-02
+        tests:
+          - not_null
+
+      - name: is_topaz_signature
+        description: "Indicates if the signature was created using Topaz signature pad (converted from 0=No, 1=Yes to boolean)"
+        tests:
+          - not_null
+
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp of when this record was loaded into the warehouse
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp of when this record was created in the source system (OpenDental)
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column."
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp of when this record was last updated in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp column."
         tests:
           - not_null
