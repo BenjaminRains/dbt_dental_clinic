@@ -1,3 +1,8 @@
+{{ config(
+    materialized='view',
+    schema='staging'
+) }}
+
 with source_data as (
     select * from {{ source('opendental', 'allergy') }}
 ),
@@ -12,8 +17,8 @@ renamed_columns as (
         ]) }},
         
         -- Clinical information
-        "Reaction" as reaction,
-        "SnomedReaction" as snomed_reaction,
+        nullif("Reaction", '')::text as reaction,
+        nullif("SnomedReaction", '')::text as snomed_reaction,
         
         -- Boolean fields using macro
         {{ convert_opendental_boolean('"StatusIsActive"') }} as is_active,
