@@ -1,24 +1,35 @@
-with source as (
+{{ config(
+    materialized='view'
+) }}
+
+with source_data as (
     select * from {{ source('opendental', 'medication') }}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary Key
-        "MedicationNum" as medication_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"MedicationNum"', 'target': 'medication_id'},
+            {'source': '"GenericNum"', 'target': 'generic_id'}
+        ]) }},
         
         -- Attributes
         "MedName" as medication_name,
-        "GenericNum" as generic_id,
         "Notes" as notes,
         "RxCui" as rxcui,
         
-        -- Required metadata columns
-        current_timestamp as _loaded_at,  -- When ETL pipeline loaded the data
-        "DateTStamp" as _created_at,     -- When the record was created in source
-        "DateTStamp" as _updated_at      -- Last update timestamp
+        -- Date Fields
+        {{ clean_opendental_date('"DateTStamp"') }} as date_updated,
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"',
+            updated_at_column='"DateTStamp"',
+            created_by_column=none
+        ) }}
 
-    from source
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
