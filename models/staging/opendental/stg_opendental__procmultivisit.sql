@@ -3,7 +3,7 @@
     unique_key='procmultivisit_id'
 ) }}
 
-with source as (
+with source_data as (
     select * from {{ source('opendental', 'procmultivisit') }}
     where "SecDateTEntry" >= '2023-01-01'
     {% if is_incremental() %}
@@ -11,29 +11,33 @@ with source as (
     {% endif %}
 ),
 
-renamed as (
+renamed_columns as (
     select
-        -- Primary key
-        "ProcMultiVisitNum" as procmultivisit_id,
+        -- ID Columns (with safe conversion)
+        {{ transform_id_columns([
+            {'source': '"ProcMultiVisitNum"', 'target': 'procmultivisit_id'},
+            {'source': '"GroupProcMultiVisitNum"', 'target': 'group_procmultivisit_id'},
+            {'source': '"ProcNum"', 'target': 'procedure_id'},
+            {'source': '"PatNum"', 'target': 'patient_id'}
+        ]) }},
         
-        -- Foreign keys
-        "GroupProcMultiVisitNum" as group_procmultivisit_id,
-        "ProcNum" as procedure_id,
-        "PatNum" as patient_id,
-        
-        -- Status fields
+        -- Status Fields
         "ProcStatus" as procedure_status,
-        "IsInProcess" as is_in_process,
         
-        -- Date and time fields
-        "SecDateTEntry" as sec_date_entry,
-        "SecDateTEdit" as sec_date_edit,
+        -- Boolean Fields
+        {{ convert_opendental_boolean('"IsInProcess"') }} as is_in_process,
         
-        -- Metadata
-        current_timestamp as _loaded_at,
-        "SecDateTEntry" as _created_at,
-        "SecDateTEdit" as _updated_at
-    from source
+        -- Date Fields
+        {{ clean_opendental_date('"SecDateTEntry"') }} as entry_date,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as edit_date,
+        
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateTEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column=none
+        ) }}
+    from source_data
 )
 
-select * from renamed
+select * from renamed_columns
