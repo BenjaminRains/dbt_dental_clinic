@@ -1,3 +1,9 @@
+{{ config(
+    materialized='incremental',
+    unique_key='task_note_id',
+    schema='staging'
+) }}
+
 with source_data as (
     select * from {{ source('opendental', 'tasknote') }}
 ),
