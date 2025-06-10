@@ -1,5 +1,14 @@
+{{ config(
+    materialized='incremental',
+    unique_key='provider_id',
+    schema='staging'
+) }}
+
 with source_data as (
     select * from {{ source('opendental', 'provider') }}
+    {% if is_incremental() %}
+    where "DateTStamp" > (select max(_updated_at) from {{ this }})
+    {% endif %}
 ),
 
 renamed_columns as (
@@ -66,17 +75,6 @@ renamed_columns as (
         -- Date fields using macro
         {{ clean_opendental_date('"Birthdate"') }} as birth_date,
         {{ clean_opendental_date('"DateTerm"') }} as termination_date,
-        
-        -- Business logic flags
-        CASE 
-            WHEN "ProvNum" = 0 THEN true
-            ELSE false
-        END::boolean as is_system_provider,
-        
-        CASE
-            WHEN "IsHidden" = 0 AND "ProvStatus" = 0 THEN true
-            ELSE false
-        END::boolean as is_active_provider,
         
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(

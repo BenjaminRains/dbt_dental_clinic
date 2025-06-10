@@ -2,7 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__provider
-    description: Standardized provider information from OpenDental
+    description: >
+      Standardized provider information from OpenDental. Contains basic provider
+      data transformations and standardized field naming. Business logic and 
+      derived fields (like provider status flags) are available in 
+      int_provider_profile intermediate model.
     columns:
       - name: provider_id
         description: >
@@ -21,19 +25,19 @@ models:
       # Provider identifiers
       - name: provider_abbreviation
         description: Provider abbreviation used in the system
-      - name: provider_item_order
+      - name: display_order
         description: Display order for the provider in lists
-      - name: provider_last_name
+      - name: last_name
         description: Provider's last name
-      - name: provider_first_name
+      - name: first_name
         description: Provider's first name
-      - name: provider_middle_initial
+      - name: middle_initial
         description: Provider's middle initial
-      - name: provider_suffix
+      - name: name_suffix
         description: Provider's name suffix
-      - name: provider_preferred_name
+      - name: preferred_name
         description: Provider's preferred name to display
-      - name: provider_custom_id
+      - name: custom_id
         description: Custom identifier for the provider
       
       # Provider classifications
@@ -45,17 +49,17 @@ models:
         description: Status of the provider (active, inactive, etc.)
       - name: anesthesia_provider_type
         description: Type of anesthesia provider classification
-      - name: school_class_number
-        description: School class number for educational institutions
+      - name: school_class_id
+        description: School class ID for educational institutions
       - name: ehr_mu_stage
         description: EHR Meaningful Use stage for the provider
-      - name: provider_billing_override_id
+      - name: billing_override_provider_id
         description: Provider ID used to override billing information
       
       # Provider identifiers and numbers
-      - name: ssn
+      - name: social_security_number
         description: Provider's Social Security Number
-      - name: state_license
+      - name: state_license_number
         description: State license number
       - name: dea_number
         description: Drug Enforcement Administration number
@@ -119,8 +123,6 @@ models:
         description: Provider's birth date
       - name: termination_date
         description: Date when the provider was terminated, if applicable
-      - name: record_updated_at
-        description: Timestamp of when the record was last updated in the source system
       
       # Relations
       - name: email_address_id
