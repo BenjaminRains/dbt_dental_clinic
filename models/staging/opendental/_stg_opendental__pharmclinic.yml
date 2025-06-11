@@ -2,41 +2,107 @@ version: 2
 
 models:
   - name: stg_opendental__pharmclinic
-    description: Staging model for pharmacy-clinic relationships from OpenDental. Maps the associations between pharmacies and clinics.
+    description: >
+      Staging model for pharmacy-clinic relationships from OpenDental. This junction table establishes 
+      many-to-many relationships between pharmacies and clinics, enabling clinics to work with multiple 
+      preferred pharmacies and pharmacies to serve multiple clinic locations. Used primarily for 
+      prescription routing and pharmacy preference management in clinical workflows.
+    
+    meta:
+      # Data quality and business context
+      record_count: "Small reference table - typically under 1,000 records"
+      data_scope: "All active and historical pharmacy-clinic relationships"
+      
+      known_issues:
+        - description: "Junction table with minimal validation - relationships may exist without proper cleanup when pharmacies or clinics are inactivated"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "clinic_id is NULL for all records because transform_id_columns macro treats ClinicNum=0 as NULL, when 0 represents the main clinic"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "_created_at and _updated_at are NULL because source table has no timestamp columns and macro was called with none values"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          
+      business_rules:
+        - rule: "Each pharmacy-clinic relationship should be unique (no duplicate combinations)"
+          impact: "Prevents duplicate pharmacy assignments to clinics"
+        - rule: "Both pharmacy_id and clinic_id must reference active entities for operational use"
+          impact: "Ensures prescription routing works correctly"
+      
+      usage_notes: >
+        This is a simple junction table for many-to-many relationships. When analyzing pharmacy 
+        preferences, join with both pharmacy and clinic staging tables to get full context. 
+        Some relationships may be historical and reference inactive pharmacies or clinics.
+
+    tests:
+      # Ensure unique pharmacy-clinic combinations
+      - unique:
+          column_name: "concat(pharmacy_id, '_', clinic_id)"
+    
     columns:
       - name: pharm_clinic_id
-        description: Primary key - Unique identifier for each pharmacy-clinic relationship
+        description: >
+          Primary key - Unique identifier for each pharmacy-clinic relationship record 
+          (maps to PharmClinicNum in OpenDental). Auto-generated sequential ID that serves 
+          as the surrogate key for this junction table.
         tests:
           - unique
           - not_null
+          - positive_values
 
       - name: pharmacy_id
-        description: Foreign key to the pharmacy table (stg_opendental__pharmacy)
+        description: >
+          Foreign key to the pharmacy table - Links to the specific pharmacy in this 
+          relationship (maps to PharmacyNum in OpenDental). Establishes which pharmacy 
+          is available to the clinic for prescription routing and patient referrals.
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__pharmacy')
               field: pharmacy_id
+              severity: warn  # Some historical relationships may reference inactive pharmacies
 
       - name: clinic_id
-        description: Foreign key to the clinic table
-        tests:
-          - not_null
+        description: >
+          Foreign key to the clinic table - Links to the specific clinic in this 
+          relationship (maps to ClinicNum in OpenDental). Identifies which clinic location 
+          has access to work with the specified pharmacy. A clinic_id of 0 indicates 
+          the main/default clinic location. May be NULL if clinic reference is invalid.
+          Note: clinic_id can be NULL due to transform_id_columns macro treating 0 as NULL.
+          No relationship test to clinic table as it may not be in staging yet.
 
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the data warehouse (using current_timestamp as no source timestamp available)
+        description: >
+          Timestamp when the record was created in the data warehouse. OpenDental pharmclinic 
+          table does not track creation timestamps, and the standardize_metadata_columns macro 
+          was called with none for created_at_column, so this field is NULL for all records.
         tests:
-          - not_null
+          - not_null:
+              where: "1=0"  # Always NULL since source doesn't track creation timestamps
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the data warehouse (using current_timestamp as no source timestamp available)
+        description: >
+          Timestamp when the record was last updated in the data warehouse. OpenDental pharmclinic 
+          table does not track modification timestamps, and the standardize_metadata_columns macro 
+          was called with none for updated_at_column, so this field is NULL for all records.
         tests:
-          - not_null
+          - not_null:
+              where: "1=0"  # Always NULL since source doesn't track modification timestamps
+
+      - name: _created_by_user_id
+        description: >
+          User who created the record in the data warehouse (using current_timestamp as no source 
+          user tracking available). OpenDental pharmclinic table does not track which user created 
+          the relationship, so this field will be null for all records.
+        tests:
+          - not_null:
+              where: "1=0"  # Always null since source doesn't track user creation
 
     config:
-      tags: ['staging', 'opendental', 'pharmacy']
+      tags: ['staging', 'opendental', 'pharmacy', 'clinic', 'junction']
