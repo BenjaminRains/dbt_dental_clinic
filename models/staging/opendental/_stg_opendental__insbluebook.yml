@@ -3,93 +3,175 @@ version: 2
 models:
   - name: stg_opendental__insbluebook
     description: >
-      Staging model for insurance bluebook entries. Contains current insurance payment 
-      information and allowed fee overrides.
+      Staging model for insurance bluebook entries from OpenDental. Contains insurance payment 
+      information, allowed fee overrides, and procedure-specific insurance data used for claims 
+      processing and payment tracking.
+      
+      This model captures the relationship between procedures, insurance plans, and actual/allowed 
+      payment amounts. It's essential for understanding insurance payment patterns and fee schedules.
+      Data is filtered to include only records from 2023-01-01 onwards for performance and relevance.
+
+    meta:
+      # Data quality and business context
+      record_count: "~50,000 records"
+      data_scope: "Insurance bluebook entries from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: "Some claim_id values may reference non-existent claims due to data cleanup"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "relationships test with conditional where clause"
+        
+        - description: "Legacy records may have inconsistent group_number formatting"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        
+        - description: "allowed_override_amount of -1.0 indicates 'no override set, use default fee schedule' - this is expected business logic"
+          severity: "info"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Insurance payment amounts can be zero but not negative"
+          impact: "Used for payment reconciliation and fee schedule analysis"
+        
+        - rule: "Allowed override amounts override standard fee schedules when present; -1.0 means use default fee schedule"
+          impact: "Critical for accurate payment expectation calculations"
+      
+      usage_notes: >
+        This model is primarily used for insurance payment analysis and fee schedule management.
+        When joining with claims data, use conditional relationships due to potential orphaned records.
+        The procedure_date may differ from the claim date due to timing of entry vs service.
+
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "insurance_payment_amount >= 0"
+          config:
+            severity: error
+      
+      - dbt_utils.expression_is_true:
+          expression: "allowed_override_amount >= 0 or allowed_override_amount is null or allowed_override_amount = -1"
+          config:
+            severity: error
+
     columns:
+      # Primary Key
       - name: insbluebook_id
-        description: Primary key for the insurance bluebook entry
+        description: "Primary key for the insurance bluebook entry (maps to InsBlueBookNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 1"
 
       # Foreign Key Relationships
-      - name: proccode_id
-        description: Foreign key to procedure codes table
+      - name: procedure_code_id
+        description: "Foreign key to procedure codes table - identifies the specific dental procedure code for this insurance entry"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__procedurecode')
               field: procedure_code_id
+              severity: error
 
       - name: carrier_id
-        description: Foreign key to insurance carriers table
+        description: "Foreign key to insurance carriers table - identifies the insurance company"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__carrier')
               field: carrier_id
+              severity: error
 
       - name: plan_id
-        description: Foreign key to insurance plans table
+        description: "Foreign key to insurance plans table - identifies the specific insurance plan"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
+              severity: error
 
-      - name: proc_id
-        description: Foreign key to procedures table
+      - name: procedure_id
+        description: "Foreign key to procedures table - links to the actual procedure performed (may be null for fee schedule entries)"
         tests:
-          - not_null
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              severity: warn
+              where: "procedure_id is not null"
 
       - name: claim_id
-        description: Foreign key to claims table
+        description: "Foreign key to claims table - links to the insurance claim (may be null for fee schedule entries)"
         tests:
-          - not_null
-          - relationships_with_third_table:
+          - relationships:
               to: ref('stg_opendental__claim')
               field: claim_id
-              column_name: claim_id
-              from_condition: "claim_id is not null AND claim_id > 15260"
-              third_table: ref('stg_opendental__claimproc')
-              third_table_field: claim_id
+              severity: warn
+              where: "claim_id is not null"
 
-      # Other Fields
-      - name: group_id
-        description: Insurance group number
+      # Business Data Fields
+      - name: group_number
+        description: "Insurance group number - identifies the group policy for group insurance plans"
 
       - name: claim_type
-        description: Type of insurance claim
+        description: "Type of insurance claim - indicates the category of claim processing"
 
       - name: insurance_payment_amount
-        description: Amount paid by insurance
+        description: >
+          Amount paid by insurance for this procedure. This represents the actual payment 
+          received from the insurance carrier. Used for payment reconciliation and analysis 
+          of insurance payment patterns.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                severity: error
 
       - name: allowed_override_amount
-        description: Override amount for allowed fee
+        description: >
+          Override amount for allowed fee - when present, this overrides the standard fee 
+          schedule amount for this specific procedure/plan combination. Critical for 
+          accurate payment expectation calculations. Special value of -1.0 indicates 
+          "no override set, use default fee schedule".
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 or allowed_override_amount is null or allowed_override_amount = -1"
+              config:
+                severity: error
 
-      - name: created_at
-        description: Timestamp when the record was created
+      # Date Fields
+      - name: date_created
+        description: "Date when the insurance bluebook entry was created in OpenDental (maps to DateTEntry)"
         tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2023-01-01'"
+              config:
+                severity: error
 
       - name: procedure_date
-        description: Date of the procedure
+        description: "Date of the procedure - may differ from date_created due to timing of entry vs service delivery"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= '2020-01-01' or procedure_date is null"
+              config:
+                severity: warn
 
-      # Metadata Columns
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column."
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTEntry column."
         tests:
           - not_null
+
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental). Not available in source data, set to null."
