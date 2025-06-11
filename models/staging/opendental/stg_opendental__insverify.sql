@@ -14,10 +14,12 @@ renamed_columns as (
         -- ID Columns (with safe conversion)
         {{ transform_id_columns([
             {'source': '"InsVerifyNum"', 'target': 'insurance_verify_id'},
-            {'source': '"UserNum"', 'target': 'user_id'},
             {'source': '"FKey"', 'target': 'foreign_key_id'},
             {'source': '"DefNum"', 'target': 'definition_id'}
         ]) }},
+        
+        -- User ID (preserve 0 as it indicates system-generated records)
+        "UserNum" as user_id,
         
         -- Attributes
         "VerifyType" as verify_type,
