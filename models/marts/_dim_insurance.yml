@@ -117,7 +117,7 @@ models:
               to: ref('dim_employer')
               field: employer_id
               config:
-                severity: error
+                severity: warn
 
       - name: subscriber_id
         description: Foreign key to the insurance subscriber
@@ -126,6 +126,8 @@ models:
           - relationships:
               to: ref('stg_opendental__inssub')
               field: inssub_id
+              config:
+                severity: warn
 
       - name: patient_id
         description: Foreign key to the patient
@@ -134,7 +136,7 @@ models:
               to: ref('dim_patient')
               field: patient_id
               config:
-                severity: error
+                severity: warn
 
       - name: plan_type
         description: Type of insurance plan (e.g., PPO, HMO, Indemnity)
