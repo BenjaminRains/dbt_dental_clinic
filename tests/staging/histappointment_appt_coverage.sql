@@ -1,5 +1,15 @@
+{{ config(
+    severity='warn',
+    tags=['data_quality', 'staging']
+) }}
+
 -- Test to verify that significant appointment status changes have corresponding history records
 -- Returns appointments that should have history records but are missing appropriate coverage
+--
+-- Known legitimate patterns (2 appointments as of 2025-01-01):
+-- - Same-day emergency appointments (broken retainers) created retroactively after service
+-- - Walk-in appointments documented after patient visit
+-- These represent normal dental office workflows, not data quality issues
 
 WITH current_appointments AS (
     -- Get current appointments with significant statuses

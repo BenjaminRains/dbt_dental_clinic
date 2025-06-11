@@ -15,24 +15,84 @@ models:
       NOTE: Data analysis shows that history_action=1 does NOT indicate "initial creation only"
       but rather "a history snapshot was created" - most appointments have dozens of history_action=1
       records spanning their entire lifecycle.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~237,000 historical appointment records"
+      data_scope: "January 1, 2023 onwards"
       
-      Note: While created_timestamp exists in the source data, it appears to be 
-      in a different timezone than history_timestamp. For analysis purposes, we 
-      focus on the chronological order of history records rather than comparing 
-      against created_timestamp.
+      known_issues:
+        - description: "Approximately 3,116 unique appointments are missing from the appointments table with ~13,273 associated history records"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "relationships_test_on_appointment_id"
+          business_impact: "Expected pattern - appointments may be deleted while their history is preserved"
+        
+        - description: "135 records have history_timestamp before appointment_datetime for completed appointments"
+          severity: "warn" 
+          identified_date: "2025-01-01"
+          test: "expression_is_true_completed_appointment_timing"
+          business_impact: "Normal OpenDental pattern - staff mark appointments completed 1-5 minutes before scheduled time"
+        
+        - description: "10 appointments have no history records (status=3, provider_id=28)"
+          severity: "error"
+          identified_date: "2025-01-01"
+          test: "histappointment_missing_records"
+          business_impact: "Data quality issue - every appointment should have at least one history record"
+        
+        - description: "2 appointments have single history records due to same-day service workflows"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "histappointment_appt_coverage"
+          business_impact: "Normal business pattern - appointments created retroactively to document completed services (broken retainer repairs, walk-ins)"
+        
+        - description: "6 historical appointments reference invalid patient IDs from 1985-2006"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "relationships_test_on_patient_id"
+          business_impact: "Historical data - likely deleted patient records"
+      
+      business_rules:
+        - rule: "History records maintain chronological order within each appointment"
+          impact: "Enables accurate tracking of appointment lifecycle and changes"
+        
+        - rule: "history_action=1 represents ongoing snapshots, not just initial creation"
+          impact: "Critical for understanding that most history records are routine snapshots"
+        
+        - rule: "Completed appointments may have history timestamps slightly before appointment time"
+          impact: "Normal workflow - staff complete appointments just before scheduled time"
+        
+        - rule: "Missing appointments with preserved history are expected business pattern"
+          impact: "Allows tracking of deleted appointments while preserving audit trail"
+      
+      usage_notes: >
+        Key considerations for analysts:
+        - Focus on chronological order of history records rather than comparing against created timestamps
+        - history_action=1 does NOT mean "first creation" - it's used throughout appointment lifecycle
+        - Missing appointment references are expected and should not block analysis
+        - Time differences between history_timestamp and appointment_datetime are normal for completed appointments
+        - Always join with appointment table using LEFT JOIN to handle missing appointments
+        - Use history_timestamp for chronological analysis, not appointment_datetime comparisons
+    
     tests:
+      # Row validation tests
       - dbt_utils.at_least_one:
           column_name: hist_appointment_id
+      
+      # Data scope validation
       - dbt_utils.expression_is_true:
           expression: "history_timestamp >= '2023-01-01'"
           config:
             severity: warn
-      # Replace the problematic chronological order test with our custom test
+      
+      # Custom chronological order test
       - histappointment_chronology
-      # High-level tests - keeping valid ones
+      
+      # Business rule validation
       - dbt_utils.expression_is_true:
           expression: "history_action in (0,1,2,3,4)"
           severity: error
+      
       - dbt_utils.expression_is_true:
           expression: "appointment_status in (0,1,2,3,5,6,7)"
           severity: warn
@@ -40,174 +100,48 @@ models:
             description: >
               Verifies that appointment status codes are valid, including temporary states 0 (Unassigned) and 7 (Placeholder).
               These should eventually transition to a valid status (1, 2, 3, 5, or 6).
+      
+      # Timestamp validation
       - dbt_utils.expression_is_true:
           expression: "history_timestamp <= current_timestamp"
           severity: error
+      
+      # Completed appointment timing validation (expected pattern)
       - dbt_utils.expression_is_true:
           expression: "appointment_status != 2 OR appointment_datetime <= history_timestamp"
-          severity: warn  # Changed from error to warn
+          severity: warn
           config:
             description: >
               Verifies that completed appointments have history records created at appropriate times.
-              Data analysis shows:
-              - 135 records have history_timestamp before appointment_datetime
-              - All are completed appointments (status = 2)
-              - Most have history_action = 1 (History snapshot)
-              - Time differences are small (1-5 minutes)
-              - Multiple history records often created within seconds
-              
-              Business Context: This is actually a normal pattern in OpenDental.
-              Staff typically mark appointments as completed just before the actual
+              Business Context: Staff typically mark appointments as completed just before the actual
               appointment time, resulting in history records being created 1-5 minutes
-              before the appointment_datetime. The test is kept as a warning to
-              monitor for any unusual patterns, but these small time differences
-              are expected and valid.
+              before the appointment_datetime. This is normal OpenDental workflow.
       
-      # Custom test to monitor missing appointments pattern
+      # Custom data quality tests
       - histappointment_missing_appointments:
           description: >
             Monitors the expected pattern of deleted appointments with preserved history.
             Tracks both the number of missing appointments and their associated history records.
-            Alerts if the distribution changes significantly from the established baseline.
-            This is an informational test that helps track data quality without failing the model.
           severity: warn
     
-    # Documentation of custom data quality tests
-    meta:
-      test_descriptions:
-        - test: "histappointment_chronology"
-          description: >
-            Ensures history records for each appointment maintain chronological order.
-            First records (with NULL previous_timestamp) are expected and ignored.
-        
-        - test: "dbt_utils_expression_is_true_stg_opendental__histappointment_appointment_status_2_OR_appointment_datetime_history_timestamp"
-          description: >
-            Verifies that completed appointments have history records created at appropriate times.
-            Data analysis shows:
-            - 135 records have history_timestamp before appointment_datetime
-            - All are completed appointments (status = 2)
-            - Most have history_action = 1 (History snapshot)
-            - Time differences are small (1-5 minutes)
-            - Multiple history records often created within seconds
-            
-            Business Context: This is actually a normal pattern in OpenDental.
-            Staff typically mark appointments as completed just before the actual
-            appointment time, resulting in history records being created 1-5 minutes
-            before the appointment_datetime. The test is kept as a warning to
-            monitor for any unusual patterns, but these small time differences
-            are expected and valid.
-      
-      data_quality_analyses:
-        - name: histappointment_chronology
-          description: >
-            Checks that history records maintain chronological order within each appointment.
-            The test only verifies that consecutive history records are properly ordered,
-            ignoring the first record of each appointment (NULL previous_timestamp).
-            Created timestamp comparisons have been removed as they are not relevant
-            for chronological ordering of history records.
-          file_path: tests/staging/histappointment_chronology.sql
-          type: "data_quality"
-          
-        - name: histappointment_action_complete
-          description: >
-            Informational analysis of data completeness in history records.
-            Identifies records with potential missing fields, but does not fail tests
-            since incomplete records may be normal in the OpenDental system.
-            To see results, run the query directly with analysis_mode=true.
-          file_path: tests/staging/histappointment_action_complete.sql
-          type: "informational"
-          
-        - name: histappointment_appt_coverage
-          description: >
-            Informational analysis that examines whether appointments with significant 
-            status changes have corresponding history records tracking those changes.
-            Data analysis shows:
-            - 2 appointments have insufficient history tracking
-            - Both have appointment_status = 2 (Completed)
-            - Both are from April-May 2024 (future dates)
-            - Both have only 1 history record with history_action = 0 (Unknown)
-            - Both history timestamps are after the appointment times
-            - Both are missing the initial creation record (history_action = 1)
-            
-            Business Context: This test verifies that significant status changes
-            (like completing an appointment) are properly tracked in the history.
-            The two failing records appear to be data entry errors where future
-            appointments were incorrectly marked as completed without proper
-            history tracking. The use of history_action = 0 (Unknown) and the
-            missing creation records suggest these may be system-generated records
-            that weren't properly initialized.
-          file_path: tests/staging/histappointment_appt_coverage.sql
-          type: "data_quality"
-          
-        - name: histappointment_missing_records
-          description: >
-            Tests for appointments with completely missing history records.
-            Data analysis shows:
-            - 10 appointments have no history records
-            - All have appointment_status = 3 (Unknown)
-            - 9 out of 10 have provider_id = 28
-            - All have assistant_id = 0 (No Assistant)
-            - All appointments are from January-June 2023
-            - All were created in 2022 (between June-December)
-            - All were last updated in 2022-2023
-            - All were loaded into the data warehouse on May 22, 2025
-            
-            Business Context: These appear to be placeholder appointments that were
-            created but never properly processed. The fact that they have no history
-            records suggests they were never fully set up in the system. The consistent
-            pattern of status=3 and provider=28 suggests this might be a specific
-            workflow. The fact that they were all loaded on the same future date
-            (May 22, 2025) suggests this might be a data migration or cleanup issue.
-            
-            Note: While these records are technically data quality issues (every
-            appointment should have at least one history record), they appear to be
-            part of a specific workflow for handling appointments that couldn't be
-            properly scheduled. The test is kept as an error to ensure these cases
-            are properly investigated and handled.
-          file_path: tests/staging/histappointment_missing_records.sql
-          expected_results: 0
-          
-        - name: histappointment_action_consistency
-          description: >
-            Informational analysis of history action patterns in OpenDental.
-            This identifies various patterns like missing creation records, unusual
-            sequences, etc., but these are treated as informational rather than errors
-            since our analysis shows that certain patterns we initially thought were
-            problematic are actually normal in the OpenDental system.
-            To see results, run the query directly with analysis_mode=true.
-          file_path: tests/staging/histappointment_action_consistency.sql
-          type: "informational"
-      
-      history_action_analysis:
-        - finding: "Most appointments have 80-95% of their history records marked as history_action=1"
-        - finding: "These history_action=1 records span the entire lifecycle of appointments, often across hundreds of days"
-        - finding: "This appears to be by design in the OpenDental system - history_action=1 indicates 'snapshot created'"
-        - finding: "Many appointments that have history records don't have any with history_action=1, which we initially thought was required"
-        - finding: "Large gaps between consecutive history records (60-500+ days) are common and don't indicate data quality issues"
-        - conclusion: "Tests and analyses should not assume history_action=1 means 'first/initial creation only'"
-        - conclusion: "Missing creation records and large gaps should be treated as informational, not errors"
-    
     columns:
+      # Primary Key
       - name: hist_appointment_id
-        description: Primary key - Unique identifier for each historical appointment record
+        description: "Primary key - Unique identifier for each historical appointment record (maps to HistApptNum in OpenDental)"
         tests:
           - unique
           - not_null
       
-      # Foreign keys
+      # Foreign Keys
       - name: appointment_id
         description: >
-          Foreign key to the appointment this history record relates to.
+          Foreign key to the appointment this history record relates to (maps to AptNum in OpenDental).
           Note: Some historical appointments may reference appointments that have been deleted.
           Data analysis shows that:
           - ~3,116 unique appointments are missing from the appointments table
           - These missing appointments have ~13,273 associated history records
           - This is expected as appointments may be deleted while their history is preserved
-          - The relationship test is configured to warn (not error) for this expected pattern
           - Missing appointments typically have multiple history records (avg ~4.26 records per appointment)
-          - Most missing appointments (56.87%) have 2-5 history records
-          - A significant portion (24.45%) have more than 5 history records
-          - Only 18.68% have a single history record
         tests:
           - not_null
           - relationships:
@@ -217,12 +151,9 @@ models:
       
       - name: patient_id
         description: >
-          Foreign key to patient record.
-          
-          Note:
-          - As of 2025, there are 6 historical appointments with invalid patient references
-          - These likely represent deleted patient records
-          - The appointments are from 1985-2006
+          Foreign key to patient record (maps to PatNum in OpenDental).
+          Note: As of 2025, there are 6 historical appointments with invalid patient references.
+          These likely represent deleted patient records from 1985-2006.
         tests:
           - relationships:
               to: ref('stg_opendental__patient')
@@ -233,7 +164,7 @@ models:
       
       - name: provider_id
         description: >
-          Foreign key to the provider table.
+          Foreign key to the provider table (maps to ProvNum in OpenDental).
           Note: provider_id = 0 is a valid value indicating "No Provider" or "Unassigned".
           This is commonly seen in special modification records (history_action = 4) where
           appointments are being configured or modified without an assigned provider.
@@ -246,40 +177,22 @@ models:
       
       - name: hygienist_id
         description: >
-          Foreign key to the provider table for the hygienist.
-          Note: hygienist_id = 0 is a valid value indicating "No Hygienist".
-          Data analysis shows:
-          - 82,213 records have hygienist_id = 0 (no hygienist)
-          - These affect 2,952 unique patients and 9,941 unique appointments
-          - Spans from Jan 2023 to Feb 2025
-          - Associated with multiple appointment types and providers
-          - Has all possible appointment statuses and history actions
-          
-          Business Context: This field tracks hygienist assignments over time.
-          The high number of records with hygienist_id = 0 reflects that many
-          appointments don't require a hygienist, which is normal in dental
-          practices. This is similar to how we handle provider_id = 0 for
-          unassigned providers.
+          Foreign key to the provider table for the hygienist (maps to ProvHyg in OpenDental).
+          Note: hygienist_id = 0 is converted to NULL indicating "No Hygienist".
+          Data analysis shows 82,213 records have no hygienist assigned, which is normal
+          for many dental appointment types that don't require hygienist services.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
-              where: "hygienist_id != 0"  # Exclude records with no hygienist
-              severity: error  # Now we can use error since we're excluding the valid 0 values
+              severity: error
       
       - name: assistant_id
         description: >
-          Foreign key to the provider table for the dental assistant.
-          
-          Note:
-          - As of 2024, approximately 5 records have assistant_id references that don't exist
-          - Common reasons for mismatches:
-            - Historical assistants who have left the practice
-            - System-generated records (assistant_id = 0)
-            - Legacy data from before assistant tracking was implemented
-            - Appointments created before assistant records were properly linked
-          - These mismatches are monitored but not considered errors as they represent
-            expected historical data patterns
+          Foreign key to the provider table for the dental assistant (maps to Assistant in OpenDental).
+          Note: assistant_id = 0 is converted to NULL indicating "No Assistant".
+          Approximately 5 records have assistant_id references that don't exist in the provider table,
+          likely representing historical assistants who have left the practice.
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
@@ -288,246 +201,135 @@ models:
               config:
                 description: >
                   This test warns when assistant_id references providers that don't exist
-                  in the provider table. This is expected for historical data and system
-                  users. The warning helps track data quality without failing the build.
+                  in the provider table. This is expected for historical data.
       
       - name: clinic_id
-        description: Foreign key to the clinic where this appointment was scheduled
+        description: "Foreign key to the clinic where this appointment was scheduled (maps to ClinicNum in OpenDental, NULL if 0)"
       
       - name: next_appointment_id
         description: >
-          Foreign key to the appointment table for the next scheduled appointment.
+          Foreign key to the appointment table for the next scheduled appointment (maps to NextAptNum in OpenDental).
           Note: Data analysis shows that many history records (221,541) reference next appointments
           that no longer exist. This is expected because:
           - Next appointments can be deleted while their history is preserved
           - The next_appointment_id is often temporary and changes as appointments are rescheduled
-          - This is similar to how we handle missing appointment_id references
-          
-          Business Context: This field is crucial for tracking treatment plan continuity,
-          analyzing rescheduling patterns, and monitoring patient care flow. The high number
-          of missing references reflects normal clinic operations where treatment plans
-          and appointment sequences evolve over time.
+          Business Context: This field is crucial for tracking treatment plan continuity.
         tests:
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
-              severity: warn  # Set to warn since this is an expected pattern
+              severity: warn
       
       - name: appointment_type_id
-        description: Foreign key to the appointment type table
+        description: "Foreign key to the appointment type table (maps to AppointmentTypeNum in OpenDental, NULL if 0)"
         tests:
           - relationships:
               to: ref('stg_opendental__appointmenttype')
               field: appointment_type_id
       
       - name: operatory_id
-        description: Foreign key to the operatory (chair/room) for this appointment
+        description: "Foreign key to the operatory (chair/room) for this appointment (maps to Op in OpenDental, NULL if 0)"
       
       - name: history_user_id
         description: >
-          Foreign key to the user table for the user who made the change.
-          Note: history_user_id = 0 is a valid value indicating "System User" or
-          "Automated Process". Data analysis shows:
-          - 1,714 records have history_user_id = 0 (system-generated)
-          - These affect 844 unique patients and 901 unique appointments
-          - Spans from Jan 2023 to Oct 2024
-          - All records have appointment_status = 1 (Scheduled)
-          - Has history_action values of 0 (Unknown) and 1 (History snapshot)
-          - Associated with specific providers (28, 47, 48, 52)
-          
-          Business Context: This field tracks who made changes to appointments.
-          The records with history_user_id = 0 appear to be system-generated
-          records, likely for initial appointment creation or automated processes.
-          This is different from entry_user_id, which tracks the user who entered
-          the record into the system.
+          Foreign key to the user table for the user who made the change (maps to HistUserNum in OpenDental).
+          Note: history_user_id = 0 is a valid value indicating "System User" or "Automated Process".
+          Data analysis shows 1,714 records have system-generated changes (history_user_id = 0).
+          Business Context: Tracks who made changes to appointments.
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
-              where: "history_user_id != 0"  # Exclude system-generated records
-              severity: error  # Now we can use error since we're excluding the valid 0 values
+              where: "history_user_id != 0"
+              severity: error
       
       - name: entry_user_id
         description: >
-          Foreign key to the user table for the user who entered the record.
-          Note: entry_user_id = 0 is a valid value indicating "System User" or
-          "Automated Process". Data analysis shows:
-          - 11,336 records have entry_user_id = 0 (system-generated)
-          - These affect 951 unique patients and 1,077 unique appointments
-          - Spans from Jan 2023 to Feb 2025
-          - Has multiple appointment statuses (0,1,2,3,5)
-          - Has all possible history actions (0,1,2,3,4)
-          - Associated with multiple providers (0,1,28,29,47,50,52)
-          
-          Business Context: This field tracks who entered the record into the system.
-          The records with entry_user_id = 0 appear to be system-generated records,
-          likely for automated processes or system-initiated changes. This is different
-          from history_user_id, which tracks who made the actual change to the
-          appointment. The broader range of statuses and actions suggests these
-          records cover various types of system operations.
+          Foreign key to the user table for the user who entered the record (maps to SecUserNumEntry in OpenDental).
+          Note: entry_user_id = 0 is a valid value indicating "System User" or "Automated Process".
+          Data analysis shows 11,336 records have system-generated entries (entry_user_id = 0).
+          Business Context: Tracks who entered the record into the system (different from history_user_id).
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
-              where: "entry_user_id != 0"  # Exclude system-generated records
-              severity: error  # Now we can use error since we're excluding the valid 0 values
+              where: "entry_user_id != 0"
+              severity: error
       
       - name: insurance_plan_1_id
         description: >
-          Foreign key to the insurance plan table for primary insurance.
-          Note: insurance_plan_1_id = 0 is a valid value indicating "No Primary Insurance".
-          Data analysis shows:
-          - 67,238 records have insurance_plan_1_id = 0 (no primary insurance)
-          - These affect 3,560 unique patients and 9,758 unique appointments
-          - The remaining 1,275 records reference other missing insurance plans
-          - Most common missing plan is 11006 (219 records)
-          - These other missing references affect 1-3 patients each
-          
-          Analysis of missing insurance plans shows:
-          - Most are "one-time" plans that were never updated
-          - They're always the first and last insurance plan for their appointments
-          - Only one plan (11200) shows any insurance changes
-          - All records are from 2023-2024
-          - Most common statuses are Scheduled (1) and Completed (2)
-          
-          Business Context: This field tracks primary insurance coverage over time.
-          The high number of records with insurance_plan_1_id = 0 reflects that many
-          patients don't have primary insurance, which is normal in dental practices.
-          The other missing references appear to be temporary insurance plans that
-          were created for specific appointments and then deleted or replaced.
+          Foreign key to the insurance plan table for primary insurance (maps to InsPlan1 in OpenDental).
+          Note: insurance_plan_1_id = 0 is converted to NULL indicating "No Primary Insurance".
+          Data analysis shows 67,238 records have no primary insurance, and 1,275 records
+          reference missing insurance plans (likely temporary plans that were deleted).
         tests:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-              where: "insurance_plan_1_id is not null"
               severity: warn
       
       - name: insurance_plan_2_id
         description: >
-          Foreign key to the insurance plan table for secondary insurance.
-          Note: insurance_plan_2_id = 0 is a valid value indicating "No Secondary Insurance".
-          Data analysis shows:
-          - 237,666 records have insurance_plan_2_id = 0 (no secondary insurance)
-          - 12 records reference actual missing insurance plans (IDs: 11200, 12566, 12746, 14152)
-          - These 12 records affect 4 unique patients and 5 unique appointments
-          - Most of these records are from 2023, with one from 2024
-          
-          Business Context: This field tracks secondary insurance coverage over time.
-          The high number of records with insurance_plan_2_id = 0 reflects that many
-          patients don't have secondary insurance, which is normal in dental practices.
-          The 12 records with missing references may indicate data entry errors or
-          insurance plan deletions that should be investigated.
+          Foreign key to the insurance plan table for secondary insurance (maps to InsPlan2 in OpenDental).
+          Note: insurance_plan_2_id = 0 is converted to NULL indicating "No Secondary Insurance".
+          Data analysis shows 237,666 records have no secondary insurance, and 12 records
+          reference missing insurance plans.
         tests:
           - relationships:
               to: ref('stg_opendental__insplan')
               field: insurance_plan_id
-              where: "insurance_plan_2_id is not null"
               severity: warn
       
       - name: unscheduled_status_id
-        description: Status identifier for unscheduled appointments
+        description: "Status identifier for unscheduled appointments (maps to UnschedStatus in OpenDental, NULL if 0)"
       
       - name: confirmation_id
-        description: Identifier for the confirmation status of this appointment
+        description: "Identifier for the confirmation status of this appointment (maps to Confirmed in OpenDental, NULL if 0)"
       
       # Timestamps
       - name: history_timestamp
-        description: Timestamp when the history record was created
-        tests:
-          - not_null
-      
-      - name: created_timestamp
-        description: Timestamp when the appointment was created
+        description: "Timestamp when the history record was created (maps to HistDateTStamp in OpenDental)"
         tests:
           - not_null
       
       - name: appointment_datetime
         description: >
-          Scheduled date and time of the appointment.
+          Scheduled date and time of the appointment (maps to AptDateTime in OpenDental).
           Note: NULL is a valid value for placeholder records with unknown status.
-          Data analysis shows:
-          - 799 records have NULL appointment_datetime
-          - All have appointment_status = 3 (Unknown)
-          - All have provider_id = 28
-          - Most have hygienist_id = 0 (No Hygienist)
-          - All have assistant_id = 0 (No Assistant)
-          - All have either entry_user_id = 28 or 57
-          - All have matching history_user_id and entry_user_id
-          - All have valid timestamps for history_timestamp, created_timestamp, and entry_datetime
-          
-          Business Context: This field tracks when appointments are scheduled to occur.
-          The NULL values appear in placeholder records for appointments that couldn't
-          be properly scheduled. These records are created by specific users (28 and 57)
-          and are associated with provider 28. The consistent pattern suggests this is
-          a specific workflow for handling appointments that need special attention.
+          Data analysis shows 799 records have NULL appointment_datetime, all with appointment_status = 3 (Unknown)
+          and provider_id = 28. These appear to be placeholder records for appointments that couldn't
+          be properly scheduled.
         tests:
           - not_null:
-              severity: warn  # Changed to warn since NULL is valid for placeholder records
+              severity: warn
       
       - name: arrived_datetime
-        description: Timestamp when the patient arrived for the appointment
+        description: "Timestamp when the patient arrived for the appointment (maps to DateTimeArrived in OpenDental)"
       
       - name: seated_datetime
-        description: Timestamp when the patient was seated in the operatory
+        description: "Timestamp when the patient was seated in the operatory (maps to DateTimeSeated in OpenDental)"
       
       - name: dismissed_datetime
-        description: Timestamp when the patient was dismissed after the appointment
+        description: "Timestamp when the patient was dismissed after the appointment (maps to DateTimeDismissed in OpenDental)"
       
       - name: asked_to_arrive_datetime
-        description: Timestamp when the patient was asked to arrive for the appointment
+        description: "Timestamp when the patient was asked to arrive for the appointment (maps to DateTimeAskedToArrive in OpenDental)"
       
-      - name: entry_datetime
-        description: >
-          Timestamp when the record was entered into the system.
-          Note: NULL is a valid value for system-generated records.
-          Data analysis shows:
-          - 1,057 records have NULL entry_datetime
-          - These are all system-generated records (entry_user_id = 0)
-          - All have history_action = 1 (History snapshot)
-          - Most have appointment_status = 5 (Broken/Missed)
-          - All have assistant_id = 0 (No Assistant)
-          - All have either history_user_id = 29 or 57
-          - Most appointment dates are from 2018-2020
-          - History timestamps are from 2023-2025
-          
-          Business Context: This field tracks when records are entered into the system.
-          The NULL values appear in automated cleanup records where the system
-          marks old, uncompleted appointments as broken/missed. These records
-          are generated by system users (29 and 57) and don't have an entry
-          timestamp since they're automated.
-        tests:
-          - not_null:
-              severity: warn  # Changed to warn since NULL is valid for system records
-      
-      # Flags and status indicators
+      # Status and classification fields
       - name: appointment_status
         description: >
-          Status code of the appointment:
-            0 = Unassigned (temporary state during special modifications)
-            1 = Scheduled (active appointments not yet completed)
-            2 = Completed (appointments fulfilled with services rendered)
-            3 = Unknown (requires investigation, may indicate data quality issues)
-            5 = Broken/Missed (patient no-show or late cancellation)
-            6 = Unscheduled (treatment planned but not yet scheduled)
-            7 = Placeholder (temporary state for future appointments)
-            
-          Data analysis shows:
-          - 8 records have status = 0 (Unassigned)
-            - All have history_action = 4 (Special modification)
-            - All have NULL appointment_datetime
-            - Used during special modifications before assignment
-            
-          - 12 records have status = 7 (Placeholder)
-            - Most have history_action = 0 (Unknown) or 4 (Special modification)
-            - Some have future appointment dates
-            - Some have NULL appointment_datetime
-            - Used for temporary placeholder appointments
-            
-          Business Context: Status codes 0 and 7 are temporary states used
-          during special modifications and placeholder creation. They should
-          eventually transition to a valid status (1, 2, 3, 5, or 6). The
-          presence of these statuses is expected but should be monitored
-          to ensure they don't remain in these temporary states.
+          Status code of the appointment (maps to AptStatus in OpenDental):
+          0 = Unassigned (temporary state during special modifications)
+          1 = Scheduled (active appointments not yet completed)
+          2 = Completed (appointments fulfilled with services rendered)
+          3 = Unknown (requires investigation, may indicate data quality issues)
+          5 = Broken/Missed (patient no-show or late cancellation)
+          6 = Unscheduled (treatment planned but not yet scheduled)
+          7 = Placeholder (temporary state for future appointments)
+          
+          Business Context: Status codes 0 and 7 are temporary states used during special
+          modifications and placeholder creation. They should eventually transition to
+          a valid status (1, 2, 3, 5, or 6).
         tests:
           - not_null
           - accepted_values:
@@ -536,7 +338,7 @@ models:
       
       - name: history_action
         description: >
-          Code indicating the type of action that created this history record:
+          Code indicating the type of action that created this history record (maps to HistApptAction in OpenDental):
           0 = Unknown
           1 = History snapshot created
           2 = Modified
@@ -552,73 +354,77 @@ models:
               severity: error
       
       - name: appointment_source
-        description: Source of the appointment (e.g., phone, online, walk-in)
+        description: "Source of the appointment (maps to ApptSource in OpenDental): 0=Phone, 1=Online, 2=Walk-in, etc."
         tests:
           - accepted_values:
               values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       
-      - name: is_time_locked
-        description: Boolean flag indicating if the appointment time is locked
-        tests:
-          - not_null
-      
-      - name: is_new_patient
-        description: Boolean flag indicating if this is a new patient appointment
-        tests:
-          - not_null
-      
-      - name: is_hygiene
-        description: Boolean flag indicating if this is a hygiene appointment
-        tests:
-          - not_null
-      
       - name: priority
-        description: Priority level of the appointment
+        description: "Priority level of the appointment (maps to Priority in OpenDental): 0=Normal, 1=High, etc."
         tests:
           - accepted_values:
               values: [0, 1, 2, 3, 4, 5]
       
+      # Boolean fields
+      - name: is_time_locked
+        description: "Boolean flag indicating if the appointment time is locked (maps to TimeLocked in OpenDental, 0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+      
+      - name: is_new_patient
+        description: "Boolean flag indicating if this is a new patient appointment (maps to IsNewPatient in OpenDental, 0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+      
+      - name: is_hygiene
+        description: "Boolean flag indicating if this is a hygiene appointment (maps to IsHygiene in OpenDental, 0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+      
       # Text fields and descriptors
       - name: pattern
-        description: Pattern string defining the graphical representation and time slots
+        description: "Pattern string defining the graphical representation and time slots (maps to Pattern in OpenDental)"
       
       - name: pattern_secondary
-        description: Secondary pattern of the appointment
+        description: "Secondary pattern of the appointment (maps to PatternSecondary in OpenDental)"
       
       - name: note
-        description: Notes about the appointment
+        description: "Notes about the appointment (maps to Note in OpenDental)"
       
       - name: procedure_description
-        description: Description of the procedures scheduled for the appointment
+        description: "Description of the procedures scheduled for the appointment (maps to ProcDescript in OpenDental)"
       
       - name: procedures_colored
-        description: Colored procedures for the appointment
+        description: "Colored procedures for the appointment (maps to ProcsColored in OpenDental)"
       
       - name: provider_bar_text
-        description: Text displayed in the provider bar for this appointment
+        description: "Text displayed in the provider bar for this appointment (maps to ProvBarText in OpenDental)"
+      
+      - name: security_hash
+        description: "Security hash for the appointment (maps to SecurityHash in OpenDental)"
       
       # Other attributes
       - name: color_override
-        description: Override color for the appointment in the schedule
-      
-      - name: security_hash
-        description: Security hash for the appointment
+        description: "Override color for the appointment in the schedule (maps to ColorOverride in OpenDental)"
       
       - name: item_order_planned
-        description: Planned order of items for the appointment
+        description: "Planned order of items for the appointment (maps to ItemOrderPlanned in OpenDental)"
       
-      # Metadata columns
+      # Required Metadata Columns (standardized across all models)
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
       
       - name: _created_at
-        description: Timestamp when the historical appointment record was created in the source system (OpenDental)
+        description: "Timestamp when the historical appointment record was created in the source system (derived from HistDateTStamp in OpenDental)"
         tests:
           - not_null
       
       - name: _updated_at
-        description: Timestamp when the historical appointment record was last updated in the source system (OpenDental)
+        description: "Timestamp when the historical appointment record was last updated in the source system (derived from DateTStamp in OpenDental with fallback to HistDateTStamp)"
         tests:
           - not_null
+      
+      - name: _created_by_user_id
+        description: "User who entered the record in the source system (maps to SecUserNumEntry in OpenDental). NULL if 0 (system-generated)."
