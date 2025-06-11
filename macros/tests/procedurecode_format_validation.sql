@@ -23,10 +23,11 @@
       and {{ column_name }}::text !~ '^Z[a-z]+'                 -- Not Z-code format
       and {{ column_name }}::text !~ '^[0-9]{4}$'               -- Not 4-digit format
       and {{ column_name }}::text !~ '^[A-Z0-9]{2,6}$'          -- Not custom alphanumeric format
-      and {{ column_name }}::text !~ '^\*[A-Z0-9]+'             -- Not star-prefixed codes
+      and {{ column_name }}::text !~ '^\*[A-Z0-9+]+'            -- Not star-prefixed codes (including + character)
       and {{ column_name }}::text !~ '^~[A-Z0-9]+~$'            -- Not tilde-wrapped codes
-      and {{ column_name }}::text !~ '^D[0-9]+[a-z](\.[a-z]+)?$' -- Not D-code with suffix
-      and {{ column_name }}::text !~ '^[A-Z0-9/\.\s-]{2,20}$'   -- Not extended alphanumeric with special chars
+      and {{ column_name }}::text !~ '^D[0-9]+(\.[a-z]+)?$'      -- Not D-code with suffix (like D8670.auto)
+      and {{ column_name }}::text !~ '^D[0-9]+[a-zA-Z]+$'       -- Not D-code with letter suffix (like D9230b, D9972Z)
+      and {{ column_name }}::text !~ '^[A-Za-z0-9/\.\s-]{2,20}$' -- Not extended alphanumeric with special chars (allow mixed case)
       -- Additional patterns found in the data:
       and {{ column_name }}::text !~ '^Watch$'                  -- Not 'Watch' code
       and {{ column_name }}::text !~ '^D$'                      -- Not single 'D' code
