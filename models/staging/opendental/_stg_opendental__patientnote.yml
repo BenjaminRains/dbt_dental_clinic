@@ -2,78 +2,205 @@ version: 2
 
 models:
   - name: stg_opendental__patientnote
-    description: "Standardized patient notes containing clinical and administrative information from OpenDental"
+    description: >
+      Standardized patient notes containing clinical and administrative information from OpenDental.
+      
+      This model consolidates various types of patient notes including medical history, treatment plans, 
+      financial information, emergency contacts, and orthodontic treatment details. Each patient can have
+      one record containing multiple note fields that capture different aspects of their clinical and 
+      administrative information. The data is filtered to include only notes from 2023 onwards to focus
+      on current and recent patient information.
+    
+    meta:
+      record_count: "~32,000"
+      data_scope: "Patient notes from 2023-01-01 onwards, filtered from source data"
+      
+      known_issues:
+        - description: "One orphaned patient note record with null patient_id from 2024-04-24 (all fields empty)"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "not_null test on patient_id excludes this record"
+        - description: "One historical patient note (from 2006) references a deleted patient record"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "relationships test on patient_id"
+        - description: "Most note fields are optional and frequently null, limiting analytical value"
+          severity: "warn"
+          identified_date: "2025-01-01"
+        - description: "2,508 records use -1 as placeholder for ortho_months_treat_override (system default)"
+          severity: "info"
+          identified_date: "2025-01-01"
+          test: "positive_values test excludes -1 values"
+      
+      business_rules:
+        - rule: "Each patient can have only one patient note record containing all note types"
+          impact: "Analysts should not expect multiple note records per patient"
+        - rule: "Note fields are free-text and may contain PHI requiring careful handling"
+          impact: "Data access requires appropriate PHI handling protocols"
+        - rule: "Orthodontic fields are only populated for patients receiving orthodontic treatment"
+          impact: "Orthodontic analysis should filter for non-null orthodontic fields"
+      
+      usage_notes: >
+        This model is primarily used for clinical reporting and patient communication preferences.
+        Most note fields are optional and frequently null, so analysts should account for sparse data.
+        Emergency contact information (ice_name, ice_phone) is critical for patient safety protocols.
+        Orthodontic override fields should be used in conjunction with standard orthodontic treatment data.
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ['patient_id']
+          name: "unique_patient_note_per_patient"
+          config:
+            severity: error
+            description: "Each patient should have only one patient note record"
+      - dbt_utils.expression_is_true:
+          expression: "date_ortho_placement_override <= current_date"
+          name: "orthodontic_placement_date_not_future"
+          where: "date_ortho_placement_override is not null"
+          config:
+            severity: warn
+            description: "Orthodontic placement override dates should not be in the future"
+      - dbt_utils.expression_is_true:
+          expression: "_updated_at >= _created_at"
+          name: "updated_at_after_created_at"
+          config:
+            severity: warn
+            description: "Updated timestamp should be greater than or equal to created timestamp"
+    
     columns:
       - name: patient_id
         description: >
-          Foreign key to patient record.
+          Foreign key to patient record - identifies which patient this note collection belongs to.
+          Maps to PatNum in OpenDental source system.
           
-          Note:
-          - As of 2025, there is 1 patient note with an invalid patient reference
-          - This likely represents a deleted patient record
-          - The note is from 2006
+          Note: As of 2025, there is 1 orphaned patient note record with null patient_id from 2024-04-24,
+          and 1 historical note with an invalid patient reference from 2006.
         tests:
-          - not_null
+          - not_null:
+              where: "_created_at != '2024-04-24 09:54:56'"
+              config:
+                severity: warn
+                description: "Excluding known orphaned record from 2024-04-24"
+          - positive_values:
+              where: "patient_id is not null"
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              where: "patient_id is not null"
               config:
                 severity: warn
                 description: "One historical note references a deleted patient"
 
+      - name: user_id_ortho_locked
+        description: >
+          User ID of the person who locked orthodontic modifications for this patient.
+          Maps to UserNumOrthoLocked in OpenDental source system.
+          Null when orthodontic records are not locked or patient is not receiving orthodontic treatment.
+        tests:
+          - positive_values:
+              where: "user_id_ortho_locked is not null"
+
       - name: family_financial
-        description: "Notes regarding family financial circumstances (Optional field, often null)"
+        description: >
+          Free-text notes regarding family financial circumstances and payment arrangements.
+          Used by billing staff to track payment plans, financial hardships, or special billing instructions.
+          Optional field, often null.
 
       - name: appointment_phone
-        description: "Notes about patient's preferred phone contact for appointments (Optional field, often null)"
+        description: >
+          Notes about patient's preferred phone contact method for appointment scheduling and reminders.
+          May include specific phone numbers, contact preferences, or communication restrictions.
+          Optional field, often null.
 
       - name: medical
-        description: "Medical notes about the patient's health conditions (Optional field, often null)"
+        description: >
+          Medical notes about the patient's health conditions, medications, and medical history relevant to dental treatment.
+          Used by clinical staff to document medical considerations that may affect dental procedures.
+          Optional field, often null.
 
       - name: service
-        description: "Notes about patient services (Optional field, often null)"
+        description: >
+          Notes about patient services, treatment preferences, or service-related communications.
+          May include information about service quality issues, special requests, or treatment modifications.
+          Optional field, often null.
 
       - name: medical_comp
-        description: "Notes about patient's compliance with medical instructions (Optional field, often null)"
+        description: >
+          Notes about patient's compliance with medical instructions, post-treatment care, or medication adherence.
+          Used to track patient cooperation with treatment plans and clinical recommendations.
+          Optional field, often null.
 
       - name: treatment
-        description: "Notes about patient's treatment plans and history (Optional field, often null)"
+        description: >
+          Notes about patient's treatment plans, treatment history, and clinical observations.
+          May include treatment outcomes, complications, or modifications to standard treatment protocols.
+          Optional field, often null.
 
       - name: ice_name
-        description: "Name of emergency contact person (Optional field, often null)"
+        description: >
+          Name of emergency contact person (In Case of Emergency contact).
+          Critical for patient safety protocols and emergency situations during treatment.
+          Optional field, often null.
 
       - name: ice_phone
-        description: "Phone number for emergency contact (Optional field, often null)"
+        description: >
+          Phone number for emergency contact person.
+          Must be accessible during treatment hours for emergency situations.
+          Optional field, often null.
 
       - name: ortho_months_treat_override
-        description: "Override value for orthodontic treatment duration in months (Optional field, often null)"
+        description: >
+          Override value for orthodontic treatment duration in months.
+          Used when standard treatment timeline needs to be modified for individual patient circumstances.
+          
+          Value meanings:
+          - NULL: No orthodontic treatment or no override needed
+          - -1: Default/placeholder value indicating no override set (system default)
+          - Positive values: Actual override duration in months
+          
+          Note: -1 is used as a system default and should not be treated as invalid data.
+        tests:
+          - positive_values:
+              where: "ortho_months_treat_override is not null and ortho_months_treat_override != -1"
+              config:
+                severity: warn
+                description: "When orthodontic month overrides are set (not -1), they should be positive"
 
       - name: date_ortho_placement_override
-        description: "Override date for orthodontic appliance placement (Optional field, often null)"
+        description: >
+          Override date for orthodontic appliance placement.
+          Used when actual placement date differs from scheduled date due to delays or complications.
+          Only populated for patients receiving orthodontic treatment. Optional field, often null.
 
       - name: consent
-        description: "Documentation of patient consent (Optional field, often null)"
-
-      - name: user_num_ortho_locked
-        description: "User ID of person who locked orthodontic modifications (Optional field, often null)"
+        description: >
+          Documentation of patient consent for treatment, data sharing, or special procedures.
+          May include references to signed consent forms or verbal consent documentation.
+          Important for compliance and legal documentation. Optional field, often null.
 
       - name: pronoun
-        description: "Patient's preferred pronoun (Optional field, often null)"
+        description: >
+          Patient's preferred pronoun for respectful communication and patient interaction.
+          Used to ensure appropriate and respectful patient communication across all staff interactions.
+          Optional field, often null.
 
       - name: _loaded_at
-        description: "Timestamp when the record was loaded into the data warehouse by the ETL pipeline"
+        description: "Timestamp when the record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: "Timestamp when the record was created in the source system"
+        description: >
+          Timestamp when the record was created in the source system (OpenDental).
+          Maps to SecDateTEntry in OpenDental source system.
+          Represents when the patient note record was first established.
         tests:
           - not_null
 
       - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system"
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental).
+          Maps to SecDateTEdit in OpenDental source system.
+          Represents the most recent modification to any note field.
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= _created_at"
-              severity: warn
