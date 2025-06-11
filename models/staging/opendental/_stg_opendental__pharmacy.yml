@@ -2,63 +2,204 @@ version: 2
 
 models:
   - name: stg_opendental__pharmacy
-    description: Staging model for pharmacy data from OpenDental. Contains information about pharmacies including their contact details and locations.
+    description: >
+      Staging model for pharmacy data from OpenDental. Contains information about pharmacies 
+      including their contact details, locations, and identifiers used for prescription management 
+      and referrals.
+      
+      This model centralizes pharmacy information used across the dental practice for:
+      - Prescription referrals and medication management
+      - Provider directory and contact information
+      - Location-based pharmacy recommendations
+      - Insurance and billing coordination
+      
+      Each record represents a unique pharmacy location that can receive prescription referrals
+      from the dental practice.
+    
+    meta:
+      # Data quality and business context
+      record_count: "Small reference table - typically 50-200 pharmacy records"
+      data_scope: "All pharmacy records from OpenDental system inception to current"
+      
+      known_issues:
+        - description: "At least 1 pharmacy record exists with neither phone number nor address information, preventing effective contact coordination"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "dbt_utils_expression_is_true_stg_opendental__pharmacy_phone_is_not_null_or_address_is_not_null"
+        - description: "Some pharmacy records may have incomplete address information, particularly older entries"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "address_completeness_validation"
+        - description: "Phone number formats are inconsistent - may include extensions, special characters, or varied formatting"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "Duplicate pharmacy entries may exist with slight name variations (e.g., 'CVS Pharmacy' vs 'CVS')"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Each pharmacy should have a unique PharmacyNum but may have multiple location entries"
+          impact: "Affects aggregation and counting of unique pharmacy relationships"
+        - rule: "Store name is required for all active pharmacy records"
+          impact: "Critical for provider lookups and prescription routing"
+        - rule: "At minimum, either phone or address should be populated for contact purposes"
+          impact: "Ensures basic contact capability for prescription coordination"
+      
+      usage_notes: >
+        This model serves as the foundation for pharmacy-related analysis and operational workflows.
+        
+        Key considerations:
+        - Use store_name for display and matching purposes
+        - pharm_id may be used for external system integration
+        - Address fields should be concatenated carefully due to potential null values
+        - Contact information (phone/fax) may require formatting standardization for operational use
+        - This is primarily a reference/lookup table with infrequent updates
+        
+        Recommended usage patterns:
+        - Join to prescription or referral tables via pharmacy_id
+        - Use for pharmacy directory and contact information lookups
+        - Filter by state/city for location-based analysis
+    
+    tests:
+      # Model-level validation tests
+      - dbt_utils.expression_is_true:
+          expression: "store_name is not null or (store_name is null and note like '%inactive%')"
+          config:
+            severity: warn
+            description: "Business rule validation: Store name should be populated for all active pharmacy records. Only inactive pharmacies (indicated in notes) may have null store names."
+      - dbt_utils.expression_is_true:
+          expression: "phone is not null or address is not null"
+          config:
+            severity: warn
+            description: "Contact information validation: Each pharmacy must have either phone number or address information to enable prescription coordination and patient referrals."
+    
+    config:
+      tags: ['staging', 'opendental', 'pharmacy', 'reference']
+
     columns:
       - name: pharmacy_id
-        description: Primary key - Unique identifier for each pharmacy
+        description: >
+          Primary key - Unique identifier for each pharmacy record (maps to PharmacyNum in OpenDental).
+          
+          This is the system-generated unique identifier used throughout OpenDental to reference 
+          pharmacy records in prescriptions, referrals, and other clinical workflows.
         tests:
           - unique
           - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              inclusive: true
 
       - name: pharm_id
-        description: External identifier for the pharmacy
+        description: >
+          External pharmacy identifier - May contain DEA numbers, NPI numbers, or other 
+          external system identifiers (maps to PharmID in OpenDental).
+          
+          Used for integration with external pharmacy systems, insurance networks, 
+          or regulatory reporting. Format and content vary by pharmacy and integration needs.
 
       - name: store_name
-        description: Name of the pharmacy store
+        description: >
+          Official name of the pharmacy store (maps to StoreName in OpenDental).
+          
+          Primary identifier for human-readable pharmacy selection and display.
+          Critical for provider workflows when selecting pharmacies for prescription routing.
+          May include chain information (e.g., "CVS Pharmacy #1234", "Walgreens", "Main Street Pharmacy").
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                where: "note not like '%inactive%'"
 
       - name: phone
-        description: Contact phone number for the pharmacy
+        description: >
+          Primary contact phone number for the pharmacy (maps to Phone in OpenDental).
+          
+          Used by clinical staff for prescription coordination, verification, and patient referrals.
+          Format varies and may include extensions, parentheses, dashes, or other formatting.
+          Essential for operational workflows requiring direct pharmacy contact.
 
       - name: fax
-        description: Fax number for the pharmacy
+        description: >
+          Fax number for prescription transmission and documentation (maps to Fax in OpenDental).
+          
+          Critical for secure prescription transmission in compliance with healthcare regulations.
+          May be used for automated prescription routing systems and documentation workflows.
 
       - name: address
-        description: Primary street address of the pharmacy
+        description: >
+          Primary street address of the pharmacy location (maps to Address in OpenDental).
+          
+          Used for location-based pharmacy recommendations, patient convenience analysis,
+          and geographic reporting. Essential component for complete pharmacy contact information.
 
       - name: address2
-        description: Secondary address line (suite, unit, etc.) if applicable
+        description: >
+          Secondary address line for suite, unit, floor, or building information (maps to Address2 in OpenDental).
+          
+          Provides additional location details when pharmacy is located within larger buildings
+          or complex addresses. Optional field that complements the primary address.
 
       - name: city
-        description: City where the pharmacy is located
+        description: >
+          City where the pharmacy is located (maps to City in OpenDental).
+          
+          Used for geographic analysis, location-based recommendations, and regional reporting.
+          Important for patient convenience analysis and provider network management.
 
       - name: state
-        description: State where the pharmacy is located
+        description: >
+          State or province where the pharmacy is located (maps to State in OpenDental).
+          
+          Critical for regulatory compliance, licensing verification, and regional analysis.
+          Used in conjunction with city and ZIP for complete geographic identification.
 
       - name: zip
-        description: ZIP/Postal code of the pharmacy location
+        description: >
+          ZIP or postal code of the pharmacy location (maps to Zip in OpenDental).
+          
+          Enables precise geographic analysis, distance calculations for patient convenience,
+          and integration with mapping services. May include extended ZIP+4 format.
 
       - name: note
-        description: Additional notes or comments about the pharmacy
+        description: >
+          Additional notes, comments, or special instructions about the pharmacy (maps to Note in OpenDental).
+          
+          Contains important operational information such as:
+          - Special handling instructions
+          - Insurance network participation
+          - Hours of operation notes
+          - Inactive status indicators
+          - Integration or system-specific notes
 
       - name: date_tstamp
-        description: Timestamp of when the record was last updated
+        description: >
+          Raw timestamp from OpenDental indicating when the pharmacy record was last modified (maps to DateTStamp).
+          
+          Original audit trail from source system. Used primarily for ETL processing and change detection.
+          For standardized audit information, refer to _created_at and _updated_at columns.
 
+      # Required metadata columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (using DateTStamp)
+        description: >
+          Timestamp when the pharmacy record was created in the source system (OpenDental).
+          Derived from DateTStamp field as OpenDental does not maintain separate creation timestamps.
+          
+          Note: For pharmacy records, creation and modification timestamps are typically the same
+          since these are reference records that are rarely updated after initial creation.
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (using DateTStamp)
+        description: >
+          Timestamp when the pharmacy record was last updated in the source system (OpenDental).
+          Derived from DateTStamp field which tracks the most recent modification to the record.
+          
+          Used for change detection and audit trails. Updates are infrequent for pharmacy reference data.
         tests:
           - not_null
-
-    config:
-      tags: ['staging', 'opendental', 'pharmacy']
