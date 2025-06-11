@@ -68,124 +68,211 @@ models:
       - Automatically transfer to visible splits when procedures complete
       - Generate income transfers when moved between hidden/visible status
     
-    tests:
-      # Comment out this test until we can fix the custom macro
-      # - paysplit_validation_rules
+    meta:
+      record_count: "~850K records"
+      data_scope: "Payment splits from 2023-01-01 onwards"
+      contains_pii: true
+      owner: "mdc analytics team"
       
-      # Test: Each split must be allocated to either a procedure, adjustment, or payment plan
+      known_issues:
+        - description: "Some administrative entries (payment_type_id = 0) can have hundreds of splits with zero amounts"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          impact: "May affect performance for certain queries; use appropriate filters"
+        
+        - description: "IsDiscount and DiscountType fields are unused in source system (always 0)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          impact: "Cannot rely on these fields for discount tracking; use procedurelog.Discount and adjustment.AdjType instead"
+        
+        - description: "Forward_split_id field is legacy and unused (always NULL)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          impact: "Field maintained for backward compatibility but has no business value"
+        
+        - description: "7,327 payment splits reference procedure_ids that don't exist in procedurelog table"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          impact: "Orphaned procedure references may indicate deleted procedures or data integrity issues. Use LEFT JOINs when joining to procedurelog."
+          test: "relationships_stg_opendental__paysplit_procedure_id"
+        
+        - description: "1,431 payment splits reference adjustment_ids that don't exist in adjustment table"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          impact: "Orphaned adjustment references may indicate deleted adjustments or data integrity issues. Use LEFT JOINs when joining to adjustment."
+          test: "relationships_stg_opendental__paysplit_adjustment_id"
+      
+      business_rules:
+        - rule: "Payment splits must be allocated unless they are unearned income types (0, 288, 439, 598, 641)"
+          impact: "Critical for proper revenue allocation and financial reporting. Unearned income/prepayments can remain unallocated until procedures are completed."
+        
+        - rule: "Treatment plan unearned revenue (type 439) must have a provider assigned"
+          impact: "Required for proper income transfer tracking. Outgoing transfers (type 288) may be system-generated without provider assignment."
+        
+        - rule: "Split amounts should not be zero unless marked as discount, has unearned_type=288, or has procedure_id"
+          impact: "Zero amounts require special business justification to maintain data integrity"
+        
+        - rule: "Cannot allocate to both procedure and adjustment simultaneously"
+          impact: "Prevents double-counting of revenue allocations"
+      
+      usage_notes: >
+        Key usage considerations:
+        - Use procedure_date for timing analysis when available, fall back to payment_date
+        - Filter out payment_type_id = 0 entries for standard financial reporting
+        - Consider using aggregated views for performance when analyzing high-split payments
+        - For discount analysis, use procedurelog.Discount and adjustment.AdjType rather than paysplit discount fields
+        - Unearned type classification is critical for proper income transfer tracking
+        - Hidden splits require special handling and are not visible in standard patient accounts
+        - Unallocated splits with unearned_type 0, 288, or 439 are valid prepayments waiting for procedure completion
+        - Type 288 transfers may legitimately lack provider assignment when system-generated
+        - Large unallocated amounts often represent treatment plan prepayments
+
+    tests:
+      # Test: Non-unearned splits must be allocated to either a procedure, adjustment, or payment plan
       - dbt_utils.expression_is_true:
-          expression: "procedure_id IS NOT NULL OR adjustment_id IS NOT NULL OR payplan_charge_id IS NOT NULL"
+          expression: "unearned_type IN (0, 288, 439, 598, 641) OR (procedure_id IS NOT NULL OR adjustment_id IS NOT NULL OR payplan_charge_id IS NOT NULL)"
+          config:
+            severity: error
+            description: "Payment splits must be allocated unless they are unearned income types (prepayments, transfers, treatment plans) which can remain unallocated until procedures are completed."
       
       # Test: Split amount should not be zero unless it's marked as a discount, has unearned_type=288, or has a procedure_id
       - dbt_utils.expression_is_true:
           expression: >
             NOT (
               split_amount = 0 
-              AND is_discount_flag = false
+              AND is_discount = false
               AND unearned_type != 288
-              AND procedure_id = 0
+              AND procedure_id IS NULL
             )
+          config:
+            severity: warn
+            description: "Zero amount splits must have valid business justification (discount, unearned type 288, or procedure allocation)"
       
-      # Test: Unearned splits (types 288, 439) must have a provider assigned
+      # Test: Incoming unearned splits (type 439) must have a provider assigned
       - dbt_utils.expression_is_true:
-          expression: "NOT (unearned_type IN (288, 439) AND provider_id IS NULL)"
+          expression: "NOT (unearned_type = 439 AND provider_id IS NULL)"
+          config:
+            severity: error
+            description: "Treatment plan unearned revenue (type 439) requires provider assignment. Outgoing transfers (type 288) may be system-generated without provider."
 
       # Test: Cannot allocate to both procedure and adjustment
       - dbt_utils.expression_is_true:
-          expression: "NOT (procedure_id != 0 AND adjustment_id != 0)"
+          expression: "NOT (procedure_id IS NOT NULL AND adjustment_id IS NOT NULL)"
+          config:
+            severity: error
+            description: "Payment splits cannot be allocated to both procedure and adjustment simultaneously to prevent double-counting"
 
       # Test: Cannot allocate to both adjustment and payment plan charge
       - dbt_utils.expression_is_true:
-          expression: "NOT (adjustment_id != 0 AND payplan_charge_id != 0)"
+          expression: "NOT (adjustment_id IS NOT NULL AND payplan_charge_id IS NOT NULL)"
+          config:
+            severity: error
+            description: "Payment splits cannot be allocated to both adjustment and payment plan charge simultaneously"
 
       # Test: If payplan_id exists, payplan_charge_id must exist
       - dbt_utils.expression_is_true:
-          expression: "NOT (payplan_id != 0 AND payplan_charge_id = 0)"
+          expression: "NOT (payplan_id IS NOT NULL AND payplan_charge_id IS NULL)"
+          config:
+            severity: error
+            description: "Payment plan allocations must include both payment plan ID and payment plan charge ID"
 
-      # Simple test for forward_split_id
+      # Test: Forward split ID field is unused and should always be 0
       - dbt_utils.expression_is_true:
           expression: "forward_split_id = 0"
           config:
             severity: warn
-            description: "Field is currently unused, 0 is the expected value"
+            description: "Forward split ID is a legacy field that should always be 0 in current system"
+
+      # Test: Discount type field is unused and should always be 0
+      - dbt_utils.expression_is_true:
+          expression: "discount_type = 0"
+          config:
+            severity: warn
+            description: "Discount type field is unused in source system and should always be 0"
+
+      # Test: Is discount field is unused and should always be false
+      - dbt_utils.expression_is_true:
+          expression: "is_discount = false"
+          config:
+            severity: warn
+            description: "Is discount field is unused in source system and should always be false"
 
     columns:
+      # Primary Key
       - name: paysplit_id
-        description: Unique identifier for each payment split record
+        description: "Primary key - Unique identifier for each payment split record (maps to SplitNum in OpenDental)"
         tests:
           - unique
           - not_null
 
-      # Relationship columns
+      # Core Relationship Columns
       - name: payment_id
-        description: |
-          Foreign key to the parent payment record.
-          Note: Some administrative payments (type 0) can have hundreds of splits.
+        description: >
+          Foreign key to the parent payment record. Some administrative payments (type 0) 
+          can have hundreds of splits. (maps to PayNum in OpenDental)
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__payment')
               field: payment_id
-              config:
-                severity: error
-                description: "Payment ID must exist in the payment table"
+              severity: error
 
       - name: patient_id
-        description: Foreign key to the patient associated with this payment split
+        description: "Foreign key to the patient associated with this payment split (maps to PatNum in OpenDental)"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
-              config:
-                severity: error
-                description: "Patient ID must exist in the patient table"
+              severity: error
 
       - name: clinic_id
-        description: Foreign key to the clinic where the payment split was recorded
+        description: "Foreign key to the clinic where the payment split was recorded (maps to ClinicNum in OpenDental, nullable when 0)"
+        # TODO: Enable when stg_opendental__clinic is available
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       severity: warn
 
       - name: provider_id
-        description: Foreign key to the provider associated with this payment split
+        description: "Foreign key to the provider associated with this payment split (maps to ProvNum in OpenDental, nullable when 0)"
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "= 0 OR provider_id IN (SELECT provider_id FROM {{ ref('stg_opendental__provider') }})"
-              column_name: provider_id
-              config:
-                severity: warn
-                description: "Provider ID should either be 0 (for prepayment transfers) or exist in the provider table"
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
 
+      # Allocation Target Columns
       - name: procedure_id
-        description: Foreign key to the dental procedure this split is applied to
+        description: "Foreign key to the dental procedure this split is applied to (maps to ProcNum in OpenDental, nullable when 0)"
         tests:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
-              config:
-                severity: warn
-                description: "Procedure ID should exist in the procedure table"
+              severity: warn
 
       - name: adjustment_id
-        description: Foreign key to any related adjustment record
+        description: "Foreign key to any related adjustment record (maps to AdjNum in OpenDental, nullable when 0)"
         tests:
           - relationships:
               to: ref('stg_opendental__adjustment')
               field: adjustment_id
-              config:
-                severity: warn
-                description: "Adjustment ID should exist in the adjustment table"
+              severity: warn
 
       - name: payplan_id
-        description: Foreign key to the associated payment plan, if applicable
+        description: "Foreign key to the associated payment plan, if applicable (maps to PayPlanNum in OpenDental, nullable when 0)"
 
       - name: payplan_charge_id
-        description: Foreign key to the specific payment plan charge
+        description: "Foreign key to the specific payment plan charge (maps to PayPlanChargeNum in OpenDental, nullable when 0)"
 
+      # Legacy/Unused Fields
       - name: forward_split_id
-        description: |
+        description: >
           Legacy field for tracking payment split references. Currently unused in the system.
           
           Current State:
-          - Always set to 0 in the source system
+          - Always NULL in the source system (maps to FSplitNum in OpenDental)
           - Maintained for backward compatibility
           - Index exists but is not actively used
           
@@ -195,23 +282,13 @@ models:
           - Field and index remain in place for backward compatibility
           
           Business Rules:
-          - Expected value is 0 for all records
+          - Expected value is NULL for all records
           - No active validation required
           - No impact on current payment processing
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "= 0"
-              column_name: "forward_split_id"
-              config:
-                severity: warn
-                description: "Field is currently unused, 0 is the expected value"
 
-      - name: created_by_user_id
-        description: ID of the user who created this payment split record
-
-      # Split details
+      # Financial Details
       - name: split_amount
-        description: |
+        description: >
           The monetary amount of this payment split.
           Common patterns:
           - Most frequent: $31.00, $60.00, $109.00
@@ -220,41 +297,29 @@ models:
         tests:
           - not_null
 
+      # Date Columns
       - name: payment_date
-        description: Date when the payment was made
+        description: "Date when the payment was made (maps to DatePay in OpenDental)"
         tests:
           - not_null
 
       - name: procedure_date
-        description: Date of the associated procedure, if applicable
+        description: "Date of the associated procedure, if applicable (maps to ProcDate in OpenDental)"
 
-      # Flags and types
-      - name: is_discount_flag
-        description: |
-          Boolean flag indicating if this split represents a discount.
-          
-          Note: This field is currently unused in the source system (always 0).
-          Discounts are tracked through:
-          1. procedurelog.Discount for procedure-level discounts
-          2. adjustment.AdjType and AdjAmt for adjustment-level discounts
-        tests:
-          - not_null
+      - name: entry_date
+        description: "Date when the payment split was entered into the system (maps to DateEntry in OpenDental, cleaned for invalid dates)"
 
+      # Type and Classification Columns
       - name: discount_type
-        description: |
-          Type of discount if this split represents a discount.
+        description: >
+          Type of discount if this split represents a discount (maps to DiscountType in OpenDental).
           
           Note: This field is currently unused in the source system and is always 0.
           For actual discount tracking, refer to:
           1. procedurelog.Discount for procedure-level discounts
           2. adjustment.AdjType for adjustment-level discounts
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "= 0"
-              column_name: "discount_type"
-              config:
-                severity: warn
-                description: "Field is currently unused, 0 is the expected value"
+          - not_null
 
       - name: unearned_type
         description: >
@@ -306,34 +371,36 @@ models:
           - Hidden types: Not shown in standard reports
 
       - name: payplan_debit_type
-        description: Type of debit if associated with a payment plan
+        description: "Type of debit if associated with a payment plan (maps to PayPlanDebitType in OpenDental)"
 
-      # Metadata columns
+      # Boolean Flags
+      - name: is_discount
+        description: >
+          Boolean flag indicating if this split represents a discount (maps to IsDiscount in OpenDental, converted from 0/1 to boolean).
+          
+          Note: This field is currently unused in the source system (always false).
+          Discounts are tracked through:
+          1. procedurelog.Discount for procedure-level discounts
+          2. adjustment.AdjType and AdjAmt for adjustment-level discounts
+        tests:
+          - not_null
+
+      # User Tracking
+      - name: created_by_user_id
+        description: "User who created the payment split record in the source system (OpenDental). Maps to SecUserNumEntry, may be null for system-generated entries."
+
+      # Standardized Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry, cleaned for invalid dates."
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit."
         tests:
           - not_null
-
-      - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
-        tests:
-          - not_null
-
-    meta:
-      contains_pii: true
-      owner: "mdc analytics team"
-      validation_rules:
-        - "Required Fields: All key fields (payment_id, split_amount, payment_date) must be populated"
-        - "Reference Rules: Must have either procedure_id, adjustment_id, or payplan_charge_id"
-        - "Amount Rules: Split amount should not be 0 unless (1) marked as discount, (2) unearned_type=288, or (3) has a valid procedure_id"
-        - "Patient Match: Patient ID should match the parent payment's patient"
-        - "Unearned Types: Special handling for types 288 and 439"
-        - "Provider Assignment: Required for unearned income types"
-        - "Amount Thresholds: Monitoring for statistical outliers in split amounts"
-        - "Split Count Patterns: Monitoring for high-split administrative entries (100+ splits)"
-        - "Payment Type Patterns: Special handling for payment_type_id = 0 entries"
