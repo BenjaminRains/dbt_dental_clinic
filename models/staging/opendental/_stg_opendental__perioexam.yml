@@ -2,45 +2,127 @@ version: 2
 
 models:
   - name: stg_opendental__perioexam
-    description: Staging model for periodontal examinations from OpenDental. Each exam may have multiple related periomeasure records.
+    description: >
+      Staging model for periodontal examinations from OpenDental. Each periodontal examination 
+      represents a comprehensive assessment of a patient's gum health and periodontal conditions, 
+      typically performed during routine dental visits or specialized periodontal consultations.
+      
+      This model contains the header-level information for periodontal exams, with detailed 
+      measurements stored separately in stg_opendental__periomeasure. Each exam record may have 
+      multiple associated periomeasure records containing specific pocket depth measurements, 
+      bleeding points, and other periodontal indicators.
+      
+      Data scope: Records from 2023-01-01 onwards with incremental loading based on measure 
+      edit timestamps.
+    
+    meta:
+      record_count: "~500 records (as of 2024)"
+      data_scope: "Periodontal examinations from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: "Some historical exam records may have null provider assignments"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          test: "provider_assignment_validation"
+        - description: "Measure edit timestamps may not reflect actual last edit for very old records"
+          severity: "warn"
+          identified_date: "2024-01-01"
+      
+      business_rules:
+        - rule: "Each periodontal exam must be associated with a valid patient"
+          impact: "Critical for patient care continuity and reporting"
+        - rule: "Exam dates cannot be in the future"
+          impact: "Ensures data integrity for clinical reporting"
+        - rule: "Periodontal exams are referenced by periomeasure records for detailed measurements"
+          impact: "Essential relationship for comprehensive periodontal analysis"
+      
+      usage_notes: >
+        This model should be joined with stg_opendental__periomeasure to get complete periodontal 
+        assessment data. Use exam_date for temporal analysis of periodontal health trends. 
+        The measure_edit_timestamp indicates when measurements were last modified, which may 
+        differ from the original exam date. Notes field may contain important clinical observations 
+        that supplement the numerical measurements.
+
+    tests:
+      - dbt_utils.at_least_one:
+          column_name: perioexam_id
+
     columns:
       - name: perioexam_id
-        description: Unique identifier for the periodontal examination. Referenced by periomeasure records in stg_opendental__periomeasure.
+        description: >
+          Primary key - Unique identifier for each periodontal examination record 
+          (maps to PerioExamNum in OpenDental). This ID is referenced by related 
+          periomeasure records for detailed pocket depth and bleeding measurements.
         tests:
           - unique
           - not_null
-      
+          - positive_values
+
       - name: patient_id
-        description: Foreign key to the patient table
+        description: >
+          Foreign key to the patient table - Links the periodontal examination to the 
+          specific patient who received the assessment. Critical for patient care continuity 
+          and longitudinal periodontal health tracking.
         tests:
           - not_null
-      
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+
       - name: exam_date
-        description: Date when the periodontal examination was performed
-      
+        description: >
+          Date when the periodontal examination was performed. Used for temporal analysis 
+          of periodontal health trends and scheduling follow-up care. Cannot be in the future.
+        tests:
+          - not_null
+          - test_date_not_future
+
       - name: provider_id
-        description: Foreign key to the provider who performed the examination
-      
+        description: >
+          Foreign key to the provider who performed the periodontal examination. May be null 
+          for some historical records where provider assignment was not properly documented.
+          Links to the dental professional responsible for the assessment.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "provider_id is not null"
+
       - name: measure_edit_timestamp
-        description: Timestamp indicating when the measurements were last edited
-      
+        description: >
+          Timestamp indicating when the periodontal measurements were last edited or modified 
+          in the OpenDental system. This may differ from the original exam_date if measurements 
+          were updated after the initial examination. Used for incremental loading logic.
+
       - name: note
-        description: Text notes associated with the periodontal examination
+        description: >
+          Free-text clinical notes associated with the periodontal examination. May contain 
+          important observations about gum health, treatment recommendations, or other clinical 
+          findings that supplement the numerical measurements stored in periomeasure records.
 
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL pipeline 
+          (using current_timestamp at load time).
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (using ExamDate)
+        description: >
+          Timestamp when the periodontal examination record was created in the source system 
+          (OpenDental). Maps to ExamDate field. Represents the original examination date.
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (using DateTMeasureEdit)
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental). 
+          Maps to DateTMeasureEdit field. Used for incremental loading to identify 
+          records that have been modified since the last ETL run.
         tests:
           - not_null
 
     config:
-      tags: ['staging', 'opendental', 'periodontal']
+      tags: ['staging', 'opendental', 'periodontal', 'clinical']
