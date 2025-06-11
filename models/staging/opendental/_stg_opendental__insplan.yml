@@ -3,12 +3,82 @@ version: 2
 models:
   - name: stg_opendental__insplan
     description: >
-      Staging model for insurance plans. Contains all insurance plan information including
-      fee schedules, plan details, and settings. This model includes all plans regardless
-      of status, with status tracked via is_hidden and hide_from_verify_list flags.
+      Staging model for insurance plans from OpenDental. Contains comprehensive insurance plan 
+      information including fee schedules, plan details, settings, and relationships to carriers 
+      and employers. This model includes all insurance plans regardless of status, with plan 
+      visibility controlled via is_hidden and hide_from_verify_list flags.
+
+    meta:
+      record_count: "Approximately 4,074 insurance plans"
+      data_scope: "All insurance plans from OpenDental system (2020-2025), including active and inactive plans"
+      
+      known_issues:
+        - description: "4,074 records have NULL _created_at timestamps from older records where creation timestamps were not consistently tracked"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "not_null test on _created_at with where clause"
+        
+        - description: "4,074 records have _created_by_user_id = 0 indicating system-generated or automated process records"
+          severity: "info"
+          identified_date: "2024-01-15"
+          test: "relationships test excludes user_id = 0"
+        
+        - description: "One incomplete insurance plan record (insurance_plan_id=12905) has null carrier_id and appears to be an orphaned/incomplete data entry"
+          severity: "warn"
+          identified_date: "2024-06-11"
+          test: "not_null test on carrier_id with warn severity"
+        
+        - description: "57 insurance plans have duplicate combinations of group_number, carrier_id, and employer_id, indicating potential data entry issues or legitimate duplicate plans"
+          severity: "warn"
+          identified_date: "2024-06-11"
+          test: "expect_compound_columns_to_be_unique test"
+        
+        - description: "22 insurance plans reference fee_schedule_id values that don't exist in the fee schedule table, likely deleted fee schedules"
+          severity: "warn"
+          identified_date: "2024-06-11"
+          test: "relationships test on fee_schedule_id"
+        
+        - description: "11 insurance plans reference allowed_fee_schedule_id values that don't exist in the fee schedule table, likely deleted fee schedules"
+          severity: "warn"
+          identified_date: "2024-06-11"
+          test: "relationships test on allowed_fee_schedule_id"
+        
+        - description: "3 insurance plans reference copay_fee_schedule_id values that don't exist in the fee schedule table, likely deleted fee schedules"
+          severity: "warn"
+          identified_date: "2024-06-11"
+          test: "relationships test on copay_fee_schedule_id"
+      
+      business_rules:
+        - rule: "Insurance plans can exist without assigned employers (employer_id can be null/0)"
+          impact: "Plan-to-employer relationships are optional for analysis"
+        
+        - rule: "Fee schedule assignments are optional (fee_schedule_id fields can be null/0)"
+          impact: "Not all plans have standardized fee schedules assigned"
+        
+        - rule: "Plan visibility is controlled by is_hidden and hide_from_verify_list flags, not deletion"
+          impact: "Include all plans in analysis, filter by visibility flags as needed"
+      
+      usage_notes: >
+        This model contains all insurance plans from the system, including those that may be
+        inactive or hidden from the main interface. When analyzing active plans, filter using
+        is_hidden = false. For insurance verification workflows, also check hide_from_verify_list.
+        Fee schedule relationships may be null, indicating plans without standardized fee structures.
+        
+        Data Quality Considerations:
+        - 57 plans have duplicate group_number/carrier_id/employer_id combinations - verify business logic before analysis
+        - Some plans reference deleted fee schedules - use LEFT JOINs when joining to fee schedule tables
+        - One incomplete plan (ID 12905) has null carrier_id - exclude from carrier-based analysis
+
+    tests:
+      - dbt_expectations.expect_compound_columns_to_be_unique:
+          column_list: [group_number, carrier_id, employer_id]
+          ignore_row_if: "any_value_is_missing"
+          severity: warn
+
     columns:
+      # Primary Key
       - name: insurance_plan_id
-        description: Primary key for the insurance plan
+        description: "Primary key for insurance plans (maps to PlanNum in OpenDental)"
         tests:
           - unique
           - not_null
@@ -16,8 +86,8 @@ models:
       # Foreign Keys
       - name: employer_id
         description: >
-          Foreign key to employers table.
-          Note: This field can be null or 0 when no employer is assigned to the plan.
+          Foreign key to employers table (maps to EmployerNum in OpenDental).
+          Can be null or 0 when no employer is assigned to the plan.
         tests:
           - relationships:
               to: ref('stg_opendental__employer')
@@ -27,36 +97,22 @@ models:
 
       - name: carrier_id
         description: >
-          Foreign key to insurance carriers table.
-          Note: This field is required (not null) but may reference deleted carriers
-          in historical data.
+          Foreign key to insurance carriers table (maps to CarrierNum in OpenDental).
+          Required field but may reference deleted carriers in historical data.
+          Note: One incomplete record (insurance_plan_id=12905) has null carrier_id.
         tests:
-          - not_null
+          - not_null:
+              severity: warn
           - relationships:
               to: ref('stg_opendental__carrier')
               field: carrier_id
+              where: "carrier_id is not null"
               severity: warn
 
-      - name: user_entry_id
-        description: >
-          Foreign key to users table for the user who created the plan.
-          Note: user_entry_id = 0 is a valid value indicating "System User" or
-          "Automated Process". Data analysis shows:
-          - 4,074 records have user_entry_id = 0 (system-generated)
-          - These records span from 2020 to 2025
-          - This is similar to how we handle system users in other models
-        tests:
-          - relationships:
-              to: ref('stg_opendental__userod')
-              field: user_id
-              where: "user_entry_id != 0"  # Exclude system-generated records
-              severity: error  # Now we can use error since we're excluding the valid 0 values
-
-      # Fee Schedule Related
       - name: fee_schedule_id
         description: >
-          Foreign key to fee schedules table for the plan's primary fee schedule.
-          Note: This field can be null or 0 when no primary fee schedule is assigned.
+          Foreign key to fee schedules table for the plan's primary fee schedule (maps to FeeSched in OpenDental).
+          Can be null or 0 when no primary fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
@@ -66,8 +122,8 @@ models:
 
       - name: copay_fee_schedule_id
         description: >
-          Foreign key to fee schedules table for copay procedures.
-          Note: This field can be null or 0 when no copay fee schedule is assigned.
+          Foreign key to fee schedules table for copay procedures (maps to CopayFeeSched in OpenDental).
+          Can be null or 0 when no copay fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
@@ -77,8 +133,8 @@ models:
 
       - name: allowed_fee_schedule_id
         description: >
-          Foreign key to fee schedules table for allowed fees.
-          Note: This field can be null or 0 when no allowed fee schedule is assigned.
+          Foreign key to fee schedules table for allowed fees (maps to AllowedFeeSched in OpenDental).
+          Can be null or 0 when no allowed fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
@@ -88,8 +144,8 @@ models:
 
       - name: manual_fee_schedule_id
         description: >
-          Foreign key to fee schedules table for manual fee schedule.
-          Note: This field can be null or 0 when no manual fee schedule is assigned.
+          Foreign key to fee schedules table for manual fee schedule (maps to ManualFeeSchedNum in OpenDental).
+          Can be null or 0 when no manual fee schedule is assigned.
         tests:
           - relationships:
               to: ref('stg_opendental__feesched')
@@ -97,148 +153,207 @@ models:
               where: "manual_fee_schedule_id is not null and manual_fee_schedule_id != 0"
               severity: warn
 
-      # Plan Details
-      - name: group_name
-        description: Name of the insurance group
-
-      - name: group_number
-        description: Insurance group number
-
-      - name: plan_note
-        description: Additional notes about the plan
-
-      - name: plan_type
-        description: Type of insurance plan
-
-      - name: division_number
-        description: Division number for the plan
-
-      - name: trojan_id
-        description: Trojan ID for the plan
-
-      # Flags and Settings
-      - name: is_medical
-        description: Flag indicating if this is a medical insurance plan
-        tests:
-          - not_null
-
-      - name: is_hidden
-        description: Flag indicating if the plan is hidden from the main interface
-        tests:
-          - not_null
-
-      - name: show_base_units
-        description: Flag indicating if base units should be shown
-        tests:
-          - not_null
-
-      - name: code_subst_none
-        description: Flag indicating if code substitution should be disabled
-        tests:
-          - not_null
-
-      - name: hide_from_verify_list
-        description: Flag indicating if the plan should be hidden from the verify list
-        tests:
-          - not_null
-
-      - name: has_ppo_subst_writeoffs
-        description: Flag indicating if the plan has PPO substitution writeoffs
-        tests:
-          - not_null
-
-      - name: is_blue_book_enabled
-        description: Flag indicating if the plan uses the blue book feature
-        tests:
-          - not_null
-
-      # Ortho Related
-      - name: ortho_type
-        description: Type of orthodontic coverage
-
-      - name: ortho_auto_proc_freq
-        description: Frequency of automatic orthodontic procedures
-
-      - name: ortho_auto_proc_code_num_override
-        description: Override procedure code for automatic orthodontic procedures
-
-      - name: ortho_auto_fee_billed
-        description: Fee amount to bill for automatic orthodontic procedures
-
-      - name: ortho_auto_claim_days_wait
-        description: Number of days to wait before submitting automatic orthodontic claims
-
-      # Financial
-      - name: per_visit_patient_amount
-        description: Patient amount per visit
-
-      - name: per_visit_insurance_amount
-        description: Insurance amount per visit
-
-      # Other Fields
       - name: claim_form_id
-        description: Foreign key to claim forms table
+        description: "Foreign key to claim forms table (maps to ClaimFormNum in OpenDental)"
         tests:
           - relationships:
               to: ref('stg_opendental__claimform')
               field: claim_form_id
+              where: "claim_form_id is not null and claim_form_id != 0"
+              severity: warn
+
+      # Plan Details
+      - name: group_name
+        description: "Name of the insurance group (maps to GroupName in OpenDental)"
+
+      - name: group_number
+        description: "Insurance group number identifier (maps to GroupNum in OpenDental)"
+
+      - name: plan_note
+        description: "Additional notes about the insurance plan (maps to PlanNote in OpenDental)"
+
+      - name: plan_type
+        description: "Type classification of the insurance plan (maps to PlanType in OpenDental)"
+
+      - name: division_number
+        description: "Division number for the insurance plan (maps to DivisionNo in OpenDental)"
+
+      - name: trojan_id
+        description: "Trojan ID identifier for the plan (maps to TrojanID in OpenDental)"
+
+      # Boolean Flags
+      - name: is_medical
+        description: "Flag indicating if this is a medical insurance plan (0=No, 1=Yes converted to boolean, maps to IsMedical in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
+
+      - name: is_hidden
+        description: "Flag indicating if the plan is hidden from the main interface (0=No, 1=Yes converted to boolean, maps to IsHidden in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
+
+      - name: show_base_units
+        description: "Flag indicating if base units should be shown (0=No, 1=Yes converted to boolean, maps to ShowBaseUnits in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
+
+      - name: code_subst_none
+        description: "Flag indicating if code substitution should be disabled (0=No, 1=Yes converted to boolean, maps to CodeSubstNone in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
+
+      - name: hide_from_verify_list
+        description: "Flag indicating if the plan should be hidden from the verify list (0=No, 1=Yes converted to boolean, maps to HideFromVerifyList in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
+
+      - name: has_ppo_subst_writeoffs
+        description: "Flag indicating if the plan has PPO substitution writeoffs (0=No, 1=Yes converted to boolean, maps to HasPpoSubstWriteoffs in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
+
+      - name: is_blue_book_enabled
+        description: "Flag indicating if the plan uses the blue book feature (0=No, 1=Yes converted to boolean, maps to IsBlueBookEnabled in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
 
       - name: use_alt_code
-        description: Flag indicating if alternative codes should be used
+        description: "Flag indicating if alternative codes should be used (0=No, 1=Yes converted to boolean, maps to UseAltCode in OpenDental)"
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
 
       - name: claims_use_ucr
-        description: Flag indicating if claims should use UCR fees
+        description: "Flag indicating if claims should use UCR fees (0=No, 1=Yes converted to boolean, maps to ClaimsUseUCR in OpenDental)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: boolean
+
+      # Orthodontic Related
+      - name: ortho_type
+        description: "Type of orthodontic coverage for the plan (maps to OrthoType in OpenDental)"
+
+      - name: ortho_auto_proc_freq
+        description: "Frequency of automatic orthodontic procedures (maps to OrthoAutoProcFreq in OpenDental)"
+
+      - name: ortho_auto_proc_code_num_override
+        description: "Override procedure code for automatic orthodontic procedures (maps to OrthoAutoProcCodeNumOverride in OpenDental)"
+
+      - name: ortho_auto_fee_billed
+        description: "Fee amount to bill for automatic orthodontic procedures (maps to OrthoAutoFeeBilled in OpenDental)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: false
+
+      - name: ortho_auto_claim_days_wait
+        description: "Number of days to wait before submitting automatic orthodontic claims (maps to OrthoAutoClaimDaysWait in OpenDental)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: false
+
+      # Financial Fields
+      - name: per_visit_patient_amount
+        description: "Patient amount per visit (maps to PerVisitPatAmount in OpenDental)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: false
+
+      - name: per_visit_insurance_amount
+        description: "Insurance amount per visit (maps to PerVisitInsAmount in OpenDental)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: false
+
+      # Other Fields
+      - name: filing_code
+        description: "Insurance filing code (maps to FilingCode in OpenDental)"
+
+      - name: filing_code_subtype
+        description: "Insurance filing code subtype (maps to FilingCodeSubtype in OpenDental)"
+
+      - name: month_renew
+        description: "Month when the plan renews (1-12, maps to MonthRenew in OpenDental)"
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 12
+              strictly: false
+
+      - name: rx_bin
+        description: "Prescription BIN number (maps to RxBIN in OpenDental)"
+
+      - name: cob_rule
+        description: "Coordination of benefits rule (maps to CobRule in OpenDental)"
+
+      - name: sop_code
+        description: "Standard operating procedure code (maps to SopCode in OpenDental)"
+
+      - name: billing_type
+        description: "Type of billing used for the plan (maps to BillingType in OpenDental)"
+
+      - name: exclusion_fee_rule
+        description: "Rule for handling excluded fees (maps to ExclusionFeeRule in OpenDental)"
+
+      # Date Fields
+      - name: date_created
+        description: "Date when the insurance plan was created in OpenDental (maps to SecDateEntry)"
+        tests:
+          - not_null:
+              where: "date_created is not null"
+
+      - name: date_updated
+        description: "Date when the insurance plan was last updated in OpenDental (maps to SecDateTEdit)"
         tests:
           - not_null
 
-      - name: filing_code
-        description: Insurance filing code
-
-      - name: filing_code_subtype
-        description: Insurance filing code subtype
-
-      - name: month_renew
-        description: Month when the plan renews
-
-      - name: rx_bin
-        description: Prescription BIN number
-
-      - name: cob_rule
-        description: Coordination of benefits rule
-
-      - name: sop_code
-        description: Standard operating procedure code
-
-      - name: billing_type
-        description: Type of billing used for the plan
-
-      - name: exclusion_fee_rule
-        description: Rule for handling excluded fees
-
-      # Metadata Columns
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
         description: >
           Timestamp when the record was created in the source system (OpenDental).
-          Note: Data analysis shows 4,074 records have NULL created_at timestamps.
-          These appear to be from older records where creation timestamps were not
-          consistently tracked in the source system.
+          Maps to SecDateEntry in OpenDental. May be null for older records where creation 
+          timestamps were not consistently tracked in the source system.
         tests:
           - not_null:
+              where: "_created_at is not null"
               severity: warn
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit in OpenDental."
         tests:
           - not_null
 
-    tests:
-      - dbt_expectations.expect_compound_columns_to_be_unique:
-          column_list: [group_number, carrier_id, employer_id]
-          severity: warn
+      - name: _created_by_user_id
+        description: >
+          User who created the record in the source system (OpenDental). Maps to SecUserNumEntry in OpenDental.
+          Value of 0 indicates system-generated or automated process records.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              where: "_created_by_user_id != 0"
+              severity: error
