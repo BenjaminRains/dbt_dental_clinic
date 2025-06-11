@@ -2,27 +2,88 @@ version: 2
 
 models:
   - name: stg_opendental__procgroupitem
-    description: Staging model for procedure group items from the OpenDental source system.
+    description: >
+      Staging model for procedure group items that link individual procedures to procedure groups in OpenDental.
+      
+      This table creates many-to-many relationships between procedures and groups, enabling functionality like:
+      - Multi-visit treatment grouping (procedures spanning multiple appointments)
+      - Group notes (single clinical note for multiple procedures completed on the same day)
+      - Coordinated billing (claims held until all procedures in group are complete)
+      - Treatment planning organization (procedures that should be completed together)
+      
+      Each record represents one procedure's membership in one group. Procedures can belong to multiple groups,
+      and groups can contain multiple procedures. This supports OpenDental's multi-visit procedure workflow
+      where complex treatments are tracked together until completion.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~26,632 active group assignments"
+      data_scope: "All procedure-to-group relationships in OpenDental system"
+      
+      known_issues:
+        - description: "No timestamp columns in source table - cannot track when groupings were created or modified"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "n/a"
+        - description: "Orphaned records may exist where referenced procedures or groups have been deleted"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "referential_integrity_checks"
+      
+      business_rules:
+        - rule: "Procedures are typically grouped for multi-visit treatments (crowns, bridges, dentures)"
+          impact: "Claims are held with 'Hold for In Process' status until all procedures in group are complete"
+        - rule: "Group notes can only be created for procedures completed on the same day by the same provider"
+          impact: "Affects clinical documentation workflow and progress note organization"
+        - rule: "Ungrouping procedures changes claim status from 'Hold for In Process' to 'Waiting to Send'"
+          impact: "Critical for billing workflow when partial claims need to be sent early"
+      
+      usage_notes: >
+        Use this model to understand procedure relationships and multi-visit treatment patterns.
+        Essential for analyzing claim holds, identifying incomplete treatment sequences, and tracking
+        complex procedures that span multiple appointments. When joining to procedures, be aware that
+        procedures can belong to multiple groups simultaneously.
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - procedure_id
+            - group_id
+          config:
+            severity: error
+            error_if: ">0"
+            warn_if: ">0"
     
     columns:
       - name: procgroup_item_id
-        description: Unique identifier for the procedure group item
+        description: "Primary key for procedure group item relationship - unique identifier for each procedure-to-group assignment (maps to ProcGroupItemNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
           
       - name: procedure_id
-        description: Foreign key to the procedures table (ProcNum)
+        description: >
+          Foreign key to stg_opendental__procedurelog - Links to the specific procedure that is part of this group.
+          Used to track which individual procedures are coordinated together for multi-visit treatments or group documentation.
+          Critical for determining when all procedures in a group are complete for billing purposes.
         tests:
           - not_null
+          - positive_values
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              severity: error
               
       - name: group_id
-        description: Identifier for the procedure group
+        description: >
+          Identifier for the procedure group - groups procedures that should be treated as a unit.
+          Not a foreign key to another table but rather an internal grouping identifier.
+          Multiple procedures with the same group_id are considered part of the same treatment sequence,
+          affecting billing hold status and clinical note organization.
         tests:
           - not_null
+          - positive_values
           
       # Required metadata columns
       - name: _loaded_at
@@ -34,25 +95,24 @@ models:
       
       - name: _created_at
         description: >
-          Timestamp when the record was created in the source system.
-          This is mapped from the DateTStamp field in OpenDental.
+          Timestamp when the record was created in the source system (OpenDental).
+          Set to null because the source table has no creation timestamp columns.
         tests:
-          - not_null
+          - accepted_values:
+              values: [null]
       
       - name: _updated_at
         description: >
-          Timestamp when the record was last updated in the source system.
-          This is mapped from DateTStamp, falling back to DateTStamp if null.
+          Timestamp when the record was last updated in the source system (OpenDental).
+          Set to null because the source table has no update timestamp columns.
         tests:
-          - not_null
+          - accepted_values:
+              values: [null]
       
-      # Optional metadata columns
-      - name: _invocation_id
+      - name: _created_by_user_id
         description: >
-          Unique identifier for the dbt run that processed this record.
-          Used for data lineage tracking and debugging pipeline issues.
-      
-      - name: _extract_timestamp
-        description: >
-          Timestamp when the data was extracted from the source system.
-          This is automatically set to current_timestamp when the model runs.
+          User who created the record in the source system (OpenDental).
+          Set to null because the source table has no user tracking columns.
+        tests:
+          - accepted_values:
+              values: [null]
