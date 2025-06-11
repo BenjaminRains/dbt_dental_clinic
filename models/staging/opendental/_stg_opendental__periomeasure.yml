@@ -2,69 +2,221 @@ version: 2
 
 models:
   - name: stg_opendental__periomeasure
-    description: Staging model for periodontal measurements from OpenDental. Contains detailed measurements for teeth examined during periodontal exams.
+    description: >
+      Staging model for periodontal measurements from OpenDental. Contains detailed measurements 
+      for teeth examined during periodontal exams, capturing pocket depths and other periodontal 
+      health indicators at multiple positions around each tooth.
+      
+      This model focuses on recent data (2023 onwards) and joins with perioexam records to ensure 
+      only valid examinations are included. Each record represents a specific measurement for a 
+      tooth position during a periodontal examination, enabling detailed analysis of periodontal 
+      health trends and treatment outcomes.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~500,000 active measurements"
+      data_scope: "Periodontal measurements from January 1, 2023 onwards for active examinations"
+      
+      known_issues:
+        - description: "Significant volume of negative measurement values across all periodontal positions (~16,000+ records per position). Clinically impossible as pocket depths cannot be negative."
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "non_negative_mesial_buccal_measurements, non_negative_buccal_measurements, non_negative_distal_buccal_measurements, non_negative_mesial_lingual_measurements, non_negative_lingual_measurements, non_negative_distal_lingual_measurements"
+          impact: "May indicate data entry errors, system conversion issues, or placeholder values. Requires clinical review for data cleanup."
+        - description: "Tooth numbers occasionally fall outside standard numbering (1-32)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "valid_tooth_numbers"
+      
+      business_rules:
+        - rule: "Measurements are filtered to only include examinations from 2023 onwards to focus on recent clinical data"
+          impact: "Historical measurements prior to 2023 are excluded from analysis"
+        - rule: "All measurements must be linked to valid periodontal examinations"
+          impact: "Orphaned measurements without valid exam records are excluded"
+        - rule: "Each position measurement represents pocket depth in millimeters"
+          impact: "Values should typically range from 1-12mm for healthy to severely diseased conditions"
+      
+      usage_notes: >
+        Key considerations when using this model:
+        - Data scope is limited to 2023+ for performance and relevance
+        - Multiple measurements per tooth position may exist if re-examinations occurred
+        - Measurement positions follow dental terminology (mesial=toward midline, distal=away from midline, buccal=cheek side, lingual=tongue side)
+        - Zero values may indicate no measurement taken rather than 0mm depth
+        - Compare with perioexam model for examination context and provider information
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "periomeasure_id > 0"
+          config:
+            severity: error
+            error_if: ">= 1"
+            warn_if: ">= 1"
+            alias: "positive_periomeasure_id"
+            description: "Ensure all periodontal measurement IDs are positive integers"
+      
+      - dbt_utils.expression_is_true:
+          expression: "tooth_number between 1 and 32 or tooth_number is null"
+          config:
+            severity: warn
+            error_if: ">= 100"
+            warn_if: ">= 1"
+            alias: "valid_tooth_numbers"
+            description: "Tooth numbers should follow standard dental numbering (1-32) or be null"
+      
+      - dbt_utils.expression_is_true:
+          expression: "mesial_buccal_value >= 0 or mesial_buccal_value is null"
+          config:
+            severity: warn
+            error_if: ">= 50"
+            warn_if: ">= 1"
+            alias: "non_negative_mesial_buccal_measurements"
+            description: "Mesial buccal pocket depth measurements cannot be negative"
+      
+      - dbt_utils.expression_is_true:
+          expression: "buccal_value >= 0 or buccal_value is null"
+          config:
+            severity: warn
+            error_if: ">= 50"
+            warn_if: ">= 1"
+            alias: "non_negative_buccal_measurements"
+            description: "Buccal pocket depth measurements cannot be negative"
+      
+      - dbt_utils.expression_is_true:
+          expression: "distal_buccal_value >= 0 or distal_buccal_value is null"
+          config:
+            severity: warn
+            error_if: ">= 50"
+            warn_if: ">= 1"
+            alias: "non_negative_distal_buccal_measurements"
+            description: "Distal buccal pocket depth measurements cannot be negative"
+      
+      - dbt_utils.expression_is_true:
+          expression: "mesial_lingual_value >= 0 or mesial_lingual_value is null"
+          config:
+            severity: warn
+            error_if: ">= 50"
+            warn_if: ">= 1"
+            alias: "non_negative_mesial_lingual_measurements"
+            description: "Mesial lingual pocket depth measurements cannot be negative"
+      
+      - dbt_utils.expression_is_true:
+          expression: "lingual_value >= 0 or lingual_value is null"
+          config:
+            severity: warn
+            error_if: ">= 50"
+            warn_if: ">= 1"
+            alias: "non_negative_lingual_measurements"
+            description: "Lingual pocket depth measurements cannot be negative"
+      
+      - dbt_utils.expression_is_true:
+          expression: "distal_lingual_value >= 0 or distal_lingual_value is null"
+          config:
+            severity: warn
+            error_if: ">= 50"
+            warn_if: ">= 1"
+            alias: "non_negative_distal_lingual_measurements"
+            description: "Distal lingual pocket depth measurements cannot be negative"
+    
     columns:
       - name: periomeasure_id
-        description: Unique identifier for the periodontal measurement
+        description: "Primary key - Unique identifier for each periodontal measurement record (maps to PerioMeasureNum in OpenDental)"
         tests:
           - unique
           - not_null
       
       - name: perioexam_id
-        description: Foreign key to stg_opendental__perioexam. Relates measurements to a specific periodontal examination.
+        description: "Foreign key to stg_opendental__perioexam - Links this measurement to the specific periodontal examination when it was recorded"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__perioexam')
               field: perioexam_id
+              severity: error
       
       - name: sequence_type
-        description: Identifies the measurement sequence type (default 0)
+        description: >
+          Identifies the measurement sequence type within the periodontal examination.
+          Typically 0 for standard measurements. Used by OpenDental to organize 
+          multiple measurement series within a single exam.
       
       - name: tooth_number
-        description: Integer representing the tooth number being measured
+        description: >
+          Integer representing the tooth number being measured using standard dental numbering (1-32).
+          1-16 = maxillary (upper) teeth, 17-32 = mandibular (lower) teeth.
+          May be null if measurement applies to general gum health assessment.
       
       - name: tooth_value
-        description: General value associated with the tooth
+        description: >
+          General measurement value associated with the overall tooth condition.
+          May represent average pocket depth, mobility score, or other tooth-specific measurement.
+          Units and interpretation depend on measurement protocol.
       
       - name: mesial_buccal_value
-        description: Measurement at the mesial-buccal position of the tooth
+        description: >
+          Periodontal pocket depth measurement (in millimeters) at the mesial-buccal position.
+          Mesial = toward the midline of the mouth, Buccal = cheek/lip side of tooth.
+          Normal healthy values: 1-3mm, values >4mm may indicate periodontal disease.
       
       - name: buccal_value
-        description: Measurement at the buccal (outer/cheek) position of the tooth
+        description: >
+          Periodontal pocket depth measurement (in millimeters) at the buccal position.
+          Buccal = cheek/lip side of tooth, typically the center measurement on the facial surface.
+          Normal healthy values: 1-3mm, values >4mm may indicate periodontal disease.
       
       - name: distal_buccal_value
-        description: Measurement at the distal-buccal position of the tooth
+        description: >
+          Periodontal pocket depth measurement (in millimeters) at the distal-buccal position.
+          Distal = away from the midline of the mouth, Buccal = cheek/lip side of tooth.
+          Normal healthy values: 1-3mm, values >4mm may indicate periodontal disease.
       
       - name: mesial_lingual_value
-        description: Measurement at the mesial-lingual position of the tooth
+        description: >
+          Periodontal pocket depth measurement (in millimeters) at the mesial-lingual position.
+          Mesial = toward the midline of the mouth, Lingual = tongue side of tooth.
+          Normal healthy values: 1-3mm, values >4mm may indicate periodontal disease.
       
       - name: lingual_value
-        description: Measurement at the lingual (inner/tongue) position of the tooth
+        description: >
+          Periodontal pocket depth measurement (in millimeters) at the lingual position.
+          Lingual = tongue side of tooth, typically the center measurement on the lingual surface.
+          Normal healthy values: 1-3mm, values >4mm may indicate periodontal disease.
       
       - name: distal_lingual_value
-        description: Measurement at the distal-lingual position of the tooth
+        description: >
+          Periodontal pocket depth measurement (in millimeters) at the distal-lingual position.
+          Distal = away from the midline of the mouth, Lingual = tongue side of tooth.
+          Normal healthy values: 1-3mm, values >4mm may indicate periodontal disease.
       
       - name: entry_timestamp
-        description: Timestamp when the measurement was initially entered
+        description: >
+          Timestamp when the periodontal measurement was initially entered into the system.
+          Maps to SecDateTEntry in OpenDental. Used for tracking data entry timing and 
+          distinguishing original entry from subsequent edits.
       
       - name: edit_timestamp
-        description: Timestamp when the measurement was last edited
+        description: >
+          Timestamp when the periodontal measurement was last edited or modified.
+          Maps to SecDateTEdit in OpenDental. Updated whenever any field in the record changes.
+          Used for incremental loading to identify recently modified records.
 
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (using SecDateTEntry)
+        description: >
+          Timestamp when the record was created in the source system (OpenDental).
+          Maps to SecDateTEntry column. Should not be null for valid measurement records.
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (using SecDateTEdit)
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental).
+          Maps to SecDateTEdit column. Used for incremental loading and change tracking.
         tests:
           - not_null
 
     config:
-      tags: ['staging', 'opendental', 'periodontal']
+      tags: ['staging', 'opendental', 'periodontal', 'clinical']
