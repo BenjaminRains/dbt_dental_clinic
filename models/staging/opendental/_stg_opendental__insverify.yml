@@ -3,108 +3,143 @@ version: 2
 models:
   - name: stg_opendental__insverify
     description: >
-      Staging model for insurance verification records. This table tracks verification activities for insurance-related entities.
+      Staging model for insurance verification records. This table tracks verification activities 
+      for insurance-related entities, documenting when insurance coverage has been verified and by whom.
       
-      **Data Quality Note**: The relationships test is currently warning with 218 records that exist in this table but do not have corresponding history records in insverifyhist. These records show patterns of automated verification creation (user_id = 0) with a 3-12 day gap before subscriber creation. See docs/data_quality/insurance_verification_orphaned_verification_records.md for detailed analysis. This is expected behavior for system-generated records.
+      The verification process is critical for ensuring accurate insurance billing and reducing claim 
+      denials. Records track both manual verifications performed by staff and automated system 
+      verifications.
     
+    meta:
+      record_count: "~3,400 records"
+      data_scope: "Active verification records from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: "218 verification records exist without corresponding history records in insverifyhist, primarily system-generated records with 3-12 day gap patterns before subscriber creation"
+          severity: "warn"
+          identified_date: "2025-01-27"
+          test: "relationships_stg_opendental__insverify_insurance_verify_id__insurance_verify_id__ref_stg_opendental__insverifyhist_"
+          jira_ticket: "TBD"
+        
+        - description: "283 Type 1 verification records have foreign_key_id values that don't match existing inssub records, all are system-generated with consistent timestamp patterns"
+          severity: "warn"
+          identified_date: "2025-01-27"
+          test: "dbt_utils_relationships_where_stg_opendental__insverify_foreign_key_id__inssub_id__verify_type_1"
+          jira_ticket: "TBD"
+        
+        - description: "Some records may have null _created_at timestamps for system-generated records where DateTimeEntry is null but last_verified_date is populated"
+          severity: "warn"
+          identified_date: "2025-01-27"
+          test: "not_null _created_at (if implemented)"
+          jira_ticket: "TBD"
+      
+      business_rules:
+        - rule: "ALL verification records are currently system-generated (user_id = 0) - no manual user-created verifications exist in the current data"
+          impact: "Affects all data quality patterns and analysis - all records follow automated verification workflows"
+        
+        - rule: "verify_type = 1 indicates insurance subscriber verification, should reference inssub.inssub_id"
+          impact: "Critical for linking verifications to insurance subscribers"
+        
+        - rule: "verify_type = 2 indicates other verification types with different foreign key relationships"
+          impact: "Affects interpretation of foreign_key_id relationships"
+      
+      usage_notes: >
+        This model tracks automated insurance verification workflows. ALL current records are 
+        system-generated (user_id = 0) with no manual user-created verifications in the dataset. 
+        The foreign_key_id interpretation depends on verify_type, so always filter or group by 
+        verify_type when analyzing relationships. System-generated records may have different 
+        data completeness patterns, particularly around timestamp fields and foreign key relationships.
+
     columns:
+      # Primary Key
       - name: insurance_verify_id
-        description: Primary key - Unique identifier for the insurance verification record
+        description: "Primary key - Unique identifier for the insurance verification record (maps to InsVerifyNum in OpenDental)"
         tests:
           - unique
           - not_null
-          # This test verifies that every verification record has at least one corresponding history record.
-          # Note: The test is currently warning with 218 records that show patterns of automated verification
-          # creation. See docs/data_quality/insurance_verification_orphaned_verification_records.md for analysis.
-          - relationships:
-              to: ref('stg_opendental__insverifyhist')
-              field: insurance_verify_id
-              config:
-                severity: warn
-                description: >
-                  This test verifies that every verification record has a corresponding history record.
-                  Note: System-generated records (user_id = 0) may not have history records immediately.
-                  See docs/data_quality/insurance_verification_orphaned_verification_records.md for analysis.
+          - positive_values
 
+      # Foreign Keys
       - name: user_id
-        description: Foreign key - ID of the user who created the verification record
+        description: "Foreign key to user who created the verification record. Value of 0 indicates system-generated verification (all current records are system-generated)."
         tests:
           - not_null
+          - accepted_values:
+              values: [0]
+              config:
+                description: "All current verification records are system-generated (user_id = 0). Manual user creation may be added in the future."
 
       - name: foreign_key_id
         description: >
-          Foreign key that can reference different entities based on verify_type:
-          - When verify_type = 1, references inssub.inssub_id (95% match rate)
-          - When verify_type = 2, references another entity (62% match rate with inssub)
+          Foreign key that references different entities based on verify_type:
+          - When verify_type = 1: References inssub.inssub_id (insurance subscriber verification)
+          - When verify_type = 2: References other entity types (62% match rate with inssub)
           
-          **Data Quality Note**: The relationships_where test for Type 1 verifications is currently
-           warning with 283 records. Analysis shows these are all system-generated records 
-           (user_id = 0) with a consistent timestamp pattern (1-hour-1-minute gap between
-            _created_at and _updated_at). Some records have old creation dates (2020, 2022) but
-             recent verification dates (2023). This is expected behavior for system-generated records.
+          **Data Quality Note**: 283 Type 1 verification records don't match existing inssub records.
+          All are system-generated (user_id = 0) with consistent timestamp patterns.
         tests:
           - not_null
 
       - name: definition_id
-        description: Foreign key - References a definition record
+        description: "Foreign key to definition record that categorizes the verification type or status"
 
+      # Business Attributes  
       - name: verify_type
         description: >
-          Indicates the type of verification:
-          - 1: Insurance subscriber verification
-          - 2: Other type of verification
+          Indicates the type of verification being performed:
+          1 = Insurance subscriber verification (references inssub records)
+          2 = Other type of verification (different entity relationship)
         tests:
           - not_null
           - accepted_values:
               values: [1, 2]
 
-      - name: last_verified_date
-        description: Date when the insurance was last verified
-
-      - name: last_assigned_date
-        description: Date when the verification task was last assigned
-
-      - name: entry_timestamp
-        description: Timestamp when the verification record was created
-
-      - name: last_modified_at
-        description: Timestamp of the last modification to the record
-        tests:
-          - not_null
-
       - name: note
-        description: Additional notes about the verification
+        description: "Additional notes or comments about the verification process or findings"
 
       - name: hours_available_for_verification
-        description: Number of hours available for verification activity
+        description: "Number of hours allocated or available for completing the verification activity"
 
-      # Metadata columns
+      # Date Fields
+      - name: last_verified_date
+        description: "Date when the insurance coverage was last successfully verified"
+
+      - name: last_assigned_date
+        description: "Date when the verification task was last assigned to a user for completion"
+
+      - name: date_created
+        description: "Business date when the verification record was originally created, sourced from DateTimeEntry in OpenDental. Cleaned to remove default dates (0001-01-01, 1900-01-01)."
+
+      - name: date_updated
+        description: "Business date when the verification record was last updated, sourced from SecDateTEdit in OpenDental. Cleaned to remove default dates (0001-01-01, 1900-01-01)."
+
+      # Required metadata columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
         description: >
-          Timestamp when the record was created in the source system (OpenDental).
-          
-          **Data Quality Note**: The not_null test is currently warning with 1,094 records. 
-          Analysis shows these are all system-generated records (user_id = 0) with 
-          last_verified_date populated but null entry_timestamp. This is expected behavior
-          for system-generated records.
+          Timestamp when the record was created in the source system (OpenDental), sourced from DateTimeEntry 
+          with fallback to SecDateTEdit. May be null for system-generated records where DateTimeEntry is null 
+          but last_verified_date is populated.
         tests:
           - not_null:
               config:
                 severity: warn
                 description: >
                   This test verifies that every record has a creation timestamp.
-                  Note: System-generated records (user_id = 0) may have null entry_timestamp
+                  Note: System-generated records (user_id = 0) may have null DateTimeEntry
                   but populated last_verified_date. This is expected behavior.
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental), sourced from SecDateTEdit with fallback to DateTimeEntry"
         tests:
           - not_null
+
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental). Always null for this table as no user tracking is available in the source."
 
     tests:
       # Test that verify_type=1 records have valid inssub references
@@ -119,7 +154,19 @@ models:
             description: >
               This test verifies that Type 1 verification records have valid subscriber references.
               Note: System-generated records may not have immediate subscriber references.
-              This is expected behavior.
+              This is expected behavior for automated verification workflows.
+
+      # Test relationship to verification history
+      - relationships:
+          column_name: insurance_verify_id
+          to: ref('stg_opendental__insverifyhist')
+          field: insurance_verify_id
+          config:
+            severity: warn
+            description: >
+              This test verifies that every verification record has at least one corresponding history record.
+              Note: System-generated records (user_id = 0) may not have history records immediately upon creation.
+              See known_issues section for detailed analysis of orphaned verification records.
 
     config:
       tags: ['staging', 'insurance', 'daily']
