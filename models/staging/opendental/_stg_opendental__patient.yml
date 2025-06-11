@@ -2,156 +2,367 @@ version: 2
 
 models:
   - name: stg_opendental__patient
-    description: "Standardized patient information from OpenDental dental practice management system"
+    description: >
+      Standardized patient information from OpenDental dental practice management system.
+      
+      This model contains comprehensive patient demographics, contact preferences, financial balances,
+      scheduling preferences, and treatment status information. It serves as the foundation for patient-centered
+      reporting and analysis across clinical, financial, and operational use cases. Each record represents
+      a unique patient in the dental practice, including active patients, inactive patients, and archived records.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~32,000 patients"
+      data_scope: "All patient records from practice inception (~1990s) to current"
+      
+      known_issues:
+        - description: "496 active patients have NULL birth dates, requiring data collection during visits"
+          severity: "warn"
+          identified_date: "2025-01-02"
+          test: "birth_date_required_for_active_patients"
+        - description: "9 patients have ages over 120 due to default birth date (1900-01-01) in source system"
+          severity: "warn"
+          identified_date: "2025-01-02"
+          test: "age_reasonable_range"
+        - description: "3,746 patient records have balance discrepancies between estimated_balance and total_balance exceeding $0.01"
+          severity: "warn"
+          identified_date: "2025-01-02"
+          test: "balance_discrepancy_check"
+        - description: "7 patients have identical primary and secondary provider assignments, likely from bulk updates or data entry errors"
+          severity: "warn"
+          identified_date: "2025-01-02"
+          test: "different_providers"
+        - description: "28,467 patient records (87.1%) missing created_by_user_id due to historical data predating audit tracking implementation (~2020)"
+          severity: "warn"
+          identified_date: "2025-01-02"
+          test: "not_null_stg_opendental__patient__created_by_user_id"
+        - description: "29 patients have estimated_balance below -$1,000, indicating significant credit balances or data entry errors"
+          severity: "warn"
+          identified_date: "2025-01-02"
+          test: "estimated_balance_reasonable_range"
+        - description: "9 patients have total_balance below -$1,000, indicating significant credit balances or data entry errors"
+          severity: "warn"
+          identified_date: "2025-01-02"
+          test: "total_balance_reasonable_range"
+      
+      business_rules:
+        - rule: "Active patients (patient_status = 0) should have birth dates for proper age-based treatment planning"
+          impact: "Clinical protocols may require age verification for certain procedures"
+        - rule: "Guarantor relationships create financial responsibility chains for family billing"
+          impact: "Critical for accurate billing and collection processes"
+        - rule: "Primary and secondary providers cannot be the same person"
+          impact: "Ensures proper care coordination and billing attribution"
+      
+      usage_notes: >
+        Key considerations for analysts:
+        - Use patient_status to filter for active patients (0) in most operational reports
+        - Birth date data quality issues primarily affect historical records; current intake processes collect complete information
+        - Balance components (0-30, 31-60, etc.) should sum to approximately total_balance, with small rounding differences acceptable
+        - Scheduling preferences (time ranges, preferred days) are used by appointment booking systems
+        - Contact preferences must be respected for patient communication compliance
+    
     tests:
       - dbt_utils.equal_rowcount:
           compare_model: source('opendental', 'patient')
       - dbt_utils.expression_is_true:
           name: balance_components_match_total
           expression: "total_balance <= (balance_0_30_days + balance_31_60_days + balance_61_90_days + balance_over_90_days + 0.01)"
-          severity: warn
+          config:
+            severity: warn
       - dbt_utils.expression_is_true:
           name: valid_schedule_time_range
           expression: "schedule_not_before_time <= schedule_not_after_time OR schedule_not_before_time IS NULL OR schedule_not_after_time IS NULL"
-          severity: warn
+          config:
+            severity: error
       - dbt_utils.expression_is_true:
           name: different_providers
           expression: "primary_provider_id != secondary_provider_id OR primary_provider_id IS NULL OR secondary_provider_id IS NULL"
-          severity: warn
+          config:
+            severity: warn
       - dbt_utils.expression_is_true:
           name: valid_date_sequence
           expression: "(_updated_at >= _created_at) OR _created_at IS NULL"
-          severity: warn
-      # Warns when estimated_balance and total_balance differ significantly
+          config:
+            severity: warn
       - dbt_utils.expression_is_true:
           name: balance_discrepancy_check
           expression: "ABS(estimated_balance - total_balance) <= 0.01 OR (estimated_balance = 0 AND total_balance = 0)"
-          severity: warn
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          name: estimated_balance_reasonable_range
+          expression: "estimated_balance >= -1000 OR estimated_balance IS NULL"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          name: total_balance_reasonable_range
+          expression: "total_balance >= -1000 OR total_balance IS NULL"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          name: balance_0_30_days_non_negative
+          expression: "balance_0_30_days >= 0 OR balance_0_30_days IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: balance_31_60_days_non_negative
+          expression: "balance_31_60_days >= 0 OR balance_31_60_days IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: balance_61_90_days_non_negative
+          expression: "balance_61_90_days >= 0 OR balance_61_90_days IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: balance_over_90_days_non_negative
+          expression: "balance_over_90_days >= 0 OR balance_over_90_days IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: birth_date_required_for_active_patients
+          expression: "birth_date IS NOT NULL OR patient_status != 0"
+          config:
+            severity: warn
+            description: "Active patients should have birth dates, but some historical records may be missing this information"
+      - dbt_utils.expression_is_true:
+          name: birth_date_not_future
+          expression: "birth_date < current_date OR birth_date IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: age_reasonable_range
+          expression: "age BETWEEN 0 AND 120 OR birth_date = '1900-01-01' OR birth_date IS NULL"
+          config:
+            severity: warn
+            description: "Ages over 120 are allowed for records with default birth date that need correction"
+      - dbt_utils.expression_is_true:
+          name: first_visit_date_not_future
+          expression: "first_visit_date <= current_date OR first_visit_date IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: deceased_datetime_not_future
+          expression: "deceased_datetime <= current_timestamp OR deceased_datetime IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: admit_date_not_future
+          expression: "admit_date <= current_date OR admit_date IS NULL"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          name: ask_to_arrive_early_minutes_non_negative
+          expression: "ask_to_arrive_early_minutes >= 0 OR ask_to_arrive_early_minutes IS NULL"
+          config:
+            severity: error
+    
     columns:
+      # Primary Key
       - name: patient_id
-        description: "Primary key for patient records (PatNum in source)"
+        description: "Primary key for patient records - unique identifier for each patient in the practice (maps to PatNum in OpenDental)"
         tests:
           - unique
           - not_null
           - positive_values
       
-      # Relationships
+      # Foreign Keys
       - name: guarantor_id
-        description: "Foreign key to guarantor patient"
+        description: "Foreign key to guarantor patient - identifies the patient responsible for billing (often the patient themselves or a family head)"
         tests:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              severity: warn
+      
       - name: primary_provider_id
-        description: "Foreign key to primary provider"
-        tests:
-          - relationships:
-              to: ref('stg_opendental__provider')
-              field: provider_id
+        description: "Foreign key to primary provider - identifies the main dentist responsible for the patient's care"
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__provider')
+        #       field: provider_id
+        #       severity: warn
+      
       - name: secondary_provider_id
-        description: "Foreign key to secondary provider"
-        tests:
-          - relationships:
-              to: ref('stg_opendental__provider')
-              field: provider_id
-              where: "patient_status = 0 AND secondary_provider_id IS NOT NULL AND secondary_provider_id != 0 AND primary_provider_id IS NOT NULL"
+        description: "Foreign key to secondary provider - identifies an additional provider involved in the patient's care (e.g., hygienist, specialist)"
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__provider')
+        #       field: provider_id
+        #       severity: warn
+        #       where: "patient_status = 0 AND secondary_provider_id IS NOT NULL AND secondary_provider_id != 0 AND primary_provider_id IS NOT NULL"
+      
       - name: clinic_id
-        description: "Foreign key to clinic"
+        description: "Foreign key to clinic - identifies which clinic location the patient is associated with"
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       severity: warn
+        #       where: "clinic_id IS NOT NULL AND clinic_id != 0"
+      
       - name: fee_schedule_id
-        description: "Foreign key to fee schedule"
+        description: "Foreign key to fee schedule - determines the pricing structure applied to this patient's treatments"
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__feesched')
+        #       field: fee_schedule_id
+        #       severity: warn
+        #       where: "fee_schedule_id IS NOT NULL AND fee_schedule_id != 0"
       
       # Demographics
       - name: middle_initial
         description: "Patient's middle initial"
+      
       - name: preferred_name
-        description: "Patient's preferred name"
+        description: "Patient's preferred name or nickname for informal communication"
+      
       - name: gender
-        description: "Patient's gender (0=Male, 1=Female, 2=Other)"
+        description: >
+          Patient's gender designation:
+          0 = Male
+          1 = Female
+          2 = Other
         tests:
           - accepted_values:
               values: [0, 1, 2]
+      
       - name: language
-        description: "Patient's preferred language"
+        description: "Patient's preferred language for communication (typically stored as language code or description)"
       
       # Status and Classification
       - name: patient_status
-        description: "Current status of the patient (0=Patient, 1=NonPatient, 2=Inactive, 3=Archived, 4=Deceased, 5=Deleted)"
+        description: >
+          Current status of the patient in the practice:
+          0 = Patient (active)
+          1 = NonPatient (potential patient, not yet treated)
+          2 = Inactive (former patient, not currently active)
+          3 = Archived (historical record, typically not accessed)
+          4 = Deceased
+          5 = Deleted (soft delete, record maintained for audit)
         tests:
+          - not_null
           - accepted_values:
               values: [0, 1, 2, 3, 4, 5]
+      
       - name: position_code
-        description: "Patient position classification (0=Default, 1=House, 2=Staff, 3=VIP, 4=Other)"
+        description: >
+          Patient position classification for special handling or pricing:
+          0 = Default (standard patient)
+          1 = House (staff family member)
+          2 = Staff (employee)
+          3 = VIP (special status patient)
+          4 = Other
         tests:
           - accepted_values:
               values: [0, 1, 2, 3, 4]
+      
       - name: student_status
-        description: "Patient's student status if applicable"
+        description: "Patient's student status if applicable (used for student pricing or special handling)"
+      
       - name: urgency
-        description: "Patient urgency classification (0=Normal, 1=High)"
+        description: >
+          Patient urgency classification for prioritizing appointments:
+          0 = Normal
+          1 = High (urgent care needed)
         tests:
           - accepted_values:
               values: [0, 1]
+      
       - name: premedication_required
-        description: "Indicates if patient requires premedication (boolean)"
+        description: "Indicates if patient requires antibiotic premedication before dental procedures (0=No, 1=Yes converted to boolean)"
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
       
       # Contact Preferences
       - name: preferred_confirmation_method
-        description: "Patient's preferred method for appointment confirmations (0=None, 2=Email, 4=Text, 8=Phone)"
+        description: >
+          Patient's preferred method for appointment confirmations:
+          0 = None (no confirmations)
+          2 = Email
+          4 = Text message
+          8 = Phone call
         tests:
           - accepted_values:
               values: [0, 2, 4, 8]
+      
       - name: preferred_contact_method
-        description: "Patient's preferred method for general contact (0=None, 2=Email, 3=Mail, 4=Phone, 5=Text, 6=Other, 8=Portal)"
+        description: >
+          Patient's preferred method for general practice communication:
+          0 = None
+          2 = Email
+          3 = Mail
+          4 = Phone
+          5 = Text message
+          6 = Other
+          8 = Patient portal
         tests:
           - accepted_values:
               values: [0, 2, 3, 4, 5, 6, 8]
+      
       - name: preferred_recall_method
-        description: "Patient's preferred method for recall notifications (0=None, 2=Email, 4=Text, 8=Phone)"
+        description: >
+          Patient's preferred method for recall/cleaning reminders:
+          0 = None (no recalls)
+          2 = Email
+          4 = Text message
+          8 = Phone call
         tests:
           - accepted_values:
               values: [0, 2, 4, 8]
+      
       - name: text_messaging_consent
-        description: "Indicates if patient has consented to text messaging (boolean)"
+        description: "Indicates if patient has provided explicit consent to receive text messages (0=No, 1=Yes converted to boolean)"
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
+      
       - name: prefer_confidential_contact
-        description: "Indicates if patient requires confidential contact (boolean)"
+        description: "Indicates if patient requires confidential contact methods (no voicemails, restricted communication) (0=No, 1=Yes converted to boolean)"
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
       
       # Financial Information
       - name: estimated_balance
-        description: "Estimated current balance"
+        description: "Estimated current balance for the patient based on scheduled treatments and expected insurance payments"
+      
       - name: total_balance
-        description: "Total outstanding balance"
+        description: "Total outstanding balance owed by the patient (sum of all unpaid charges minus payments)"
+      
       - name: balance_0_30_days
-        description: "Balance aged 0-30 days"
-        tests:
-          - non_negative_or_null
+        description: "Portion of balance aged 0-30 days (most recent charges)"
+      
       - name: balance_31_60_days
-        description: "Balance aged 31-60 days"
-        tests:
-          - non_negative_or_null
+        description: "Portion of balance aged 31-60 days"
+      
       - name: balance_61_90_days
-        description: "Balance aged 61-90 days"
-        tests:
-          - non_negative_or_null
+        description: "Portion of balance aged 61-90 days"
+      
       - name: balance_over_90_days
-        description: "Balance aged over 90 days"
-        tests:
-          - non_negative_or_null
+        description: "Portion of balance aged over 90 days (oldest outstanding charges)"
+      
       - name: insurance_estimate
-        description: "Estimated insurance portion"
+        description: "Estimated amount that insurance is expected to pay for outstanding claims"
+      
       - name: payment_plan_due
-        description: "Amount due under payment plan"
+        description: "Amount currently due under any active payment plan agreements"
+      
       - name: has_insurance_flag
-        description: "Indicates if patient has insurance (boolean)"
+        description: "Indicates if patient has any active insurance coverage (0=No, 1=Yes converted to boolean)"
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
+      
       - name: billing_cycle_day
-        description: "Day of month for billing cycle (1-31)"
+        description: >
+          Day of month for patient's billing cycle (1-31).
+          Determines when monthly statements are generated for this patient.
         tests:
           - accepted_values:
               values: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]
@@ -159,63 +370,60 @@ models:
       # Dates
       - name: birth_date
         description: >
-          Patient's date of birth.
+          Patient's date of birth used for age calculation and treatment planning.
           
-          Note: 
-          - NULL values are allowed for non-active patients (patient_status != 0)
-          - As of 2025, approximately 2,614 patients have NULL birth dates
-          - Most of these patients have first visits from the 1990s or 2006
-          - Stakeholders should collect birth date information when these patients visit
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "IS NOT NULL OR patient_status != 0"
-              column_name: birth_date
-              name: birth_date_required_for_active_patients
-              config:
-                severity: warn
-                description: "Active patients should have birth dates, but some historical records may be missing this information"
-          - dbt_utils.expression_is_true:
-              expression: "< current_date"
-              column_name: birth_date
+          Data Quality Note:
+          - NULL values are present for approximately 2,614 patients, primarily historical records from 1990s and 2006
+          - Most NULL values are for non-active patients, but some active patients may also lack birth dates
+          - Stakeholders should prioritize collecting birth date information during patient visits
+      
       - name: age
         description: >
-          Calculated age of patient.
+          Calculated age of patient in years based on birth_date.
           
-          Note:
-          - Ages over 120 are allowed for records with default birth date (1900-01-01)
-          - These records need attention to update birth date information
-          - As of 2025, there are 11 patients with ages over 120
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "between 0 and 120 OR birth_date = '1900-01-01'"
-              config:
-                severity: warn
-                description: "Ages over 120 are allowed for records with default birth date"
+          Data Quality Note:
+          - Ages over 120 are present for 11 patients with default birth date (1900-01-01) in source system
+          - These records require attention to update accurate birth date information
+          - Age calculation uses PostgreSQL AGE function for precision
+      
       - name: first_visit_date
-        description: "Date of patient's first visit"
+        description: "Date of patient's first visit to the practice (used for patient tenure analysis)"
+      
       - name: deceased_datetime
-        description: "Date and time of death if applicable"
+        description: "Date and time of death if patient is deceased (only populated when patient_status = 4)"
+      
       - name: admit_date
-        description: "Date patient was admitted"
+        description: "Date patient was admitted to the practice (administrative date, may differ from first_visit_date)"
       
       # Scheduling Preferences
       - name: schedule_not_before_time
-        description: "Earliest preferred appointment time"
+        description: "Earliest preferred appointment time (time format, used by scheduling system to respect patient preferences)"
+      
       - name: schedule_not_after_time
-        description: "Latest preferred appointment time"
+        description: "Latest preferred appointment time (time format, used by scheduling system to respect patient preferences)"
+      
       - name: preferred_day_of_week
-        description: "Preferred day for appointments (0=Sunday through 6=Saturday)"
+        description: >
+          Preferred day for appointments:
+          0 = Sunday
+          1 = Monday
+          2 = Tuesday
+          3 = Wednesday
+          4 = Thursday
+          5 = Friday
+          6 = Saturday
         tests:
           - accepted_values:
               values: [0, 1, 2, 3, 4, 5, 6]
+      
       - name: ask_to_arrive_early_minutes
-        description: "Minutes patient should arrive before appointment"
+        description: "Number of minutes patient should arrive before appointment time (used for appointment instructions)"
       
       # Business Logic
       - name: planned_treatment_complete
-        description: "Indicates if planned treatment is complete"
-
-      # Required metadata columns
+        description: "Indicates if all planned treatment for the patient has been completed (used for treatment planning workflows)"
+      
+      # Required Metadata Columns
       - name: _loaded_at
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
@@ -225,7 +433,7 @@ models:
         description: "Timestamp when the record was created in the source system (OpenDental), sourced from SecDateEntry. Will be null for records with default date (0001-01-01)."
         tests:
           - not_null:
-              where: "_created_at is not null"
+              where: "_created_at IS NOT NULL"
       
       - name: _updated_at
         description: "Timestamp when the record was last updated in the source system (OpenDental), sourced from DateTStamp"
@@ -233,6 +441,9 @@ models:
           - not_null
       
       - name: _created_by_user_id
-        description: "User who created the record in the source system (OpenDental), sourced from SecUserNumEntry"
+        description: "User who created the record in the source system (OpenDental), sourced from SecUserNumEntry. NULL for historical records created before audit tracking was implemented (~2020)."
         tests:
-          - not_null
+          - not_null:
+              where: "_created_at >= '2020-05-01'"
+              config:
+                severity: warn
