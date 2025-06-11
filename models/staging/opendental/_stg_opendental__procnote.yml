@@ -3,60 +3,169 @@ version: 2
 models:
   - name: stg_opendental__procnote
     description: >
-      Staging model for procedure notes from the OpenDental system.
-      Contains notes and signatures related to dental procedures.
+      Standardized procedure notes from the OpenDental dental practice management system.
+      
+      This model contains clinical notes and digital signatures associated with dental procedures.
+      Each record represents a clinical note created by a dental professional during or after a procedure,
+      capturing important clinical observations, treatment details, and outcomes. These notes are essential
+      for clinical documentation, continuity of care, and regulatory compliance. The model includes both
+      text notes and digital signature data when electronic signature pads are used.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~15,000 procedure notes"
+      data_scope: "All procedure notes from January 1, 2023 to current (incremental updates)"
+      
+      known_issues:
+        - description: "5,474 procedure notes have user IDs that do not exist in the provider table, likely referencing historical users no longer in the system"
+          severity: "warn"
+          identified_date: "2025-01-14"
+          test: "relationships_stg_opendental__procnote_user_id__provider_id__ref_stg_opendental__provider_"
+        - description: "933 procedure notes have neither text content nor signature data, indicating incomplete clinical documentation"
+          severity: "warn"
+          identified_date: "2025-01-14"
+          test: "has_content_or_signature"
+        - description: "Some notes may contain PHI (Protected Health Information) requiring careful handling in reports"
+          severity: "warn"
+          identified_date: "2025-01-14"
+        - description: "Digital signature data is stored as text but interpretation requires specialized software"
+          severity: "warn"
+          identified_date: "2025-01-14"
+      
+      business_rules:
+        - rule: "Procedure notes are linked to specific procedures and patients for proper clinical documentation"
+          impact: "Critical for maintaining treatment history and continuity of care"
+        - rule: "Digital signatures when present provide legal authentication of clinical notes"
+          impact: "Important for regulatory compliance and legal documentation requirements"
+        - rule: "Entry timestamp reflects when note was documented, not when treatment occurred"
+          impact: "Affects timing analysis - use procedure completion dates for treatment timing"
+      
+      usage_notes: >
+        Key considerations for analysts:
+        - Use patient_id and procedure_id to link notes to specific treatments and patients
+        - Note content may contain PHI - ensure appropriate data handling and access controls
+        - is_topaz_signature indicates use of electronic signature pad for authentication
+        - entry_timestamp shows documentation timing, which may differ from treatment timing
+        - user_id may reference deactivated users for historical records
+        - Signature field contains binary data that requires specialized tools for interpretation
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          name: valid_timestamp_sequence
+          expression: "_updated_at >= _created_at"
+          config:
+            severity: warn
+            description: "Metadata timestamps should be chronologically consistent - updated_at should not be earlier than created_at"
+      - dbt_utils.expression_is_true:
+          name: entry_timestamp_not_future
+          expression: "entry_timestamp <= current_timestamp"
+          config:
+            severity: error
+            description: "Clinical notes cannot be documented in the future - entry_timestamp must be current or historical"
+      - dbt_utils.expression_is_true:
+          name: has_content_or_signature
+          expression: "(note IS NOT NULL AND trim(note) != '') OR signature IS NOT NULL"
+          config:
+            severity: warn
+            description: "Procedure notes should have either text content or signature data"
     
     columns:
+      # Primary Key
       - name: procnote_id
-        description: Unique identifier for each procedure note
+        description: "Primary key for procedure notes - unique identifier for each clinical note entry (maps to ProcNoteNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
       
+      # Foreign Keys
       - name: patient_id
-        description: Foreign key to the patient table
+        description: "Foreign key to patient - identifies the patient for whom this clinical note was created"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              severity: error
       
       - name: procedure_id
-        description: Foreign key to the procedure log table
+        description: "Foreign key to procedure log - identifies the specific dental procedure this note documents"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              severity: error
       
       - name: user_id
-        description: ID of the user who created the procedure note. May reference historical users no longer in the system.
+        description: "Foreign key to user - identifies the dental professional who created this clinical note. May reference historical users no longer active in the system."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "user_id IS NOT NULL"
       
+      # Clinical Data
       - name: entry_timestamp
-        description: Date and time when the note was entered
+        description: >
+          Date and time when this clinical note was entered into the system.
+          
+          Business Context:
+          - Represents documentation timing, not necessarily when treatment occurred
+          - Used for audit trails and clinical documentation compliance
+          - May be entered during treatment or shortly after completion
         tests:
           - not_null
       
       - name: note
-        description: The text content of the procedure note
+        description: >
+          Text content of the clinical note containing procedure details, observations, and outcomes.
+          
+          Data Quality Notes:
+          - May contain Protected Health Information (PHI) requiring appropriate handling
+          - Content varies from brief status updates to detailed clinical observations
+          - Empty or whitespace-only notes may indicate incomplete documentation
+          
+          Usage Considerations:
+          - Ensure appropriate access controls when analyzing note content
+          - Consider note length and content quality when using for clinical insights
+          - Text analysis should account for medical terminology and abbreviations
       
       - name: is_topaz_signature
-        description: Flag indicating if a Topaz signature pad was used (1 = yes, 0 = no)
+        description: "Indicates if a Topaz electronic signature pad was used to authenticate this note (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
       - name: signature
-        description: Digital signature data associated with the note
+        description: >
+          Digital signature data associated with this clinical note when electronic signature authentication is used.
+          
+          Technical Notes:
+          - Contains binary signature data in text format
+          - Requires specialized software for signature verification and display
+          - Presence indicates electronic authentication of the clinical note
+          - NULL when no electronic signature was captured
+          
+          Business Context:
+          - Provides legal authentication for clinical documentation
+          - Important for regulatory compliance and audit requirements
+          - Enhances clinical note integrity and non-repudiation
       
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
       
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
+        description: "Timestamp when the record was created in the source system (OpenDental), sourced from EntryDateTime. Represents when the clinical note was first documented."
         tests:
           - not_null
       
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental), sourced from EntryDateTime. For procedure notes, this typically matches _created_at as notes are rarely modified after creation."
         tests:
           - not_null
