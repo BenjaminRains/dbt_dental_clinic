@@ -6,19 +6,82 @@ models:
       Standardized staging model for procedure codes from the OpenDental system.
       This table contains dental procedure codes, descriptions, and related attributes
       for dental services and treatments. Only includes records from 2023-01-01 onwards.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~1,900 procedure codes"
+      data_scope: "All procedure codes from 2023-01-01 onwards"
       
-      Key business context:
-      - Most procedure codes follow CDT (Code on Dental Procedures) format with D-prefixes.
-      - The system also contains numeric procedure codes (e.g., "01354", "02920") without D-prefixes.
-      - Numeric codes represent valid dental procedures but don't follow the CDT standard format.
-      - The code_prefix field extracts only D-prefixes and will be NULL for numeric procedure codes.
-      - The system also contains special custom codes for product tracking and specific services:
-        - Single letter codes (e.g., "D") - Used as simplified procedure identifiers
-        - Short word codes (e.g., "Watch", "Clo") - Custom tracking or product codes
-        - Product names with spaces (e.g., "Smart 1500", "iO Brush") - Retail products for patients
-        - Custom product codes (e.g., "3Dtemp", "Roottip") - Specialized services or products
-      - Primary categorization is through procedure_category_id field.
-      - Procedure category breakdown:
+      known_issues:
+        - description: "Fee variations across different schedules are expected and normal business practice"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "fee_variation_monitoring"
+          details: >
+            Common variations include:
+            - Implant procedures (D6010): $818-$4,000 range
+            - Crown procedures (D2740): $126-$818 range  
+            - Periodontal evaluations (D0180): $56-$116 range
+        - description: "Some fee schedules are intentionally underutilized for specific procedures only"
+          severity: "warn" 
+          identified_date: "2024-01-15"
+          test: "underutilized_fee_schedule_monitoring"
+          details: >
+            Intentionally small schedules:
+            - Schedule 8277: Used for specific fluoride treatments
+            - Schedule 8285: Used for periodic evaluations
+            - Schedule 8290: Used for comprehensive evaluations
+            These variations are monitored but not considered errors.
+        - description: "Historical providers may be referenced in default_provider_id that no longer exist in provider table"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "default_provider_id relationships test"
+        - description: "Procedure codes contain trailing spaces and mixed case characters"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "validate_procedure_code_format"
+          details: >
+            Data quality issues found:
+            - Trailing spaces: 'Smart 1500 ' (11 characters vs expected 10)
+            - Mixed case: Product names like 'Smart 1500', 'iO Brush' contain lowercase letters
+            - Special characters: Emergency codes like '*EMG+' contain plus signs
+            These variations are handled by format validation but may affect string matching.
+        - description: "Non-standard D-code formats exist beyond traditional CDT patterns"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "validate_procedure_code_format"
+          details: >
+            Non-standard D-code patterns found:
+            - Letter suffixes without periods: D9230b, D9972Z  
+            - Letter suffixes with periods: D8670.auto
+            - Single character codes: 'D'
+            These are legitimate practice codes but don't follow standard CDT format.
+        - description: "D6 and D0 flag validation shows expected business rule exceptions"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "validate_procedure_code_flag"
+          details: >
+            Flag validation warnings are expected due to business logic:
+            - D6 codes: 113 records without prosthetic flags (surgical implant procedures vs prosthetic procedures)
+            - D0 codes: 82 records without radiology flags (evaluations/screenings vs radiological procedures)
+            These warnings help monitor business rules but are not data errors.
+      
+      business_rules:
+        - rule: "D6 prefixed codes should have prosthodontic flags set (with exceptions for surgical implant procedures)"
+          impact: "Affects procedure categorization and billing workflows - warnings expected for surgical vs prosthetic procedures"
+        - rule: "D0 prefixed codes should have radiology flags set (with exceptions for evaluations and screenings)"
+          impact: "Affects diagnostic procedure classification - warnings expected for non-radiological D0 procedures"  
+        - rule: "D0-D9 prefixes indicate procedure groups (diagnostic, preventive, etc.)"
+          impact: "Used for clinical procedure categorization and workflow routing"
+        - rule: "Numeric procedure codes (category 622) don't follow CDT format but are valid dental procedures"
+          impact: "Requires special handling in code prefix analysis"
+        - rule: "Flags like is_hygiene and is_radiology indicate special handling requirements"
+          impact: "Determines workflow routing and provider assignment rules"
+        - rule: "Primary categorization is through procedure_category_id field"
+          impact: "This should be used for grouping rather than code prefixes alone"
+      
+      procedure_category_breakdown: >
+        Detailed breakdown by procedure_category_id:
         - 622: Standard dental procedures (most common, 677 codes, all numeric format)
         - 82: Oral surgery and maxillofacial procedures (145 codes, all D-prefixed)
         - 250: Administrative, supply codes, patient items (126 codes, mix of formats)
@@ -39,53 +102,88 @@ models:
         - 301: Anesthesia services (4 codes, all D-prefixed)
         - 540: Root procedures (1 code, custom "Roottip" format)
         - 548: COVID and pathogen testing (1 code, D-prefixed)
-      - D0-D9 prefixes indicate procedure groups (diagnostic, preventive, etc.)
-      - Flags like is_hygiene_flag and is_radiology_flag indicate special handling requirements.
       
-      Fee Schedule Context:
-      - Fee variations across different schedules are expected and normal
-      - Common variations include:
-        - Implant procedures (D6010): $818-$4,000 range
-        - Crown procedures (D2740): $126-$818 range
-        - Periodontal evaluations (D0180): $56-$116 range
-      - Some fee schedules are intentionally underutilized:
-        - Schedule 8277: Used for specific fluoride treatments
-        - Schedule 8285: Used for periodic evaluations
-        - Schedule 8290: Used for comprehensive evaluations
-      - These variations are monitored but not considered errors
-      
-      Tests:
-      - Custom test "validate_procedure_code_flag" checks that D6 codes have prosthodontic flags
-      - Custom test "validate_procedure_code_prefixes" validates proper code prefixes
-      - Custom test "warn_new_procedure_codes" alerts when new procedure codes are added to the system
-      - Fee variation tests are set to 'warn' severity as variations are expected
-      - Underutilized fee schedule tests are set to 'warn' severity as some schedules are intentionally small
+      usage_notes: >
+        Key usage considerations and code format details:
+        
+        Code Format Types:
+        - Most procedure codes follow CDT (Code on Dental Procedures) format with D-prefixes
+        - Numeric procedure codes (e.g., "01354", "02920") represent valid dental procedures but don't follow CDT standard format
+        - The code_prefix field extracts only D-prefixes and will be NULL for numeric procedure codes
+        
+        Special Custom Codes for Product Tracking and Services:
+        - Single letter codes (e.g., "D") - Used as simplified procedure identifiers
+        - Short word codes (e.g., "Watch", "Clo") - Custom tracking or product codes  
+        - Product names with spaces (e.g., "Smart 1500", "iO Brush") - Retail products for patients
+        - Custom product codes (e.g., "3Dtemp", "Roottip") - Specialized services or products
+        
+        Analysis Guidelines:
+        - The code_prefix field is NULL for numeric codes and should be handled appropriately in analysis
+        - Primary categorization should use procedure_category_id rather than code prefixes alone
+        - Fee variations across schedules are expected and normal business practice
+        - D0-D9 prefixes indicate procedure groups when present (diagnostic, preventive, etc.)
+    
     config:
       materialized: incremental
       unique_key: procedure_code_id
+    
     tests:
       - validate_procedure_code_flag:
           column_name: procedure_code
           prefix: 'D6'
-          flag_column: is_prosthetic_flag
-          expected_value: 1
+          flag_column: is_prosthetic
+          expected_value: true
           severity: warn
       
       - validate_procedure_code_flag:
           column_name: procedure_code
           prefix: 'D0'
-          flag_column: is_radiology_flag
-          expected_value: 1
+          flag_column: is_radiology
+          expected_value: true
           severity: warn
+    
     columns:
       - name: procedure_code_id
-        description: Primary key - unique identifier for each procedure code record
+        description: "Primary key - unique identifier for each procedure code record (maps to CodeNum in OpenDental)"
         tests:
           - unique
           - not_null
 
+      - name: procedure_category_id
+        description: "Foreign key to the procedure category - determines the clinical classification of the procedure"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              severity: warn
+          - accepted_values:
+              values: [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 85, 250, 251, 260, 300, 301, 540, 548, 622]
+              quote: false
+              severity: warn
+
+      - name: graphic_type_id
+        description: "Foreign key to graphic type - determines visual representation in dental software (maps to GTypeNum in OpenDental)"
+
+      - name: default_provider_id
+        description: >
+          Foreign key to default provider for this procedure. This field may contain references to
+          providers that no longer exist in the system (historical providers) or special system
+          provider IDs (e.g., provider_id = 0 for system-generated procedures). The relationship
+          test is set to 'warn' severity to monitor these expected mismatches without failing
+          the build. Common reasons for mismatches:
+          - Historical providers who have left the practice
+          - System-generated procedures (provider_id = 0)
+          - Procedures that were created before provider records were properly linked
+          - Legacy data from before provider tracking was implemented
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+
       - name: procedure_code
-        description: Standard dental procedure code (e.g. CDT code)
+        description: "Standard dental procedure code (e.g. CDT code like D0120, or numeric codes like 01354)"
         tests:
           - not_null
           - unique
@@ -107,167 +205,151 @@ models:
           Used for procedure categorization in CDT-standard codes only.
       
       - name: description
-        description: Full description of the dental procedure
+        description: "Full description of the dental procedure (maps to Descript in OpenDental)"
       
       - name: abbreviated_description
-        description: Shortened description of the dental procedure
+        description: "Shortened description of the dental procedure (maps to AbbrDesc in OpenDental)"
       
       - name: procedure_time
-        description: Expected time required to complete the procedure
+        description: "Expected time required to complete the procedure (maps to ProcTime in OpenDental)"
       
-      - name: procedure_category_id
-        description: Foreign key to the procedure category
+      - name: default_note
+        description: "Standard note associated with this procedure (maps to DefaultNote in OpenDental)"
+      
+      - name: layman_term
+        description: "Non-technical term for the procedure for patient communication (maps to LaymanTerm in OpenDental)"
+      
+      - name: default_claim_note
+        description: "Default note to appear on insurance claims (maps to DefaultClaimNote in OpenDental)"
+      
+      - name: default_treatment_plan_note
+        description: "Default note for treatment plans (maps to DefaultTPNote in OpenDental)"
+      
+      - name: treatment_area
+        description: "Area of the mouth where treatment is applied (maps to TreatArea in OpenDental)"
+      
+      - name: paint_type
+        description: "Visual indicator type used in dental software (maps to PaintType in OpenDental)"
+      
+      - name: graphic_color
+        description: "Color code used for visual representation (maps to GraphicColor in OpenDental)"
+      
+      - name: paint_text
+        description: "Text to display in dental software UI (maps to PaintText in OpenDental)"
+      
+      - name: alternate_code1
+        description: "Alternative procedure code (maps to AlternateCode1 in OpenDental)"
+      
+      - name: medical_code
+        description: "Associated medical code for this procedure (maps to MedicalCode in OpenDental)"
+      
+      - name: substitution_code
+        description: "Alternative code that can be substituted (maps to SubstitutionCode in OpenDental)"
+      
+      - name: substitution_only_if
+        description: "Condition code for substitution (maps to SubstOnlyIf in OpenDental)"
+      
+      - name: drug_ndc
+        description: "National Drug Code if applicable (maps to DrugNDC in OpenDental)"
+      
+      - name: default_revenue_code
+        description: "Default revenue code for billing (maps to RevenueCodeDefault in OpenDental)"
+      
+      - name: tax_code
+        description: "Tax code associated with this procedure (maps to TaxCode in OpenDental)"
+      
+      - name: diagnostic_codes
+        description: "Associated diagnostic codes (maps to DiagnosticCodes in OpenDental)"
+      
+      - name: no_bill_insurance
+        description: "Flag indicating if this procedure should not be billed to insurance (0=Bill Insurance, 1=Do Not Bill Insurance, converted to boolean)"
         tests:
           - not_null
           - accepted_values:
-              values: [73, 74, 75, 77, 78, 79, 80, 81, 82, 83, 85, 250, 251, 260, 300, 622]
-              quote: false
-              severity: warn
+              values: [true, false]
       
-      - name: treatment_area
-        description: Area of the mouth where treatment is applied
-      
-      - name: no_bill_insurance_flag
-        description: Flag indicating if this procedure should not be billed to insurance
-      
-      - name: is_prosthetic_flag
-        description: Flag indicating if this procedure involves prosthetics
+      - name: is_prosthetic
+        description: "Flag indicating if this procedure involves prosthetics (0=No, 1=Yes, converted to boolean)"
         tests:
+          - not_null
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
       
-      - name: default_note
-        description: Standard note associated with this procedure
-      
-      - name: is_hygiene_flag
-        description: Flag indicating if this is a hygiene-related procedure
+      - name: is_hygiene
+        description: "Flag indicating if this is a hygiene-related procedure (0=No, 1=Yes, converted to boolean)"
         tests:
+          - not_null
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
       
-      - name: graphic_type_id
-        description: The type of graphic associated with the procedure
+      - name: is_taxed
+        description: "Flag indicating if this procedure is taxable (0=No, 1=Yes, converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
-      - name: alternate_code1
-        description: Alternative procedure code
+      - name: is_canadian_lab
+        description: "Flag for Canadian lab work (0=No, 1=Yes, converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
-      - name: medical_code
-        description: Associated medical code for this procedure
+      - name: is_multi_visit
+        description: "Flag indicating if procedure typically requires multiple visits (0=No, 1=Yes, converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
-      - name: is_taxed_flag
-        description: Flag indicating if this procedure is taxable
+      - name: is_radiology
+        description: "Flag indicating if this is a radiology procedure (0=No, 1=Yes, converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
-      - name: paint_type
-        description: Visual indicator type used in dental software
+      - name: bypass_global_lock
+        description: "Flag indicating if procedure can bypass global locks (0=No, 1=Yes, converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
-      - name: graphic_color
-        description: Color code used for visual representation
-      
-      - name: layman_term
-        description: Non-technical term for the procedure for patient communication
-      
-      - name: is_canadian_lab_flag
-        description: Flag for Canadian lab work
-      
-      - name: pre_existing_flag
-        description: Flag indicating if condition was pre-existing
+      - name: area_also_tooth_range
+        description: "Flag indicating if procedure area includes tooth range (0=No, 1=Yes, converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
       
       - name: base_units
-        description: Standard time/billing units for the procedure
-      
-      - name: substitution_code
-        description: Alternative code that can be substituted
-      
-      - name: substitution_only_if
-        description: Condition code for substitution
-      
-      - name: date_timestamp
-        description: Date and time the record was created or last updated
-      
-      - name: is_multi_visit_flag
-        description: Flag indicating if procedure typically requires multiple visits
-        tests:
-          - accepted_values:
-              values: [0, 1]
-      
-      - name: drug_ndc
-        description: National Drug Code if applicable
-      
-      - name: default_revenue_code
-        description: Default revenue code for billing
-      
-      - name: default_provider_id
-        description: >
-          ID of the default provider for this procedure. This field may contain references to
-          providers that no longer exist in the system (historical providers) or special system
-          provider IDs (e.g., provider_id = 0 for system-generated procedures). The relationship
-          test is set to 'warn' severity to monitor these expected mismatches without failing
-          the build. Common reasons for mismatches:
-          - Historical providers who have left the practice
-          - System-generated procedures (provider_id = 0)
-          - Procedures that were created before provider records were properly linked
-          - Legacy data from before provider tracking was implemented
-        tests:
-          - relationships:
-              to: ref('stg_opendental__provider')
-              field: provider_id
-              severity: warn
-              config:
-                description: >
-                  This test warns when default_provider_id references providers that don't exist
-                  in the provider table. This is expected for historical data and system-generated
-                  procedures. The warning helps track data quality without failing the build.
+        description: "Standard time/billing units for the procedure (maps to BaseUnits in OpenDental)"
       
       - name: canada_time_units
-        description: Time units specific to Canadian dental coding
+        description: "Time units specific to Canadian dental coding (maps to CanadaTimeUnits in OpenDental)"
       
-      - name: is_radiology_flag
-        description: Flag indicating if this is a radiology procedure
+      - name: pre_existing_flag
+        description: "Flag indicating if condition was pre-existing (maps to PreExisting in OpenDental)"
         tests:
           - accepted_values:
-              values: [0, 1]
-      
+              values: [true, false]
+
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system (using DateTStamp)
+        description: "Timestamp when the record was created in the source system (OpenDental). Uses DateTStamp as creation timestamp since created_by_column is set to none. May be null for records with invalid timestamps."
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (using DateTStamp)
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp column."
         tests:
           - not_null
-
-      - name: default_claim_note
-        description: Default note to appear on insurance claims
-      
-      - name: default_treatment_plan_note
-        description: Default note for treatment plans
-      
-      - name: bypass_global_lock_flag
-        description: Flag indicating if procedure can bypass global locks
-      
-      - name: tax_code
-        description: Tax code associated with this procedure
-      
-      - name: paint_text
-        description: Text to display in dental software UI
-      
-      - name: area_also_tooth_range_flag
-        description: Flag indicating if procedure area includes tooth range
-      
-      - name: diagnostic_codes
-        description: Associated diagnostic codes
-      
-      - name: _invocation_id
-        description: Metadata - dbt invocation ID for lineage tracking
-      
-      - name: _extract_timestamp
-        description: Metadata - timestamp when this record was extracted
 
     config:
       tags: ['staging', 'opendental', 'procedure']
