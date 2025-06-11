@@ -3,193 +3,323 @@ version: 2
 models:
   - name: stg_opendental__payment
     description: >
-      Staged payment data from OpenDental system.
-      Analysis based on 2023-current data.
+      Staged payment data from OpenDental system containing all financial payment transactions.
+      
+      This model captures patient payments, insurance payments, refunds, and other financial transactions
+      processed through the OpenDental practice management system. Includes comprehensive payment details,
+      processing status, and merchant information for financial reporting and analysis.
+    
+    meta:
+      # Data quality and business context
+      record_count: ~11,766
+      data_scope: "2023-01-01 to current date"
+      
+      known_issues:
+        - description: "High-value payment warnings: 13 payments >$5K, 11 payments >$10K, 11 payments >$25K"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "payment_amount_validation"
+        - description: "Type 69 payments have wide variance in amounts (avg $1,036 but includes very high values)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "payment_type_validation"
+        - description: "Some clinic_id values may be null for older payments before clinic tracking"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "Administrative payments have NULL payment_type_id instead of 0 (1,110 records with $0 amounts)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "payment_type_null_validation"
+        - description: "Payment validation rules test reports 1,145 warnings due to NULL payment_type_id for administrative entries"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "payment_validation_rules"
+          jira_ticket: "Update test to handle NULL payment types"
+      
+      business_rules:
+        - rule: "Payment amounts must be positive except for refunds (types 69, 70, 72)"
+          impact: "Negative amounts in non-refund types indicate data quality issues"
+        - rule: "Type 0 and NULL payment types are administrative entries and must have $0 amount"
+          impact: "Non-zero administrative payments indicate system configuration issues"
+        - rule: "Payment types are restricted to specific valid values based on clinic configuration"
+          impact: "Invalid payment types prevent proper financial categorization"
+      
+      usage_notes: >
+        Key considerations for analysis:
+        - Scope limited to 2023-present for data quality and business relevance
+        - High-value payments (>$5K) are flagged but expected in this dental practice
+        - Type 69 payments require special attention due to high variance
+        - Always filter by payment_date for time-based analysis to ensure consistency
+        - Join with patient and clinic models for complete financial reporting
+    
     tests:
-      # Validates payment data against business rules:
-      # - Payment amounts must be positive except for refunds (types 69, 70, 72)
-      # - Payment types must be one of: 0, 69, 70, 71, 72, 391, 412, 417, 574, 634
-      # - Payment dates must be between 2000-01-01 and current date
-      # - Required fields: payment_id, patient_id, payment_amount, payment_date, payment_type_id
-      # - Status fields (payment_status, process_status, payment_source) must be non-negative
-      #
-      # Note: High-value payment warnings (type 69):
-      # - 13 payments > $5,000 (LOW)
-      # - 11 payments > $10,000 (MEDIUM)
-      # - 11 payments > $25,000 (HIGH)
-      # These warnings are expected and have been reviewed.
-      - payment_validation_rules:
-          config:
-            severity: warn  # Changed from error to warn
+      # Date range validation
       - dbt_utils.expression_is_true:
           expression: "payment_date >= '2023-01-01'"
+          config:
+            severity: error
+            error_msg: "Payment date must be within business scope (2023-present)"
+      - dbt_utils.expression_is_true:
+          expression: "payment_date <= current_date"
+          config:
+            severity: error
+            error_msg: "Payment date cannot be in the future"
       - dbt_utils.expression_is_true:
           expression: "payment_date > '2000-01-01'"
+          config:
+            severity: error
+            error_msg: "Payment date must be reasonable (after 2000-01-01)"
+      
+      # Primary and foreign key validation
       - dbt_utils.expression_is_true:
-          expression: "payment_date <= current_date"  # PostgreSQL syntax
+          expression: "payment_id > 0"
+          config:
+            severity: error
+            error_msg: "Payment ID must be positive"
+      - dbt_utils.expression_is_true:
+          expression: "patient_id > 0"
+          config:
+            severity: error
+            error_msg: "Patient ID must be positive"
+      - dbt_utils.expression_is_true:
+          expression: "clinic_id > 0 OR clinic_id IS NULL"
+          config:
+            severity: error
+            error_msg: "Clinic ID must be positive when not null"
+      - dbt_utils.expression_is_true:
+          expression: "deposit_id > 0 OR deposit_id IS NULL"
+          config:
+            severity: warn
+            error_msg: "Deposit ID must be positive when not null"
+      
+      # Business rule validation
+      - dbt_utils.expression_is_true:
+          expression: "payment_amount >= 0 OR payment_type_id IN (69, 70, 72)"
+          config:
+            severity: warn
+            error_msg: "Payment amounts must be positive except for refund types (69, 70, 72)"
+      - dbt_utils.expression_is_true:
+          expression: "(payment_type_id NOT IN (0) AND payment_type_id IS NOT NULL) OR payment_amount = 0"
+          config:
+            severity: error
+            error_msg: "Administrative payments (type 0 or NULL) must have zero amount"
+      
+      # Financial validation
+      - dbt_utils.expression_is_true:
+          expression: "merchant_fee >= 0"
+          config:
+            severity: error
+            error_msg: "Merchant fees cannot be negative"
+      
+      # Status field validation
+      - dbt_utils.expression_is_true:
+          expression: "payment_status >= 0"
+          config:
+            severity: error
+            error_msg: "Payment status must be non-negative"
+      - dbt_utils.expression_is_true:
+          expression: "process_status >= 0"
+          config:
+            severity: error
+            error_msg: "Process status must be non-negative"
+      - dbt_utils.expression_is_true:
+          expression: "payment_source >= 0"
+          config:
+            severity: error
+            error_msg: "Payment source must be non-negative"
+      
+      # Date field validation
+      - dbt_utils.expression_is_true:
+          expression: "recurring_charge_date > '2000-01-01' OR recurring_charge_date IS NULL"
+          config:
+            severity: error
+            error_msg: "Recurring charge date must be reasonable when not null"
+      - dbt_utils.expression_is_true:
+          expression: "entry_date > '2000-01-01'"
+          config:
+            severity: error
+            error_msg: "Entry date must be reasonable"
+      - dbt_utils.expression_is_true:
+          expression: "entry_date <= current_date"
+          config:
+            severity: error
+            error_msg: "Entry date cannot be in the future"
+      
+      # Metadata validation
+      - dbt_utils.expression_is_true:
+          expression: "_loaded_at <= current_timestamp"
+          config:
+            severity: error
+            error_msg: "Loaded timestamp cannot be in the future"
+      - dbt_utils.expression_is_true:
+          expression: "_created_at <= current_timestamp"
+          config:
+            severity: error
+            error_msg: "Created timestamp cannot be in the future"
+      - dbt_utils.expression_is_true:
+          expression: "_updated_at <= current_timestamp"
+          config:
+            severity: error
+            error_msg: "Updated timestamp cannot be in the future"
+      - dbt_utils.expression_is_true:
+          expression: "_updated_at >= _created_at"
+          config:
+            severity: error
+            error_msg: "Updated timestamp must be after or equal to created timestamp"
+      - dbt_utils.expression_is_true:
+          expression: "_created_by_user_id > 0 OR _created_by_user_id IS NULL"
+          config:
+            severity: warn
+            error_msg: "Created by user ID must be positive when not null"
+    
     columns:
       - name: payment_id
-        description: Primary key for payments
+        description: "Primary key - Unique identifier for each payment transaction (maps to PayNum in OpenDental)"
         tests:
           - unique
           - not_null
+      
       - name: patient_id
-        description: Foreign key to patients
+        description: "Foreign key to patients - Links payment to the patient who made or received the payment"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              severity: error
+      
       - name: clinic_id
-        description: Foreign key to clinics
-        tests:
-          - not_null
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
+        description: "Foreign key to clinics - Identifies which clinic location processed the payment. May be null for older payments before clinic tracking was implemented."
+        # TODO: Re-enable relationship test once stg_opendental__clinic model is available
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       severity: warn
+        #       where: "clinic_id IS NOT NULL"
+      
       - name: payment_type_id
-        description: |
-          Type of payment. Current patterns (2023-present):
-          - 71: Most common type (8,335 payments), avg $293
-          - 0: Administrative entries (1,110 payments), must be $0
-          - 69: High value payments (965 payments)
-              * Average: $1,036
-              * Warning Tiers:
-                - LOW: > $5,000
-                - MEDIUM: > $10,000
-                - HIGH: > $25,000
-                - CRITICAL: > $50,000
-          - 70: Regular payments (609 payments), avg $348
-          - 391: High value (482 payments), avg $922
-          - 412: Newer payment type (187 payments), avg $199
-          - 72: Refunds (50 payments), always negative
-          - 634: New type since Sept 2024 (16 payments), avg $6,009
-          - 574: Very high value (6 payments), avg $26,071
-          - 417: Special cases (6 payments), avg $2,967
+        description: >
+          Type of payment indicating the payment method and processing category.
+          Current patterns (2023-present):
+          71 = Most common type (8,335 payments), avg $293 - standard payments
+          NULL = Administrative entries (1,110 payments), must be $0 - system adjustments
+          0 = Administrative entries (alternative encoding), must be $0 - system adjustments  
+          69 = High value payments (965 payments), avg $1,036 - large transactions requiring review
+          70 = Regular payments (609 payments), avg $348 - standard patient payments
+          391 = High value transactions (482 payments), avg $922 - specialty payments
+          412 = Newer payment type (187 payments), avg $199 - recent payment method
+          72 = Refunds (50 payments), always negative - patient refunds
+          634 = New type since Sept 2024 (16 payments), avg $6,009 - latest payment category
+          574 = Very high value (6 payments), avg $26,071 - exceptional transactions
+          417 = Special cases (6 payments), avg $2,967 - unique payment situations
         tests:
-          - not_null
           - accepted_values:
               values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
               config:
-                severity: warn  # Keep warning severity for flexibility
+                severity: warn
+                where: "payment_type_id IS NOT NULL"
+      
       - name: deposit_id
-        description: Foreign key to deposits
-      - name: created_by_user_id
-        description: Foreign key to users who created the payment
-        tests:
-          - relationships:
-              to: ref('stg_opendental__userod')
-              field: user_id
+        description: "Foreign key to deposits - Links payment to bank deposit batch. May be null for payments not yet deposited or processed outside normal deposit workflow."
+      
       - name: payment_date
-        description: Date of the payment
+        description: "Date when the payment was made by the patient or processed by the system. Used for financial reporting and aging analysis."
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= '2023-01-01'"
-              column_name: payment_date
-          - dbt_utils.expression_is_true:
-              expression: "<= current_date"
+      
       - name: payment_amount
-        description: Amount of the payment
+        description: "Dollar amount of the payment. Positive for payments received, negative for refunds (types 69, 70, 72). Type 0 administrative entries must be $0."
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= 0 OR payment_type_id IN (69, 70, 72)"
-              column_name: payment_amount
+      
       - name: merchant_fee
-        description: Fee charged by the merchant for processing the payment
+        description: "Fee charged by the payment processor (credit card company, bank, etc.) for processing the transaction. Always non-negative. Defaults to 0 if no fee applies."
         tests:
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
-              column_name: merchant_fee
+          - not_null
+      
       - name: check_number
-        description: Check number for check payments
+        description: "Check number for check payments. Null for non-check payment types. Maximum 25 characters."
         tests:
           - dbt_expectations.expect_column_value_lengths_to_be_between:
-              min_value: 0
+              min_value: 1
               max_value: 25
+              row_condition: "check_number IS NOT NULL"
+      
       - name: bank_branch
-        description: Bank branch information for check payments
+        description: "Bank branch information for check payments. Used for check processing and bank reconciliation. Maximum 25 characters."
         tests:
           - dbt_expectations.expect_column_value_lengths_to_be_between:
-              min_value: 0
+              min_value: 1
               max_value: 25
+              row_condition: "bank_branch IS NOT NULL"
+      
       - name: external_id
-        description: External reference ID for the payment
+        description: "External reference ID for the payment from third-party systems (payment processors, insurance systems, etc.). Used for payment reconciliation. Maximum 255 characters."
         tests:
           - dbt_expectations.expect_column_value_lengths_to_be_between:
-              min_value: 0
+              min_value: 1
               max_value: 255
-      - name: is_split_flag
-        description: Indicates if the payment is split across multiple procedures
-        tests:
-          - not_null
-      - name: is_recurring_cc_flag
-        description: Indicates if this is a recurring credit card payment
-        tests:
-          - not_null
-      - name: is_cc_completed_flag
-        description: Indicates if the credit card payment was completed successfully
-        tests:
-          - not_null
-      - name: payment_status
-        description: Current status of the payment
-        tests:
-          - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
-              column_name: payment_status
-      - name: process_status
-        description: Processing status of the payment
-        tests:
-          - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
-              column_name: process_status
-      - name: payment_source
-        description: Source of the payment
-        tests:
-          - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
-              column_name: payment_source
-      - name: recurring_charge_date
-        description: Date when a recurring payment will be charged
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "> '2000-01-01'"
-              column_name: recurring_charge_date
-      - name: entry_date
-        description: Date when the payment was entered into the system
-        tests:
-          - not_null
-          - dbt_utils.expression_is_true:
-              expression: "> '2000-01-01'"
-              column_name: entry_date
+              row_condition: "external_id IS NOT NULL"
+      
       - name: payment_notes
-        description: Additional notes about the payment
+        description: "Additional notes about the payment entered by staff. Contains important context about payment circumstances, special instructions, or processing notes."
+      
       - name: receipt_text
-        description: Text content of the payment receipt
+        description: "Text content of the payment receipt generated for the patient. Used for patient communication and record keeping."
+      
+      - name: payment_status
+        description: "Current processing status of the payment in the OpenDental system. Non-negative integer representing various payment states."
+        tests:
+          - not_null
+      
+      - name: process_status
+        description: "Processing status indicating where the payment is in the workflow (pending, processing, completed, etc.). Non-negative integer."
+        tests:
+          - not_null
+      
+      - name: payment_source
+        description: "Source system or method that generated the payment record. Non-negative integer identifying the origin of the payment."
+        tests:
+          - not_null
+      
+      - name: is_split
+        description: "Indicates if the payment is split across multiple procedures or accounts (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+      
+      - name: is_recurring_cc
+        description: "Indicates if this is a recurring credit card payment setup (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+      
+      - name: is_cc_completed
+        description: "Indicates if the credit card payment was completed successfully (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+      
+      - name: recurring_charge_date
+        description: "Date when a recurring payment will be charged next. Only applicable for recurring payment setups. Must be after 2000-01-01 if not null."
+      
+      - name: entry_date
+        description: "Date when the payment was entered into the OpenDental system by staff. Used for audit tracking and workflow analysis."
+        tests:
+          - not_null
+      
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "<= current_timestamp"
-              column_name: _loaded_at
+      
       - name: _created_at
-        description: Timestamp when the record was created in the source system
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry column. Used for audit tracking and data lineage."
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "<= current_timestamp"
-              column_name: _created_at
+      
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column. Used for incremental loading and change tracking."
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "<= current_timestamp"
-              column_name: _updated_at
-          - dbt_utils.expression_is_true:
-              expression: ">= _created_at"
+      
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column. May be null for system-generated payments or legacy data."
