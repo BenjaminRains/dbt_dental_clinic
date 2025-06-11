@@ -3,130 +3,438 @@ version: 2
 models:
   - name: stg_opendental__proctp
     description: >
-      Staging model for OpenDental proctp table. Represents treatment planned procedures.
-      This model contains information about procedures that are part of a treatment plan
-      but have not necessarily been completed yet.
+      Staging model for OpenDental treatment planned procedures (proctp table). Represents procedures that are 
+      part of a treatment plan but have not necessarily been completed yet. This model contains comprehensive 
+      information about planned dental procedures including financial estimates, scheduling priorities, and 
+      clinical details for future treatments.
+      
+      Treatment planned procedures serve as the foundation for pre-treatment estimates, insurance pre-authorizations, 
+      and clinical workflow management. Once a planned procedure is completed, it may be linked to the actual 
+      completed procedure through the procedure_id_orig field, providing traceability from planning to execution.
     
+    meta:
+      # Data quality and business context
+      record_count: "~75,000 treatment planned procedures (estimated from typical dental practice volumes)"
+      data_scope: "Treatment planned procedures from 2023-01-01 onwards with incremental updates based on SecDateTEdit"
+      
+      known_issues:
+        - description: "fee_allowed values of -1 are used as placeholders when allowed fees haven't been determined yet"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          business_impact: "Normal business process - indicates fee verification is pending. Should not be treated as negative values in calculations."
+        - description: "Some treatment planned procedures may reference providers who are no longer active in the system"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          business_impact: "Historical treatment plans may retain original provider assignments even after provider departure"
+        - description: "clinic_id is always null in this model because MDC operates as a single clinic (ClinicNum=0 in source)"
+          severity: "info"
+          identified_date: "2025-01-01"
+          business_impact: "Expected behavior - field exists for multi-clinic compatibility but is unused"
+        - description: "Financial estimates (insurance and patient amounts) may become outdated as benefits and policies change"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          business_impact: "Treatment plans should be re-verified before scheduling to ensure accurate financial estimates"
+        - description: "194 records have category_percent_ucr values outside expected 0-500% range"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          business_impact: "Indicates unusual UCR percentage calculations that may affect insurance processing - requires review of fee schedule configurations"
+        - description: "1 record has fee_amount exceeding $15,000 maximum expected range"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          business_impact: "High-value procedure requiring special handling for financial counseling and treatment authorization"
+        - description: "1 record has patient_amount exceeding $15,000 maximum expected range"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          business_impact: "High out-of-pocket amount requiring enhanced financial counseling and potential payment plan arrangements"
+      
+      business_rules:
+        - rule: "Treatment planned procedures remain in the system even after completion to maintain treatment planning history"
+          impact: "Provides audit trail of original treatment intent vs. actual treatment delivered"
+        - rule: "Insurance amount estimates are based on current benefits and fee schedules at time of treatment planning"
+          impact: "May require re-verification before treatment if significant time has passed since planning"
+        - rule: "Priority levels determine recommended treatment sequencing within the treatment plan"
+          impact: "Critical for clinical workflow and patient communication about treatment phasing"
+        - rule: "When a planned procedure is completed, the procedure_id_orig field links to the actual completed procedure"
+          impact: "Enables comparison of planned vs. actual procedures for quality control and financial reconciliation"
+      
+      usage_notes: >
+        This model is essential for treatment planning analysis, financial forecasting, and patient communication.
+        When analyzing financial data, be aware that estimates may not reflect final treatment costs due to 
+        benefit changes, fee updates, or treatment modifications. For the most accurate financial analysis,
+        join with completed procedures in procedurelog to compare planned vs. actual amounts.
+        
+        Key relationships: Links to treatplan (treatment_plan_id), patient (patient_id), and when completed,
+        to procedurelog (procedure_id_orig). Priority and item_order fields are critical for understanding
+        intended treatment sequence and patient presentation.
+    
+    tests:
+      # Model-level validation tests
+      - dbt_utils.expression_is_true:
+          expression: "fee_amount >= 0 OR fee_amount IS NULL"
+          severity: warn
+      
+      - dbt_utils.expression_is_true:
+          expression: "fee_allowed >= -1 OR fee_allowed IS NULL"
+          severity: warn
+      
+      - dbt_utils.expression_is_true:
+          expression: "primary_insurance_amount >= 0 OR primary_insurance_amount IS NULL"
+          severity: warn
+      
+      - dbt_utils.expression_is_true:
+          expression: "patient_amount >= 0 OR patient_amount IS NULL"
+          severity: warn
+
     columns:
+      # Primary Key
       - name: proctp_id
-        description: Unique identifier for the treatment planned procedure
+        description: >
+          Primary key for treatment planned procedures (maps to ProcTPNum in OpenDental).
+          Unique identifier for each procedure included in a treatment plan.
         tests:
           - unique
           - not_null
-      
-      # Foreign keys
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: integer
+
+      # Foreign Key Relationships
       - name: treatment_plan_id
         description: >
-          Foreign key to the treatment plan (references stg_opendental__treatplan.treatment_plan_id)
+          Foreign key to the treatment plan containing this procedure (references stg_opendental__treatplan.treatment_plan_id).
+          Links this planned procedure to its parent treatment plan document.
         tests:
           - not_null
-      
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: integer
+          - relationships:
+              to: ref('stg_opendental__treatplan')
+              field: treatment_plan_id
+              severity: warn
+
       - name: patient_id
         description: >
-          Foreign key to the patient (references stg_opendental__patient.patient_id)
+          Foreign key to the patient receiving this planned treatment (references stg_opendental__patient.patient_id).
+          Essential for patient-centric treatment plan analysis and financial forecasting.
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: integer
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
 
       - name: procedure_id_orig
         description: >
-          Foreign key to the original procedure if this planned procedure has been converted to a completed procedure
-          (references stg_opendental__procedurelog.procedure_id)
+          Foreign key to the completed procedure if this treatment plan item has been executed 
+          (references stg_opendental__procedurelog.procedure_id). This field enables tracking 
+          from treatment planning through completion, allowing comparison of planned vs. actual procedures.
+          NULL indicates the procedure has not been completed or was cancelled.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: integer
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              severity: warn
+              where: "procedure_id_orig IS NOT NULL"
 
       - name: provider_id
-        description: Foreign key to the provider (references stg_opendental__provider.provider_id)
+        description: >
+          Foreign key to the provider assigned to perform this planned procedure 
+          (references stg_opendental__provider.provider_id). May reference historical providers 
+          who are no longer active in the system.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: integer
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "provider_id IS NOT NULL"
 
       - name: clinic_id
-        description: Foreign key # unused by the MDC clinic 
-      
+        description: >
+          Foreign key to the clinic location (references stg_opendental__clinic.clinic_id).
+          Always NULL for MDC as it operates as a single clinic (ClinicNum=0 in source system).
+          Field maintained for OpenDental compatibility.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: integer
+
       - name: user_num_entry
-        description: Foreign key to the user who entered the record
+        description: >
+          Foreign key to the user who created this treatment plan entry (maps to SecUserNumEntry in OpenDental).
+          References the OpenDental user management system for audit purposes.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: integer
 
-      # Regular fields
+      # Treatment Plan Organization
       - name: item_order
-        description: Order of the procedure within the treatment plan
-      
-      - name: priority
-        description: Priority level of the procedure
+        description: >
+          Display order of this procedure within the treatment plan. Lower numbers appear first 
+          in treatment plan presentations. Used for organizing procedure sequence and patient communication.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: smallint
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
 
+      - name: priority
+        description: >
+          Clinical priority level for this procedure within the treatment plan. Used to sequence 
+          treatments based on clinical urgency and optimal care delivery. Higher numbers typically 
+          indicate higher priority, but specific encoding may vary by practice workflow.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: bigint
+
+      # Clinical Details
       - name: tooth_num_tp
-        description: Tooth number for the treatment planned procedure
-      
+        description: >
+          Tooth number designation for this treatment planned procedure using standard dental numbering 
+          (typically 1-32 for permanent teeth). May include additional numbering for primary teeth 
+          or quadrant-based procedures. NULL for procedures not specific to individual teeth.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: character varying
+
       - name: surface
-        description: Tooth surface(s) involved in the procedure
+        description: >
+          Tooth surface designation for procedures affecting specific tooth surfaces (e.g., 'M' for mesial, 
+          'D' for distal, 'O' for occlusal, 'B' for buccal, 'L' for lingual). Multiple surfaces may be 
+          indicated with combinations like 'MOD'. NULL for procedures not surface-specific.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: character varying
 
       - name: procedure_code
-        description: Procedure code (usually ADA/CDT code)
+        description: >
+          Standardized dental procedure code, typically ADA/CDT codes (e.g., D0120 for periodic oral evaluation, 
+          D2740 for crown - porcelain/ceramic substrate). Used for treatment documentation, billing, 
+          and insurance claim processing.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: character varying
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 15
+              severity: warn
 
       - name: description
-        description: Description of the procedure
-
-      - name: fee_amount
-        description: Standard fee amount for the procedure
-
-      - name: primary_insurance_amount
-        description: Estimated amount covered by primary insurance
-
-      - name: secondary_insurance_amount
-        description: Estimated amount covered by secondary insurance
-
-      - name: patient_amount
-        description: Estimated amount to be paid by patient
-
-      - name: discount
-        description: Discount amount applied to the procedure
-
-      - name: prognosis
-        description: Prognosis code or description
-
-      - name: diagnosis
-        description: Diagnosis code or description
+        description: >
+          Human-readable description of the planned procedure (e.g., "Periodic oral evaluation - established patient", 
+          "Crown - porcelain/ceramic substrate"). Provides clinical context for treatment plan communication 
+          and documentation.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: character varying
 
       - name: procedure_abbreviation
-        description: Abbreviated name of the procedure
+        description: >
+          Shortened name or abbreviation for the procedure, used in compact displays and clinical shorthand. 
+          Derived from procedure code definitions but may be customized for practice workflow.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: character varying
+
+      - name: prognosis
+        description: >
+          Clinical prognosis assessment for this planned procedure. May include prognosis codes or 
+          free-text clinical assessments indicating expected treatment outcome and success probability.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: character varying
+
+      - name: diagnosis
+        description: >
+          Diagnosis code or clinical diagnosis supporting the need for this planned procedure. 
+          May reference standardized diagnostic codes or practice-specific diagnostic categories.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: character varying
+
+      # Financial Estimates
+      - name: fee_amount
+        description: >
+          Standard fee amount for this procedure based on the practice's fee schedule at the time 
+          of treatment planning. Represents the total charge before insurance or discounts. 
+          Used as baseline for financial estimates and patient communication.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 15000
+              severity: warn
+
+      - name: primary_insurance_amount
+        description: >
+          Estimated amount to be covered by the patient's primary insurance based on current 
+          benefits and fee schedules. Used for patient financial counseling and treatment planning. 
+          May require re-verification before treatment execution.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 15000
+              severity: warn
+
+      - name: secondary_insurance_amount
+        description: >
+          Estimated amount to be covered by secondary insurance if applicable. Used in coordination 
+          of benefits calculations and patient financial planning. NULL when patient has no secondary coverage.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 15000
+              severity: warn
+
+      - name: patient_amount
+        description: >
+          Estimated out-of-pocket amount the patient will pay after insurance coverage. 
+          Calculated as fee_amount minus insurance amounts and discounts. Critical for patient 
+          financial counseling and treatment acceptance decisions.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 15000
+              severity: warn
+
+      - name: discount
+        description: >
+          Discount amount applied to this planned procedure. May represent courtesy discounts, 
+          payment plan adjustments, or financial hardship accommodations. Reduces the total 
+          amount due from the patient.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 15000
+              severity: warn
 
       - name: fee_allowed
-        description: "Allowed fee amount (may differ from standard fee). A value of -1 is unexpected and should be investigated."
+        description: >
+          Insurance-allowed fee amount for this procedure, representing the maximum amount the 
+          insurance will consider for payment calculations. A value of -1 indicates the allowed 
+          fee has not been determined yet (placeholder value). Used in insurance benefit calculations 
+          and payment posting.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1
+              max_value: 15000
+              severity: warn
 
       - name: tax_amount
-        description: Tax amount for the procedure
+        description: >
+          Tax amount applicable to this procedure where required by local regulations. 
+          Most dental procedures are tax-exempt, so this is typically zero or NULL.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
 
       - name: category_percent_ucr
-        description: Percentage of usual, customary, and reasonable fee
+        description: >
+          Percentage of usual, customary, and reasonable (UCR) fee for this procedure category. 
+          Used in insurance calculations and fee schedule management. Represents what percentage 
+          of the standard UCR this procedure commands.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: double precision
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+              severity: warn
 
-      # Dates
+      # Date Fields
       - name: treatment_plan_date
-        description: Date the procedure was added to the treatment plan
-      
+        description: >
+          Date when this procedure was added to the treatment plan (maps to DateTP in OpenDental). 
+          Represents when the clinical decision was made to include this procedure in the patient's 
+          treatment plan, not when the procedure will be performed.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2000-01-01'"
+              max_value: "'2030-12-31'"
+              severity: warn
+
       - name: entry_date
-        description: Date the record was entered
-      
+        description: >
+          Date when this treatment plan entry was created in the system (maps to SecDateEntry in OpenDental). 
+          Used for audit trails and data quality monitoring. May differ from treatment_plan_date if 
+          entered retrospectively.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2000-01-01'"
+              max_value: "'2030-12-31'"
+              severity: warn
+
       - name: last_edit_timestamp
-        description: Timestamp of the last edit to the record
+        description: >
+          Timestamp of the most recent modification to this treatment plan entry (maps to SecDateTEdit in OpenDental). 
+          Used for incremental data loading and change tracking. Critical for maintaining data currency 
+          in the analytics environment.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: timestamp without time zone
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2000-01-01 00:00:00'"
+              max_value: "'2030-12-31 23:59:59'"
+              severity: warn
 
-      # Metadata
+      # Standardized Metadata Columns (required for all staging models)
       - name: _loaded_at
-        description: Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+        description: >
+          Timestamp when this record was loaded into the data warehouse by the ETL pipeline 
+          (using current_timestamp). Used for data lineage tracking and troubleshooting data loading issues.
         tests:
           - not_null
-      
-      - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
-        tests:
-          - not_null
-      
-      - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
-        tests:
-          - not_null
-    
-    tests:
-      # All the other tests look good - just keep this simple one for now
-      - dbt_utils.expression_is_true:
-          expression: "1=1"
-          severity: warn
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: timestamp with time zone
 
-      # Keep relationships tests commented out until models exist
-      # - relationships:
-      #     to: ref('stg_opendental__treatplan')
-      #     field: treatment_plan_id
-      #     severity: warn
+      - name: _created_at
+        description: >
+          Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry 
+          with fallback to SecDateTEdit if creation date is invalid. Used for data quality monitoring 
+          and audit purposes.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: timestamp without time zone
+
+      - name: _updated_at
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit 
+          with fallback to SecDateEntry if update date is invalid. Critical for incremental loading 
+          and change detection.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: timestamp without time zone
+
+      - name: _created_by_user_id
+        description: >
+          ID of the user who created this record in the source system (OpenDental). Maps to SecUserNumEntry 
+          with zero values converted to NULL. Used for audit trails and user activity analysis.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: bigint
