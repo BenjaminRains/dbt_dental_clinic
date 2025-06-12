@@ -5,80 +5,261 @@ models:
     description: >
       Staging model for task records from OpenDental. Contains information about tasks, reminders, and to-do items
       associated with patients, procedures, and other entities in the system.
+      
+      Business Context:
+      - Supports task management and reminders across the practice
+      - Links tasks to various entities (patients, procedures, etc.)
+      - Tracks task assignments, priorities, and completion status
+      - Handles both one-time and repeating tasks
+      - Supports different reminder types and frequencies
+      
+      Data Scope:
+      - Records from 2023-01-01 onwards
+      - Includes all task types and statuses
+      - Captures both active and completed tasks
+      
+      Key Relationships:
+      - Links to task lists through task_list_id
+      - Links to users through user_id (assignee)
+      - Links to various entities through key_id (based on object_type)
+      - Links to task creators through from_id
+      - Links to priority definitions through priority_def_id
+      - Links to triage categories through triage_category_id
+      
+      Important Business Rules:
+      - Tasks must have a valid task_date
+      - Task status must be valid
+      - Object type determines the entity type for key_id
+      - Repeating tasks have specific frequency patterns
+      - Read-only tasks cannot be modified
+
+    meta:
+      record_count: "Approximately 1,000 records (as of 2024)"
+      data_scope: "Tasks from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: >
+            164 tasks are missing both task_date and triage_category_id, all with date_type = 0.
+            Pattern analysis shows:
+            - 149 patient tasks (91%): 124 completed, 24 new, 1 in progress
+            - 15 non-patient tasks (9%): 5 completed, 5 new, 5 in progress
+            - Date range: 2023-01-18 to 2025-02-05
+            - All tasks have date_type = 0 (No Date)
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May affect task scheduling, prioritization, and workflow management"
+          test: "not_null_stg_opendental__task_task_date"
+        - description: "32 tasks reference task lists that no longer exist (task_list_id 8, 12, 14, 20)"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May affect task organization and grouping"
+          test: "relationships_stg_opendental__task_task_list_id__task_list_id__ref_stg_opendental__tasklist_"
+      
+      business_rules:
+        - rule: "Tasks must have a valid task_date unless date_type = 0"
+          impact: "Ensures proper task scheduling and tracking"
+        - rule: "Tasks must have a valid triage_category_id unless date_type = 0"
+          impact: "Ensures proper task prioritization"
+        - rule: "Tasks must reference valid task lists"
+          impact: "Ensures proper task organization"
+        - rule: "date_type = 0 indicates a task without a specific date requirement"
+          impact: "Affects how tasks are scheduled and tracked"
+      
+      usage_notes: >
+        - Use task_date for scheduling and timeline analysis
+        - Check triage_category_id for task prioritization
+        - Be aware that tasks with date_type = 0 may legitimately have null task_date and triage_category_id
+        - Some tasks may reference non-existent task lists
+        - Task notes from before 2023-01-01 are not included
+        - Future dates (2025) may indicate data entry issues
+
     columns:
       # Primary Key
       - name: task_id
-        description: Primary key - unique identifier for each task
+        description: "Primary key - unique identifier for each task (maps to TaskNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
 
       # Foreign Keys
       - name: task_list_id
-        description: Foreign key to the task list table
+        description: "Foreign key to the task list this task belongs to (maps to TaskListNum in OpenDental, 0 values converted to NULL)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__tasklist')
+              field: task_list_id
+              severity: warn
+
       - name: key_id
-        description: Foreign key to the related entity (varies based on object_type)
+        description: "Foreign key to the related entity - type determined by object_type (maps to KeyNum in OpenDental)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: warn
+              where: "object_type = 1"
+
       - name: from_id
-        description: Foreign key to the task creator
+        description: "Foreign key to the task creator - identifies who created the task (maps to FromNum in OpenDental)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              severity: warn
+
       - name: user_id
-        description: Foreign key to the user assigned to the task
+        description: "Foreign key to the assigned user - identifies who is responsible for the task (maps to UserNum in OpenDental)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              severity: warn
+
       - name: priority_def_id
-        description: Foreign key to the priority definition table
+        description: "Foreign key to the priority definition - determines task priority level (maps to PriorityDefNum in OpenDental)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__prioritydef')
+              field: priority_def_id
+              severity: warn
+
       - name: triage_category_id
-        description: Foreign key to the triage category table
+        description: "Foreign key to the triage category - used for task categorization (maps to TriageCategory in OpenDental)"
+        tests:
+          - not_null:
+              severity: warn
+          - relationships:
+              to: ref('stg_opendental__triagecategory')
+              field: triage_category_id
+              severity: warn
 
-      # Date and Timestamps
+      # Dates and Timestamps
       - name: task_date
-        description: Date when the task is due or scheduled
+        description: "Date when the task is scheduled or due (maps to DateTask in OpenDental)"
+        tests:
+          - not_null:
+              severity: warn
+          - test_date_after:
+              compare_column: "2000-01-01"
+              allow_null: false
+
       - name: entry_timestamp
-        description: Timestamp when the task was created
+        description: "Timestamp when the task was created (maps to DateTimeEntry in OpenDental)"
+        tests:
+          - not_null
+
       - name: finished_timestamp
-        description: Timestamp when the task was completed
+        description: "Timestamp when the task was completed (maps to DateTimeFinished in OpenDental)"
+
       - name: original_timestamp
-        description: Original creation timestamp of the task
+        description: "Original creation timestamp (maps to DateTimeOriginal in OpenDental)"
+        tests:
+          - not_null
+
       - name: last_edit_timestamp
-        description: Timestamp of the last modification to the task
+        description: "Timestamp of the last edit to the task (maps to SecDateTEdit in OpenDental)"
+        tests:
+          - not_null
 
-      # Attributes
+      # Task Attributes
       - name: description
-        description: Main description of the task
-      - name: task_status
-        description: Current status of the task
-      - name: is_repeating
-        description: Flag indicating if the task repeats
-      - name: date_type
-        description: Type of date associated with the task
-      - name: object_type
-        description: Type of object the task is associated with
-      - name: reminder_group_id
-        description: Identifier for the reminder group
-      - name: reminder_type
-        description: Type of reminder
-      - name: reminder_frequency
-        description: Frequency of the reminder
-      - name: description_override
-        description: Override text for the task description
-      - name: is_readonly
-        description: Flag indicating if the task is read-only
+        description: "Main description of the task (maps to Descript in OpenDental)"
 
-      # Metadata
+      - name: task_status
+        description: "Current status of the task (maps to TaskStatus in OpenDental)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2]
+
+      - name: date_type
+        description: "Type of date associated with the task (maps to DateType in OpenDental)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2]
+
+      - name: object_type
+        description: "Type of object the task is associated with (maps to ObjectType in OpenDental)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2]
+
+      - name: reminder_group_id
+        description: "Identifier for the reminder group (maps to ReminderGroupId in OpenDental)"
+
+      - name: reminder_type
+        description: "Type of reminder for the task (maps to ReminderType in OpenDental)"
+
+      - name: reminder_frequency
+        description: "Frequency of reminders for the task (maps to ReminderFrequency in OpenDental)"
+
+      - name: description_override
+        description: "Override description for the task (maps to DescriptOverride in OpenDental)"
+
+      # Boolean Flags
+      - name: is_repeating
+        description: "Indicates if the task repeats (maps to IsRepeating in OpenDental)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_readonly
+        description: "Indicates if the task is read-only (maps to IsReadOnly in OpenDental)"
+        tests:
+          - not_null
+          - boolean_values
+
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTimeEntry."
+        tests:
+          - not_null
+
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit."
+        tests:
+          - not_null
 
     tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - task_id
+      - dbt_utils.expression_is_true:
+          expression: "original_timestamp >= '2023-01-01'"
+          name: "task_date_range_check"
+          config:
+            severity: warn
+            description: "Ensures all tasks are from 2023-01-01 onwards as per business requirements"
 
     meta:
       relationships:
         - relationship: many_to_one
           field: task_list_id
           related_to: stg_opendental__tasklist.task_list_id
+          severity: warn
+        - relationship: many_to_one
+          field: key_id
+          related_to: stg_opendental__patient.patient_id
+          severity: warn
+          where: "object_type = 1"
+        - relationship: many_to_one
+          field: from_id
+          related_to: stg_opendental__userod.user_id
+          severity: warn
         - relationship: many_to_one
           field: user_id
           related_to: stg_opendental__userod.user_id
+          severity: warn
+        - relationship: many_to_one
+          field: priority_def_id
+          related_to: stg_opendental__prioritydef.priority_def_id
+          severity: warn
+        - relationship: many_to_one
+          field: triage_category_id
+          related_to: stg_opendental__triagecategory.triage_category_id
+          severity: warn
