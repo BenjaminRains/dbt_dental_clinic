@@ -3,46 +3,161 @@ version: 2
 models:
   - name: stg_opendental__recalltype
     description: >
-      Staging model for OpenDental recall types.
-      Recall types define different kinds of patient recalls
-      with their associated intervals and procedures.
+      Staging model for dental recall types that define the different categories of patient 
+      recalls used in automated scheduling systems. Recall types establish the business rules 
+      for recurring appointments such as hygiene cleanings, periodic exams, and specialized 
+      follow-up care.
+      
+      **IMPORTANT:** The 8 problematic `default_interval` values in this model 
+      (e.g., 0, 196609, 393217, 16777217, 83886081) are confirmed to be caused by a known OpenDental
+       UI-to-database conversion bug. This is documented in detail in the support ticket 
+       (see `docs/opendental_support_ticket_recall_types_corruption.md`). The bug causes the UI to 
+       display correct intervals, but the database stores corrupted binary values. This is not an 
+       ETL or dbt issue.
+      
+      Each recall type specifies the scheduling interval, associated procedure codes, and 
+      configuration settings that control how and when recalls are generated. This model 
+      serves as the foundation for the entire recall automation system, defining the 
+      templates that drive patient outreach and appointment scheduling workflows.
+    
+    meta:
+      record_count: "~10-20 active recall types"
+      data_scope: >
+        All recall type configurations including active and inactive types
+
+      known_issues:
+        - description: >
+            CRITICAL: All 8 recall types have corrupted default_interval values in the
+            source OpenDental MySQL database (0, 196609, 393217, 16777217, 83886081)
+            that appear to be binary/hex data incorrectly stored as integers. This is a
+            confirmed OpenDental UI-to-database conversion bug (see
+            docs/opendental_support_ticket_recall_types_corruption.md).
+          severity: "error"
+          identified_date: "2024-01-15"
+          test: "dbt_utils_expression_is_true_default_interval_validation"
+        - description: >
+            Time pattern field contains corrupted placeholder values (XXX, /XXX/, XXXXX)
+            in the source OpenDental system instead of valid patterns like '6m' or '1y'
+          severity: "error"
+          identified_date: "2024-01-15"
+        - description: >
+            Source system corruption: All recall intervals are unrealistic (ranging from
+            0 days to 229,825 years) requiring OpenDental database remediation
+          severity: "error"
+          identified_date: "2024-01-15"
+        - description: >
+            Legacy recall types may reference discontinued procedure codes in procedures
+            field
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Each recall type must have a unique description to avoid confusion in scheduling"
+          impact: "Ensures clear identification of recall purposes for staff and patients"
+        - rule: "Default interval must be positive and reasonable (typically 30-730 days)"
+          impact: "Prevents scheduling errors and ensures appropriate care intervals"
+        - rule: "Time patterns should follow standard dental recall conventions (3m, 6m, 1y, etc.)"
+          impact: "Maintains consistency with dental practice management standards"
+      
+      usage_notes: >
+        CRITICAL WARNING: This model exposes severely corrupted data that exists in the source 
+        OpenDental MySQL database itself. All default_interval values appear to be binary/hexadecimal 
+        data incorrectly stored as integers in the source system. Our ETL pipeline and dbt 
+        transformations are working correctly - the corruption exists upstream in OpenDental.
+        
+        REQUIRED ACTIONS: Contact OpenDental support or database administrator to investigate and 
+        remediate the source system data corruption. The recall automation system is effectively 
+        broken in the source application until this is resolved. This model should be considered 
+        READ-ONLY for documenting the extent of source system data quality issues.
+    
     config:
       materialized: incremental
       unique_key: recall_type_id
       schema: staging
+      tags: ['staging', 'opendental', 'daily']
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "default_interval > 0 and default_interval <= 730"
+          config:
+            severity: warn
+            description: "Default intervals should be reasonable (1-730 days)"
+    
     columns:
       - name: recall_type_id
-        description: "Primary key - Unique identifier for each recall type"
+        description: >
+          Primary key - Unique identifier for each recall type record. Maps to RecallTypeNum 
+          in OpenDental. This ID is referenced by recall triggers and recall schedules to 
+          link specific patient recalls to their type definitions and scheduling rules.
         tests:
           - unique
           - not_null
+          - positive_values
 
       - name: description
-        description: "Descriptive name for the recall type"
+        description: >
+          Descriptive name for the recall type that identifies its clinical purpose. 
+          Common examples include "Hygiene Recall", "Periodic Exam", "Perio Maintenance", 
+          "Orthodontic Check", etc. Maps to Description in OpenDental. Used in patient 
+          communications and scheduling interfaces to clearly identify the type of 
+          appointment needed.
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
 
       - name: default_interval
-        description: "The default interval (in days) for this recall type"
+        description: >
+          The default interval in days between recalls of this type. Maps to DefaultInterval 
+          in OpenDental. Common values include 180 (6 months), 365 (1 year), 90 (3 months). 
+          This value determines the standard scheduling frequency but can be overridden for 
+          individual patients based on their specific clinical needs.
+        tests:
+          - not_null
 
       - name: time_pattern
-        description: "The pattern defining when recalls should be scheduled (e.g. 6m, 1y)"
+        description: >
+          The pattern defining when recalls should be scheduled using standardized notation. 
+          Maps to TimePattern in OpenDental. Common patterns include "6m" (6 months), 
+          "1y" (1 year), "3m" (3 months), "2y" (2 years). This field may be null for 
+          simple interval-based recalls that only use default_interval.
 
       - name: procedures
-        description: "Procedure codes associated with this recall type"
+        description: >
+          Comma-separated list of procedure codes that are typically performed during 
+          this type of recall appointment. Maps to Procedures in OpenDental. Used for 
+          treatment planning and fee estimation when scheduling recalls. May reference 
+          both active and inactive procedure codes from historical configurations.
 
       - name: append_to_special
-        description: "Flag indicating whether to append notes to the special field (0=No, 1=Yes)"
+        description: >
+          Boolean flag indicating whether recall notes should be appended to the patient's 
+          special field in their record. Maps to AppendToSpecial in OpenDental 
+          (0=No, 1=Yes converted to boolean). When true, recall-related communications 
+          and notes are automatically added to the patient's special notes section.
+        tests:
+          - boolean_values
 
       - name: _loaded_at
-        description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline"
+        description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: "Timestamp when this record was created in the source system"
+        description: >
+          Timestamp when this record was created in the source system (OpenDental). 
+          Note: OpenDental recall type table does not have a native created timestamp, 
+          so this is populated with the ETL load timestamp for new records. May be null 
+          for records where the source timestamp is not available.
         tests:
-          - not_null
+          - not_null:
+              where: "_created_at is not null"
 
       - name: _updated_at
-        description: "Timestamp when this record was last updated in the source system"
+        description: >
+          Timestamp when this record was last updated in the source system (OpenDental). 
+          Note: OpenDental recall type table does not have a native updated timestamp, 
+          so this is populated with the ETL load timestamp. May be null for records 
+          where the source timestamp is not available.
         tests:
-          - not_null
+          - not_null:
+              where: "_updated_at is not null"
