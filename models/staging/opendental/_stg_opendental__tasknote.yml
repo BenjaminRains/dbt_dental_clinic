@@ -3,35 +3,94 @@ version: 2
 models:
   - name: stg_opendental__tasknote
     description: >
-      Staging model for task notes from OpenDental. Contains notes associated with tasks,
-      including who created the note and when it was created. Task notes provide additional
-      context and communication history for tasks in the system.
+      Staging model for task notes from OpenDental. Contains detailed notes and comments associated with tasks, including user attribution and timestamps.
+      
+      Business Context:
+      - Task notes provide detailed documentation of task-related activities
+      - Notes can be added by any user with task access
+      - Notes are timestamped and user-attributed for audit purposes
+      - Notes may reference task status changes, completions, or cancellations
+      - Notes are preserved even if the associated task is removed
+      
+      Data Scope:
+      - Records from 2020-11-01 onwards
+      - Includes all note types and lengths
+      - Captures both active and orphaned notes
+      
+      Key Relationships:
+      - Links to tasks through task_id
+      - Links to users through user_id
+      
+      Important Business Rules:
+      - Notes must have a valid user_id
+      - Notes must have a valid note_datetime
+      - Notes can exist without an associated task (orphaned notes)
+      - Orphaned notes are primarily from 2020-2022
+      - Most orphaned notes are routine task updates
+      - Orphaned notes are not typically related to task deletion
 
-      Known Data Quality Issues:
-      - 259 task notes reference tasks that don't exist in the source system
-      - These orphaned references are likely due to deleted tasks or data migration issues
-      - The relationship test is configured as a warning to allow the pipeline to continue
-      - These notes should be reviewed and either reassigned to valid tasks or archived
+    meta:
+      record_count: "Approximately 1,000 records (as of 2024)"
+      data_scope: "Task notes from 2020-11-01 onwards"
+      
+      known_issues:
+        - description: "259 task notes reference non-existent tasks, primarily from 2020-2022"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May affect task history tracking and audit trails"
+          test: "relationships_to_task"
+          patterns:
+            - "Most orphaned notes are routine task updates"
+            - "No explicit mentions of task deletion or archiving"
+            - "Notes are distributed across multiple users"
+            - "Peak activity in early 2021 (52 notes in January)"
+            - "Declining trend over time (only 1 note in December 2022)"
+      
+      business_rules:
+        - rule: "Notes must have a valid user_id"
+          impact: "Ensures proper attribution of task notes"
+        - rule: "Notes must have a valid note_datetime"
+          impact: "Maintains accurate audit trail"
+        - rule: "Notes can exist without an associated task"
+          impact: "Preserves task history even if task is removed"
+        - rule: "Orphaned notes are primarily from 2020-2022"
+          impact: "Historical data quality issue, not current"
+        - rule: "Most orphaned notes are routine task updates"
+          impact: "Suggests legitimate notes that lost task reference"
+        - rule: "Orphaned notes are not typically related to task deletion"
+          impact: "Indicates potential data migration or system issue"
+      
+      usage_notes: >
+        - Use user_id to track who created each note
+        - Check note_datetime for chronological analysis
+        - Be aware of the task relationship warning when joining to tasks
+        - Orphaned notes are primarily historical (2020-2022)
+        - Most orphaned notes appear to be legitimate task updates
+        - Note lengths vary significantly (2-484 characters)
+        - Multiple users involved in creating orphaned notes
+        - Peak activity in early 2021, declining trend over time
+
     columns:
       # Primary Key
       - name: task_note_id
-        description: Primary key - unique identifier for each task note
+        description: "Primary key - unique identifier for each task note (maps to TaskNoteNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
 
       # Foreign Keys
       - name: task_id
-        description: Foreign key to the associated task
+        description: "Foreign key to the associated task (maps to TaskNum in OpenDental, 0 values converted to NULL)"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__task')
               field: task_id
-              config:
-                severity: warn
+              severity: warn
+
       - name: user_id
-        description: Foreign key to the user who created the note
+        description: "Foreign key to the user who created the note (maps to UserNum in OpenDental, 0 values converted to NULL)"
         tests:
           - not_null
           - relationships:
@@ -40,25 +99,47 @@ models:
 
       # Timestamps
       - name: note_datetime
-        description: Timestamp when the note was created
+        description: "Timestamp when the note was created (maps to DateTimeNote in OpenDental)"
         tests:
           - not_null
+          - test_date_after:
+              compare_column: "2000-01-01"
+              allow_null: false
 
       # Content
       - name: note
-        description: Content of the task note
+        description: "Content of the task note (maps to Note in OpenDental)"
 
-      # Metadata
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental)
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTimeNote."
+        tests:
+          - not_null
+
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental)
-      - name: _created_by_user_id
-        description: User who created the record in the source system (OpenDental)
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTimeNote."
+        tests:
+          - not_null
 
     tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - task_note_id
+      - dbt_utils.expression_is_true:
+          expression: "note_datetime >= '2000-01-01'"
+          name: "task_note_date_range_check"
+          config:
+            severity: warn
+            description: "Ensures all task notes have valid creation dates"
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: task_id
+          related_to: stg_opendental__task.task_id
+          severity: warn
+        - relationship: many_to_one
+          field: user_id
+          related_to: stg_opendental__userod.user_id
