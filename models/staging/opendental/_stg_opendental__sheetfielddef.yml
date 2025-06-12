@@ -2,107 +2,213 @@ version: 2
 
 models:
   - name: stg_opendental__sheetfielddef
-    description: Staging model for OpenDental sheet field definitions. These definitions serve as templates for sheet fields, defining their default properties and behaviors.
+    description: >
+      Staging model for OpenDental sheet field definitions. These definitions serve as templates for sheet fields, defining their default properties and behaviors.
+      
+      This model contains the template definitions for form fields in OpenDental's dynamic sheet system. Each record represents a field template that can be used across multiple sheets, defining properties like position, size, font settings, and behavior. The model is joined with sheetdef to ensure we only include fields from valid sheet definitions.
+    
+    meta:
+      record_count: "Varies based on number of sheet definitions"
+      data_scope: "All active and historical sheet field definitions"
+      
+      known_issues:
+        - description: "Some historical records may have null values in optional fields"
+          severity: "warn"
+          identified_date: "2024-03-20"
+        - description: "One record (sheet_field_def_id: 421) has a negative width value (-12) for field_type 6"
+          severity: "warn"
+          identified_date: "2024-03-20"
+        - description: "Many records have null field_names, particularly for field_type 2"
+          severity: "warn"
+          identified_date: "2024-03-20"
+      
+      business_rules:
+        - rule: "Each field definition must be associated with a valid sheet definition"
+          impact: "Ensures data integrity and prevents orphaned field definitions"
+        - rule: "Field positions (x_position, y_position) must be non-negative integers"
+          impact: "Maintains proper field layout and positioning"
+        - rule: "Field width must be positive for all field types except: field_type 15 (always zero) and field_type 6 (may be any value)"
+          impact: "Ensures proper field display and layout while accommodating special field types"
+        - rule: "Field names may be null for certain field types (2, 6, 7, 9)"
+          impact: "Some field types don't require names in the OpenDental system"
+      
+      usage_notes: >
+        - Field definitions serve as templates and may be used across multiple sheets
+        - Mobile-specific properties (tab_order_mobile, ui_label_mobile) are optional
+        - Boolean fields are converted from OpenDental's 0/1 format to true/false
+        - Text fields are trimmed and nullified if empty to maintain data quality
+        - Some field types (6 and 15) may have zero height and width as valid values
+        - Field names may be null for certain field types (2, 6, 7, 9) as per OpenDental's design
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          column_name: x_position
+          expression: ">= 0"
+          config:
+            severity: error
+            description: "Field horizontal position must be non-negative to maintain proper layout"
+      - dbt_utils.expression_is_true:
+          column_name: y_position
+          expression: ">= 0"
+          config:
+            severity: error
+            description: "Field vertical position must be non-negative to maintain proper layout"
+      - dbt_utils.expression_is_true:
+          column_name: height
+          expression: "> 0 OR field_type IN (6, 15)"
+          config:
+            severity: error
+            description: "Field height must be positive except for field types 6 and 15 which may have zero height"
+      - dbt_utils.expression_is_true:
+          column_name: tab_order
+          expression: ">= 0"
+          config:
+            severity: error
+            description: "Tab order must be non-negative to maintain proper navigation sequence"
+    
     columns:
       - name: sheet_field_def_id
-        description: Primary key of the sheet field definition table
+        description: "Primary key - Unique identifier for each sheet field definition (maps to SheetFieldDefNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
 
-      # Foreign Keys
       - name: sheet_def_id
-        description: Foreign key to the sheet definition table. References sheet_def_id in stg_opendental__sheetdef
+        description: "Foreign key to the sheet definition table - Links to the parent sheet definition that this field template belongs to"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__sheetdef')
+              field: sheet_def_id
+              severity: error
+
+      - name: field_type
+        description: "Type of field template as an integer code (e.g., text box, checkbox, signature field)"
         tests:
           - not_null
 
-      # Regular Fields
-      - name: field_type
-        description: Type of field template (e.g., text box, checkbox, signature field)
-      
       - name: field_name
-        description: Default name identifier for the field
-      
-      - name: field_value
-        description: Default value for the field
-      
-      - name: font_size
-        description: Default font size for the field
-      
-      - name: font_name
-        description: Default font name for the field
-      
-      - name: is_font_bold
-        description: Boolean indicating if the default font is bold
-      
-      - name: x_position
-        description: Default horizontal position of the field
-      
-      - name: y_position
-        description: Default vertical position of the field
-      
-      - name: width
-        description: Default width of the field
-      
-      - name: height
-        description: Default height of the field
-      
-      - name: growth_behavior
-        description: Default growth behavior when content is added
-      
-      - name: radio_button_value
-        description: Default value for radio button fields
-      
-      - name: radio_button_group
-        description: Default group identifier for related radio buttons
-      
-      - name: is_required
-        description: Boolean indicating if the field is required by default
-      
-      - name: tab_order
-        description: Default tab navigation order
-      
-      - name: reportable_name
-        description: Default name used for reporting purposes
-      
-      - name: text_align
-        description: Default text alignment within the field
-      
-      - name: is_payment_option
-        description: Boolean indicating if the field is used for payment options
-      
-      - name: item_color
-        description: Default color of the field item
-      
-      - name: is_locked
-        description: Boolean indicating if the field is locked by default
-      
-      - name: tab_order_mobile
-        description: Default tab order for mobile device display
-      
-      - name: ui_label_mobile
-        description: Default label for mobile device display
-      
-      - name: ui_label_mobile_radio_button
-        description: Default mobile-specific label for radio buttons
-      
-      - name: layout_mode
-        description: Defines how the field is laid out in the form
-      
-      - name: language
-        description: Language setting for the field definition
-      
-      - name: can_electronically_sign
-        description: Boolean indicating if the field can be signed electronically
-      
-      - name: is_sig_prov_restricted
-        description: Boolean indicating if signature is restricted to providers
+        description: "Default name identifier for the field, trimmed of whitespace. May be null for field types 2, 6, 7, and 9."
+        tests:
+          - not_null:
+              where: "field_type NOT IN (2, 6, 7, 9)"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: sheet_def_id
-          related_to: stg_opendental__sheetdef.sheet_def_id
-        - relationship: one_to_many
-          field: sheet_field_def_id
-          related_to: stg_opendental__sheetfield.sheet_field_def_id
+      - name: field_value
+        description: "Default value for the field, trimmed of whitespace"
+
+      - name: font_size
+        description: "Default font size for the field as a real number"
+
+      - name: font_name
+        description: "Default font name for the field, trimmed of whitespace"
+
+      - name: is_font_bold
+        description: "Indicates if the default font is bold (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+
+      - name: x_position
+        description: "Default horizontal position of the field in pixels"
+        tests:
+          - not_null
+
+      - name: y_position
+        description: "Default vertical position of the field in pixels"
+        tests:
+          - not_null
+
+      - name: width
+        description: "Default width of the field in pixels. Field type 15 always has zero width. Field type 6 may have any width value. All other field types must have positive width."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: null
+              where: "field_type NOT IN (6, 15)"
+              config:
+                severity: error
+                description: "Field width must be positive except for field types 6 and 15 which may have any width"
+
+      - name: height
+        description: "Default height of the field in pixels. May be zero for field types 6 and 15."
+        tests:
+          - not_null
+
+      - name: growth_behavior
+        description: "Default growth behavior when content is added, as an integer code"
+
+      - name: radio_button_value
+        description: "Default value for radio button fields, trimmed of whitespace"
+
+      - name: radio_button_group
+        description: "Default group identifier for related radio buttons, trimmed of whitespace"
+
+      - name: is_required
+        description: "Indicates if the field is required by default (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+
+      - name: tab_order
+        description: "Default tab navigation order for the field"
+        tests:
+          - not_null
+
+      - name: reportable_name
+        description: "Default name used for reporting purposes, trimmed of whitespace"
+
+      - name: text_align
+        description: "Default text alignment within the field as a smallint code"
+
+      - name: is_payment_option
+        description: "Indicates if the field is used for payment options (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+
+      - name: item_color
+        description: "Default color of the field item as an integer code"
+
+      - name: is_locked
+        description: "Indicates if the field is locked by default (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+
+      - name: tab_order_mobile
+        description: "Default tab order for mobile device display"
+
+      - name: ui_label_mobile
+        description: "Default label for mobile device display, trimmed of whitespace"
+
+      - name: ui_label_mobile_radio_button
+        description: "Default mobile-specific label for radio buttons, trimmed of whitespace"
+
+      - name: layout_mode
+        description: "Defines how the field is laid out in the form as a smallint code"
+
+      - name: language
+        description: "Language setting for the field definition, trimmed of whitespace"
+
+      - name: can_electronically_sign
+        description: "Indicates if the field can be signed electronically (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+
+      - name: is_sig_prov_restricted
+        description: "Indicates if signature is restricted to providers (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+
+      # Required metadata columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTCreated from sheetdef table."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTCreated from sheetdef table."
+        tests:
+          - not_null
