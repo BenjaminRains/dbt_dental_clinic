@@ -3,79 +3,203 @@ version: 2
 models:
   - name: stg_opendental__program
     description: >
-      Staging model for OpenDental program configurations. Contains information about integrated software programs, 
-      their paths, and settings.
+      Staging model for OpenDental program configurations and integrated software settings. 
+      Contains configuration information for external programs, plugins, and tools that integrate 
+      with the OpenDental practice management system.
       
-      Note: This table does not include two commonly referenced program_ids from the commlog table:
-      - program_id = 0: Represents system default/no specific program
-      - program_id = 95: Represents legacy communication system
+      This reference table defines the programs available for integration and their settings, 
+      including executable paths, command line parameters, and UI configurations. These programs 
+      are referenced in communication logs and other system activities to track which external 
+      systems are used for various operations.
       
-      These IDs are intentionally excluded as they are internal system references rather than actual integrated programs.
+      Note: This table contains only actual program configurations. The communication system 
+      (commlog table) uses additional program_id values that are not stored here:
+      - program_id = 0: System default communications (no specific program)
+      - program_id = 95: Legacy communication system references
+      
+      These special IDs represent internal system communications rather than external program integrations.
+    
+    meta:
+      record_count: 131
+      data_scope: "Reference data - all configured program integrations"
+      
+      known_issues:
+        - description: "No creation/update timestamps available in source table - this is a static reference table without audit trail"
+          severity: "info"
+          identified_date: "2024-12-15"
+          test: "none"
+        - description: "Program paths may contain Windows-specific file system paths that need conversion for cross-platform compatibility"
+          severity: "warn"
+          identified_date: "2024-12-15"
+          test: "none"
+        - description: "Program ID 147 has an empty program_name but valid program_description 'Perfect Cam' - this appears to be a data entry issue in the source system"
+          severity: "warn"
+          identified_date: "2024-12-15"
+          test: "dbt_utils_not_empty_string_stg_opendental__program_program_name"
+      
+      business_rules:
+        - rule: "Programs must be enabled (is_enabled = true) to be available for use in the OpenDental interface"
+          impact: "Affects program availability and integration functionality"
+        - rule: "Programs can be disabled at headquarters level (is_disabled_by_hq = true) which overrides local enable settings"
+          impact: "Central control of program availability across practice locations"
+        - rule: "Plugin DLL names are used for .NET-based integrations and must match actual DLL files"
+          impact: "Essential for proper plugin loading and functionality"
+      
+      usage_notes: >
+        Use this model to understand available program integrations and their configurations.
+        When analyzing communication patterns, join with stg_opendental__commlog using program_id,
+        but be aware that many communications use special program_ids (0, 95) not found in this table.
+        For program availability analysis, check both is_enabled and is_disabled_by_hq flags.
+        File paths and command line parameters may contain sensitive system information.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - program_name
+          config:
+            severity: warn
+            description: "Program names should be unique to avoid confusion in the user interface"
+      - dbt_utils.expression_is_true:
+          expression: "NOT (is_enabled = true AND is_disabled_by_hq = true)"
+          config:
+            severity: warn
+            description: "Programs should not be both enabled locally and disabled by headquarters"
+
     columns:
       - name: program_id
         description: >
-          Primary key of the program table. 
-          Note: program_ids 0 and 95 are special cases used in communication logs but not stored in this table.
+          Primary key of the program table (maps to ProgramNum in OpenDental).
+          Unique identifier for each program configuration.
+          
+          Note: Special program_ids used in communication logs (0 and 95) are not stored in this table 
+          as they represent internal system references rather than actual external program integrations.
         tests:
           - unique
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+              config:
+                severity: error
+                description: "Program IDs must be positive integers"
 
       - name: program_name
-        description: Name of the integrated program or software (limited to 100 characters)
+        description: >
+          Name of the integrated program or software (maps to ProgName in OpenDental, limited to 100 characters).
+          Display name used in the OpenDental interface for program identification.
         tests:
           - not_null
+          - dbt_utils.not_empty_string:
+              config:
+                severity: warn
+                description: "Program names should not be empty - this may indicate data quality issues"
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 100
+              row_condition: "program_name IS NOT NULL AND program_name != ''"
 
       - name: program_description
-        description: Description of the program or software (limited to 100 characters)
+        description: >
+          Description of the program or software (maps to ProgDesc in OpenDental, limited to 100 characters).
+          Additional descriptive text about the program's purpose and functionality.
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 0
+              max_value: 100
+              row_condition: "program_description IS NOT NULL"
 
       - name: is_enabled
-        description: Flag indicating if the program integration is enabled (0=disabled, 1=enabled)
+        description: >
+          Flag indicating if the program integration is enabled locally (maps to Enabled in OpenDental converted to boolean).
+          Controls whether the program appears as available in the OpenDental interface.
+          True = enabled and available for use, False = disabled and hidden from interface.
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
 
       - name: program_path
-        description: File system path to the program executable
+        description: >
+          File system path to the program executable (maps to Path in OpenDental).
+          Full path used by OpenDental to launch the external program.
+          May contain Windows-specific paths that require conversion for cross-platform use.
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 0
+              max_value: 1000
+              row_condition: "program_path IS NOT NULL"
 
       - name: command_line
-        description: Command line parameters or arguments used when launching the program
+        description: >
+          Command line parameters or arguments used when launching the program (maps to CommandLine in OpenDental).
+          Additional parameters passed to the program executable during startup.
+          May contain placeholder variables that are replaced at runtime.
 
       - name: note
-        description: Additional notes or comments about the program integration
+        description: >
+          Additional notes or comments about the program integration (maps to Note in OpenDental).
+          Free-form text field for administrative notes about the program configuration.
 
       - name: plugin_dll_name
-        description: Name of the plugin DLL file if applicable (limited to 255 characters)
+        description: >
+          Name of the plugin DLL file if applicable (maps to PluginDllName in OpenDental, limited to 255 characters).
+          Used for .NET-based program integrations that load as plugins within OpenDental.
+          Must match actual DLL filename for proper plugin loading.
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 0
+              max_value: 255
+              row_condition: "plugin_dll_name IS NOT NULL"
 
       - name: button_image
-        description: Path or reference to the button image used in the interface
+        description: >
+          Path or reference to the button image used in the interface (maps to ButtonImage in OpenDental).
+          Image file path for the program's button icon in the OpenDental toolbar or interface.
 
       - name: file_template
-        description: Template for file naming or structure used by the program
+        description: >
+          Template for file naming or structure used by the program (maps to FileTemplate in OpenDental).
+          Defines how files are named or structured when exchanging data with the external program.
 
       - name: file_path
-        description: File system path for program-specific files (limited to 255 characters)
+        description: >
+          File system path for program-specific files (maps to FilePath in OpenDental, limited to 255 characters).
+          Directory path where files are stored or exchanged with the external program.
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 0
+              max_value: 255
+              row_condition: "file_path IS NOT NULL"
 
       - name: is_disabled_by_hq
-        description: Flag indicating if the program is disabled by headquarters (0=not disabled, 1=disabled)
+        description: >
+          Flag indicating if the program is disabled by headquarters (maps to IsDisabledByHq in OpenDental converted to boolean).
+          Central control mechanism that overrides local enable settings.
+          True = disabled by headquarters (cannot be used regardless of local settings), False = local control allowed.
         tests:
+          - not_null
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
 
       - name: custom_error
-        description: Custom error message for the program (limited to 255 characters)
+        description: >
+          Custom error message for the program (maps to CustErr in OpenDental, limited to 255 characters).
+          Specific error message displayed when the program integration encounters problems.
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 0
+              max_value: 255
+              row_condition: "custom_error IS NOT NULL"
 
       - name: _loaded_at
-        description: Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
       
       - name: _created_at
-        description: Timestamp when the record was created in the source system (OpenDental). For this reference data view, this matches the load time.
-        tests:
-          - not_null
+        description: "Timestamp when the record was created in the source system (OpenDental). Set to null as source table lacks creation timestamp tracking."
       
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (OpenDental). For this reference data view, this matches the load time.
-        tests:
-          - not_null
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Set to null as source table lacks update timestamp tracking."
+      
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental). Set to null as source table lacks user tracking."
