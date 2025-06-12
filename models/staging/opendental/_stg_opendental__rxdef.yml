@@ -2,54 +2,88 @@ version: 2
 
 models:
   - name: stg_opendental__rxdef
-    description: Staging model for prescription definitions from OpenDental
+    description: >
+      Staging model for prescription definitions from OpenDental.
+      
+      This model contains the master list of prescription definitions used in the dental practice.
+      Each record represents a predefined prescription template that can be used when writing
+      prescriptions for patients. The model includes drug information, dosing instructions,
+      and regulatory flags for controlled substances.
+    
+    meta:
+      record_count: "Approximately 100-200 records (varies by practice)"
+      data_scope: "All active and historical prescription definitions"
+      
+      known_issues:
+        - description: "Some historical records may have missing RxCui values"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May affect drug interaction checking and reporting"
+      
+      business_rules:
+        - rule: "Controlled substances must have IsControlled=1"
+          impact: "Ensures proper tracking of controlled substance prescriptions"
+        - rule: "Prescriptions requiring procedures must have IsProcRequired=1"
+          impact: "Links prescriptions to required dental procedures"
+      
+      usage_notes: >
+        - Use this model as the source of truth for prescription templates
+        - Check IsControlled flag when analyzing controlled substance prescriptions
+        - RxCui can be used to link to external drug databases
+        - PatientInstruction field may contain important warnings or special instructions
+    
     columns:
       - name: rx_def_id
-        description: Primary key for the prescription definition
+        description: "Primary key for the prescription definition (maps to RxDefNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
 
       - name: drug
-        description: Name or description of the drug
+        description: "Name or description of the drug/medication"
         tests:
           - not_null
 
       - name: sig
-        description: Prescription instructions/signatura (how to take the medication)
+        description: "Prescription instructions/signatura (how to take the medication)"
 
       - name: disp
-        description: Dispensing instructions or quantity to dispense
+        description: "Dispensing instructions or quantity to dispense"
 
       - name: refills
-        description: Number of refills allowed for the prescription
+        description: "Number of refills allowed for the prescription"
 
       - name: notes
-        description: Additional notes about the prescription
+        description: "Additional notes about the prescription, including special instructions or warnings"
 
       - name: is_controlled
-        description: Flag indicating if this is a controlled substance (0/1)
+        description: "Flag indicating if this is a controlled substance (0=No, 1=Yes)"
         tests:
+          - not_null
           - accepted_values:
               values: [0, 1]
 
       - name: rx_cui
-        description: RxNorm Concept Unique Identifier for the drug
+        description: "RxNorm Concept Unique Identifier for the drug, used for external drug database integration"
 
       - name: is_proc_required
-        description: Flag indicating if a procedure is required (0/1)
+        description: "Flag indicating if a dental procedure is required before prescribing (0=No, 1=Yes)"
         tests:
+          - not_null
           - accepted_values:
               values: [0, 1]
 
       - name: patient_instruction
-        description: Detailed instructions for the patient
+        description: "Detailed instructions for the patient, including warnings and special considerations"
 
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
 
       - name: _created_at
-        description: Creation timestamp is not available in the source system (OpenDental)
+        description: "Creation timestamp is not available in the source system (OpenDental)"
 
       - name: _updated_at
-        description: Timestamp when the data was last loaded by the ETL pipeline
+        description: "Timestamp when the data was last loaded by the ETL pipeline"
