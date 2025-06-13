@@ -14,19 +14,19 @@ renamed_columns as (
         -- Primary and Foreign Key transformations using macro
         {{ transform_id_columns([
             {'source': '"TimeAdjustNum"', 'target': 'time_adjust_id'},
-            {'source': 'NULLIF("EmployeeNum", 0)', 'target': 'employee_id'},
-            {'source': 'NULLIF("ClinicNum", 0)', 'target': 'clinic_id'},
-            {'source': 'NULLIF("PtoDefNum", 0)', 'target': 'pto_def_id'},
-            {'source': 'NULLIF("SecuUserNumEntry", 0)', 'target': 'secu_user_entry_id'}
+            {'source': '"EmployeeNum"', 'target': 'employee_id'},
+            {'source': 'CASE WHEN "ClinicNum" = 0 THEN 0 ELSE NULLIF("ClinicNum", 0) END', 'target': 'clinic_id'},
+            {'source': 'CASE WHEN "PtoDefNum" = 0 THEN 0 ELSE NULLIF("PtoDefNum", 0) END', 'target': 'pto_def_id'},
+            {'source': 'CASE WHEN "SecuUserNumEntry" = 0 THEN 0 ELSE NULLIF("SecuUserNumEntry", 0) END', 'target': 'secu_user_entry_id'}
         ]) }},
         
         -- Timestamps
         "TimeEntry" as time_entry_ts,
         
-        -- Time durations
-        "RegHours" as regular_hours,
-        "OTimeHours" as overtime_hours,
-        "PtoHours" as pto_hours,
+        -- Time durations - convert time values to hours
+        EXTRACT(EPOCH FROM "RegHours")/3600 as regular_hours,
+        EXTRACT(EPOCH FROM "OTimeHours")/3600 as overtime_hours,
+        EXTRACT(EPOCH FROM "PtoHours")/3600 as pto_hours,
         
         -- Flags and attributes using boolean conversion macro
         {{ convert_opendental_boolean('"IsAuto"') }} as is_auto,
