@@ -27,7 +27,7 @@ def get_env_with_fallback(new_var, old_var):
     old_val = os.getenv(old_var)
     
     if new_val:
-        return new_val, f"{new_var} (improved)"
+        return new_val, f"{new_var} (template)"
     elif old_val:
         return old_val, f"{old_var} (legacy fallback)"
     else:
@@ -37,7 +37,7 @@ def test_opendental_source_connection():
     """Test connection to OpenDental source MySQL database."""
     print("\nTesting OpenDental source MySQL connection...")
     
-    # Print environment variables with improved naming
+    # Print environment variables with template naming
     host, host_source = get_env_with_fallback('OPENDENTAL_SOURCE_HOST', 'SOURCE_MYSQL_HOST')
     port, port_source = get_env_with_fallback('OPENDENTAL_SOURCE_PORT', 'SOURCE_MYSQL_PORT')
     database, db_source = get_env_with_fallback('OPENDENTAL_SOURCE_DB', 'SOURCE_MYSQL_DB')
@@ -74,7 +74,7 @@ def test_opendental_source_connection():
                     SELECT table_name 
                     FROM information_schema.tables 
                     WHERE table_schema = :db_name
-                    LIMIT 10
+                    LIMIT 5
                 """),
                 {"db_name": database}
             )
@@ -82,10 +82,9 @@ def test_opendental_source_connection():
             tables = [row[0] for row in result]
             if tables:
                 print(f"\n📋 Sample tables in {database}:")
-                for table in tables[:10]:  # Show first 10 tables
+                for table in tables:
                     print(f"  - {table}")
-                if len(tables) == 10:
-                    print("  ... (showing first 10 tables)")
+                print("  ... (showing first 5 tables)")
             else:
                 print(f"\nDatabase: {database} (empty)")
         
@@ -102,7 +101,7 @@ def test_mysql_replication_connection():
     """Test connection to MySQL replication database."""
     print("\nTesting MySQL replication connection...")
     
-    # Print environment variables with improved naming
+    # Print environment variables with template naming
     host, host_source = get_env_with_fallback('MYSQL_REPLICATION_HOST', 'REPLICATION_MYSQL_HOST')
     port, port_source = get_env_with_fallback('MYSQL_REPLICATION_PORT', 'REPLICATION_MYSQL_PORT')
     database, db_source = get_env_with_fallback('MYSQL_REPLICATION_DB', 'REPLICATION_MYSQL_DB')
@@ -145,15 +144,17 @@ def test_mysql_replication_connection():
                     SELECT table_name 
                     FROM information_schema.tables 
                     WHERE table_schema = :db_name
+                    LIMIT 5
                 """),
                 {"db_name": database}
             )
             
             tables = [row[0] for row in result]
             if tables:
-                print(f"\n📋 Tables in {database}:")
+                print(f"\n📋 Sample tables in {database}:")
                 for table in tables:
                     print(f"  - {table}")
+                print("  ... (showing first 5 tables)")
             else:
                 print(f"\nDatabase: {database} (empty)")
         
@@ -171,7 +172,7 @@ def test_postgres_analytics_connection():
     """Test connection to PostgreSQL analytics database."""
     print("\nTesting PostgreSQL analytics connection...")
     
-    # Print environment variables with improved naming
+    # Print environment variables with template naming
     host, host_source = get_env_with_fallback('POSTGRES_ANALYTICS_HOST', 'ANALYTICS_POSTGRES_HOST')
     port, port_source = get_env_with_fallback('POSTGRES_ANALYTICS_PORT', 'ANALYTICS_POSTGRES_PORT')
     database, db_source = get_env_with_fallback('POSTGRES_ANALYTICS_DB', 'ANALYTICS_POSTGRES_DB')
@@ -215,15 +216,17 @@ def test_postgres_analytics_connection():
                     SELECT table_name 
                     FROM information_schema.tables 
                     WHERE table_schema = :schema_name
+                    LIMIT 5
                 """),
                 {"schema_name": schema or 'raw'}
             )
             
             tables = [row[0] for row in result]
             if tables:
-                print(f"\n📋 Tables in {schema or 'raw'} schema:")
+                print(f"\n📋 Sample tables in {schema or 'raw'} schema:")
                 for table in tables:
                     print(f"  - {table}")
+                print("  ... (showing first 5 tables)")
             else:
                 print(f"\nSchema: {schema or 'raw'} (empty)")
         
@@ -245,7 +248,7 @@ def test_connection_factory_batch():
         results = ConnectionFactory.test_connections()
         
         print("\n📊 ConnectionFactory Test Results:")
-        print("New naming convention results:")
+        print("Template naming convention results:")
         print(f"  - opendental_source: {'✅' if results.get('opendental_source') else '❌'}")
         print(f"  - mysql_replication: {'✅' if results.get('mysql_replication') else '❌'}")
         print(f"  - postgres_analytics: {'✅' if results.get('postgres_analytics') else '❌'}")
@@ -267,9 +270,9 @@ def test_connection_factory_batch():
 
 def main():
     """Run all connection tests."""
-    print_header("Database Connection Tests - Improved Naming Conventions")
-    print("🔍 Testing database connections with improved naming conventions...")
-    print("📝 This test shows both new and legacy environment variable usage")
+    print_header("Database Connection Tests - Template Naming Conventions")
+    print("🔍 Testing database connections with template naming conventions...")
+    print("📝 This test shows both template and legacy environment variable usage")
     
     # Test OpenDental source MySQL
     print_section("OpenDental Source Database (MySQL)")
@@ -298,7 +301,7 @@ def main():
     
     if all_success:
         print("\n🎉 All connection tests passed!")
-        print("✅ Improved naming conventions are working correctly")
+        print("✅ Template naming conventions are working correctly")
         print("✅ Legacy compatibility is maintained")
     else:
         print("\n❌ Some connection tests failed")
