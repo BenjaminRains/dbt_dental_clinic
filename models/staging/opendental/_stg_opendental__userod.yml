@@ -2,28 +2,99 @@ version: 2
 
 models:
   - name: stg_opendental__userod
-    description: Staging model for user/operator data from OpenDental
-    columns:
-      - name: user_id
-        description: Primary key - unique identifier for each user
-        tests:
-          - unique
-          - not_null
-
-      # Foreign Keys
-      - name: user_group_id
-        description: >
-          Foreign key to user group table. Links users to their security groups.
-          
-          Note:
-          - As of 2024, approximately 21 records have user_group_id references that don't exist
-          - Common reasons for mismatches:
+    description: >
+      Staging model for user/operator data from OpenDental. Contains comprehensive
+      information about system users, including their authentication details, security
+      settings, and relationships to other entities like employees and providers.
+      
+      This model serves as the foundation for user management and access control in the
+      dental practice system. It tracks user authentication, security settings, and
+      relationships to other key entities like employees, providers, and clinics.
+    
+    meta:
+      record_count: "Varies based on number of active and historical users"
+      data_scope: "All active and historical users in the practice"
+      
+      known_issues:
+        - description: "Source system lacks creation and update timestamps, resulting in NULL _created_at and _updated_at values"
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "Unable to track when user records were created or modified"
+        - description: >
+            Approximately 21 records have invalid user_group_id references. Common reasons:
             - Historical user groups that have been deleted
             - System users with special group assignments
             - Users created before group management was properly implemented
             - Legacy data from before group tracking was standardized
-          - These mismatches are monitored but not considered errors as they represent
-            expected historical data patterns
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect historical analysis of user permissions"
+        - description: >
+            Approximately 49 records have invalid employee_id references. Common reasons:
+            - Historical employees who have left the practice
+            - System users without employee records
+            - Users created before employee records were properly linked
+            - Legacy data from before employee tracking was standardized
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect historical analysis of user-employee relationships"
+        - description: >
+            Approximately 57 records have invalid provider_id references. Common reasons:
+            - Historical providers who have left the practice
+            - System users (provider_id = 0) for automated processes
+            - Users created before provider records were properly linked
+            - Legacy data from before provider tracking was implemented
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect historical analysis of user-provider relationships"
+        - description: >
+            Approximately 68 records have invalid cemt_user_id references. Common reasons:
+            - Historical CEMT users that have been deleted
+            - System users with special CEMT assignments
+            - Users created before CEMT tracking was properly implemented
+            - Legacy data from before CEMT user tracking was standardized
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect historical analysis of CEMT user relationships"
+        - description: >
+            Approximately 44 users are referenced in commlog but not in the excluded list. Common reasons:
+            - Active providers with commlog entries
+            - Staff members who create commlog entries
+            - Historical users who created commlog entries
+            - System users who generate automated communications
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect analysis of communication patterns and user activity"
+      
+      business_rules:
+        - rule: "Each user must have a unique username"
+          impact: "Ensures proper user identification and authentication"
+        - rule: "Users must be associated with at least one user group"
+          impact: "Ensures proper access control and permissions"
+        - rule: "System users (user_id = 0) are exempt from certain relationship validations"
+          impact: "Maintains system functionality while allowing historical data analysis"
+      
+      usage_notes: >
+        - Use this model to understand user access and authentication
+        - Join with stg_opendental__usergroup for group assignments
+        - Join with stg_opendental__employee for employee details
+        - Join with stg_opendental__provider for provider details
+        - Note that creation and update timestamps are not available in source
+        - All timestamps are in UTC
+        - Contains sensitive security information - handle with appropriate security measures
+    
+    columns:
+      # Primary Key
+      - name: user_id
+        description: "Primary key - Unique identifier for each user (maps to UserNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Foreign Keys
+      - name: user_group_id
+        description: "Foreign key to user group table. Links users to their security groups (maps to UserGroupNum in OpenDental, with NULLIF(0))"
         tests:
           - relationships:
               to: ref('stg_opendental__usergroup')
@@ -33,18 +104,7 @@ models:
               name: fk_userod_usergroup_valid
 
       - name: employee_id
-        description: >
-          Foreign key to employee table that links users to employee records.
-          
-          Note:
-          - As of 2024, approximately 49 records have employee_id references that don't exist
-          - Common reasons for mismatches:
-            - Historical employees who have left the practice
-            - System users without employee records
-            - Users created before employee records were properly linked
-            - Legacy data from before employee tracking was standardized
-          - These mismatches are monitored but not considered errors as they represent
-            expected historical data patterns
+        description: "Foreign key to employee table that links users to employee records (maps to EmployeeNum in OpenDental, with NULLIF(0))"
         tests:
           - relationships:
               to: ref('stg_opendental__employee')
@@ -52,28 +112,20 @@ models:
               severity: warn
               where: "employee_id is not null"
               name: fk_userod_employee_valid
-              config:
-                description: >
-                  This test warns when employee_id references employees that don't exist
-                  in the employee table. This is expected for historical data and system
-                  users. The warning helps track data quality without failing the build.
 
-      - name: clinic_id
-        description: Foreign key to clinic table
+      # Commented out until clinic model is implemented
+      # - name: clinic_id
+      #   description: "Foreign key to clinic table (maps to ClinicNum in OpenDental, with NULLIF(0))"
+      #   tests:
+      #     - relationships:
+      #         to: ref('stg_opendental__clinic')
+      #         field: clinic_id
+      #         severity: warn
+      #         where: "clinic_id is not null"
+      #         name: fk_userod_clinic_valid
 
       - name: provider_id
-        description: >
-          Foreign key to provider table. Links users to their associated provider records.
-          
-          Note:
-          - As of 2024, approximately 57 records have provider_id references that don't exist
-          - Common reasons for mismatches:
-            - Historical providers who have left the practice
-            - System users (provider_id = 0) for automated processes
-            - Users created before provider records were properly linked
-            - Legacy data from before provider tracking was implemented
-          - These mismatches are monitored but not considered errors as they represent
-            expected historical data patterns
+        description: "Foreign key to provider table. Links users to their associated provider records (maps to ProvNum in OpenDental, with NULLIF(0))"
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
@@ -81,25 +133,9 @@ models:
               severity: warn
               where: "provider_id is not null"
               name: fk_userod_provider_valid
-              config:
-                description: >
-                  This test warns when provider_id references providers that don't exist
-                  in the provider table. This is expected for historical data and system
-                  users. The warning helps track data quality without failing the build.
 
       - name: cemt_user_id
-        description: >
-          Foreign key to another user record (CEMT user reference).
-          
-          Note:
-          - As of 2024, approximately 68 records have cemt_user_id references that don't exist
-          - Common reasons for mismatches:
-            - Historical CEMT users that have been deleted
-            - System users with special CEMT assignments
-            - Users created before CEMT tracking was properly implemented
-            - Legacy data from before CEMT user tracking was standardized
-          - These mismatches are monitored but not considered errors as they represent
-            expected historical data patterns
+        description: "Foreign key to another user record (CEMT user reference) (maps to UserNumCEMT in OpenDental, with NULLIF(0))"
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
@@ -107,94 +143,106 @@ models:
               severity: warn
               where: "cemt_user_id is not null"
               name: fk_userod_cemt_valid
-              config:
-                description: >
-                  This test warns when cemt_user_id references users that don't exist
-                  in the userod table. This is expected for historical data and system
-                  users. The warning helps track data quality without failing the build.
 
       # User Information
       - name: username
-        description: User's login username
+        description: "User's login username (maps to UserName in OpenDental)"
         tests:
           - not_null
+          - unique
 
       - name: password_hash
-        description: Hashed password value
+        description: "Hashed password value (maps to Password in OpenDental)"
 
       - name: domain_username
-        description: Domain username for network authentication
+        description: "Domain username for network authentication (maps to DomainUser in OpenDental)"
 
       - name: badge_id
-        description: User's badge identifier
+        description: "User's badge identifier (maps to BadgeId in OpenDental)"
 
       # Boolean Flags
       - name: is_hidden
-        description: Flag indicating if the user account is hidden
+        description: "Flag indicating if the user account is hidden (maps to IsHidden in OpenDental, converted to boolean)"
+        tests:
+          - not_null
 
       - name: has_strong_password
-        description: Flag indicating if the password meets strong password requirements
+        description: "Flag indicating if the password meets strong password requirements (maps to PasswordIsStrong in OpenDental, converted to boolean)"
+        tests:
+          - not_null
 
       - name: is_clinic_restricted
-        description: Flag indicating if the user is restricted to specific clinics
+        description: "Flag indicating if the user is restricted to specific clinics (maps to ClinicIsRestricted in OpenDental, converted to boolean)"
+        tests:
+          - not_null
 
       - name: is_password_reset_required
-        description: Flag indicating if the user needs to reset their password
+        description: "Flag indicating if the user needs to reset their password (maps to IsPasswordResetRequired in OpenDental, converted to boolean)"
+        tests:
+          - not_null
 
       # Security and Access
       - name: task_list_inbox
-        description: User's task list inbox configuration
+        description: "User's task list inbox configuration (maps to TaskListInBox in OpenDental, converted to bigint)"
+        tests:
+          - not_null
 
       - name: anesthesia_provider_type
-        description: Type of anesthesia provider if applicable
+        description: "Type of anesthesia provider if applicable (maps to AnesthProvType in OpenDental, converted to smallint)"
 
       - name: is_default_hide_popups
-        description: Flag for default popup visibility settings
+        description: "Flag for default popup visibility settings (maps to DefaultHidePopups in OpenDental, converted to boolean)"
+        tests:
+          - not_null
 
       - name: is_inbox_hide_popups
-        description: Flag for inbox popup visibility settings
+        description: "Flag for inbox popup visibility settings (maps to InboxHidePopups in OpenDental, converted to boolean)"
+        tests:
+          - not_null
 
       # Mobile and Web Access
       - name: mobile_web_pin
-        description: PIN for mobile web access
+        description: "PIN for mobile web access (maps to MobileWebPin in OpenDental)"
 
       - name: mobile_web_pin_failed_attempts
-        description: Count of failed mobile web PIN attempts
+        description: "Count of failed mobile web PIN attempts (maps to MobileWebPinFailedAttempts in OpenDental, converted to integer)"
+        tests:
+          - not_null
 
       - name: eclipboard_clinical_pin
-        description: PIN for eClipboard clinical access
+        description: "PIN for eClipboard clinical access (maps to EClipboardClinicalPin in OpenDental)"
 
       # Security Tracking
       - name: last_failed_login_at
-        description: Timestamp of last failed login attempt
+        description: "Timestamp of last failed login attempt (maps to DateTFail in OpenDental, cleaned date)"
 
       - name: failed_login_attempts
-        description: Count of failed login attempts
+        description: "Count of failed login attempts (maps to FailedAttempts in OpenDental, converted to integer)"
+        tests:
+          - not_null
 
       - name: last_login_at
-        description: Timestamp of last successful login
+        description: "Timestamp of last successful login (maps to DateTLastLogin in OpenDental, cleaned date)"
 
       # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into our data warehouse by the ETL pipeline
+        description: "Timestamp when the ETL pipeline loaded the data into the data warehouse (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: >
-          Timestamp when the user record was created in the source system (OpenDental).
-          Since no creation timestamp exists in the source, this uses current_timestamp
-          to track when the record was loaded into our warehouse.
+        description: "Timestamp when the user record was created (NULL as source system lacks creation timestamp)"
         tests:
-          - not_null
+          - not_null:
+              where: "_created_at is not null"
+              severity: warn
 
       - name: _updated_at
-        description: >
-          Timestamp when the user record was last updated in the source system (OpenDental).
-          Since no update timestamp exists in the source, this uses current_timestamp
-          to track when the record was loaded into our warehouse.
+        description: "Timestamp when the user record was last updated (NULL as source system lacks update timestamp)"
         tests:
-          - not_null
+          - not_null:
+              where: "_updated_at is not null"
+              severity: warn
 
     # Model-level tests
     tests:
@@ -215,3 +263,16 @@ models:
               - Maria Barajas (45) - Hidden provider
               - Edward Karateew (51) - Hidden provider
               And system/unknown users (54, 9280, 9281)
+
+    meta:
+      business_owners: ["system_administrators", "security_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "real-time"
+      contains_pii: true
+      data_quality_requirements:
+        - "All user records must have valid usernames"
+        - "Users must be associated with valid security groups"
+        - "Employee and provider relationships must be valid when present"
+        - "Security settings must be properly configured"
+        - "All required fields must be non-null"
+        - "User references must be valid"
