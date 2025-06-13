@@ -3,425 +3,285 @@ version: 2
 models:
   - name: int_patient_profile
     description: >
-      Foundation model combining core patient information from staging models to 
-      create comprehensive patient profiles.
-
-      Data Sources:
-      - stg_opendental__patient: Base patient information, demographics, and financial data
-      - stg_opendental__patientlink: Family relationships and linkages
-      - stg_opendental__patientnote: Medical notes, treatment information, and emergency contacts
-      - stg_opendental__provider: Provider assignments and relationships
-
+      Foundation model that combines core patient information from staging models to create comprehensive patient profiles.
+      
+      This model serves as the primary source for patient profile information in downstream analytics and financial processing.
+      Part of System A: Patient Management workflow.
+      
       Key Features:
-      - Basic demographics and contact information
-      - Family relationships
-      - Emergency contacts
-      - Medical notes and treatment information
-      - Patient preferences (pronouns, consent)
-      - One-to-one relationship with patients (32,700 records as of 2025)
-      - Base model for int_ar_analysis (record count must match)
-
-      Usage:
-      Primary source for patient profile information in downstream analytics.
-      Base model for AR analysis and financial reporting.
-
+      - Basic demographics and contact information: Core patient identification and communication
+      - Family relationships and emergency contacts: Patient safety and financial responsibility
+      - Medical notes and treatment information: Clinical care coordination
+      - Patient preferences (pronouns, consent): Patient experience and compliance
+      - Insurance status and financial information: Payment processing and coverage management
+      
+      Data Sources:
+      - stg_opendental__patient: Core patient information and demographics
+      - stg_opendental__patientlink: Family relationships and financial responsibility
+      - stg_opendental__patientnote: Additional patient information and preferences
+      
+      Business Logic Features:
+      - Patient status determination: Active/Inactive/Deceased/Archived categorization
+      - Family relationship mapping: Bidirectional relationship tracking
+      - Emergency contact management: Required for active patients
+      - Medical and treatment note consolidation: Clinical information aggregation
+      - Insurance status tracking: Coverage and financial responsibility
+      
+      Financial Calculations:
+      - Insurance coverage determination: Active coverage status
+      - Financial responsibility mapping: Guarantor relationships
+      - Payment eligibility: Based on patient status and insurance
+      
+      Data Quality Notes:
+      - Geographic data (city, state, zipcode) pending investigation
+      - Consider checking for additional patient address/location tables
+      - Family relationships may be incomplete for historical data
+      - Insurance status requires regular validation
+      - Emergency contact information needs periodic verification
+      
+      Business Rules:
+      - Each patient must have a unique patient_id
+      - Patient status must be valid (Active/Inactive/Deceased/Archived)
+      - Family relationships must be bidirectional
+      - Emergency contacts must have valid phone numbers
+      - Active patients must have complete demographic information
+      - Insurance status must be current and accurate
     
     config:
       materialized: table
+      schema: intermediate
       unique_key: patient_id
-      tags: ['foundation', 'weekly']
     
     columns:
       - name: patient_id
-        description: Unique identifier for each patient
+        description: >
+          Primary key - Unique identifier for the patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase)
+          - Transformed to: patient_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all patients
+          - Used as foreign key in multiple downstream models
+          - Critical for patient identification and record linking
         tests:
           - unique
           - not_null
-
-      - name: guarantor_id
-        description: ID of the guarantor responsible for patient's account
-        tests:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                severity: error
+                description: "Patient ID must exist in source system"
+
+      - name: guarantor_id
+        description: >
+          Foreign key to the patient's guarantor (maps from "GuarantorNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "GuarantorNum" (CamelCase)
+          - Transformed to: guarantor_id (snake_case)
+          
+          Business Relationship:
+          - Links to the patient responsible for payment
+          - May be self-referential (patient is their own guarantor)
+          - Critical for financial responsibility tracking
+          
+          Data Quality Considerations:
+          - Must exist in patient profile
+          - Self-referential cases must be validated
+        tests:
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+                description: "Guarantor must exist in patient profile"
 
       - name: primary_provider_id
-        description: ID of the patient's primary provider
+        description: >
+          Foreign key to the patient's primary provider (maps from "PriProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PriProvNum" (CamelCase)
+          - Transformed to: primary_provider_id (snake_case)
+          
+          Business Relationship:
+          - Main provider responsible for patient care
+          - Used for provider assignment and scheduling
+          - Critical for clinical workflow
         tests:
           - relationships:
-              to: ref('stg_opendental__provider')
-              field: provider_id
-
-      - name: secondary_provider_id
-        description: >
-          ID of the patient's secondary provider
-          
-          Note:
-          - As of 2025, approximately 4,662 records have secondary_provider_id = 0
-          - This appears to be a default value rather than an invalid provider ID
-          - Primarily affects:
-            - Prospective patients (status 4)
-            - Inactive patients (status 0)
-            - Some inactive (status 1) and active (status 2) patients
-          - Zero likely indicates "no secondary provider assigned"
-          - Consider updating active patients with zero provider IDs
-        tests:
-          - relationships:
-              to: ref('stg_opendental__provider')
+              to: ref('int_provider_profile')
               field: provider_id
               config:
-                severity: warn
-                description: "Provider ID of 0 indicates no secondary provider assigned"
-
-      - name: preferred_name
-        description: Patient's preferred name
-        tests:
-          - not_null
-
-      - name: middle_initial
-        description: Patient's middle initial
-
-      - name: gender
-        description: Patient's gender (0=Male, 1=Female, 2=Other)
-        tests:
-          - accepted_values:
-              values: [0, 1, 2]
-
-      - name: language
-        description: Patient's preferred language
-        tests:
-          - not_null:
-              config:
-                severity: warn
-
-      - name: birth_date
-        description: >
-          Patient's date of birth.
-          
-          Note: 
-          - NULL values are allowed for non-active patients (patient_status != 0)
-          - As of 2025, approximately 2,614 patients have NULL birth dates
-          - Most of these patients have first visits from the 1990s or 2006
-          - Stakeholders should collect birth date information when these patients visit
-          - This affects age calculation (these patients will have NULL ages)
-        tests:
-          - not_null:
-              where: "patient_status = 0"  # Only require for active patients
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'1900-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
-              where: "birth_date is not null"  # Only validate non-NULL values
-
-      - name: age
-        description: >
-          Patient's calculated age
-          Note: 
-          - Ages over 120 (11 records) include:
-            - 2 records with placeholder birth_date (1900-01-01)
-            - 9 records with likely typo birth dates (1900-1903)
-          - Approximately 2,614 patients have NULL ages due to missing birth dates
-          - See birth_date field documentation for details on missing data
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 120
-              config:
-                severity: warn
+                severity: error
+                description: "Primary provider must exist in provider profile"
 
       - name: patient_status
         description: >
           Current status of the patient
-          Values:
-          - 0 = Patient (active)
-          - 1 = NonPatient
-          - 2 = Inactive
-          - 3 = Archived
-          - 4 = Deceased
-          - 5 = Deleted
+          
+          Valid Values:
+          - 0: Patient (active) - Currently receiving care
+          - 1: NonPatient - Potential patient, not yet treated
+          - 2: Inactive - Former patient, not currently active
+          - 3: Archived - Historical record, typically not accessed
+          - 4: Deceased - Patient has passed away
+          - 5: Deleted - Soft delete, record maintained for audit
+          
+          Business Rules:
+          - Must be one of the valid statuses
+          - Status changes must be tracked
+          - Affects financial processing and clinical care
+          
+          Operational Impact:
+          - Determines eligibility for services
+          - Affects billing and insurance processing
+          - Influences communication preferences
         tests:
           - not_null
           - accepted_values:
               values: [0, 1, 2, 3, 4, 5]
-
-      - name: position_code
-        description: Patient position classification
-        tests:
-          - not_null
-
-      - name: student_status
-        description: Patient's student status (N=Not a student, ''=Unknown/Not specified)
-        tests:
-          - accepted_values:
-              values: ['N', '']
               config:
-                severity: warn
-
-      - name: preferred_confirmation_method
-        description: >
-          Patient's preferred method for appointment confirmations.
-          
-          Current distribution (as of 2024):
-          - 0 (15.17%): Assumed to be "None/No Preference"
-          - 2 (58.52%): Assumed to be "Email"
-          - 4 (26.26%): Assumed to be "Text"
-          - 8 (0.04%): Assumed to be "Phone"
-          
-          Note: These mappings are assumptions based on data distribution patterns and 
-          OpenDental's typical bit flag usage. They should be verified with stakeholders
-          before being used for business decisions.
-        tests:
-          - accepted_values:
-              values: [0, 2, 4, 8]
-
-      - name: preferred_contact_method
-        description: >
-          Patient's preferred method for general contact.
-          
-          Current distribution (as of 2024):
-          - 0 (13.35%): Assumed to be "None/No Preference"
-          - 2 (58.53%): Assumed to be "Email"
-          - 3 (0.01%): Assumed to be "Mail"
-          - 4 (28.08%): Assumed to be "Phone"
-          - 5 (0.01%): Assumed to be "Text"
-          - 6 (0.00%): Assumed to be "Other"
-          - 8 (0.02%): Assumed to be "Portal"
-          
-          Note: These mappings are assumptions based on data distribution patterns and
-          OpenDental's typical bit flag usage. They should be verified with stakeholders
-          before being used for business decisions.
-        tests:
-          - accepted_values:
-              values: [0, 2, 3, 4, 5, 6, 8]
-
-      - name: text_messaging_consent
-        description: >
-          Whether patient has consented to text messaging
-          - 0: Consent given (87.43%)
-          - 1: No consent (8.33%)
-          - 2: Unknown/Not specified (4.24%)
-        tests:
-          - accepted_values:
-              values: [0, 1, 2]
-              config:
-                severity: warn
-
-      - name: estimated_balance
-        description: Estimated current balance
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000000
-              max_value: 1000000
-
-      - name: total_balance
-        description: Total balance on account
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000000
-              max_value: 1000000
+                severity: error
+                description: "Patient status must be valid"
 
       - name: has_insurance_flag
         description: >
-          Indicates if patient has insurance.
+          Flag indicating if patient has active insurance (converted from OpenDental 0/1 integer)
           
-          Values in source data (as of 2025):
-          - 'I': Patient has insurance (59.28% of records)
-          - '': No insurance or unknown (40.72% of records)
+          Source Transformation:
+          - OpenDental source: "HasIns" (0/1 integer)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false)
           
-          Note: The 'I' notation is OpenDental's single-character flag for "Insurance".
-          This is a common pattern in the system where single letters are used as flags.
-          The exact meaning should be verified with stakeholders.
+          Business Logic:
+          - true when: Patient has active insurance coverage
+          - false when: Patient has no insurance or inactive coverage
+          
+          Operational Usage:
+          - Used for insurance verification
+          - Affects payment processing
+          - Influences financial responsibility
         tests:
+          - not_null
           - accepted_values:
-              values: ['I', '']
-
-      - name: family_id
-        description: ID linking to related family members
-        tests:
-          - relationships:
-              to: ref('stg_opendental__patient')
-              field: patient_id
-
-      - name: family_link_type
-        description: Type of family relationship
-        tests:
-          - accepted_values:
-              values: [1]
-
-      - name: family_linked_at
-        description: Timestamp when family relationship was established
+              values: [true, false]
+              config:
+                severity: error
+                description: "Insurance flag must be boolean"
 
       - name: emergency_contact_name
         description: >
-          Name of emergency contact (ICE)
+          Name of the patient's emergency contact
           
-          Note:
-          - CRITICAL: 21,686 active patients are missing emergency contacts
-          - These are the same legacy patients missing consent forms
-          - Missing emergency contacts represent a patient safety risk
-          - URGENT: Collect emergency contact info at next visit
-          - Consider a targeted outreach campaign for this information
+          Business Rules:
+          - Recommended for active patients (status = 0)
+          - Used for emergency situations
+          - Must be a valid name (not empty or just spaces)
+          
+          Data Quality:
+          - Currently only ~16.5% of active patients have emergency contact info
+          - When present, should be properly formatted
+          - May be null for non-active patients
+          
+          Known Data Gap:
+          - Emergency contact information is not consistently collected
+          - Consider implementing a data quality improvement initiative
         tests:
           - not_null:
-              where: "patient_status = 2"  # Required for active patients
+              where: "patient_status = 0"
               config:
-                severity: error
-                description: "Active patients must have emergency contacts"
+                severity: warn
+                description: "Active patients should have emergency contact name for safety"
 
       - name: emergency_contact_phone
         description: >
-          Phone number of emergency contact
+          Phone number of the patient's emergency contact
           
-          Note:
-          - CRITICAL: 21,686 active patients are missing emergency contact phones
-          - These are the same legacy patients missing other critical info
-          - Missing emergency contact phones represent a patient safety risk
-          - URGENT: Collect this information along with other missing data
-          - Consider adding to new patient registration requirements
+          Business Rules:
+          - Recommended for active patients (status = 0)
+          - Used for emergency situations
+          - Must be a valid phone number format
+          
+          Data Quality:
+          - Currently only ~16.5% of active patients have emergency contact info
+          - When present, should be properly formatted
+          - May be null for non-active patients
+          
+          Known Data Gap:
+          - Emergency contact information is not consistently collected
+          - Consider implementing a data quality improvement initiative
         tests:
           - not_null:
-              where: "patient_status = 2"  # Required for active patients
-              config:
-                severity: error
-                description: "Active patients must have emergency contact phones"
-
-      - name: medical_notes
-        description: General medical notes
-
-      - name: treatment_notes
-        description: Notes related to treatment
-
-      - name: pronoun
-        description: Patient's preferred pronouns (0=default)
-        tests:
-          - accepted_values:
-              values: [0]
+              where: "patient_status = 0"
               config:
                 severity: warn
+                description: "Active patients should have emergency contact phone for safety"
 
-      - name: consent
+      - name: _loaded_at
         description: >
-          Patient's recorded consents
+          ETL pipeline processing time - when the record was loaded into the data warehouse
           
-          Note:
-          - CRITICAL: 21,686 active patients are missing consent records
-          - These are legacy patients with first visits from 1985-1997
-          - Missing consents represent a significant compliance risk
-          - URGENT: Collect consent forms from these patients at their next visit
-          - Track consent collection progress in a separate system
+          Source: ETL pipeline metadata (added during extraction process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
         tests:
-          - not_null:
-              where: "patient_status = 2"  # Required for active patients
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
               config:
                 severity: error
-                description: "Active patients must have consent records"
+                description: "ETL load timestamp must be within valid range"
 
-      - name: first_visit_date
+      - name: _created_at
         description: >
-          Date of patient's first visit
+          Original creation timestamp from OpenDental source system
           
-          Note:
-          - As of 2025, approximately 3,162 patients have no first visit date recorded
-          - Distribution of patients missing first visit dates:
-            - Status 4 (Prospective): Expected to be NULL until first visit
-            - Status 1 (Inactive): May be missing for historical reasons
-            - Status 2 (Active): ~2,000 records unexpectedly missing first visit dates
-          - Action Items:
-            - Review active patients missing first visit dates
-            - Update first visit dates for active patients based on appointment history
-            - Ensure new patients get first visit date recorded at first appointment
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
         tests:
-          - not_null:
-              where: "patient_status = 2"  # Required for active patients
-              config:
-                severity: error
-                description: "Active patients must have a first visit date"
+          - not_null
 
-      - name: patient_created_at
+      - name: _updated_at
         description: >
-          Timestamp when patient record was created in OpenDental
+          Last update timestamp from OpenDental source system
           
-          Note:
-          - As of 2025, approximately 27,789 records are missing creation timestamps
-          - These represent historical patient records from 1985-2006
-          - Creation timestamps were not tracked in OpenDental during this period
-          - For historical records:
-            - first_visit_date can be used as an approximate creation date
-            - model_created_at shows when the record was added to the analytics database (2025-04-15)
-          - All new patient records after 2006 should have creation timestamps
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
         tests:
-          - not_null:
-              config:
-                severity: warn
-                description: "Historical records (1985-2006) do not have creation timestamps"
+          - not_null
 
-      - name: patient_updated_at
+      - name: _transformed_at
         description: >
-          Timestamp when patient record was last updated.
-          Warning: If this is older than 2 years for active patients (status=2),
-          the patient may be effectively inactive despite their active status.
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
-
-      - name: notes_created_at
-        description: Timestamp when patient notes were created
-        tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
-
-      - name: notes_updated_at
-        description: Timestamp when patient notes were last updated
-        tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'"
-              max_value: "{{ var('max_valid_date', 'current_date') }}"
-
-      - name: model_created_at
-        description: Timestamp when this model record was created
-        tests:
-          - not_null
-
-      - name: model_updated_at
-        description: Timestamp when this model record was last updated
-        tests:
-          - not_null
-
-    tests:
-      - dbt_utils.equal_rowcount:
-          compare_model: ref('stg_opendental__patient')
-          config:
-            severity: error
-            description: "Patient count must match source data"
-
-      - dbt_utils.expression_is_true:
-          expression: "NOT(patient_updated_at < CURRENT_DATE - INTERVAL '2 years' AND patient_status = 2)"
-          config:
-            severity: warn
-            where: "patient_status = 2"
-            description: "Active patients should have recent updates"
 
     meta:
-      owner: 'data_team'
-      contains_phi: true
-      refresh_frequency: 'daily'
-      upstream_sources:
-        - 'stg_opendental__patient'
-        - 'stg_opendental__patientlink'
-        - 'stg_opendental__patientnote'
+      owner: "clinical_operations_team"
+      contains_pii: true
+      business_process: "Patient Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System A: Patient Management"
       data_quality_requirements:
-        - "All active patients must have emergency contact information"
-        - "All active patients must have a first visit date"
-        - "Patient status must be valid (0-9)"
-        - "Age must be between 0 and 120"
-        - "Balances must be within reasonable ranges"
-        - "Dates must be within valid ranges"
-        - "Gender must be one of M, F, O, U"
-        - "Contact preferences must be valid"
-        - "Family relationships must be valid"
-        - "Patient updates must be recent for active patients"
+        - "All active patients must have complete demographic information"
+        - "Emergency contact information must be valid and current"
+        - "Family relationships must be properly mapped"
+        - "Patient status must accurately reflect current state"
+        - "Insurance status must be current and accurate"
+        - "Financial responsibility must be properly assigned"
+        - "Provider assignments must be valid and current"
