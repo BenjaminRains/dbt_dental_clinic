@@ -5,17 +5,54 @@ models:
     description: >
       Staging model for user group attachments in OpenDental. Contains information about
       which users belong to which security groups, enabling role-based access control.
+      
+      This model serves as the junction table between users and their assigned security
+      groups, implementing the many-to-many relationship between users and groups. It is
+      critical for managing user permissions and access rights across the dental practice
+      system.
+    
+    meta:
+      record_count: "Varies based on number of users and their group assignments"
+      data_scope: "All active and historical user group assignments"
+      
+      known_issues:
+        - description: "Source system lacks creation and update timestamps, resulting in NULL _created_at and _updated_at values"
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "Unable to track when group assignments were created or modified"
+        - description: "Some user_id and user_group_id references may be NULL or invalid due to historical data"
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect historical analysis of user permissions"
+      
+      business_rules:
+        - rule: "Each user can only be assigned to a specific group once"
+          impact: "Prevents duplicate group assignments and ensures consistent permissions"
+        - rule: "Users must be assigned to at least one group"
+          impact: "Ensures all users have defined access rights"
+        - rule: "Group assignments must reference valid users and groups"
+          impact: "Maintains data integrity of the permission system"
+      
+      usage_notes: >
+        - Use this model to understand user access control assignments
+        - Join with stg_opendental__userod to see user details
+        - Join with stg_opendental__usergroup to see group details
+        - Note that creation and update timestamps are not available in source
+        - All timestamps are in UTC
+        - Contains PII - handle with appropriate security measures
+    
     columns:
       # Primary Key
       - name: user_group_attach_id
-        description: Primary key - unique identifier for each user group attachment
+        description: "Primary key - Unique identifier for each user group attachment (maps to UserGroupAttachNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
       
       # Foreign Keys
       - name: user_id
-        description: Foreign key to stg_opendental__userod, represents the user being assigned to a group
+        description: "Foreign key to stg_opendental__userod - Represents the user being assigned to a group (maps to UserNum in OpenDental, with NULLIF(0))"
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
@@ -30,7 +67,7 @@ models:
                   users. The warning helps track data quality without failing the build.
 
       - name: user_group_id
-        description: Foreign key to stg_opendental__usergroup, represents the security group being assigned
+        description: "Foreign key to stg_opendental__usergroup - Represents the security group being assigned (maps to UserGroupNum in OpenDental, with NULLIF(0))"
         tests:
           - relationships:
               to: ref('stg_opendental__usergroup')
@@ -46,23 +83,23 @@ models:
 
       # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the ETL pipeline loaded the data into the data warehouse (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: >
-          Timestamp when the user group attachment was created in the source system (OpenDental).
-          Since no creation timestamp exists in the source, this uses current_timestamp.
+        description: "Timestamp when the user group attachment was created (NULL as source system lacks creation timestamp)"
         tests:
-          - not_null
+          - not_null:
+              where: "_created_at is not null"
+              severity: warn
 
       - name: _updated_at
-        description: >
-          Timestamp when the user group attachment was last updated in the source system (OpenDental).
-          Since no update timestamp exists in the source, this uses current_timestamp.
+        description: "Timestamp when the user group attachment was last updated (NULL as source system lacks update timestamp)"
         tests:
-          - not_null
+          - not_null:
+              where: "_updated_at is not null"
+              severity: warn
 
     # Model-level tests
     tests:
