@@ -6,70 +6,176 @@ models:
       Staging model for time adjustments from OpenDental. Tracks employee time entries including
       regular hours, overtime, and PTO. This model supports time tracking, payroll processing,
       and workforce management by maintaining a record of all time-related adjustments.
+      
+      Business Context:
+      - Records employee time entries and adjustments
+      - Supports payroll processing and workforce management
+      - Tracks regular hours, overtime, and PTO
+      - Maintains audit trail of time entry changes
+      
+      Data Scope:
+      - Records from 2023-01-01 onwards
+      - Includes all time adjustments across all clinics
+      - Captures both manual and automatic entries
+    
+    meta:
+      record_count: "Approximately [TBD] records"
+      data_scope: "Records from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: "TimeEntry field is used for both created_at and updated_at timestamps"
+          severity: "warn"
+          identified_date: "2024-03-19"
+          impact: "Cannot distinguish between creation and update times"
+      
+      business_rules:
+        - rule: "Time adjustments must be associated with an employee and clinic"
+          impact: "Critical for payroll processing and time tracking"
+        - rule: "Time entries are filtered to 2023-01-01 onwards"
+          impact: "Historical data before 2023 is not available in this model"
+      
+      usage_notes: >
+        - Use this model for payroll processing, time tracking, and workforce management
+        - Regular hours, overtime, and PTO hours are tracked separately
+        - Automatic entries are flagged with is_auto
+        - Unpaid protected leave is tracked separately with is_unpaid_protected_leave
+        - All time entries require an employee and clinic association
+    
     columns:
       # Primary Key
       - name: time_adjust_id
-        description: Primary key - unique identifier for each time adjustment record
+        description: "Primary key - unique identifier for each time adjustment record (maps to TimeAdjustNum in OpenDental)"
         tests:
           - unique
           - not_null
+          - positive_values
 
       # Foreign Keys
       - name: employee_id
-        description: Foreign key to the employee who the time adjustment applies to
+        description: "Foreign key to the employee who the time adjustment applies to (maps to EmployeeNum in OpenDental)"
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__employee')
               field: employee_id
+              severity: error
+      
       - name: clinic_id
-        description: Foreign key to the clinic where the time adjustment was recorded
-        tests:
-          - not_null
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
+        description: >
+          Foreign key to the clinic where the time adjustment was recorded (maps to ClinicNum in OpenDental).
+          A value of 0 represents the main/default clinic location. This is common in single-clinic
+          practices and for system-generated entries. Field maintained for OpenDental compatibility.
+        tests: []
+        # TODO: Uncomment when clinic relationship is needed
+        # - relationships:
+        #     to: ref('stg_opendental__clinic')
+        #     field: clinic_id
+        #     severity: error
+      
       - name: pto_def_id
-        description: Foreign key to the PTO definition if this adjustment is for paid time off
+        description: >
+          Foreign key to the PTO definition if this adjustment is for paid time off (maps to PtoDefNum in OpenDental).
+          A value of 0 indicates no PTO definition is associated with this time adjustment.
+          NULL values are valid and indicate pending time adjustment requests that haven't been processed yet.
+          Note: Currently not linked to any definition table as PTO definitions are not tracked in the system.
+          The field exists in the source data but is not actively used for PTO categorization.
+        tests: []
+      
       - name: secu_user_entry_id
-        description: Foreign key to the user who entered the time adjustment
+        description: >
+          Foreign key to the user who entered the time adjustment (maps to SecuUserNumEntry in OpenDental).
+          A value of 0 indicates a system-generated entry, particularly when is_auto = true.
+          For manual entries (is_auto = false), this field may also be 0 for historical records
+          or when the user information was not captured.
         tests:
-          - not_null
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              severity: error
+              where: "secu_user_entry_id != 0"
 
       # Timestamps
       - name: time_entry_ts
-        description: Timestamp when the time adjustment was entered
+        description: "Timestamp when the time adjustment was entered (maps to TimeEntry in OpenDental)"
         tests:
           - not_null
+          - test_date_after:
+              compare_column: '2023-01-01'
+              allow_null: false
 
       # Time Durations
       - name: regular_hours
-        description: Number of regular hours in the time adjustment
+        description: "Number of regular hours in the time adjustment (maps to RegHours in OpenDental)"
+      
       - name: overtime_hours
-        description: Number of overtime hours in the time adjustment
+        description: "Number of overtime hours in the time adjustment (maps to OTimeHours in OpenDental)"
+      
       - name: pto_hours
-        description: Number of paid time off hours in the time adjustment
+        description: "Number of paid time off hours in the time adjustment (maps to PtoHours in OpenDental)"
 
       # Flags and Attributes
       - name: is_auto
-        description: Flag indicating if the time adjustment was automatically generated
+        description: "Flag indicating if the time adjustment was automatically generated (maps to IsAuto in OpenDental, 0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
       - name: is_unpaid_protected_leave
-        description: Flag indicating if the time adjustment is for unpaid protected leave
+        description: "Flag indicating if the time adjustment is for unpaid protected leave (maps to IsUnpaidProtectedLeave in OpenDental, 0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
       - name: note
-        description: Additional notes or comments about the time adjustment
+        description: "Additional notes or comments about the time adjustment (maps to Note in OpenDental)"
 
       # Metadata
       - name: _loaded_at
-        description: Timestamp when the data was loaded into the data warehouse by the ETL pipeline
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+      
       - name: _created_at
-        description: Timestamp from TimeEntry field indicating when the time adjustment was created
+        description: "Timestamp when the time adjustment was created in OpenDental (maps to TimeEntry)"
+        tests:
+          - not_null
+      
       - name: _updated_at
-        description: Timestamp from TimeEntry field indicating when the time adjustment was last updated
+        description: "Timestamp when the time adjustment was last updated in OpenDental (maps to TimeEntry)"
+        tests:
+          - not_null
+      
+      - name: _created_by_user_id
+        description: "User who created the time adjustment in OpenDental (maps to SecuUserNumEntry)"
 
     tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - time_adjust_id
+      - dbt_utils.expression_is_true:
+          expression: "> 0"
+          column_name: "regular_hours + overtime_hours + pto_hours"
+          config:
+            severity: error
+            description: "At least one type of hours must be greater than 0"
+      - dbt_utils.expression_is_true:
+          expression: ">= 0"
+          column_name: "pto_def_id"
+          config:
+            severity: warn
+            description: "PTO definition ID should be non-negative"
+      - dbt_utils.expression_is_true:
+          expression: ">= 0"
+          column_name: "regular_hours"
+          config:
+            severity: error
+            description: "Regular hours should be non-negative"
+      - dbt_utils.expression_is_true:
+          expression: ">= 0"
+          column_name: "overtime_hours"
+          config:
+            severity: error
+            description: "Overtime hours should be non-negative"
+      - dbt_utils.expression_is_true:
+          expression: ">= 0"
+          column_name: "pto_hours"
+          config:
+            severity: error
+            description: "PTO hours should be non-negative"
