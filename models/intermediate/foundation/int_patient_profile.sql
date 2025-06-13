@@ -1,6 +1,7 @@
 {{
     config(
         materialized='table',
+        schema='intermediate',
         unique_key='patient_id',
         tags=['foundation', 'weekly'],
         description='''
@@ -27,8 +28,14 @@
     )
 }}
 
-WITH patient_base AS (
-    SELECT
+with source_data as (
+    select * from {{ ref('stg_opendental__patient') }}
+),
+
+-- Standardize IDs and metadata
+standardized as (
+    select
+        -- Core patient information
         patient_id,
         guarantor_id,
         primary_provider_id,
@@ -51,22 +58,27 @@ WITH patient_base AS (
         total_balance,
         has_insurance_flag,
         first_visit_date,
-        created_at,
-        updated_at
-    FROM {{ ref('stg_opendental__patient') }}
+        -- Metadata columns
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by_user_id
+    from source_data
 ),
 
-patient_family AS (
-    SELECT
+-- Family relationships
+family_relationships as (
+    select
         patient_id_from as patient_id,
         patient_id_to as family_id,
         link_type,
         linked_at
-    FROM {{ ref('stg_opendental__patientlink') }}
+    from {{ ref('stg_opendental__patientlink') }}
 ),
 
-patient_notes AS (
-    SELECT
+-- Patient notes and additional information
+patient_notes as (
+    select
         patient_id,
         ice_name,
         ice_phone,
@@ -74,50 +86,68 @@ patient_notes AS (
         treatment,
         pronoun,
         consent,
-        created_at as notes_created_at,
-        updated_at as notes_updated_at
-    FROM {{ ref('stg_opendental__patientnote') }}
+        _created_at as notes_created_at,
+        _updated_at as notes_updated_at
+    from {{ ref('stg_opendental__patientnote') }}
+),
+
+-- Combine all patient information
+final as (
+    select
+        -- Required metadata fields
+        s._loaded_at,
+        s._created_at,
+        s._updated_at,
+        s._created_by_user_id,
+        current_timestamp as _transformed_at,
+        
+        -- Core patient information
+        s.patient_id,
+        s.guarantor_id,
+        s.primary_provider_id,
+        s.secondary_provider_id,
+        s.clinic_id,
+        s.fee_schedule_id,
+        s.preferred_name,
+        s.middle_initial,
+        s.gender,
+        s.language,
+        s.birth_date,
+        s.age,
+        s.patient_status,
+        s.position_code,
+        s.student_status,
+        s.preferred_confirmation_method,
+        s.preferred_contact_method,
+        s.text_messaging_consent,
+        s.estimated_balance,
+        s.total_balance,
+        s.has_insurance_flag,
+        
+        -- Family relationships
+        f.family_id,
+        f.link_type as family_link_type,
+        f.linked_at as family_linked_at,
+        
+        -- Emergency contacts and notes
+        pn.ice_name as emergency_contact_name,
+        pn.ice_phone as emergency_contact_phone,
+        pn.medical as medical_notes,
+        pn.treatment as treatment_notes,
+        pn.pronoun,
+        pn.consent,
+        
+        -- Dates
+        s.first_visit_date,
+        s._created_at as patient_created_at,
+        s._updated_at as patient_updated_at,
+        pn.notes_created_at,
+        pn.notes_updated_at
+    from standardized s
+    left join family_relationships f
+        on s.patient_id = f.patient_id
+    left join patient_notes pn
+        on s.patient_id = pn.patient_id
 )
 
-SELECT
-    p.patient_id,
-    p.guarantor_id,
-    p.primary_provider_id,
-    p.secondary_provider_id,
-    p.clinic_id,
-    p.preferred_name,
-    p.middle_initial,
-    p.gender,
-    p.language,
-    p.birth_date,
-    p.age,
-    p.patient_status,
-    p.position_code,
-    p.student_status,
-    p.preferred_confirmation_method,
-    p.preferred_contact_method,
-    p.text_messaging_consent,
-    p.estimated_balance,
-    p.total_balance,
-    p.has_insurance_flag,
-    pf.family_id,
-    pf.link_type as family_link_type,
-    pf.linked_at as family_linked_at,
-    pn.ice_name as emergency_contact_name,
-    pn.ice_phone as emergency_contact_phone,
-    pn.medical as medical_notes,
-    pn.treatment as treatment_notes,
-    pn.pronoun,
-    pn.consent,
-    p.first_visit_date,
-    p.created_at as patient_created_at,
-    p.updated_at as patient_updated_at,
-    pn.notes_created_at,
-    pn.notes_updated_at,
-    CURRENT_TIMESTAMP as model_created_at,
-    CURRENT_TIMESTAMP as model_updated_at
-FROM patient_base p
-LEFT JOIN patient_family pf 
-    ON p.patient_id = pf.patient_id
-LEFT JOIN patient_notes pn
-    ON p.patient_id = pn.patient_id 
+select * from final 
