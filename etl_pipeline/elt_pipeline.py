@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 class IntelligentELTPipeline:
-    def __init__(self, config_path: str = 'etl_pipeline/config/tables.yaml'):
+    def __init__(self, config_path: str = 'etl_pipeline/config/tables.yml'):
         """
         Initialize the intelligent ETL pipeline (Phase 1: Configuration Only).
         
@@ -900,7 +900,7 @@ def main():
                        help='Process tables by importance level')
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be processed without executing')
-    parser.add_argument('--config', type=str, default='etl_pipeline/config/tables.yaml',
+    parser.add_argument('--config', type=str, default='etl_pipeline/config/tables.yml',
                        help='Path to table configuration file')
     
     args = parser.parse_args()
