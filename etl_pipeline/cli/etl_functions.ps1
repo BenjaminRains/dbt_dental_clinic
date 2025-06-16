@@ -19,8 +19,8 @@ function Initialize-ETLEnvironment {
         return $false
     }
 
-    # Check if Pipfile exists
-    $pipfilePath = Join-Path $ProjectPath "etl_pipeline/Pipfile"
+    # Check if Pipfile exists in the root directory
+    $pipfilePath = Join-Path $ProjectPath "Pipfile"
     if (-not (Test-Path $pipfilePath)) {
         Write-Host "❌ Pipfile not found at: $pipfilePath" -ForegroundColor Red
         return $false
@@ -28,15 +28,19 @@ function Initialize-ETLEnvironment {
 
     Write-Host "✅ ETL Pipenv environment detected"
     Write-Host "📦 Installing ETL dependencies..."
-
-    # Change to the directory containing the Pipfile
-    Push-Location (Split-Path $pipfilePath)
     
     try {
-        # Install dependencies
+        # Install dependencies and the package in development mode
         pipenv install --dev
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to install dependencies"
+        }
+        
+        # Install the package in development mode
+        Write-Host "📦 Installing ETL package in development mode..."
+        pipenv run pip install -e .
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install ETL package"
         }
         Write-Host "✅ Dependencies installed successfully"
 
@@ -74,34 +78,30 @@ function Initialize-ETLEnvironment {
         Write-Host "  etl                       - Main ETL CLI (run 'etl' for help)"
         Write-Host "  etl-help                  - Show detailed command help"
         Write-Host "  etl-status                - Get pipeline status"
-        Write-Host "  etl-validate [table]      - Validate data quality"
+        Write-Host "  etl validate-data         - Validate data quality (use --help for options)"
         Write-Host "  etl-performance           - Analyze performance"
         Write-Host "  etl-config [action]       - Manage configuration`n"
 
         Write-Host "🏥 Dental Clinic Specific:"
-        Write-Host "  etl-patient-sync          - Sync patient data"
-        Write-Host "  etl-appointment-metrics   - Daily appointment metrics"
-        Write-Host "  etl-compliance-check      - HIPAA compliance check`n"
+        Write-Host "  etl patient-sync          - Sync patient data"
+        Write-Host "  etl appointment-metrics   - Daily appointment metrics"
+        Write-Host "  etl compliance-check      - HIPAA compliance check`n"
 
-        Write-Host "⚡ Quick Actions:"
-        Write-Host "  etl-quick-status          - Quick status check"
-        Write-Host "  etl-quick-validate        - Quick patient validation"
-        Write-Host "  etl-quick-run             - Quick run core tables`n"
+        Write-Host "⚡ Quick Actions (with aliases):"
+        Write-Host "  etl-s                     - Quick status check (alias for Quick-ETLStatus)"
+        Write-Host "  etl-v                     - Quick data validation (alias for Quick-ETLValidate)"
+        Write-Host "  etl-r                     - Quick run core tables (alias for Quick-ETLRun)`n"
 
-        Write-Host "🔧 Basic Operations:"
-        Write-Host "  etl-test-connections      - Test database connections"
-        Write-Host "  etl-run                   - Run ETL pipeline"
-        Write-Host "  etl-setup                 - Set up databases"
-        Write-Host "  etl-deactivate            - Deactivate ETL environment"
+        Write-Host "🔧 Basic Operations (with aliases):"
+        Write-Host "  etl-t                     - Test database connections (alias for Test-ETLConnections)"
+        Write-Host "  etl-p                     - Run ETL pipeline (alias for Run-ETLPipeline)"
+        Write-Host "  etl-d                     - Deactivate ETL environment (alias for Deactivate-ETLEnvironment)"
 
         return $true
     }
     catch {
         Write-Host "❌ Error initializing ETL environment: $_" -ForegroundColor Red
         return $false
-    }
-    finally {
-        Pop-Location
     }
 }
 
@@ -125,19 +125,41 @@ function Run-ETLPipeline {
     param(
         [string]$Tables,
         [switch]$Full,
-        [switch]$Force
+        [switch]$Force,
+        [string]$Config = "etl_pipeline/config/pipeline.yaml"
     )
 
+    Write-Host "🚀 Running ETL pipeline..." -ForegroundColor Magenta
+    
+    # Build the command arguments
+    $args = @("run", "-c", $Config)
+    
     if ($Full) {
-        Write-Host "🚀 Running full ETL pipeline..." -ForegroundColor Magenta
-        etl run --full
+        Write-Host "   📊 Running full pipeline" -ForegroundColor Cyan
+        $args += "--full"
     }
     elseif ($Tables) {
-        Write-Host "🚀 Running ETL pipeline for tables: $Tables" -ForegroundColor Magenta
-        etl run --tables $Tables
+        Write-Host "   📊 Running pipeline for tables: $Tables" -ForegroundColor Cyan
+        $args += "--tables", $Tables
     }
     else {
         Write-Host "❌ Please specify either --Full or --Tables" -ForegroundColor Red
+        return
+    }
+    
+    if ($Force) {
+        Write-Host "   ⚡ Force mode enabled" -ForegroundColor Yellow
+        $args += "--force"
+    }
+    
+    try {
+        Write-Host "   🚀 Running command: pipenv run python -m etl_pipeline.cli.entry $($args -join ' ')" -ForegroundColor Gray
+        # Use pipenv run to ensure we're in the correct environment
+        pipenv run python -m etl_pipeline.cli.entry @args
+    }
+    catch {
+        Write-Host "❌ Pipeline run failed: $_" -ForegroundColor Red
+        Write-Host "💡 Tip: Run 'pipenv run python -m etl_pipeline.cli.entry run --help' for more information" -ForegroundColor Yellow
     }
 }
 
@@ -163,9 +185,47 @@ function Quick-ETLStatus {
 }
 
 function Quick-ETLValidate {
-    param([string]$Table)
-    Write-Host "🔍 Quick validation for table: $Table" -ForegroundColor Magenta
-    etl validate --table $Table
+    param(
+        [Parameter(Mandatory=$false)]
+        [string]$Table,
+        
+        [Parameter(Mandatory=$false)]
+        [string]$Config = "etl_pipeline/config/pipeline.yaml",
+        
+        [Parameter(Mandatory=$false)]
+        [switch]$Verbose
+    )
+    
+    Write-Host "🔍 Running data validation..." -ForegroundColor Magenta
+    
+    # Build the command arguments
+    $args = @("validate-data")
+    
+    if ($Config) {
+        $args += "--config", $Config
+    }
+    
+    if ($Table) {
+        Write-Host "   📊 Validating table: $Table" -ForegroundColor Cyan
+        $args += "--table", $Table
+    } else {
+        Write-Host "   📊 Validating all tables" -ForegroundColor Cyan
+    }
+    
+    if ($Verbose) {
+        $args += "--verbose"
+        Write-Host "   🔍 Verbose mode enabled" -ForegroundColor Gray
+    }
+    
+    try {
+        Write-Host "   🚀 Running command: etl $($args -join ' ')" -ForegroundColor Gray
+        # Use python -m to ensure proper module loading
+        python -m etl_pipeline.cli.entry @args
+    }
+    catch {
+        Write-Host "❌ Validation failed: $_" -ForegroundColor Red
+        Write-Host "💡 Tip: Run 'python -m etl_pipeline.cli.entry validate-data --help' for more information" -ForegroundColor Yellow
+    }
 }
 
 function Quick-ETLRun {
@@ -238,6 +298,110 @@ function Test-ComprehensiveHealth {
     
     etl @args
 }
+
+function Get-ETLStatus {
+    <#
+    .SYNOPSIS
+    Get the current status of the ETL pipeline.
+    
+    .DESCRIPTION
+    Retrieves and displays the current status of the ETL pipeline, including table statuses,
+    last run times, and any errors or warnings.
+    
+    .PARAMETER Format
+    Output format: table, json, or summary (default: table)
+    
+    .PARAMETER Table
+    Show status for specific table only
+    
+    .PARAMETER Watch
+    Watch status in real-time (press Ctrl+C to stop)
+    
+    .PARAMETER Output
+    Output file for status report
+    
+    .PARAMETER IncludeDentalIntelligence
+    Include dental practice specific metrics and insights
+    
+    .PARAMETER TimeRange
+    Time range for status check (e.g., 1h, 24h, 7d, 30d)
+    
+    .EXAMPLE
+    Get-ETLStatus -Format summary
+    Get-ETLStatus -Table patient -Format json
+    Get-ETLStatus -Watch -TimeRange 24h
+    #>
+    param(
+        [ValidateSet("table", "json", "summary")]
+        [string]$Format = "table",
+        
+        [string]$Table = "",
+        
+        [switch]$Watch,
+        
+        [string]$Output = "",
+        
+        [switch]$IncludeDentalIntelligence,
+        
+        [string]$TimeRange = "24h"
+    )
+    
+    Write-Host "📊 Getting ETL pipeline status..." -ForegroundColor Green
+    
+    # Get the config path
+    $configPath = Join-Path $PSScriptRoot ".." "config" "pipeline.yaml"
+    if (-not (Test-Path $configPath)) {
+        Write-Host "❌ Pipeline config file not found at: $configPath" -ForegroundColor Red
+        return $false
+    }
+    
+    # Build the command string
+    $cmd = "pipenv run python -m etl_pipeline.cli.main status --config `"$configPath`" --format `"$Format`" --time-range `"$TimeRange`""
+    
+    # Add optional parameters if specified
+    if ($Table) { 
+        Write-Host "   📋 Table: $Table" -ForegroundColor Cyan
+        $cmd += " --table `"$Table`""
+    }
+    
+    if ($Watch) { 
+        Write-Host "   👀 Watching status in real-time..." -ForegroundColor Cyan
+        $cmd += " --watch"
+    }
+    
+    if ($Output) { 
+        Write-Host "   📄 Output: $Output" -ForegroundColor Cyan
+        $cmd += " --output `"$Output`""
+    }
+    
+    if ($IncludeDentalIntelligence) {
+        Write-Host "   🦷 Including dental practice intelligence..." -ForegroundColor Cyan
+        $cmd += " --include-dental-intelligence"
+    }
+    
+    try {
+        # Set PYTHONPATH to include the project root
+        $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $env:PYTHONPATH = $projectRoot
+        
+        # Execute the command
+        Write-Host "   🔧 Running command: $cmd" -ForegroundColor Gray
+        Invoke-Expression $cmd
+    }
+    catch {
+        Write-Host "❌ Failed to get ETL status: $_" -ForegroundColor Red
+        return $false
+    }
+    finally {
+        # Clean up environment variable
+        Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
+    }
+    
+    return $true
+}
+
+# Alias for backward compatibility
+Set-Alias -Name etl-status -Value Get-ETLStatus
 
 # Remove the Export-ModuleMember line since we're dot-sourcing this file
 # Export-ModuleMember -Function Initialize-ETLEnvironment, Deactivate-ETLEnvironment, Test-ETLConnections, Run-ETLPipeline, Setup-ETLDatabases, Quick-ETLStatus, Quick-ETLValidate, Quick-ETLRun, Sync-PatientData, Get-AppointmentMetrics, Test-HIPAACompliance 
