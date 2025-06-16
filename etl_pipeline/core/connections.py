@@ -197,70 +197,118 @@ class ConnectionFactory:
     
     @classmethod
     def get_staging_connection(cls) -> Engine:
-        """Get connection to staging/replication MySQL database (DEPRECATED: use get_mysql_replication_connection)."""
+        """
+        Get connection to staging/replication MySQL database.
+        
+        DEPRECATED: Use get_mysql_replication_connection() instead.
+        This method is maintained for backward compatibility with legacy code in:
+        - etl_job/monitoring_utils.py
+        - etl_job/mysql_postgre_incremental.py
+        - etl_job/mysql_postgre_increm_ETL.py
+        - airflow/dags/nightly_incremental_DAG.py
+        
+        The entire /etl_job directory is considered legacy and should be migrated to /etl_pipeline.
+        """
+        import warnings
+        warnings.warn(
+            "get_staging_connection() is deprecated. Use get_mysql_replication_connection() instead. "
+            "This method is maintained for backward compatibility with legacy code.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return cls.get_mysql_replication_connection()
     
     @classmethod
     def get_target_connection(cls) -> Engine:
-        """Get connection to target PostgreSQL analytics database (DEPRECATED: use get_postgres_analytics_connection)."""
+        """
+        Get connection to target PostgreSQL analytics database.
+        
+        DEPRECATED: Use get_postgres_analytics_connection() instead.
+        This method is maintained for backward compatibility with legacy code in:
+        - etl_job/monitoring_utils.py
+        - etl_job/mysql_postgre_incremental.py
+        - etl_job/mysql_postgre_increm_ETL.py
+        - airflow/dags/nightly_incremental_DAG.py
+        
+        The entire /etl_job directory is considered legacy and should be migrated to /etl_pipeline.
+        """
+        import warnings
+        warnings.warn(
+            "get_target_connection() is deprecated. Use get_postgres_analytics_connection() instead. "
+            "This method is maintained for backward compatibility with legacy code.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return cls.get_postgres_analytics_connection()
     
     @classmethod
     def get_source_connection(cls) -> Engine:
-        """Get connection to source OpenDental MySQL database (DEPRECATED: use get_opendental_source_connection)."""
-        # Try improved naming first, fall back to old naming
-        host = os.getenv('OPENDENTAL_SOURCE_HOST') or os.getenv('SOURCE_MYSQL_HOST')
-        port = os.getenv('OPENDENTAL_SOURCE_PORT') or os.getenv('SOURCE_MYSQL_PORT')
-        database = os.getenv('OPENDENTAL_SOURCE_DB') or os.getenv('SOURCE_MYSQL_DB')
-        user = os.getenv('OPENDENTAL_SOURCE_USER') or os.getenv('SOURCE_MYSQL_USER')
-        password = os.getenv('OPENDENTAL_SOURCE_PASSWORD') or os.getenv('SOURCE_MYSQL_PASSWORD')
+        """
+        Get connection to source OpenDental MySQL database.
         
-        return cls.create_mysql_connection(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password,
-            readonly=True
+        DEPRECATED: Use get_opendental_source_connection() instead.
+        This method is maintained for backward compatibility with legacy code in:
+        - etl_job/monitoring_utils.py
+        - etl_job/mysql_postgre_incremental.py
+        - etl_job/mysql_postgre_increm_ETL.py
+        - airflow/dags/nightly_incremental_DAG.py
+        
+        The entire /etl_job directory is considered legacy and should be migrated to /etl_pipeline.
+        """
+        import warnings
+        warnings.warn(
+            "get_source_connection() is deprecated. Use get_opendental_source_connection() instead. "
+            "This method is maintained for backward compatibility with legacy code.",
+            DeprecationWarning,
+            stacklevel=2
         )
+        return cls.get_opendental_source_connection()
     
     @classmethod
     def get_replication_connection(cls) -> Engine:
-        """Get connection to local MySQL replication database (DEPRECATED: use get_mysql_replication_connection)."""
-        # Try improved naming first, fall back to old naming
-        host = os.getenv('MYSQL_REPLICATION_HOST') or os.getenv('REPLICATION_MYSQL_HOST')
-        port = os.getenv('MYSQL_REPLICATION_PORT') or os.getenv('REPLICATION_MYSQL_PORT')
-        database = os.getenv('MYSQL_REPLICATION_DB') or os.getenv('REPLICATION_MYSQL_DB')
-        user = os.getenv('MYSQL_REPLICATION_USER') or os.getenv('REPLICATION_MYSQL_USER')
-        password = os.getenv('MYSQL_REPLICATION_PASSWORD') or os.getenv('REPLICATION_MYSQL_PASSWORD')
+        """
+        Get connection to local MySQL replication database.
         
-        return cls.create_mysql_connection(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password
+        DEPRECATED: Use get_mysql_replication_connection() instead.
+        This method is maintained for backward compatibility with legacy code in:
+        - etl_job/monitoring_utils.py
+        - etl_job/mysql_postgre_incremental.py
+        - etl_job/mysql_postgre_increm_ETL.py
+        - airflow/dags/nightly_incremental_DAG.py
+        
+        The entire /etl_job directory is considered legacy and should be migrated to /etl_pipeline.
+        """
+        import warnings
+        warnings.warn(
+            "get_replication_connection() is deprecated. Use get_mysql_replication_connection() instead. "
+            "This method is maintained for backward compatibility with legacy code.",
+            DeprecationWarning,
+            stacklevel=2
         )
+        return cls.get_mysql_replication_connection()
     
     @classmethod
     def get_analytics_connection(cls) -> Engine:
-        """Get connection to PostgreSQL analytics database (DEPRECATED: use get_postgres_analytics_connection)."""
-        # Try improved naming first, fall back to old naming
-        host = os.getenv('POSTGRES_ANALYTICS_HOST') or os.getenv('ANALYTICS_POSTGRES_HOST')
-        port = os.getenv('POSTGRES_ANALYTICS_PORT') or os.getenv('ANALYTICS_POSTGRES_PORT')
-        database = os.getenv('POSTGRES_ANALYTICS_DB') or os.getenv('ANALYTICS_POSTGRES_DB')
-        schema = os.getenv('POSTGRES_ANALYTICS_SCHEMA') or os.getenv('ANALYTICS_POSTGRES_SCHEMA', 'raw')
-        user = os.getenv('POSTGRES_ANALYTICS_USER') or os.getenv('ANALYTICS_POSTGRES_USER')
-        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD') or os.getenv('ANALYTICS_POSTGRES_PASSWORD')
+        """
+        Get connection to PostgreSQL analytics database.
         
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password
+        DEPRECATED: Use get_postgres_analytics_connection() instead.
+        This method is maintained for backward compatibility with legacy code in:
+        - etl_job/monitoring_utils.py
+        - etl_job/mysql_postgre_incremental.py
+        - etl_job/mysql_postgre_increm_ETL.py
+        - airflow/dags/nightly_incremental_DAG.py
+        
+        The entire /etl_job directory is considered legacy and should be migrated to /etl_pipeline.
+        """
+        import warnings
+        warnings.warn(
+            "get_analytics_connection() is deprecated. Use get_postgres_analytics_connection() instead. "
+            "This method is maintained for backward compatibility with legacy code.",
+            DeprecationWarning,
+            stacklevel=2
         )
+        return cls.get_postgres_analytics_connection()
     
     @classmethod
     def test_connections(cls) -> dict:
