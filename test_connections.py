@@ -51,24 +51,27 @@ def test_opendental_source_connection():
     print(f"PASSWORD: {'SET' if password else 'MISSING'} [{pwd_source}]")
     
     try:
-        # Test both new and legacy connection methods
-        print("\n🔧 Testing improved ConnectionFactory method...")
-        new_engine = ConnectionFactory.get_opendental_source_connection()
-        with new_engine.connect() as conn:
+        # Test new connection method
+        print("\n🔧 Testing ConnectionFactory method...")
+        engine = ConnectionFactory.get_opendental_source_connection()
+        with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             assert result.scalar() == 1
-            print("✅ New method (get_opendental_source_connection) successful")
+            print("✅ Connection successful")
         
-        print("\n🔧 Testing legacy ConnectionFactory method...")
-        legacy_engine = ConnectionFactory.get_source_connection()
-        with legacy_engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            assert result.scalar() == 1
-            print("✅ Legacy method (get_source_connection) successful")
-        
-        # List tables using the new connection
-        with new_engine.connect() as conn:
+        # List tables and get count using the connection
+        with engine.connect() as conn:
             conn.execute(text(f"USE {database}"))
+            
+            # Get table count
+            count_result = conn.execute(text("""
+                SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = :db_name
+            """), {"db_name": database})
+            table_count = count_result.scalar()
+            
+            # Get sample tables
             result = conn.execute(
                 text("""
                     SELECT table_name 
@@ -84,13 +87,12 @@ def test_opendental_source_connection():
                 print(f"\n📋 Sample tables in {database}:")
                 for table in tables:
                     print(f"  - {table}")
-                print("  ... (showing first 5 tables)")
+                print(f"  ... (showing first 5 of {table_count} total tables)")
             else:
                 print(f"\nDatabase: {database} (empty)")
         
         # Cleanup
-        new_engine.dispose()
-        legacy_engine.dispose()
+        engine.dispose()
         return True
         
     except SQLAlchemyError as e:
@@ -115,30 +117,27 @@ def test_mysql_replication_connection():
     print(f"PASSWORD: {'SET' if password else 'MISSING'} [{pwd_source}]")
     
     try:
-        # Test both new and legacy connection methods
-        print("\n🔧 Testing improved ConnectionFactory method...")
-        new_engine = ConnectionFactory.get_mysql_replication_connection()
-        with new_engine.connect() as conn:
+        # Test new connection method
+        print("\n🔧 Testing ConnectionFactory method...")
+        engine = ConnectionFactory.get_mysql_replication_connection()
+        with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             assert result.scalar() == 1
-            print("✅ New method (get_mysql_replication_connection) successful")
+            print("✅ Connection successful")
         
-        print("\n🔧 Testing legacy ConnectionFactory methods...")
-        staging_engine = ConnectionFactory.get_staging_connection()
-        with staging_engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            assert result.scalar() == 1
-            print("✅ Legacy method (get_staging_connection) successful")
-        
-        replication_engine = ConnectionFactory.get_replication_connection()
-        with replication_engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            assert result.scalar() == 1
-            print("✅ Legacy method (get_replication_connection) successful")
-        
-        # List tables using the new connection
-        with new_engine.connect() as conn:
+        # List tables and get count using the connection
+        with engine.connect() as conn:
             conn.execute(text(f"USE {database}"))
+            
+            # Get table count
+            count_result = conn.execute(text("""
+                SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = :db_name
+            """), {"db_name": database})
+            table_count = count_result.scalar()
+            
+            # Get sample tables
             result = conn.execute(
                 text("""
                     SELECT table_name 
@@ -154,14 +153,12 @@ def test_mysql_replication_connection():
                 print(f"\n📋 Sample tables in {database}:")
                 for table in tables:
                     print(f"  - {table}")
-                print("  ... (showing first 5 tables)")
+                print(f"  ... (showing first 5 of {table_count} total tables)")
             else:
                 print(f"\nDatabase: {database} (empty)")
         
         # Cleanup
-        new_engine.dispose()
-        staging_engine.dispose()
-        replication_engine.dispose()
+        engine.dispose()
         return True
         
     except SQLAlchemyError as e:
@@ -184,33 +181,32 @@ def test_postgres_analytics_connection():
     print(f"PORT: {port} [{port_source}]")
     print(f"DATABASE: {database} [{db_source}]")
     print(f"USER: {user} [{user_source}]")
+    if user == 'postgres':
+        print("⚠️  WARNING: Using postgres superuser - this is not recommended for ETL operations")
+        print("   Please use analytics_user instead as specified in .env.template")
     print(f"SCHEMA: {schema} [{schema_source}]")
     print(f"PASSWORD: {'SET' if password else 'MISSING'} [{pwd_source}]")
     
     try:
-        # Test both new and legacy connection methods
-        print("\n🔧 Testing improved ConnectionFactory method...")
-        new_engine = ConnectionFactory.get_postgres_analytics_connection()
-        with new_engine.connect() as conn:
+        # Test new connection method
+        print("\n🔧 Testing ConnectionFactory method...")
+        engine = ConnectionFactory.get_postgres_analytics_connection()
+        with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             assert result.scalar() == 1
-            print("✅ New method (get_postgres_analytics_connection) successful")
+            print("✅ Connection successful")
         
-        print("\n🔧 Testing legacy ConnectionFactory methods...")
-        target_engine = ConnectionFactory.get_target_connection()
-        with target_engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            assert result.scalar() == 1
-            print("✅ Legacy method (get_target_connection) successful")
-        
-        analytics_engine = ConnectionFactory.get_analytics_connection()
-        with analytics_engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            assert result.scalar() == 1
-            print("✅ Legacy method (get_analytics_connection) successful")
-        
-        # List tables using the new connection
-        with new_engine.connect() as conn:
+        # List tables and get count using the connection
+        with engine.connect() as conn:
+            # Get table count
+            count_result = conn.execute(text("""
+                SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = :schema_name
+            """), {"schema_name": schema or 'raw'})
+            table_count = count_result.scalar()
+            
+            # Get sample tables
             result = conn.execute(
                 text("""
                     SELECT table_name 
@@ -226,14 +222,12 @@ def test_postgres_analytics_connection():
                 print(f"\n📋 Sample tables in {schema or 'raw'} schema:")
                 for table in tables:
                     print(f"  - {table}")
-                print("  ... (showing first 5 tables)")
+                print(f"  ... (showing first 5 of {table_count} total tables)")
             else:
                 print(f"\nSchema: {schema or 'raw'} (empty)")
         
         # Cleanup
-        new_engine.dispose()
-        target_engine.dispose()
-        analytics_engine.dispose()
+        engine.dispose()
         return True
         
     except SQLAlchemyError as e:
@@ -253,11 +247,6 @@ def test_connection_factory_batch():
         print(f"  - mysql_replication: {'✅' if results.get('mysql_replication') else '❌'}")
         print(f"  - postgres_analytics: {'✅' if results.get('postgres_analytics') else '❌'}")
         
-        print("\nLegacy compatibility results:")
-        print(f"  - source: {'✅' if results.get('source') else '❌'}")
-        print(f"  - replication: {'✅' if results.get('replication') else '❌'}")
-        print(f"  - analytics: {'✅' if results.get('analytics') else '❌'}")
-        
         return all([
             results.get('opendental_source', False),
             results.get('mysql_replication', False),
@@ -272,9 +261,8 @@ def main():
     """Run all connection tests."""
     print_header("Database Connection Tests - Template Naming Conventions")
     print("🔍 Testing database connections with template naming conventions...")
-    print("📝 This test shows both template and legacy environment variable usage")
     
-    # Test OpenDental source MySQL
+    # Test OpenDental source
     print_section("OpenDental Source Database (MySQL)")
     source_success = test_opendental_source_connection()
     
@@ -302,7 +290,6 @@ def main():
     if all_success:
         print("\n🎉 All connection tests passed!")
         print("✅ Template naming conventions are working correctly")
-        print("✅ Legacy compatibility is maintained")
     else:
         print("\n❌ Some connection tests failed")
         print("💡 Check your .env file and ensure all required environment variables are set")
