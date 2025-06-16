@@ -1,6 +1,8 @@
 """ETL Pipeline CLI Module"""
 
-from .main import cli, main
-from .commands import commands
+def get_cli():
+    """Lazy import of CLI to avoid circular dependencies."""
+    from .main import cli
+    return cli
 
-__all__ = ['cli', 'main', 'commands'] 
+__all__ = ['get_cli'] 
