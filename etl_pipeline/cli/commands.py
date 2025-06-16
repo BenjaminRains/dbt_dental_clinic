@@ -8,6 +8,7 @@ Enhanced implementation with dental clinic specific functionality.
 import logging
 import click
 import sys
+import time
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import json
@@ -27,16 +28,11 @@ from etl_pipeline.utils.notifications import NotificationManager, NotificationCo
 
 logger = logging.getLogger(__name__)
 
-@click.group()
-def commands() -> None:
-    """Enhanced ETL pipeline commands."""
-    pass
-
 # =============================================================================
 # CORE PIPELINE COMMANDS
 # =============================================================================
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--tables', '-t', help='Comma-separated list of tables to process')
 @click.option('--full', is_flag=True, help='Run complete pipeline for all tables')
@@ -110,7 +106,95 @@ def run(config: str, tables: Optional[str], full: bool, force: bool,
         logger.error(f"Pipeline execution failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
+@click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
+@click.option('--format', type=click.Choice(['table', 'json', 'summary']), 
+              default='table', help='Output format (default: table)')
+@click.option('--table', help='Show status for specific table only')
+@click.option('--watch', is_flag=True, help='Watch status in real-time')
+@click.option('--output', '-o', help='Output file for status report')
+def status(config: str, format: str, table: Optional[str], watch: bool, output: Optional[str]) -> None:
+    """Show current status of the ETL pipeline."""
+    try:
+        # Load configuration
+        with open(config, 'r') as f:
+            config_data = yaml.safe_load(f)
+        
+        # Initialize components
+        connection_factory = ConnectionFactory()
+        monitor = PipelineMetrics()
+        
+        # Get pipeline status
+        status_data = monitor.get_pipeline_status(table=table)
+        
+        # Display status
+        _display_status(status_data, format)
+        
+        # Handle output file if specified
+        if output:
+            with open(output, 'w') as f:
+                if format == 'json':
+                    json.dump(status_data, f, indent=2)
+                else:
+                    f.write(str(status_data))
+            click.echo(f"✅ Status report written to {output}")
+        
+        # Handle watch mode
+        if watch:
+            click.echo("👀 Watching pipeline status (press Ctrl+C to stop)...")
+            try:
+                while True:
+                    status_data = monitor.get_pipeline_status(table=table)
+                    click.clear()
+                    _display_status(status_data, format)
+                    time.sleep(5)  # Update every 5 seconds
+            except KeyboardInterrupt:
+                click.echo("\nStopped watching.")
+                
+    except Exception as e:
+        logger.error(f"Failed to get pipeline status: {str(e)}")
+        raise click.ClickException(str(e))
+
+def _display_status(status_data: Dict[str, Any], format: str) -> None:
+    """Display pipeline status in the specified format."""
+    if format == 'json':
+        click.echo(json.dumps(status_data, indent=2))
+    elif format == 'summary':
+        click.echo("\n📊 Pipeline Status Summary")
+        click.echo("=" * 50)
+        click.echo(f"Last Update: {status_data.get('last_update', 'N/A')}")
+        click.echo(f"Overall Status: {status_data.get('status', 'N/A')}")
+        click.echo(f"Total Tables: {len(status_data.get('tables', []))}")
+        click.echo("=" * 50)
+    else:  # table format
+        tables = status_data.get('tables', [])
+        if not tables:
+            click.echo("No tables found in pipeline status.")
+            return
+            
+        # Limit to 10 tables
+        tables = tables[:10]
+        
+        # Prepare table data
+        table_data = []
+        for table in tables:
+            table_data.append([
+                table.get('name', 'N/A'),
+                table.get('status', 'N/A'),
+                table.get('last_sync', 'N/A'),
+                table.get('records_processed', 'N/A'),
+                table.get('error', 'N/A')
+            ])
+        
+        # Display table
+        headers = ['Table', 'Status', 'Last Sync', 'Records', 'Error']
+        click.echo("\n📊 Pipeline Status")
+        click.echo("=" * 100)
+        click.echo(tabulate(table_data, headers=headers, tablefmt='grid'))
+        click.echo(f"\nShowing {len(tables)} of {len(status_data.get('tables', []))} tables")
+        click.echo("=" * 100)
+
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--table', '-t', required=True, help='Table to extract')
 @click.option('--incremental', is_flag=True, help='Use incremental extraction')
@@ -143,7 +227,7 @@ def extract(config: str, table: str, incremental: bool, batch_size: int, dry_run
         logger.error(f"Extraction failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--table', '-t', required=True, help='Table to load')
 @click.option('--schema', default='staging', help='Target schema (default: staging)')
@@ -172,7 +256,7 @@ def load(config: str, table: str, schema: str, truncate: bool, dry_run: bool) ->
         logger.error(f"Load failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--schema', default='analytics', help='Target schema for transformations (default: analytics)')
 @click.option('--model', help='Specific model/transformation to run')
@@ -209,113 +293,7 @@ def transform(config: str, schema: str, model: Optional[str], dry_run: bool) -> 
 # MONITORING AND ANALYSIS COMMANDS
 # =============================================================================
 
-@commands.command()
-@click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
-@click.option('--format', type=click.Choice(['table', 'json', 'summary']), 
-              default='table', help='Output format (default: table)')
-@click.option('--table', help='Show status for specific table only')
-@click.option('--watch', is_flag=True, help='Watch status in real-time')
-@click.option('--output', '-o', help='Output file for status report')
-def status(config: str, format: str, table: Optional[str], watch: bool, output: Optional[str]) -> None:
-    """Show pipeline status and metrics."""
-    try:
-        # Load configuration
-        with open(config, 'r') as f:
-            config_data = yaml.safe_load(f)
-        
-        # Initialize components
-        connection_factory = ConnectionFactory()
-        monitor = PipelineMetrics()
-        performance_monitor = PerformanceMonitor()
-        
-        runner = PipelineRunner(
-            connection_factory=connection_factory,
-            monitor=monitor,
-            performance_monitor=performance_monitor
-        )
-        
-        if watch:
-            click.echo("👀 Watching pipeline status (Ctrl+C to stop)...")
-            try:
-                while True:
-                    status_data = runner.get_pipeline_status()
-                    if table:
-                        status_data = {k: v for k, v in status_data.items() if k == table}
-                    
-                    # Clear screen and display status
-                    click.clear()
-                    _display_status(status_data, format)
-                    
-                    import time
-                    time.sleep(5)  # Update every 5 seconds
-            except KeyboardInterrupt:
-                click.echo("\n⏹️  Status monitoring stopped")
-                return
-        
-        status_data = runner.get_pipeline_status()
-        if table:
-            status_data = {k: v for k, v in status_data.items() if k == table}
-        
-        if output:
-            with open(output, 'w') as f:
-                if format == 'json':
-                    json.dump(status_data, f, indent=2, default=str)
-                else:
-                    yaml.dump(status_data, f, default_flow_style=False)
-            click.echo(f"📄 Status report saved to {output}")
-        else:
-            _display_status(status_data, format)
-        
-    except Exception as e:
-        logger.error(f"Failed to get status: {str(e)}")
-        raise click.ClickException(str(e))
-
-def _display_status(status_data: Dict[str, Any], format: str) -> None:
-    """Display status data in specified format."""
-    if format == 'json':
-        click.echo(json.dumps(status_data, indent=2, default=str))
-    elif format == 'summary':
-        click.echo("\n📊 ETL Pipeline Status Summary")
-        click.echo("=" * 40)
-        
-        total_tables = len(status_data.get('tables', []))
-        successful = sum(1 for t in status_data.get('tables', []) if t.get('status') == 'success')
-        failed = sum(1 for t in status_data.get('tables', []) if t.get('status') == 'failed')
-        running = sum(1 for t in status_data.get('tables', []) if t.get('status') == 'running')
-        
-        click.echo(f"Total Tables: {total_tables}")
-        click.echo(f"✅ Successful: {successful}")
-        click.echo(f"❌ Failed: {failed}")
-        click.echo(f"🔄 Running: {running}")
-        click.echo(f"Last Updated: {status_data.get('last_updated', 'Unknown')}")
-    else:
-        # Table format
-        if 'tables' in status_data:
-            headers = ["Table", "Status", "Last Run", "Duration", "Rows"]
-            rows = []
-            
-            for table in status_data['tables']:
-                status_emoji = {
-                    'success': '✅',
-                    'failed': '❌', 
-                    'running': '🔄',
-                    'pending': '⏳'
-                }.get(table.get('status'), '❓')
-                
-                rows.append([
-                    table.get('name'),
-                    f"{status_emoji} {table.get('status')}",
-                    table.get('last_run', 'Never'),
-                    table.get('duration', 'N/A'),
-                    table.get('row_count', 'N/A')
-                ])
-            
-            click.echo(f"\n📋 Pipeline Status ({len(rows)} tables)")
-            click.echo(tabulate(rows, headers=headers, tablefmt="grid"))
-        else:
-            click.echo(yaml.dump(status_data, default_flow_style=False))
-
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--table', '-t', help='Table to validate (default: all tables)')
 @click.option('--rules', '-r', help='Path to custom validation rules file')
@@ -392,7 +370,7 @@ def _display_validation_results(results: Dict[str, Any], table: str) -> None:
         for issue in results.get('issues', []):
             click.echo(f"  • {issue}")
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--component', type=click.Choice(['extraction', 'loading', 'transformation', 'all']),
               default='all', help='Component to analyze (default: all)')
@@ -444,7 +422,7 @@ def analyze_performance(config: str, component: str, time_range: str,
 # CONFIGURATION AND DISCOVERY COMMANDS
 # =============================================================================
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--action', type=click.Choice(['validate', 'generate', 'show', 'edit']),
               default='show', help='Configuration action (default: show)')
@@ -480,7 +458,7 @@ def config_mgmt(config: str, action: str, env: str, interactive: bool) -> None:
         logger.error(f"Config operation failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--source', default='opendental', help='Source database to discover (default: opendental)')
 @click.option('--output', '-o', help='Output file path for the schema')
@@ -552,7 +530,7 @@ def discover_schema(config: str, source: str, output: Optional[str]) -> None:
         logger.error(f"Schema discovery failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--table', '-t', required=True, help='Table to backfill')
 @click.option('--start-date', required=True, help='Start date (YYYY-MM-DD)')
@@ -588,7 +566,7 @@ def backfill(config: str, table: str, start_date: str, end_date: Optional[str],
 # DENTAL CLINIC SPECIFIC COMMANDS
 # =============================================================================
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--clinic-id', help='Specific clinic ID to sync')
 @click.option('--incremental-only', is_flag=True, help='Only sync incremental changes')
@@ -629,7 +607,7 @@ def patient_sync(config: str, clinic_id: Optional[str], incremental_only: bool,
         logger.error(f"Patient sync failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--date', default=datetime.now().strftime('%Y-%m-%d'), 
               help='Date for metrics (YYYY-MM-DD, default: today)')
@@ -695,7 +673,7 @@ def _display_appointment_metrics(metrics: Dict[str, Any], format: str) -> None:
     else:
         click.echo(yaml.dump(metrics, default_flow_style=False))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--table', help='Specific table to check (default: all patient-related tables)')
 @click.option('--generate-report', is_flag=True, help='Generate detailed compliance report')
@@ -801,7 +779,7 @@ def _generate_compliance_report(results: Dict[str, Any], output: str) -> None:
 # UTILITY COMMANDS
 # =============================================================================
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--output', '-o', help='Output file path for the report')
 def generate_report(config: str, output: Optional[str]) -> None:
@@ -837,7 +815,7 @@ def generate_report(config: str, output: Optional[str]) -> None:
         logger.error(f"Report generation failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--backup-dir', '-b', required=True, help='Directory to store backups')
 def backup_config(config: str, backup_dir: str) -> None:
@@ -865,7 +843,7 @@ def backup_config(config: str, backup_dir: str) -> None:
         logger.error(f"Configuration backup failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
 @click.option('--backup', '-b', required=True, help='Backup file to restore from')
 def restore_config(config: str, backup: str) -> None:
@@ -893,7 +871,7 @@ def restore_config(config: str, backup: str) -> None:
         logger.error(f"Configuration restore failed: {str(e)}")
         raise click.ClickException(str(e))
 
-@commands.command()
+@click.command()
 def test_connections() -> None:
     """Test all database connections."""
     try:
