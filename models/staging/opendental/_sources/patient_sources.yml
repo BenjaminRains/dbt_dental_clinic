@@ -8,6 +8,9 @@ sources:
     schema: public
     loader: postgres
     loaded_at_field: "DateTStamp"  # Using the timestamp field from patient table
+    freshness:
+      warn_after: {count: 24, period: day}
+      error_after: {count: 48, period: day}
     
     tables:
       - name: patient
@@ -145,6 +148,10 @@ sources:
       
       - name: toothinitial
         description: "Initial conditions of patient teeth"
+        loaded_at_field: "SecDateTEdit"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
         columns:
           - name: "ToothInitialNum"
             description: "Primary key for tooth initial conditions"
@@ -180,7 +187,3 @@ sources:
                   expression: ">= \"SecDateTEntry\""
           - name: "DrawText"
             description: "Text description for drawings"
-
-freshness:
-  warn_after: {count: 24, period: day}
-  error_after: {count: 48, period: day}
