@@ -18,26 +18,26 @@ class Settings:
     # Environment variable mappings
     ENV_MAPPINGS = {
         'source': {
-            'host': 'SOURCE_MYSQL_HOST',
-            'port': 'SOURCE_MYSQL_PORT',
-            'database': 'SOURCE_MYSQL_DB',
-            'user': 'SOURCE_MYSQL_USER',
-            'password': 'SOURCE_MYSQL_PASSWORD'
+            'host': 'OPENDENTAL_SOURCE_HOST',
+            'port': 'OPENDENTAL_SOURCE_PORT',
+            'database': 'OPENDENTAL_SOURCE_DB',
+            'user': 'OPENDENTAL_SOURCE_USER',
+            'password': 'OPENDENTAL_SOURCE_PASSWORD'
         },
         'replication': {
-            'host': 'REPLICATION_MYSQL_HOST',
-            'port': 'REPLICATION_MYSQL_PORT',
-            'database': 'REPLICATION_MYSQL_DB',
-            'user': 'REPLICATION_MYSQL_USER',
-            'password': 'REPLICATION_MYSQL_PASSWORD'
+            'host': 'MYSQL_REPLICATION_HOST',
+            'port': 'MYSQL_REPLICATION_PORT',
+            'database': 'MYSQL_REPLICATION_DB',
+            'user': 'MYSQL_REPLICATION_USER',
+            'password': 'MYSQL_REPLICATION_PASSWORD'
         },
         'analytics': {
-            'host': 'ANALYTICS_POSTGRES_HOST',
-            'port': 'ANALYTICS_POSTGRES_PORT',
-            'database': 'ANALYTICS_POSTGRES_DB',
-            'schema': 'ANALYTICS_POSTGRES_SCHEMA',
-            'user': 'ANALYTICS_POSTGRES_USER',
-            'password': 'ANALYTICS_POSTGRES_PASSWORD'
+            'host': 'POSTGRES_ANALYTICS_HOST',
+            'port': 'POSTGRES_ANALYTICS_PORT',
+            'database': 'POSTGRES_ANALYTICS_DB',
+            'schema': 'POSTGRES_ANALYTICS_SCHEMA',
+            'user': 'POSTGRES_ANALYTICS_USER',
+            'password': 'POSTGRES_ANALYTICS_PASSWORD'
         }
     }
     
