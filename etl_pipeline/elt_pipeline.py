@@ -1,9 +1,20 @@
+
 """
 Intelligent ETL pipeline implementation.
 Handles the extraction and loading of data from OpenDental to analytics
 using data-driven configuration and priority-based processing.
 """
+
 import os
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+current_file = Path(__file__).resolve()
+project_root = current_file.parent.parent  # Go up two levels from etl_pipeline/elt_pipeline.py
+sys.path.insert(0, str(project_root))
+
+# Now continue with your existing imports
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,14 +26,11 @@ from dotenv import load_dotenv
 import re
 from etl_pipeline.mysql_replicator import ExactMySQLReplicator
 from etl_pipeline.core.metrics import MetricsCollector
-import sys
 import yaml
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-# Configure logging with dedicated log directory and unique filenames
-import os
-from datetime import datetime
+# Rest of your existing code continues unchanged...
 
 # Create logs directory if it doesn't exist
 logs_dir = "logs"
