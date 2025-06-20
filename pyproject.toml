@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,12 +8,11 @@ version = "0.1.0"
 description = "Intelligent ETL pipeline for dental clinics"
 authors = [{name = "Ben Rains", email = "your.rains.bp@gmail.com"}]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Healthcare Industry",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -29,6 +28,7 @@ dependencies = [
     "cryptography>=3.4.0",
     "click>=8.0.0",
     "tabulate>=0.9.0",
+    "sqlparse>=0.4.0",
 ]
 
 [project.optional-dependencies]
@@ -41,8 +41,7 @@ dev = [
 ]
 
 [project.scripts]
-etl-run = "etl_pipeline.cli.__main__:main"
-etl-test-connections = "test_connections:main"
+etl = "etl_pipeline.cli.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -50,9 +49,9 @@ include = ["etl_pipeline*"]
 
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py39']
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
