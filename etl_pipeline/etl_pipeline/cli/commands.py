@@ -46,13 +46,20 @@ from pathlib import Path
 from tabulate import tabulate
 import os
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.monitoring import PipelineMetrics
+from etl_pipeline.core.unified_metrics import UnifiedMetricsCollector
+from etl_pipeline.core.logger import get_logger
+from etl_pipeline.config.settings import settings
 from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
 from etl_pipeline.utils.notifications import NotificationManager, NotificationConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @click.command()
 @click.option('--config', '-c', type=click.Path(exists=True), help='Path to configuration file')
@@ -117,9 +124,10 @@ def status(config: str, format: str, table: Optional[str], watch: bool, output: 
         with open(config, 'r') as f:
             config_data = yaml.safe_load(f)
         
-        # Initialize components
+        # Initialize components with analytics engine for persistence
         connection_factory = ConnectionFactory()
-        monitor = PipelineMetrics()
+        analytics_engine = ConnectionFactory.get_postgres_analytics_connection()
+        monitor = UnifiedMetricsCollector(analytics_engine=analytics_engine)
         
         # Get pipeline status
         status_data = monitor.get_pipeline_status(table=table)
