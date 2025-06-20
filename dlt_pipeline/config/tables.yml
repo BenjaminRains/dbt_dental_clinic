@@ -1,0 +1,98 @@
+# OpenDental Table Configurations
+
+tables:
+  patient:
+    source_table: patient
+    replication_table: patient
+    analytics_table: patient
+    primary_key: PatNum
+    incremental_column: DateTStamp
+    batch_size: 10000
+    importance: critical
+    columns:
+      - PatNum
+      - LName
+      - FName
+      - Preferred
+      - MiddleI
+      - BirthDate
+      - SSN
+      - Address
+      - Address2
+      - City
+      - State
+      - Zip
+      - HmPhone
+      - WkPhone
+      - WirelessPhone
+      - Email
+      - DateTStamp
+
+  appointment:
+    source_table: appointment
+    replication_table: appointment
+    analytics_table: appointment
+    primary_key: AptNum
+    incremental_column: DateTStamp
+    batch_size: 5000
+    importance: critical
+    columns:
+      - AptNum
+      - PatNum
+      - AptDateTime
+      - AptStatus
+      - Pattern
+      - ProvNum
+      - ProvHyg
+      - Note
+      - DateTStamp
+
+  treatment:
+    source_table: treatment
+    replication_table: treatment
+    analytics_table: treatment
+    primary_key: TreatPlanNum
+    incremental_column: DateTStamp
+    batch_size: 5000
+    importance: important
+    columns:
+      - TreatPlanNum
+      - PatNum
+      - DateTP
+      - Note
+      - DateTStamp
+
+  procedure:
+    source_table: procedure
+    replication_table: procedure
+    analytics_table: procedure
+    primary_key: ProcNum
+    incremental_column: DateTStamp
+    batch_size: 5000
+    importance: important
+    columns:
+      - ProcNum
+      - PatNum
+      - ProcDate
+      - ProcStatus
+      - ProcCode
+      - ToothNum
+      - Surf
+      - DateTStamp
+
+  provider:
+    source_table: provider
+    replication_table: provider
+    analytics_table: provider
+    primary_key: ProvNum
+    incremental_column: DateTStamp
+    batch_size: 1000
+    importance: important
+    columns:
+      - ProvNum
+      - Abbr
+      - FName
+      - LName
+      - SSN
+      - StateLicense
+      - DateTStamp
