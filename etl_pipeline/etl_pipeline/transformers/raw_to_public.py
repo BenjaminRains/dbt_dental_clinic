@@ -1,0 +1,643 @@
+"""
+Raw to Public Schema Transformer
+
+This module handles the transformation of data from the raw schema to the public schema,
+performing basic data cleaning, type standardization, and structure normalization.
+
+STATUS: ACTIVE - Core Transformation Component (NEEDS TESTING)
+============================================================
+
+This module is the ACTIVE core transformation component of the ETL pipeline, recently
+moved to the etl_pipeline package. It's actively used by TableProcessor and represents
+the final transformation phase of the ETL pipeline.
+
+CURRENT STATE:
+- ✅ ACTIVE IMPLEMENTATION: Used by TableProcessor for schema transformation
+- ✅ COMPLETE FUNCTIONALITY: Handles raw-to-public schema transformation
+- ✅ PANDAS INTEGRATION: Uses pandas for data manipulation
+- ✅ DATABASE INTEGRATION: Direct SQLAlchemy integration
+- ✅ ERROR HANDLING: Comprehensive exception handling
+- ❌ LIMITED TESTING: Basic unit tests but no integration testing
+- ❌ INCOMPLETE IMPLEMENTATION: Some methods are placeholder/basic
+- ❌ COMPLEXITY: Inherits over-engineered BaseTransformer interface
+- ❌ UNTESTED INTEGRATION: No real database testing
+
+ACTIVE USAGE:
+- TableProcessor: Calls transform_table for schema transformation
+- PipelineOrchestrator: Initializes RawToPublicTransformer
+- ETL Pipeline: Final transformation phase in the pipeline
+- Tests: Basic unit tests exist but limited
+
+CORE FUNCTIONALITY:
+1. READ: Read data from raw schema using pandas
+2. TRANSFORM: Apply data cleaning and type conversions
+3. WRITE: Write transformed data to public schema
+4. TRACK: Update transformation status and metadata
+
+IMPLEMENTATION STATUS:
+- transform_table: ✅ Core transformation logic implemented
+- _read_from_raw: ✅ Basic pandas SQL reading
+- _apply_transformations: ✅ Data cleaning and type conversion
+- _write_to_public: ✅ Pandas to_sql writing
+- Schema methods: ❌ Many are basic/placeholder implementations
+- Metadata methods: ❌ Basic implementations, not fully tested
+
+TESTING STATUS:
+- UNIT TESTS: ✅ Basic unit tests with mocks
+- INTEGRATION TESTS: ❌ No real database integration tests
+- ERROR SCENARIOS: ❌ Limited error handling testing
+- PERFORMANCE TESTS: ❌ No performance validation
+- DATA VALIDATION: ❌ No data integrity testing
+
+CRITICAL TESTING NEEDS:
+1. INTEGRATION TESTS: Test with real database connections
+2. DATA TRANSFORMATION: Validate actual data transformations
+3. SCHEMA HANDLING: Test schema creation and modification
+4. ERROR RECOVERY: Test failure scenarios and recovery
+5. PERFORMANCE: Test with real data volumes
+6. INCREMENTAL UPDATES: Test incremental transformation logic
+
+DEVELOPMENT PRIORITIES:
+1. COMPREHENSIVE TESTING: Add integration tests with real databases
+2. DATA VALIDATION: Add data integrity checks
+3. ERROR HANDLING: Enhance error recovery mechanisms
+4. PERFORMANCE: Optimize for large datasets
+5. SCHEMA MANAGEMENT: Improve schema handling
+6. INCREMENTAL LOGIC: Complete incremental update implementation
+
+INTEGRATION POINTS:
+- TableProcessor: Main integration point for ETL pipeline
+- Database Connections: Uses SQLAlchemy for database operations
+- Pandas: Core data manipulation library
+- BaseTransformer: Inherits over-engineered interface
+- ETL Status Tracking: Updates transformation status
+
+This component is critical for the ETL pipeline but needs comprehensive
+testing and validation before production deployment.
+"""
+
+import pandas as pd
+from sqlalchemy import text, inspect
+from typing import Dict, List, Optional, Any
+import logging
+from datetime import datetime
+from .base_transformer import BaseTransformer
+
+logger = logging.getLogger(__name__)
+
+class RawToPublicTransformer(BaseTransformer):
+    def __init__(self, source_engine, target_engine):
+        """
+        Initialize the Raw to Public transformer.
+        
+        Args:
+            source_engine: SQLAlchemy engine for raw schema
+            target_engine: SQLAlchemy engine for public schema
+        """
+        super().__init__(source_engine, target_engine)
+        self.source_schema = 'raw'
+        self.target_schema = 'public'
+        self.inspector = inspect(target_engine)
+        
+    def get_last_transformed(self, table_name: str) -> Optional[datetime]:
+        """Get the last transformation timestamp for a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT MAX(transform_time) 
+                        FROM etl_transform_status 
+                        WHERE table_name = :table_name 
+                        AND transform_type = 'raw_to_public'
+                    """),
+                    {'table_name': table_name}
+                ).scalar()
+                return result
+        except Exception as e:
+            logger.error(f"Error getting last transform time: {str(e)}")
+            return None
+            
+    def update_transform_status(self, table_name: str, rows_transformed: int, 
+                              status: str = 'success') -> None:
+        """Update the transformation status for a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                conn.execute(
+                    text("""
+                        INSERT INTO etl_transform_status 
+                        (table_name, transform_type, rows_processed, status, transform_time)
+                        VALUES (:table_name, 'raw_to_public', :rows_processed, :status, :transform_time)
+                    """),
+                    {
+                        'table_name': table_name,
+                        'rows_processed': rows_transformed,
+                        'status': status,
+                        'transform_time': datetime.now()
+                    }
+                )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error updating transform status: {str(e)}")
+            
+    def verify_transform(self, table_name: str) -> bool:
+        """Verify that the transformation was successful."""
+        try:
+            source_count = self.get_table_row_count(table_name)
+            target_count = self.get_table_row_count(table_name)
+            return source_count == target_count
+        except Exception as e:
+            logger.error(f"Error verifying transform: {str(e)}")
+            return False
+            
+    def get_table_schema(self, table_name: str) -> Dict[str, Any]:
+        """Get the schema information for a table."""
+        try:
+            return {
+                'columns': self.get_table_columns(table_name),
+                'primary_key': self.get_table_primary_key(table_name),
+                'foreign_keys': self.get_table_foreign_keys(table_name),
+                'indexes': self.get_table_indexes(table_name),
+                'constraints': self.get_table_constraints(table_name)
+            }
+        except Exception as e:
+            logger.error(f"Error getting table schema: {str(e)}")
+            return {}
+            
+    def has_schema_changed(self, table_name: str, stored_hash: str) -> bool:
+        """Check if the table schema has changed."""
+        try:
+            current_schema = self.get_table_schema(table_name)
+            current_hash = hash(str(current_schema))
+            return str(current_hash) != stored_hash
+        except Exception as e:
+            logger.error(f"Error checking schema change: {str(e)}")
+            return True
+            
+    def get_table_metadata(self, table_name: str) -> Dict[str, Any]:
+        """Get metadata about a table."""
+        try:
+            return {
+                'row_count': self.get_table_row_count(table_name),
+                'size': self.get_table_size(table_name),
+                'last_transformed': self.get_last_transformed(table_name),
+                'schema': self.get_table_schema(table_name)
+            }
+        except Exception as e:
+            logger.error(f"Error getting table metadata: {str(e)}")
+            return {}
+            
+    def get_table_row_count(self, table_name: str) -> int:
+        """Get the number of rows in a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                return conn.execute(
+                    text(f"SELECT COUNT(*) FROM {self.target_schema}.{table_name}")
+                ).scalar()
+        except Exception as e:
+            logger.error(f"Error getting row count: {str(e)}")
+            return 0
+            
+    def get_table_size(self, table_name: str) -> int:
+        """Get the size of a table in bytes."""
+        try:
+            with self.target_engine.connect() as conn:
+                return conn.execute(
+                    text(f"""
+                        SELECT pg_total_relation_size('{self.target_schema}.{table_name}')
+                    """)
+                ).scalar()
+        except Exception as e:
+            logger.error(f"Error getting table size: {str(e)}")
+            return 0
+            
+    def get_table_indexes(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the indexes for a table."""
+        try:
+            return self.inspector.get_indexes(table_name, schema=self.target_schema)
+        except Exception as e:
+            logger.error(f"Error getting indexes: {str(e)}")
+            return []
+            
+    def get_table_constraints(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the constraints for a table."""
+        try:
+            return self.inspector.get_unique_constraints(table_name, schema=self.target_schema)
+        except Exception as e:
+            logger.error(f"Error getting constraints: {str(e)}")
+            return []
+            
+    def get_table_foreign_keys(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the foreign keys for a table."""
+        try:
+            return self.inspector.get_foreign_keys(table_name, schema=self.target_schema)
+        except Exception as e:
+            logger.error(f"Error getting foreign keys: {str(e)}")
+            return []
+            
+    def get_table_columns(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the columns for a table."""
+        try:
+            return self.inspector.get_columns(table_name, schema=self.target_schema)
+        except Exception as e:
+            logger.error(f"Error getting columns: {str(e)}")
+            return []
+            
+    def get_table_primary_key(self, table_name: str) -> Optional[List[str]]:
+        """Get the primary key columns for a table."""
+        try:
+            return self.inspector.get_pk_constraint(table_name, schema=self.target_schema)['constrained_columns']
+        except Exception as e:
+            logger.error(f"Error getting primary key: {str(e)}")
+            return None
+            
+    def get_table_partitions(self, table_name: str) -> Optional[List[Dict[str, Any]]]:
+        """Get the partitions for a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                result = conn.execute(
+                    text(f"""
+                        SELECT * FROM pg_partitions 
+                        WHERE tablename = :table_name 
+                        AND schemaname = :schema
+                    """),
+                    {'table_name': table_name, 'schema': self.target_schema}
+                ).fetchall()
+                return [dict(row) for row in result]
+        except Exception as e:
+            logger.error(f"Error getting partitions: {str(e)}")
+            return None
+            
+    def get_table_grants(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the grants for a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                result = conn.execute(
+                    text(f"""
+                        SELECT grantee, privilege_type 
+                        FROM information_schema.role_table_grants 
+                        WHERE table_name = :table_name 
+                        AND table_schema = :schema
+                    """),
+                    {'table_name': table_name, 'schema': self.target_schema}
+                ).fetchall()
+                return [dict(row) for row in result]
+        except Exception as e:
+            logger.error(f"Error getting grants: {str(e)}")
+            return []
+            
+    def get_table_triggers(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the triggers for a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                result = conn.execute(
+                    text(f"""
+                        SELECT * FROM information_schema.triggers 
+                        WHERE event_object_table = :table_name 
+                        AND event_object_schema = :schema
+                    """),
+                    {'table_name': table_name, 'schema': self.target_schema}
+                ).fetchall()
+                return [dict(row) for row in result]
+        except Exception as e:
+            logger.error(f"Error getting triggers: {str(e)}")
+            return []
+            
+    def get_table_views(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the views that reference a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                result = conn.execute(
+                    text(f"""
+                        SELECT * FROM information_schema.views 
+                        WHERE table_schema = :schema 
+                        AND view_definition LIKE :table_pattern
+                    """),
+                    {
+                        'schema': self.target_schema,
+                        'table_pattern': f'%{table_name}%'
+                    }
+                ).fetchall()
+                return [dict(row) for row in result]
+        except Exception as e:
+            logger.error(f"Error getting views: {str(e)}")
+            return []
+            
+    def get_table_dependencies(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get the dependencies for a table."""
+        try:
+            with self.target_engine.connect() as conn:
+                result = conn.execute(
+                    text(f"""
+                        SELECT * FROM pg_depend 
+                        WHERE objid = :table_oid
+                    """),
+                    {'table_oid': f"{self.target_schema}.{table_name}"}
+                ).fetchall()
+                return [dict(row) for row in result]
+        except Exception as e:
+            logger.error(f"Error getting dependencies: {str(e)}")
+            return []
+            
+    def transform_table(self, table_name: str, is_incremental: bool = False) -> bool:
+        """
+        Transform a table from raw to public schema.
+        
+        Args:
+            table_name: Name of the table to transform
+            is_incremental: Whether this is an incremental update
+            
+        Returns:
+            bool: True if transformation was successful
+        """
+        try:
+            logger.info(f"Starting raw-to-public transformation for table: {table_name}")
+            
+            # 1. Read from raw schema
+            raw_data = self._read_from_raw(table_name, is_incremental)
+            if raw_data is None or raw_data.empty:
+                logger.warning(f"No data found in raw schema for table: {table_name}")
+                return True  # Not an error, just no data to transform
+                
+            # 2. Apply transformations
+            transformed_data = self._apply_transformations(raw_data, table_name)
+            
+            # 3. Write to public schema
+            success = self._write_to_public(table_name, transformed_data, is_incremental)
+            
+            # 4. Update tracking
+            if success:
+                self._update_transformation_status(table_name, len(transformed_data))
+                
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error transforming table {table_name}: {str(e)}")
+            return False
+            
+    def _read_from_raw(self, table_name: str, is_incremental: bool) -> Optional[pd.DataFrame]:
+        """Read data from raw schema."""
+        try:
+            query = f"SELECT * FROM {self.source_schema}.{table_name}"
+            if is_incremental:
+                # Add incremental logic here if needed
+                pass
+                
+            with self.source_engine.connect() as conn:
+                return pd.read_sql(query, conn)
+                
+        except Exception as e:
+            logger.error(f"Error reading from raw schema: {str(e)}")
+            return None
+            
+    def _apply_transformations(self, df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+        """Apply transformations to the data."""
+        try:
+            # 1. Standardize column names
+            df.columns = [col.lower() for col in df.columns]
+            
+            # 2. Handle NULL values
+            df = df.replace({pd.NA: None})
+            
+            # 3. Convert data types
+            df = self._convert_data_types(df, table_name)
+            
+            # 4. Apply table-specific transformations
+            df = self._apply_table_specific_transformations(df, table_name)
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error applying transformations: {str(e)}")
+            raise
+            
+    def _convert_data_types(self, df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+        """
+        Convert data types to PostgreSQL standards.
+        
+        INCOMPLETE IMPLEMENTATION: This method calls _get_column_types() which
+        is not implemented. In a complete implementation, this would:
+        
+        1. Get column type mappings from configuration
+        2. Apply appropriate PostgreSQL data types
+        3. Handle type conversion errors gracefully
+        4. Validate data type compatibility
+        5. Log conversion issues for review
+        
+        TODO: Implement _get_column_types() method to:
+        - Load column type mappings from settings
+        - Define PostgreSQL type mappings
+        - Handle dental-specific data types
+        - Provide fallback type mappings
+        """
+        try:
+            # Get column types from configuration
+            column_types = self._get_column_types(table_name)
+            
+            for col, dtype in column_types.items():
+                if col in df.columns:
+                    try:
+                        df[col] = df[col].astype(dtype)
+                    except Exception as e:
+                        logger.warning(f"Could not convert column {col} to {dtype}: {str(e)}")
+                        
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error converting data types: {str(e)}")
+            raise
+            
+    def _apply_table_specific_transformations(self, df: pd.DataFrame, table_name: str) -> pd.DataFrame:
+        """
+        Apply table-specific transformations.
+        
+        INCOMPLETE IMPLEMENTATION: This method is currently a placeholder that
+        returns the input DataFrame unchanged. In a complete implementation, this
+        would contain table-specific transformation logic such as:
+        
+        1. Custom data cleaning rules per table
+        2. Business logic transformations
+        3. Data enrichment and validation
+        4. Custom field mappings and calculations
+        5. Dental-specific data transformations
+        
+        TODO: Implement table-specific transformation logic based on:
+        - Table configuration from settings
+        - Business rules and requirements
+        - Data quality requirements
+        - Dental clinic specific transformations
+        """
+        # Add table-specific transformation logic here
+        return df
+        
+    def _write_to_public(self, table_name: str, df: pd.DataFrame, is_incremental: bool) -> bool:
+        """Write transformed data to public schema."""
+        try:
+            if df.empty:
+                logger.warning(f"No data to write to public schema for table: {table_name}")
+                return True
+                
+            # Create table if it doesn't exist
+            self._ensure_table_exists(table_name, df)
+            
+            # Write data
+            with self.target_engine.connect() as conn:
+                if is_incremental:
+                    # Handle incremental updates
+                    self._handle_incremental_update(conn, table_name, df)
+                else:
+                    # Full load
+                    df.to_sql(
+                        table_name,
+                        conn,
+                        schema=self.target_schema,
+                        if_exists='replace',
+                        index=False
+                    )
+                    
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error writing to public schema: {str(e)}")
+            return False
+            
+    def _ensure_table_exists(self, table_name: str, df: pd.DataFrame):
+        """Ensure the target table exists with correct structure."""
+        try:
+            # Create table with appropriate structure
+            create_table_sql = self._generate_create_table_sql(table_name, df)
+            
+            with self.target_engine.connect() as conn:
+                conn.execute(text(create_table_sql))
+                conn.commit()
+                
+        except Exception as e:
+            logger.error(f"Error ensuring table exists: {str(e)}")
+            raise
+            
+    def _update_transformation_status(self, table_name: str, rows_processed: int):
+        """Update transformation tracking table."""
+        try:
+            with self.target_engine.connect() as conn:
+                conn.execute(
+                    text("""
+                        INSERT INTO etl_transform_status 
+                        (table_name, transform_type, rows_processed, transform_time)
+                        VALUES (:table_name, 'raw_to_public', :rows_processed, :transform_time)
+                    """),
+                    {
+                        'table_name': table_name,
+                        'rows_processed': rows_processed,
+                        'transform_time': datetime.now()
+                    }
+                )
+                conn.commit()
+                
+        except Exception as e:
+            logger.error(f"Error updating transformation status: {str(e)}")
+            # Don't raise - this is non-critical 
+            
+    def _get_column_types(self, table_name: str) -> Dict[str, Any]:
+        """
+        Get column type mappings for a table.
+        
+        MISSING IMPLEMENTATION: This method is called by _convert_data_types but
+        is not implemented. It should return a dictionary mapping column names
+        to their target PostgreSQL data types.
+        
+        TODO: Implement this method to:
+        1. Load column type mappings from configuration files
+        2. Define default type mappings for common columns
+        3. Handle dental-specific data types
+        4. Provide fallback mappings for unknown columns
+        5. Support table-specific type overrides
+        
+        Example return value:
+        {
+            'id': 'integer',
+            'name': 'varchar(255)',
+            'created_date': 'timestamp',
+            'is_active': 'boolean'
+        }
+        """
+        # TODO: Implement column type mapping logic
+        logger.warning(f"Column type mapping not implemented for table: {table_name}")
+        return {}
+        
+    def _generate_create_table_sql(self, table_name: str, df: pd.DataFrame) -> str:
+        """
+        Generate CREATE TABLE SQL statement for a DataFrame.
+        
+        MISSING IMPLEMENTATION: This method is called by _ensure_table_exists but
+        is not implemented. It should generate appropriate PostgreSQL CREATE TABLE
+        statements based on the DataFrame structure.
+        
+        TODO: Implement this method to:
+        1. Analyze DataFrame column types and data
+        2. Generate appropriate PostgreSQL data types
+        3. Handle primary keys and constraints
+        4. Support table-specific schema requirements
+        5. Generate indexes and other database objects
+        
+        Args:
+            table_name: Name of the table to create
+            df: DataFrame containing the data structure
+            
+        Returns:
+            str: CREATE TABLE SQL statement
+        """
+        # TODO: Implement CREATE TABLE SQL generation
+        logger.warning(f"CREATE TABLE SQL generation not implemented for table: {table_name}")
+        
+        # Basic placeholder implementation
+        columns = []
+        for col, dtype in df.dtypes.items():
+            if 'int' in str(dtype):
+                pg_type = 'INTEGER'
+            elif 'float' in str(dtype):
+                pg_type = 'NUMERIC'
+            elif 'datetime' in str(dtype):
+                pg_type = 'TIMESTAMP'
+            elif 'bool' in str(dtype):
+                pg_type = 'BOOLEAN'
+            else:
+                pg_type = 'TEXT'
+            columns.append(f'"{col.lower()}" {pg_type}')
+            
+        return f"""
+        CREATE TABLE IF NOT EXISTS {self.target_schema}.{table_name} (
+            {', '.join(columns)}
+        );
+        """
+        
+    def _handle_incremental_update(self, conn, table_name: str, df: pd.DataFrame):
+        """
+        Handle incremental updates to existing tables.
+        
+        MISSING IMPLEMENTATION: This method is called by _write_to_public for
+        incremental updates but is not implemented. It should handle merging
+        new data with existing data based on primary keys or business logic.
+        
+        TODO: Implement this method to:
+        1. Identify primary keys for merge operations
+        2. Handle INSERT/UPDATE/DELETE operations
+        3. Support different merge strategies (upsert, append, etc.)
+        4. Handle conflicts and duplicates
+        5. Optimize performance for large datasets
+        6. Track incremental update metadata
+        
+        Args:
+            conn: Database connection
+            table_name: Name of the table to update
+            df: DataFrame containing new data
+        """
+        # TODO: Implement incremental update logic
+        logger.warning(f"Incremental update not implemented for table: {table_name}")
+        
+        # Basic placeholder implementation - just append data
+        df.to_sql(
+            table_name,
+            conn,
+            schema=self.target_schema,
+            if_exists='append',
+            index=False
+        ) 
