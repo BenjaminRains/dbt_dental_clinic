@@ -1,0 +1,70 @@
+# DLT Pipeline Configuration
+
+# General Settings
+pipeline:
+  name: opendental_etl
+  version: 1.0.0
+  description: "OpenDental ETL Pipeline using DLT"
+
+# Database Settings
+databases:
+  source:
+    type: mysql
+    schema: opendental
+    read_only: true
+  
+  replication:
+    type: mysql
+    schema: opendental_replication
+    read_only: false
+  
+  analytics:
+    type: postgresql
+    schema: raw
+    read_only: false
+
+# Pipeline Settings
+settings:
+  batch_size: 1000
+  max_retries: 3
+  retry_delay: 5
+  log_level: INFO
+  
+  # Performance Tuning
+  extract_workers: 4
+  normalize_workers: 2
+  load_workers: 2
+  
+  # Monitoring
+  enable_metrics: true
+  metrics_port: 9090
+  metrics_path: /metrics
+
+# Table Processing Order
+processing_order:
+  - patient
+  - provider
+  - appointment
+  - treatment
+  - procedure
+
+# Validation Rules
+validation:
+  required_columns:
+    - DateTStamp
+    - PatNum
+  
+  data_types:
+    DateTStamp: datetime
+    PatNum: integer
+    AptNum: integer
+    TreatPlanNum: integer
+    ProcNum: integer
+    ProvNum: integer
+
+# Error Handling
+error_handling:
+  max_failures: 3
+  failure_notification: true
+  retry_strategy: exponential_backoff
+  alert_threshold: 0.1  # Alert if more than 10% of records fail 
