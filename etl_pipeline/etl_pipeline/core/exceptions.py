@@ -2,82 +2,33 @@
 Custom exceptions for the ETL pipeline.
 Provides specific exception types for different error scenarios.
 
-UNDERUTILIZED AND UNTESTED CODE
-==============================
-This exceptions module is underutilized and has not been tested.
+CLEANED UP AND SIMPLIFIED
+=========================
+This exceptions module has been cleaned up to remove unused exception classes.
 
 Current Status:
-- Only ETLPipelineError is actively used (in main.py)
-- 12 out of 13 exceptions are defined but never used
-- No unit tests or integration tests exist
-- Exception hierarchy is well-designed but not implemented
-- All exceptions are exported from core/__init__.py but unused
+- ETLPipelineError: Base exception for ETL pipeline errors (ACTIVELY USED)
+- Removed 12 unused exception classes to reduce complexity
+- Simplified to only include what's actually needed
+- Exception hierarchy removed in favor of standard Python exceptions
 
 Usage Analysis:
 - ETLPipelineError: Used in main.py for configuration/health check failures
-- ConfigurationError, DatabaseError, ValidationError, etc.: Never used
-- No exception handling patterns established in the codebase
+- All other custom exceptions were unused and have been removed
+- Codebase uses standard Python exceptions (ValueError, RuntimeError, etc.)
 
-Testing Needed:
-- Unit tests for all exception classes
-- Integration tests for exception handling
-- Validation of exception hierarchy and inheritance
-- Test exception context and error messages
-- Verify exception propagation through pipeline
+Benefits of Cleanup:
+- Reduced code complexity and maintenance burden
+- Follows YAGNI principle (You Aren't Gonna Need It)
+- Simplified imports and exports
+- Clearer codebase with only necessary components
 
-TODO: Implement comprehensive exception handling throughout the pipeline
-TODO: Add unit tests for all exception classes
-TODO: Establish exception handling patterns and best practices
+Future Considerations:
+- Add specific exceptions only when actually needed
+- Use standard Python exceptions when possible
+- Implement comprehensive exception handling patterns when required
 """
 
 class ETLPipelineError(Exception):
     """Base exception for ETL pipeline errors."""
     pass
-
-class ConfigurationError(ETLPipelineError):
-    """Raised when there are configuration issues."""
-    pass
-
-class DatabaseError(ETLPipelineError):
-    """Raised when there are database-related errors."""
-    pass
-
-class ConnectionError(DatabaseError):
-    """Raised when database connection fails."""
-    pass
-
-class QueryError(DatabaseError):
-    """Raised when a database query fails."""
-    pass
-
-class SchemaError(DatabaseError):
-    """Raised when there are schema-related issues."""
-    pass
-
-class ValidationError(ETLPipelineError):
-    """Raised when data validation fails."""
-    pass
-
-class TransformationError(ETLPipelineError):
-    """Raised when data transformation fails."""
-    pass
-
-class LoadingError(ETLPipelineError):
-    """Raised when data loading fails."""
-    pass
-
-class MonitoringError(ETLPipelineError):
-    """Raised when monitoring operations fail."""
-    pass
-
-class AlertError(MonitoringError):
-    """Raised when alert sending fails."""
-    pass
-
-class MetricsError(MonitoringError):
-    """Raised when metrics collection fails."""
-    pass
-
-class HealthCheckError(MonitoringError):
-    """Raised when health checks fail."""
-    pass 
