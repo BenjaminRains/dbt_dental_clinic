@@ -16,12 +16,17 @@ What it ACTUALLY does:
 - Table-level copying utility
 
 Better names would be:
-- mysql_table_copier.py
 - mysql_schema_replicator.py
-- mysql_data_migrator.py
-- exact_table_copier.py
 
-TODO: Rename this file to accurately reflect its functionality
+**Files to Update:**
+- `etl_pipeline/orchestration/pipeline_orchestrator.py` (Line 82)
+- `etl_pipeline/orchestration/table_processor.py` (Line 103)
+- `tests/core/test_mysql_replicator.py` (Line 24)
+
+TODO: Fix import statements in dependent files
+TODO: Rename this file to accurately reflect its functionality: mysql_schema_replicator.py
+TODO: Check alignment with schema_discovery.py 
+TODO: Add tests
 """
 import os
 import re
