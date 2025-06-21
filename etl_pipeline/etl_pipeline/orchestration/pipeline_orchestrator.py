@@ -29,7 +29,7 @@ ACTIVE DEPENDENCIES:
 - ExactMySQLReplicator: Replicates data from source to replication
 - ConnectionFactory: Manages database connections
 - Settings: Configuration management
-- MetricsCollector: Basic metrics collection (core/metrics.py)
+- MetricsCollector: Unified metrics collection with persistence
 
 ARCHITECTURE OVERVIEW:
 1. Connection Initialization: Sets up all database connections
@@ -80,8 +80,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..core.connections import ConnectionFactory
 from ..transformers.raw_to_public import RawToPublicTransformer
-from ..mysql_replicator import ExactMySQLReplicator
-from ..core.metrics import MetricsCollector
+from ..core.mysql_replicator import ExactMySQLReplicator
+from ..monitoring.unified_metrics import UnifiedMetricsCollector
+from ..core.logger import get_logger
 from ..core.postgres_schema import PostgresSchema
 from .table_processor import TableProcessor
 from .priority_processor import PriorityProcessor
@@ -115,8 +116,8 @@ class PipelineOrchestrator:
         self.postgres_analytics_engine = None
         self.raw_to_public_transformer = None
         
-        # Initialize metrics
-        self.metrics = MetricsCollector()
+        # Initialize metrics (will be updated with analytics engine after connections)
+        self.metrics = UnifiedMetricsCollector()
         
         # Track initialization state
         self.connections_initialized = False
