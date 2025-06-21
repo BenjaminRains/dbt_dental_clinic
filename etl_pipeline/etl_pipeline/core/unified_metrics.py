@@ -6,7 +6,7 @@ implementations into a single, comprehensive metrics system.
 
 CONSOLIDATED FROM:
 1. core/metrics.py - Basic in-memory metrics collection (ACTIVELY USED)
-2. monitoring/metrics.py - Mock implementation with PipelineMetrics class (ACTIVELY USED)
+2. monitoring/metrics.py - REMOVED (consolidated into unified_metrics.py)
 3. monitoring/metrics_collector.py - Advanced implementation with database persistence (UNUSED)
 
 FEATURES:
