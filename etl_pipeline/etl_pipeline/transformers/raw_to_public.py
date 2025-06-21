@@ -74,6 +74,7 @@ INTEGRATION POINTS:
 
 This component is critical for the ETL pipeline but needs comprehensive
 testing and validation before production deployment.
+
 """
 
 import pandas as pd
@@ -81,11 +82,10 @@ from sqlalchemy import text, inspect
 from typing import Dict, List, Optional, Any
 import logging
 from datetime import datetime
-from .base_transformer import BaseTransformer
 
 logger = logging.getLogger(__name__)
 
-class RawToPublicTransformer(BaseTransformer):
+class RawToPublicTransformer:
     def __init__(self, source_engine, target_engine):
         """
         Initialize the Raw to Public transformer.
@@ -94,7 +94,8 @@ class RawToPublicTransformer(BaseTransformer):
             source_engine: SQLAlchemy engine for raw schema
             target_engine: SQLAlchemy engine for public schema
         """
-        super().__init__(source_engine, target_engine)
+        self.source_engine = source_engine
+        self.target_engine = target_engine
         self.source_schema = 'raw'
         self.target_schema = 'public'
         self.inspector = inspect(target_engine)
