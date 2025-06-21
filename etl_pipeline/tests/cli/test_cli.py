@@ -223,7 +223,7 @@ class TestCLI:
             # Clean up the temporary file
             os.unlink(config_path)
         
-    @patch('etl_pipeline.monitoring.metrics.PipelineMetrics')
+    @patch('etl_pipeline.core.unified_metrics.UnifiedMetricsCollector')
     @patch('etl_pipeline.core.connections.ConnectionFactory')
     def test_status_command(self, mock_conn_factory, mock_metrics_class):
         """Test status command with mocked metrics and connection factory."""
