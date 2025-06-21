@@ -54,7 +54,7 @@ DEPENDENCIES:
 - PostgresSchema: Schema management and conversion
 - Settings: Configuration management
 - ConnectionFactory: Database connections
-- MetricsCollector: Basic metrics collection
+- UnifiedMetricsCollector: Basic metrics collection
 
 INTEGRATION POINTS:
 - PipelineOrchestrator: Main orchestration integration
@@ -98,12 +98,13 @@ import time
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from ..core.metrics import MetricsCollector
+from ..core.connections import ConnectionFactory
+from ..monitoring.unified_metrics import UnifiedMetricsCollector
+from ..core.logger import get_logger
 from ..core.postgres_schema import PostgresSchema
 from ..transformers.raw_to_public import RawToPublicTransformer
-from ..mysql_replicator import ExactMySQLReplicator
+from ..core.mysql_replicator import ExactMySQLReplicator
 from ..config.settings import Settings
-from ..core.connections import ConnectionFactory
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ class TableProcessor:
         """
         self.settings = Settings()
         self.config_path = config_path
-        self.metrics = MetricsCollector()
+        self.metrics = UnifiedMetricsCollector()
         
         # Connection state
         self.opendental_source_engine = None
