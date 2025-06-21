@@ -223,31 +223,85 @@ class TestCLI:
             # Clean up the temporary file
             os.unlink(config_path)
         
-    @patch('etl_pipeline.core.unified_metrics.UnifiedMetricsCollector')
-    @patch('etl_pipeline.core.connections.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_status_command(self, mock_conn_factory, mock_metrics_class):
-        """Test status command with mocked metrics and connection factory."""
-        # Set up the metrics mock
-        mock_metrics = MagicMock()
-        mock_metrics_class.return_value = mock_metrics
-        mock_metrics.get_pipeline_status.return_value = {
-            'last_update': '2024-02-20 10:00:00',
-            'status': 'running',
-            'tables': [
-                {'name': 'patient', 'status': 'completed', 'last_sync': '2024-02-20 10:00:00', 'records_processed': 1000, 'error': None},
-                {'name': 'appointment', 'status': 'in_progress', 'last_sync': '2024-02-20 09:55:00', 'records_processed': 500, 'error': None}
-            ]
-        }
-        
-        # Set up the connection factory mock
-        mock_conn_factory.return_value = MagicMock()
-        
-        # Test status command
-        result = self.runner.invoke(cli, ['status', '--config', 'etl_pipeline/config/tables.yml'])
-        assert result.exit_code == 0
-        assert 'Pipeline Status' in result.output
-        assert 'patient' in result.output
-        assert 'appointment' in result.output
+        """Test the status command."""
+        # Create a temporary config file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("""
+            source:
+              host: localhost
+              port: 3306
+              database: opendental
+              user: test_user
+              password: test_pass
+            replication:
+              host: localhost
+              port: 3306
+              database: opendental_replication
+              user: test_user
+              password: test_pass
+            analytics:
+              host: localhost
+              port: 5432
+              database: opendental_analytics
+              user: test_user
+              password: test_pass
+            """)
+            config_path = f.name
+
+        try:
+            # Setup mock metrics with realistic test data
+            mock_metrics = MagicMock()
+            mock_metrics_class.return_value = mock_metrics
+            mock_metrics.get_pipeline_status.return_value = {
+                'last_update': '2024-02-20 10:00:00',
+                'status': 'running',
+                'tables': [
+                    {
+                        'name': 'patient',
+                        'status': 'completed',
+                        'last_sync': '2024-02-20 10:00:00',
+                        'records_processed': 1000,
+                        'error': None
+                    },
+                    {
+                        'name': 'appointment',
+                        'status': 'in_progress',
+                        'last_sync': '2024-02-20 09:55:00',
+                        'records_processed': 500,
+                        'error': None
+                    },
+                    {
+                        'name': 'procedure',
+                        'status': 'failed',
+                        'last_sync': '2024-02-20 09:50:00',
+                        'records_processed': 0,
+                        'error': 'Connection timeout'
+                    }
+                ]
+            }
+
+            # Setup mock connection factory
+            mock_conn_factory.get_postgres_analytics_connection.return_value = MagicMock()
+
+            # Run the command
+            result = self.runner.invoke(cli, ['status', '--config', config_path])
+
+            # Verify the result
+            assert result.exit_code == 0
+            assert 'Pipeline Status' in result.output
+            assert 'patient' in result.output
+            assert 'appointment' in result.output
+            assert 'procedure' in result.output
+            assert 'completed' in result.output
+            assert 'in_progress' in result.output
+            assert 'failed' in result.output
+
+        finally:
+            # Clean up the temporary file
+            os.unlink(config_path)
 
 
 class TestConnectionTesting:
