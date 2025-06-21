@@ -38,7 +38,13 @@ function Initialize-DBTEnvironment {
         Push-Location $ProjectPath
         try {
             Write-Host "📦 Installing dbt dependencies..." -ForegroundColor Yellow
-            pipenv install
+            
+            # Suppress pipenv verbosity and courtesy notices
+            $env:PIPENV_VERBOSITY = -1
+            $env:PIPENV_IGNORE_VIRTUALENVS = 1
+            
+            # Suppress pipenv output since we handle activation manually
+            pipenv install 2>$null | Out-Null
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "🔧 Activating dbt pipenv shell..." -ForegroundColor Yellow
@@ -160,7 +166,13 @@ function Initialize-ETLEnvironment {
     Push-Location $etlPath
     try {
         Write-Host "📦 Installing ETL dependencies..." -ForegroundColor Yellow
-        pipenv install
+        
+        # Suppress pipenv verbosity and courtesy notices
+        $env:PIPENV_VERBOSITY = -1
+        $env:PIPENV_IGNORE_VIRTUALENVS = 1
+        
+        # Suppress pipenv output since we handle activation manually
+        pipenv install 2>$null | Out-Null
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "🔧 Activating ETL pipenv shell..." -ForegroundColor Yellow

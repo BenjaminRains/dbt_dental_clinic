@@ -30,8 +30,12 @@ function Initialize-ETLEnvironment {
     Write-Host "📦 Installing ETL dependencies..."
     
     try {
+        # Suppress pipenv verbosity and courtesy notices
+        $env:PIPENV_VERBOSITY = -1
+        $env:PIPENV_IGNORE_VIRTUALENVS = 1
+        
         # Install dependencies and the package in development mode
-        pipenv install --dev
+        pipenv install --dev 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to install dependencies"
         }
