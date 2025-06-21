@@ -2,10 +2,6 @@
 Configuration settings for the ETL pipeline.
 Consolidates database and pipeline configuration logic.
 
-MODERN CONFIGURATION SYSTEM - REPLACES loader.py
-===============================================
-This is the current, modern configuration system that replaces the legacy loader.py.
-
 Migration from loader.py:
 - ConfigLoader → Settings class
 - ETLConfig dataclass → Direct dictionary access
@@ -15,7 +11,6 @@ Migration from loader.py:
 
 Current Status:
 - This is the ACTIVE configuration system for new development
-- loader.py is kept for backward compatibility only
 - All new code should use Settings class and global settings instance
 - Supports environment variables, YAML files, and validation
 
