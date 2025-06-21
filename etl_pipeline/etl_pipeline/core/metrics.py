@@ -1,49 +1,55 @@
 """
-Metrics collection for the ETL pipeline.
+DEPRECATED: Basic metrics collection module.
 
-BASIC IMPLEMENTATION - NEEDS ENHANCEMENT
-=======================================
-This metrics module provides basic pipeline metrics collection but lacks
-advanced features and may be redundant with planned monitoring system.
+STATUS: DEPRECATED - Replaced by unified_metrics.py
+==================================================
 
-Current Status:
-- Basic in-memory metrics collection (no persistence)
-- Simple counters for tables, rows, and errors
-- No integration with monitoring systems
-- No validation or error handling
-- Metrics lost on pipeline restart
+This module has been deprecated and replaced by the unified metrics system.
+All functionality has been consolidated into monitoring/unified_metrics.py.
 
-Limitations:
-- No persistence - metrics not saved between runs
-- No time-series data or aggregation
-- No integration with pipeline.yml monitoring config
-- No advanced features like retention policies
-- No storage path or collection intervals
+MIGRATION:
+- Use UnifiedMetricsCollector from monitoring/unified_metrics.py instead
+- This file will be removed in a future release
+- All imports have been updated to use the new unified system
 
-Planned vs. Current:
-- pipeline.yml shows plans for: retention_days, storage_path, collection_interval
-- metrics.py provides: basic counters, in-memory storage, simple timestamps
-- Gap between planned monitoring and current implementation
+DEPRECATION TIMELINE:
+- Phase 1: Mark as deprecated (current)
+- Phase 2: Remove after validation period
+- Phase 3: Clean up any remaining references
 
-Enhancement Needed:
-- Add persistence and storage capabilities
-- Integrate with monitoring configuration
-- Add validation and error handling
-- Implement time-series metrics
-- Add retention and cleanup policies
-
-TODO: Enhance metrics collection with persistence and advanced features
-TODO: Integrate with pipeline.yml monitoring configuration
-TODO: Add comprehensive testing for metrics functionality
-TODO: Implement proper storage and retention policies
+DO NOT USE: This file is maintained for backward compatibility only.
+Use etl_pipeline.monitoring.unified_metrics.UnifiedMetricsCollector instead.
 """
+
+import logging
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 class MetricsCollector:
+    """
+    DEPRECATED: Basic metrics collector.
+    
+    This class has been deprecated. Use UnifiedMetricsCollector from
+    monitoring/unified_metrics.py instead.
+    
+    The unified system provides:
+    - Database persistence
+    - Real-time metrics collection
+    - Pipeline status reporting
+    - Error tracking and success rates
+    - Configurable retention policies
+    """
+    
     def __init__(self):
-        """Initialize metrics collector."""
-        self.metrics: Dict[str, Any] = {
+        """
+        DEPRECATED: Initialize metrics collector.
+        
+        Use UnifiedMetricsCollector(analytics_engine) instead.
+        """
+        logger.warning("MetricsCollector is deprecated. Use UnifiedMetricsCollector from monitoring/unified_metrics.py")
+        self.metrics = {
             'start_time': None,
             'end_time': None,
             'tables_processed': 0,
@@ -52,25 +58,52 @@ class MetricsCollector:
         }
     
     def start_pipeline(self):
-        """Record pipeline start time."""
+        """
+        DEPRECATED: Start pipeline timing.
+        
+        Use UnifiedMetricsCollector.start_pipeline() instead.
+        """
+        logger.warning("MetricsCollector.start_pipeline() is deprecated")
         self.metrics['start_time'] = datetime.now()
     
     def end_pipeline(self):
-        """Record pipeline end time."""
+        """
+        DEPRECATED: End pipeline timing.
+        
+        Use UnifiedMetricsCollector.end_pipeline() instead.
+        """
+        logger.warning("MetricsCollector.end_pipeline() is deprecated")
         self.metrics['end_time'] = datetime.now()
     
-    def record_table_processed(self, table_name: str, rows: int):
-        """Record a processed table."""
+    def record_table_processed(self, table_name: str, rows_processed: int):
+        """
+        DEPRECATED: Record table processing.
+        
+        Use UnifiedMetricsCollector.record_table_processed() instead.
+        """
+        logger.warning("MetricsCollector.record_table_processed() is deprecated")
         self.metrics['tables_processed'] += 1
-        self.metrics['rows_processed'] += rows
+        self.metrics['rows_processed'] += rows_processed
     
-    def record_error(self, error: str):
-        """Record an error."""
-        self.metrics['errors'].append({
+    def record_error(self, error_message: str):
+        """
+        DEPRECATED: Record error.
+        
+        Use UnifiedMetricsCollector.record_error() instead.
+        """
+        logger.warning("MetricsCollector.record_error() is deprecated")
+        error = {
             'timestamp': datetime.now(),
-            'message': error
-        })
+            'message': error_message
+        }
+        self.metrics['errors'].append(error)
     
     def get_metrics(self) -> Dict[str, Any]:
-        """Get current metrics."""
-        return self.metrics
+        """
+        DEPRECATED: Get metrics.
+        
+        Use UnifiedMetricsCollector.get_pipeline_status() or 
+        UnifiedMetricsCollector.get_pipeline_stats() instead.
+        """
+        logger.warning("MetricsCollector.get_metrics() is deprecated")
+        return self.metrics.copy()
