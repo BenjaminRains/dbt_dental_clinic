@@ -1,81 +1,127 @@
-"""
-Tests for the metrics module.
-"""
+"""Tests for unified metrics functionality."""
+
 import pytest
 from datetime import datetime
-import time
+from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 
-from etl_pipeline.core.metrics import MetricsCollector
-
-def test_metrics_collector_initialization():
-    """Test MetricsCollector initialization."""
-    collector = MetricsCollector()
-    
-    assert collector.metrics['start_time'] is None
-    assert collector.metrics['end_time'] is None
+def test_unified_metrics_initialization():
+    """Test UnifiedMetricsCollector initialization."""
+    collector = UnifiedMetricsCollector()
+    assert collector is not None
+    assert collector.metrics['status'] == 'idle'
     assert collector.metrics['tables_processed'] == 0
-    assert collector.metrics['rows_processed'] == 0
-    assert collector.metrics['errors'] == []
+    assert collector.metrics['total_rows_processed'] == 0
 
-def test_pipeline_timing():
-    """Test pipeline timing recording."""
-    collector = MetricsCollector()
+def test_pipeline_start_end():
+    """Test pipeline start and end functionality."""
+    collector = UnifiedMetricsCollector()
     
-    # Test start time
+    # Start pipeline
     collector.start_pipeline()
-    assert isinstance(collector.metrics['start_time'], datetime)
+    assert collector.metrics['status'] == 'running'
+    assert collector.metrics['start_time'] is not None
     
-    # Add a small delay to ensure different timestamps
-    time.sleep(0.1)
-    
-    # Test end time
-    collector.end_pipeline()
-    assert isinstance(collector.metrics['end_time'], datetime)
-    assert collector.metrics['start_time'] < collector.metrics['end_time']
+    # End pipeline
+    result = collector.end_pipeline()
+    assert result['status'] == 'completed'
+    assert result['end_time'] is not None
+    assert result['total_time'] is not None
 
-def test_table_processing():
-    """Test table processing metrics."""
-    collector = MetricsCollector()
+def test_table_processing_recording():
+    """Test recording table processing metrics."""
+    collector = UnifiedMetricsCollector()
     
-    # Test single table
-    collector.record_table_processed('table1', 1000)
+    # Record table processing
+    collector.record_table_processed('patient', 1000, 30.5, True)
     assert collector.metrics['tables_processed'] == 1
-    assert collector.metrics['rows_processed'] == 1000
+    assert collector.metrics['total_rows_processed'] == 1000
+    assert 'patient' in collector.metrics['table_metrics']
     
-    # Test multiple tables
-    collector.record_table_processed('table2', 2000)
+    # Record failed table
+    collector.record_table_processed('appointment', 500, 15.2, False, "Connection timeout")
     assert collector.metrics['tables_processed'] == 2
-    assert collector.metrics['rows_processed'] == 3000
+    assert collector.metrics['total_rows_processed'] == 1500
+    assert len(collector.metrics['errors']) == 1
 
 def test_error_recording():
-    """Test error recording."""
-    collector = MetricsCollector()
+    """Test error recording functionality."""
+    collector = UnifiedMetricsCollector()
     
-    # Record an error
-    error_message = "Test error"
-    collector.record_error(error_message)
-    
+    # Record general error
+    collector.record_error("Database connection failed")
     assert len(collector.metrics['errors']) == 1
-    error = collector.metrics['errors'][0]
-    assert error['message'] == error_message
-    assert isinstance(error['timestamp'], datetime)
+    assert collector.metrics['errors'][0]['message'] == "Database connection failed"
+    
+    # Record table-specific error
+    collector.record_error("Table not found", "nonexistent_table")
+    assert len(collector.metrics['errors']) == 2
+    assert collector.metrics['errors'][1]['table'] == "nonexistent_table"
 
-def test_get_metrics():
-    """Test metrics retrieval."""
-    collector = MetricsCollector()
+def test_pipeline_status():
+    """Test pipeline status reporting."""
+    collector = UnifiedMetricsCollector()
     
-    # Record some metrics
-    collector.start_pipeline()
-    collector.record_table_processed('table1', 1000)
+    # Get initial status
+    status = collector.get_pipeline_status()
+    assert status['status'] == 'idle'
+    assert status['tables_processed'] == 0
+    assert status['total_rows_processed'] == 0
+    
+    # Process some tables and get status
+    collector.record_table_processed('patient', 1000, 30.5, True)
+    collector.record_table_processed('appointment', 500, 15.2, True)
+    
+    status = collector.get_pipeline_status()
+    assert status['tables_processed'] == 2
+    assert status['total_rows_processed'] == 1500
+    assert len(status['tables']) == 2
+
+def test_table_status():
+    """Test table-specific status reporting."""
+    collector = UnifiedMetricsCollector()
+    
+    # Record table processing
+    collector.record_table_processed('patient', 1000, 30.5, True)
+    
+    # Get table status
+    table_status = collector.get_table_status('patient')
+    assert table_status is not None
+    assert table_status['table_name'] == 'patient'
+    assert table_status['rows_processed'] == 1000
+    assert table_status['processing_time'] == 30.5
+    assert table_status['success'] is True
+    
+    # Get non-existent table status
+    table_status = collector.get_table_status('nonexistent')
+    assert table_status is None
+
+def test_pipeline_stats():
+    """Test pipeline statistics calculation."""
+    collector = UnifiedMetricsCollector()
+    
+    # Process tables with mixed success/failure
+    collector.record_table_processed('patient', 1000, 30.5, True)
+    collector.record_table_processed('appointment', 500, 15.2, False, "Error")
+    collector.record_table_processed('procedure', 750, 25.0, True)
+    
+    stats = collector.get_pipeline_stats()
+    assert stats['tables_processed'] == 3
+    assert stats['total_rows_processed'] == 2250
+    assert stats['error_count'] == 1
+    assert stats['success_count'] == 2
+    assert stats['success_rate'] == (2/3) * 100
+
+def test_metrics_reset():
+    """Test metrics reset functionality."""
+    collector = UnifiedMetricsCollector()
+    
+    # Add some data
+    collector.record_table_processed('patient', 1000, 30.5, True)
     collector.record_error("Test error")
-    collector.end_pipeline()
     
-    # Get metrics
-    metrics = collector.get_metrics()
-    
-    assert isinstance(metrics, dict)
-    assert metrics['tables_processed'] == 1
-    assert metrics['rows_processed'] == 1000
-    assert len(metrics['errors']) == 1
-    assert isinstance(metrics['start_time'], datetime)
-    assert isinstance(metrics['end_time'], datetime) 
+    # Reset metrics
+    collector.reset_metrics()
+    assert collector.metrics['tables_processed'] == 0
+    assert collector.metrics['total_rows_processed'] == 0
+    assert len(collector.metrics['errors']) == 0
+    assert collector.metrics['status'] == 'idle' 
