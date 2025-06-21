@@ -7,7 +7,9 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+import pytest
 
+@pytest.mark.skip(reason="This is a standalone script, not a pytest test")
 def test_command(cmd, description, expected_in_output=None):
     """Test a command and report results."""
     print(f"\n🔍 Testing: {description}")
