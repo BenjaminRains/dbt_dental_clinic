@@ -53,11 +53,10 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.core.unified_metrics import UnifiedMetricsCollector
+from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 from etl_pipeline.core.logger import get_logger
 from etl_pipeline.config.settings import settings
 from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
-from etl_pipeline.utils.notifications import NotificationManager, NotificationConfig
 
 logger = get_logger(__name__)
 
