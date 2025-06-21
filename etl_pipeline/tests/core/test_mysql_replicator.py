@@ -22,7 +22,7 @@ import pytest
 from sqlalchemy import text
 from etl_pipeline.core.config import PipelineConfig
 from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
 
 def test_mysql_replication():
     """Test basic MySQL replication functionality."""
