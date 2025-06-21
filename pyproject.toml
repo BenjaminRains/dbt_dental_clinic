@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "etl-pipeline"
 version = "0.1.0"
 description = "Intelligent ETL pipeline for dental clinics"
-authors = [{name = "Ben Rains", email = "your.rains.bp@gmail.com"}]
+authors = [{name = "Ben Rains", email = "rains.bp@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
