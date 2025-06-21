@@ -51,7 +51,7 @@ from datetime import datetime
 import time
 
 # Use the new logger architecture
-from etl_pipeline.core.logger import get_logger
+from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config.settings import settings
 
 logger = get_logger(__name__)

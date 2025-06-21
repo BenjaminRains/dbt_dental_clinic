@@ -56,14 +56,13 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
 import pandas as pd
 
-from .base_loader import BaseLoader
 from etl_pipeline.config.settings import settings
 from etl_pipeline.core.postgres_schema import PostgresSchema
-from etl_pipeline.core.logger import get_logger
+from etl_pipeline.config.logging import get_logger
 
 logger = get_logger(__name__)
 
-class PostgresLoader(BaseLoader):
+class PostgresLoader:
     """PostgreSQL loader for loading data from MySQL replication to PostgreSQL analytics."""
     
     def __init__(self, replication_engine: Engine, analytics_engine: Engine):
@@ -74,7 +73,8 @@ class PostgresLoader(BaseLoader):
             replication_engine: MySQL replication database engine
             analytics_engine: PostgreSQL analytics database engine
         """
-        super().__init__(replication_engine, analytics_engine)
+        self.replication_engine = replication_engine
+        self.analytics_engine = analytics_engine
         
         # Use correct database names from conventions
         self.replication_db = "opendental_replication"

@@ -100,7 +100,7 @@ from sqlalchemy.engine import Engine
 
 from ..core.connections import ConnectionFactory
 from ..monitoring.unified_metrics import UnifiedMetricsCollector
-from ..core.logger import get_logger
+from ..config.logging import get_logger
 from ..core.postgres_schema import PostgresSchema
 from ..transformers.raw_to_public import RawToPublicTransformer
 from ..core.mysql_replicator import ExactMySQLReplicator

@@ -9,7 +9,7 @@ import re
 from datetime import datetime
 import logging
 
-from etl_pipeline.core.logger import get_logger
+from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config.settings import settings
 
 logger = logging.getLogger(__name__)
