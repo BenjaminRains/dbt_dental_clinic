@@ -3,14 +3,14 @@
 ## Clear Data Flow Architecture
 
 ```
-┌─────────────────────┐    ┌─────────────────────┐    ┌──────────────────────┐
-│   Source MySQL      │    │   Replication MySQL │    │   Analytics PostgreSQL│
-│   (OpenDental)      │───▶│   (Local Copy)      │───▶│   (Analytics)        │
-│                     │    │                     │    │                      │
-│ - opendental_prod   │    │ - opendental_repl   │    │ - opendental_analytics│
-│ - Read-only access  │    │ - Full read/write   │    │ - Analytics warehouse │
-│ - Port 3306         │    │ - Port 3305         │    │ - Port 5432          │
-└─────────────────────┘    └─────────────────────┘    └──────────────────────┘
+┌─────────────────────┐    ┌─────────────────────┐     ┌────────────────────── ┐
+│   Source MySQL      │    │   Replication MySQL │     │   Analytics PostgreSQL│
+│   (OpenDental)      │───▶│   (Local Copy)      │───▶│   (Analytics)         │
+│                     │    │                     │     │                       │
+│ - opendental        │    │ - opendental_repl   │     │ - opendental_analytics│
+│ - Read-only access  │    │ - Full read/write   │     │ - Analytics warehouse │
+│ - Port 3306         │    │ - Port 3305         │     │ - Port 5432           │
+└─────────────────────┘    └─────────────────────┘     └────────────────────── ┘
 ```
 
 ## Consistent Naming Strategy
@@ -20,7 +20,7 @@
 # Source Database (OpenDental Production)
 SOURCE_MYSQL_HOST=client-opendental-server
 SOURCE_MYSQL_PORT=3306
-SOURCE_MYSQL_DB=opendental_prod
+SOURCE_MYSQL_DB=opendental
 SOURCE_MYSQL_USER=readonly_user
 SOURCE_MYSQL_PASSWORD=secure_password
 
@@ -58,7 +58,7 @@ class ELTPipeline:
         self.analytics_engine = None       # Analytics PostgreSQL
         
         # Database names
-        self.source_db = "opendental_prod"
+        self.source_db = "opendental"
         self.replication_db = "opendental_replication"
         self.analytics_db = "opendental_analytics"
         self.analytics_schema = "raw"
@@ -94,7 +94,7 @@ public_marts.fact_treatments
 ## ELT Pipeline Phases
 
 ### Extract Phase
-- **Source**: OpenDental MySQL (`opendental_prod`)
+- **Source**: OpenDental MySQL (`opendental`)
 - **Target**: Replication MySQL (`opendental_replication`)
 - **Method**: Exact MySQL replication using `ExactMySQLReplicator`
 - **Tables**: `patient`, `appointment`, `treatment` (no suffixes)
