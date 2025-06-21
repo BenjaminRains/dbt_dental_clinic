@@ -1,6 +1,7 @@
 """
-Pipeline monitoring package.
+Monitoring package for ETL pipeline metrics and monitoring functionality.
 """
-from etl_pipeline.monitoring.metrics import PipelineMetrics
 
-__all__ = ['PipelineMetrics'] 
+from .unified_metrics import UnifiedMetricsCollector
+
+__all__ = ['UnifiedMetricsCollector'] 
