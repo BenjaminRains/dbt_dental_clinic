@@ -2,7 +2,13 @@
 
 ## Overview
 
-This strategy extends your successful staging model refactoring approach to standardize OpenDental source file documentation, creating a consistent foundation that feeds into your staging models. This aligns with your established naming conventions and intermediate model standardization goals.
+This document provides comprehensive strategic context, patterns, and implementation framework for standardizing OpenDental source file documentation. It works in conjunction with:
+- **`source_file_refactor_template.md`** - Provides tactical implementation template and quality standards for AI analysts
+- **`source_refactor_two_layer_prompt_system.md`** - Explains how these documents work together in an integrated prompting system
+
+Together, these documents provide a comprehensive framework for standardizing OpenDental source file documentation to support staging model development and business analytics.
+
+---
 
 ## Current State Assessment
 

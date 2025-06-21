@@ -1,5 +1,15 @@
 # Source File Refactoring Prompt Template for AI Analysts
 
+## Overview
+
+This document provides the tactical implementation template and quality standards for refactoring OpenDental source files. It works in conjunction with:
+- **`source_file_standardization_strategy.md`** - Provides comprehensive strategic context, patterns, and implementation framework
+- **`source_refactor_two_layer_prompt_system.md`** - Explains how these documents work together in an integrated prompting system
+
+Together, these documents provide a comprehensive framework for standardizing OpenDental source file documentation to support staging model development and business analytics.
+
+---
+
 ## **Context and Objective**
 
 You are an AI analyst tasked with refactoring OpenDental source file documentation for MDC Analytics, a dental clinic data pipeline. Your goal is to transform existing source files into comprehensive, business-focused documentation that follows established patterns and supports both technical and business users.

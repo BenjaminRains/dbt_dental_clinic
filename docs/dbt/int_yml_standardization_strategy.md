@@ -1,5 +1,16 @@
 # Intermediate Documentation Standardization Strategy
 
+## Overview
+
+This document focuses exclusively on standardizing the `.yml` documentation files for intermediate models. It works in conjunction with:
+- **`int_model_standardization_strategy.md`** - Defines SQL model file standardization patterns and technical implementation
+- **`int_template_to_model_mapping_guide.md`** - Maps each model to appropriate documentation templates and implementation phases
+- **`int_roadmap_checklist.md`** - Provides the detailed implementation roadmap and quality gates
+
+Together, these documents provide a comprehensive framework for standardizing both SQL files and documentation across all intermediate models in the dbt_dental_clinic project.
+
+---
+
 ## Documentation-Specific Strategy
 
 This strategy focuses exclusively on standardizing the `.yml` documentation files for intermediate models, building on the excellent business documentation patterns I observed in your models.

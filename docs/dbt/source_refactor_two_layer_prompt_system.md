@@ -1,5 +1,15 @@
 # Integrated Source File Refactoring Prompting System
 
+## Overview
+
+This document explains how the source file refactoring documents work together as an integrated prompting system. It works in conjunction with:
+- **`source_file_standardization_strategy.md`** - Provides comprehensive strategic context, patterns, and implementation framework
+- **`source_file_refactor_template.md`** - Provides tactical implementation template and quality standards for AI analysts
+
+Together, these documents provide a comprehensive framework for standardizing OpenDental source file documentation to support staging model development and business analytics.
+
+---
+
 ## How the Two Documents Work Together
 
 ### **Document 1: Strategic Foundation** (`source_file_standardization_strategy.md`)

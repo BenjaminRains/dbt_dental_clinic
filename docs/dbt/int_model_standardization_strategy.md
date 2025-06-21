@@ -1,5 +1,16 @@
 # Intermediate Model Standardization Strategy
 
+## Overview
+
+This document defines the SQL model file standardization patterns and technical implementation for intermediate models. It works in conjunction with:
+- **`int_yml_standardization_strategy.md`** - Provides detailed documentation template patterns and standards
+- **`int_template_to_model_mapping_guide.md`** - Maps each model to appropriate documentation templates and implementation phases
+- **`int_roadmap_checklist.md`** - Provides the detailed implementation roadmap and quality gates
+
+Together, these documents provide a comprehensive framework for standardizing both SQL files and documentation across all intermediate models in the dbt_dental_clinic project.
+
+---
+
 ## Strategy Overview
 
 After analyzing your intermediate models (`int_adjustments`, `int_insurance_coverage`, `int_payment_split`, `int_ar_analysis`, `int_appointment_details`), I've identified the need for **two separate but complementary standardization strategies**:

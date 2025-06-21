@@ -1,6 +1,15 @@
 # Template-to-Model Mapping Guide
 
-This document maps each of your 41 intermediate models to the appropriate documentation template and implementation approach.
+## Overview
+
+This document maps each of your 41 intermediate models to the appropriate documentation template and implementation approach. It works in conjunction with:
+- **`int_model_standardization_strategy.md`** - Defines SQL model file standardization patterns and technical implementation
+- **`int_yml_standardization_strategy.md`** - Provides detailed documentation template patterns and standards
+- **`int_roadmap_checklist.md`** - Provides the detailed implementation roadmap and quality gates
+
+Together, these documents provide a comprehensive framework for standardizing both SQL files and documentation across all intermediate models.
+
+---
 
 ## Template Assignment by Model
 

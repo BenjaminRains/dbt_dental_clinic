@@ -7,10 +7,20 @@
 
 ---
 
+## Overview
+
+This document outlines the strategic implementation plan for migrating to improved naming conventions. It works in conjunction with:
+- **`naming_conventions_models_data_type.md`** - Defines the standardized naming conventions and data type transformations
+- **`macro_implementation_checklist.md`** - Provides a detailed checklist for implementing these conventions in staging models
+
+Together, these documents provide a comprehensive framework for standardizing the dbt_dental_clinic project.
+
+---
+
 ## Executive Summary
 
 This document outlines the strategic implementation plan for migrating from our current dual-convention 
-naming system to the improved, simplified naming conventions documented in `Improved_naming_conventions.md`. 
+naming system to the improved, simplified naming conventions documented in `naming_conventions_models_data_type.md`. 
 The implementation will follow a phased approach to minimize risk and ensure system stability.
 
 **Key Decision:** Complete ETL pipeline baseline first, then implement improved conventions for all new development.
@@ -65,7 +75,7 @@ The implementation will follow a phased approach to minimize risk and ensure sys
 
 #### 1.1 Documentation Updates
 **Tasks:**
-- [ ] Finalize `Improved_naming_conventions.md` based on ETL learnings
+- [ ] Finalize `naming_conventions_models_data_type.md` based on ETL learnings
 - [ ] Create migration playbook with step-by-step procedures
 - [ ] Document current system performance as baseline
 - [ ] Create convention comparison guide (old vs new)
@@ -267,7 +277,7 @@ The implementation will follow a phased approach to minimize risk and ensure sys
 4. ✅ **Create stable release of current system**
 
 ### For Implementation Preparation:
-1. 📋 **Review and finalize** `Improved_naming_conventions.md`
+1. 📋 **Review and finalize** `naming_conventions_models_data_type.md`
 2. 🛠️ **Begin macro development** for common patterns
 3. 📚 **Create detailed migration playbook**
 4. 🎓 **Plan team training schedule**

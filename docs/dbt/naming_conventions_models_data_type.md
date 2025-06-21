@@ -1,4 +1,14 @@
-# Consolidated Naming Conventions - MDC Analytics
+# Consolidated Naming Conventions - dbt_dental_clinic
+
+## Overview
+
+This document defines the standardized naming conventions and data type transformations for the dbt_dental_clinic project. It works in conjunction with:
+- **`macro_implementation_checklist.md`** - Provides a detailed checklist for implementing these conventions in staging models
+- **`naming_conventions_implementation_strategy.md`** - Outlines the phased migration plan for implementing these standards across the entire project
+
+Together, these documents provide a comprehensive framework for standardizing data models and transformations.
+
+---
 
 ## Core Principles
 

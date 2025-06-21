@@ -1,5 +1,15 @@
 # Macro Implementation Checklist
 
+## Overview
+
+This checklist works in conjunction with:
+- **`naming_conventions_models_data_type.md`** - Defines the standardized naming conventions and data type transformations
+- **`naming_conventions_implementation_strategy.md`** - Outlines the phased migration plan for implementing these standards
+
+Together, these documents provide a comprehensive framework for standardizing staging models across the dbt_dental_clinic project.
+
+---
+
 ## Implementation Standards Per Model
 
 ### ✅ Macro Implementation Checklist (per model):

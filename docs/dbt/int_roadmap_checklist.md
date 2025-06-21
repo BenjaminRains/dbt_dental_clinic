@@ -2,6 +2,13 @@
 
 ## Overview
 
+This document provides a structured implementation roadmap for standardizing intermediate models. It works in conjunction with:
+- **`int_model_standardization_strategy.md`** - Defines SQL model file standardization patterns and technical implementation
+- **`int_yml_standardization_strategy.md`** - Provides detailed documentation template patterns and standards
+- **`int_template_to_model_mapping_guide.md`** - Maps each model to appropriate documentation templates and implementation phases
+
+Together, these documents provide a comprehensive framework for standardizing both SQL files and documentation across all intermediate models in the dbt_dental_clinic project.
+
 Based on analysis of your 15+ intermediate models across 7 different systems, this roadmap provides a structured approach to implementing both SQL and documentation standardization.
 
 ## Pre-Implementation Assessment
