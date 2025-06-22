@@ -5,45 +5,45 @@
 ```mermaid
 graph TD
     %% Entry Points
-    CLI[CLI Commands<br/>cli/main.py<br/>✅ ACTIVE] --> ORCH[PipelineOrchestrator<br/>orchestration/pipeline_orchestrator.py<br/>✅ ACTIVE]
+    CLI["CLI Commands<br/>cli/main.py<br/>✅ ACTIVE"] --> ORCH["PipelineOrchestrator<br/>orchestration/pipeline_orchestrator.py<br/>✅ ACTIVE"]
     
     %% Main Orchestration
-    ORCH --> TP[TableProcessor<br/>orchestration/table_processor.py<br/>✅ ACTIVE - CORE ETL ENGINE]
+    ORCH --> TP["TableProcessor<br/>orchestration/table_processor.py<br/>✅ ACTIVE - CORE ETL ENGINE"]
     
     %% ETL Phases
-    TP --> PHASE1[PHASE 1: EXTRACTION<br/>MySQL → MySQL]
-    TP --> PHASE2[PHASE 2: LOADING<br/>MySQL → PostgreSQL]
-    TP --> PHASE3[PHASE 3: TRANSFORMATION<br/>PostgreSQL → PostgreSQL]
+    TP --> PHASE1["PHASE 1: EXTRACTION<br/>MySQL → MySQL"]
+    TP --> PHASE2["PHASE 2: LOADING<br/>MySQL → PostgreSQL"]
+    TP --> PHASE3["PHASE 3: TRANSFORMATION<br/>PostgreSQL → PostgreSQL"]
     
     %% Phase 1: Extraction
-    PHASE1 --> MYSQL_COPY[ExactMySQLReplicator<br/>mysql_replicator.py<br/>✅ ACTIVE - Table Copying<br/>⚠️ MISNAMED]
-    MYSQL_COPY --> |create_exact_replica()| SCHEMA[Schema Creation<br/>opendental_replication]
-    MYSQL_COPY --> |copy_table_data()| DATA_COPY[Data Copying<br/>OpenDental → opendental_replication]
-    MYSQL_COPY --> |verify_exact_replica()| VERIFY1[Validation]
+    PHASE1 --> MYSQL_COPY["ExactMySQLReplicator<br/>mysql_replicator.py<br/>✅ ACTIVE - Table Copying<br/>⚠️ MISNAMED"]
+    MYSQL_COPY --> |create_exact_replica()| SCHEMA["Schema Creation<br/>opendental_replication"]
+    MYSQL_COPY --> |copy_table_data()| DATA_COPY["Data Copying<br/>OpenDental → opendental_replication"]
+    MYSQL_COPY --> |verify_exact_replica()| VERIFY1["Validation"]
     
     %% Phase 2: Loading
-    PHASE2 --> PG_LOADER[PostgresLoader<br/>loaders/postgres_loader.py<br/>✅ ACTIVE - MySQL to PostgreSQL<br/>⚠️ OVER-ENGINEERED]
-    PG_LOADER --> |load_table()| LOAD_CORE[Core Loading Logic]
-    PG_LOADER --> |load_table_chunked()| CHUNKED[Large Table Handling]
-    PG_LOADER --> |verify_load()| VERIFY2[Load Validation]
-    PG_LOADER --> RAW_SCHEMA[opendental_analytics.raw]
+    PHASE2 --> PG_LOADER["PostgresLoader<br/>loaders/postgres_loader.py<br/>✅ ACTIVE - MySQL to PostgreSQL<br/>⚠️ OVER-ENGINEERED"]
+    PG_LOADER --> |load_table()| LOAD_CORE["Core Loading Logic"]
+    PG_LOADER --> |load_table_chunked()| CHUNKED["Large Table Handling"]
+    PG_LOADER --> |verify_load()| VERIFY2["Load Validation"]
+    PG_LOADER --> RAW_SCHEMA["opendental_analytics.raw"]
     
     %% Phase 3: Transformation
-    PHASE3 --> TRANSFORMER[RawToPublicTransformer<br/>transformers/raw_to_public.py<br/>✅ ACTIVE - Schema Transformation]
-    TRANSFORMER --> |transform_table()| TRANSFORM_CORE[Core Transformation]
-    TRANSFORMER --> |_read_from_raw()| READ_RAW[Read from raw schema]
-    TRANSFORMER --> |_apply_transformations()| CLEAN[Data Cleaning & Type Conversion]
-    TRANSFORMER --> |_write_to_public()| WRITE_PUBLIC[Write to public schema]
-    TRANSFORMER --> PUBLIC_SCHEMA[opendental_analytics.public]
+    PHASE3 --> TRANSFORMER["RawToPublicTransformer<br/>transformers/raw_to_public.py<br/>✅ ACTIVE - Schema Transformation"]
+    TRANSFORMER --> |transform_table()| TRANSFORM_CORE["Core Transformation"]
+    TRANSFORMER --> |_read_from_raw()| READ_RAW["Read from raw schema"]
+    TRANSFORMER --> |_apply_transformations()| CLEAN["Data Cleaning & Type Conversion"]
+    TRANSFORMER --> |_write_to_public()| WRITE_PUBLIC["Write to public schema"]
+    TRANSFORMER --> PUBLIC_SCHEMA["opendental_analytics.public"]
     
     %% Supporting Components
-    ORCH --> CONFIG[Settings<br/>config/settings.py<br/>✅ ACTIVE - Configuration]
-    ORCH --> CONN[ConnectionFactory<br/>core/connections.py<br/>✅ ACTIVE - Database Connections]
-    ORCH --> SCHEMA_CONV[PostgresSchema<br/>core/postgres_schema.py<br/>✅ ACTIVE - Schema Conversion]
-    ORCH --> METRICS[MetricsCollector<br/>core/metrics.py<br/>✅ ACTIVE - Basic Metrics]
+    ORCH --> CONFIG["Settings<br/>config/settings.py<br/>✅ ACTIVE - Configuration"]
+    ORCH --> CONN["ConnectionFactory<br/>core/connections.py<br/>✅ ACTIVE - Database Connections"]
+    ORCH --> SCHEMA_CONV["PostgresSchema<br/>core/postgres_schema.py<br/>✅ ACTIVE - Schema Conversion"]
+    ORCH --> METRICS["MetricsCollector<br/>core/metrics.py<br/>✅ ACTIVE - Basic Metrics"]
     
     %% Priority Processing
-    ORCH --> PRIORITY[PriorityProcessor<br/>orchestration/priority_processor.py<br/>✅ ACTIVE - Batch Processing]
+    ORCH --> PRIORITY["PriorityProcessor<br/>orchestration/priority_processor.py<br/>✅ ACTIVE - Batch Processing"]
     
     %% Styling
     classDef active fill:#d4edda,stroke:#155724,stroke-width:2px
