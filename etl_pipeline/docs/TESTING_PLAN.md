@@ -2,7 +2,9 @@
 
 ## Overview
 
-This testing plan outlines the comprehensive testing strategy for the ETL pipeline after refactoring. The plan addresses current testing gaps, improves test quality, and ensures robust validation of all pipeline components.
+This testing plan outlines the comprehensive testing strategy for the ETL pipeline after refactoring.
+ The plan addresses current testing gaps, improves test quality, and ensures robust validation of 
+ all pipeline components.
 
 ## Current Testing State Analysis (UPDATED - Current Coverage: 41%)
 
