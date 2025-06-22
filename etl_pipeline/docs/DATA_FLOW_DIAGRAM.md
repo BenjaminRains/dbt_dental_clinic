@@ -17,23 +17,23 @@ graph TD
     
     %% Phase 1: Extraction
     PHASE1 --> MYSQL_COPY["ExactMySQLReplicator<br/>mysql_replicator.py<br/>✅ ACTIVE - Table Copying<br/>⚠️ MISNAMED"]
-    MYSQL_COPY --> |create_exact_replica()| SCHEMA["Schema Creation<br/>opendental_replication"]
-    MYSQL_COPY --> |copy_table_data()| DATA_COPY["Data Copying<br/>OpenDental → opendental_replication"]
-    MYSQL_COPY --> |verify_exact_replica()| VERIFY1["Validation"]
+    MYSQL_COPY --> SCHEMA["Schema Creation<br/>opendental_replication"]
+    MYSQL_COPY --> DATA_COPY["Data Copying<br/>OpenDental → opendental_replication"]
+    MYSQL_COPY --> VERIFY1["Validation"]
     
     %% Phase 2: Loading
     PHASE2 --> PG_LOADER["PostgresLoader<br/>loaders/postgres_loader.py<br/>✅ ACTIVE - MySQL to PostgreSQL<br/>⚠️ OVER-ENGINEERED"]
-    PG_LOADER --> |load_table()| LOAD_CORE["Core Loading Logic"]
-    PG_LOADER --> |load_table_chunked()| CHUNKED["Large Table Handling"]
-    PG_LOADER --> |verify_load()| VERIFY2["Load Validation"]
+    PG_LOADER --> LOAD_CORE["Core Loading Logic"]
+    PG_LOADER --> CHUNKED["Large Table Handling"]
+    PG_LOADER --> VERIFY2["Load Validation"]
     PG_LOADER --> RAW_SCHEMA["opendental_analytics.raw"]
     
     %% Phase 3: Transformation
     PHASE3 --> TRANSFORMER["RawToPublicTransformer<br/>transformers/raw_to_public.py<br/>✅ ACTIVE - Schema Transformation"]
-    TRANSFORMER --> |transform_table()| TRANSFORM_CORE["Core Transformation"]
-    TRANSFORMER --> |_read_from_raw()| READ_RAW["Read from raw schema"]
-    TRANSFORMER --> |_apply_transformations()| CLEAN["Data Cleaning & Type Conversion"]
-    TRANSFORMER --> |_write_to_public()| WRITE_PUBLIC["Write to public schema"]
+    TRANSFORMER --> TRANSFORM_CORE["Core Transformation"]
+    TRANSFORMER --> READ_RAW["Read from raw schema"]
+    TRANSFORMER --> CLEAN["Data Cleaning & Type Conversion"]
+    TRANSFORMER --> WRITE_PUBLIC["Write to public schema"]
     TRANSFORMER --> PUBLIC_SCHEMA["opendental_analytics.public"]
     
     %% Supporting Components
