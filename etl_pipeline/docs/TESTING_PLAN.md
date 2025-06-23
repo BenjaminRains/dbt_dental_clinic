@@ -78,6 +78,16 @@ class TestPipelineOrchestrator:
     def test_parallel_processing_limits(self)
     def test_memory_management(self)
     def test_interrupt_handling(self)
+    
+    # IDEMPOTENCY AND INCREMENTAL LOAD TESTS - CRITICAL
+    def test_idempotent_processing_force_full_false_twice(self)
+    def test_idempotent_processing_force_full_true_then_false(self)
+    def test_incremental_processing_with_source_changes(self)
+    def test_incremental_processing_with_no_source_changes(self)
+    def test_schema_change_reverts_to_full_load(self)
+    def test_incremental_flags_monitoring(self)
+    def test_force_full_flag_behavior(self)
+    def test_schema_changed_flag_behavior(self)
 ```
 
 #### **1.3 Table Processor (16% → 90% coverage) - CRITICAL**
@@ -94,6 +104,97 @@ class TestTableProcessor:
     def test_data_validation_before_processing(self)
     def test_schema_change_detection(self)
     def test_processing_timeout_handling(self)
+    
+    # IDEMPOTENCY AND INCREMENTAL LOAD TESTS - CRITICAL
+    def test_idempotent_table_processing_force_full_false_twice(self)
+    def test_idempotent_table_processing_force_full_true_then_false(self)
+    def test_incremental_table_processing_with_source_changes(self)
+    def test_incremental_table_processing_with_no_source_changes(self)
+    def test_schema_change_detection_and_full_load_revert(self)
+    def test_incremental_column_behavior_validation(self)
+    def test_force_full_flag_overrides_incremental_logic(self)
+    def test_schema_changed_flag_triggers_full_load(self)
+    def test_data_consistency_after_multiple_runs(self)
+    def test_incremental_processing_with_partial_failures(self)
+```
+
+#### **1.4 Idempotency and Incremental Load Testing (NEW SECTION) - CRITICAL**
+```python
+# tests/orchestration/test_idempotency.py
+class TestIdempotencyAndIncrementalLoad:
+    """CRITICAL: Tests for idempotency and incremental load behavior"""
+    
+    def test_force_full_false_twice_should_skip_or_process_deltas(self):
+        """✅ Test with force_full=False twice → second run should skip or only process deltas"""
+        # 1. Run pipeline with force_full=False
+        # 2. Verify data is loaded
+        # 3. Run pipeline again with force_full=False
+        # 4. Verify second run either skips or only processes deltas
+        # 5. Verify no duplicate data is created
+        
+    def test_source_row_change_triggers_incremental_processing(self):
+        """✅ Change a row in source → rerun and see if only that row is processed"""
+        # 1. Run initial pipeline with force_full=False
+        # 2. Modify a row in source database
+        # 3. Run pipeline again with force_full=False
+        # 4. Verify only the changed row is processed
+        # 5. Verify other rows remain unchanged
+        
+    def test_schema_change_reverts_to_full_load(self):
+        """✅ Break schema → check that it reverts to full load"""
+        # 1. Run initial pipeline with force_full=False
+        # 2. Modify table schema in source (add/remove column)
+        # 3. Run pipeline again with force_full=False
+        # 4. Verify schema change is detected
+        # 5. Verify pipeline reverts to full load
+        # 6. Verify new schema is properly applied
+        
+    def test_incremental_flags_monitoring(self):
+        """✅ Monitor flags like is_incremental, force_full, and schema_changed"""
+        # 1. Test is_incremental flag behavior
+        # 2. Test force_full flag behavior
+        # 3. Test schema_changed flag behavior
+        # 4. Verify flag combinations work correctly
+        # 5. Verify flags are properly logged and monitored
+        
+    def test_idempotent_processing_with_no_changes(self):
+        """Test that running pipeline multiple times with no changes produces identical results"""
+        # 1. Run pipeline with force_full=False
+        # 2. Record data state and processing metrics
+        # 3. Run pipeline again with force_full=False
+        # 4. Verify data state is identical
+        # 5. Verify processing metrics show no new data processed
+        
+    def test_incremental_processing_with_multiple_changes(self):
+        """Test incremental processing with multiple source changes"""
+        # 1. Run initial pipeline
+        # 2. Make multiple changes to source data
+        # 3. Run incremental pipeline
+        # 4. Verify all changes are captured
+        # 5. Verify processing efficiency
+        
+    def test_force_full_overrides_incremental_logic(self):
+        """Test that force_full=True always triggers full processing"""
+        # 1. Run pipeline with force_full=True
+        # 2. Verify full processing occurs regardless of incremental settings
+        # 3. Verify all data is reprocessed
+        # 4. Verify incremental flags are ignored
+        
+    def test_incremental_processing_edge_cases(self):
+        """Test edge cases in incremental processing"""
+        # 1. Test with empty incremental column
+        # 2. Test with NULL values in incremental column
+        # 3. Test with deleted rows in source
+        # 4. Test with very large incremental datasets
+        # 5. Test with concurrent source modifications
+        
+    def test_data_consistency_validation(self):
+        """Test data consistency across multiple pipeline runs"""
+        # 1. Run pipeline multiple times
+        # 2. Verify data integrity is maintained
+        # 3. Verify no data corruption occurs
+        # 4. Verify referential integrity is preserved
+        # 5. Verify business rules are maintained
 ```
 
 ### **Phase 2: Data Movement Component Testing (Week 2) - MUST COMPLETE BEFORE PRODUCTION**
@@ -147,6 +248,14 @@ class TestFullPipeline:
     def test_memory_usage_under_load(self)
     def test_database_connection_limits(self)
     def test_rollback_mechanisms(self)
+    
+    # IDEMPOTENCY AND INCREMENTAL LOAD INTEGRATION TESTS - CRITICAL
+    def test_end_to_end_idempotent_processing(self)
+    def test_end_to_end_incremental_processing_with_changes(self)
+    def test_end_to_end_schema_change_handling(self)
+    def test_end_to_end_force_full_behavior(self)
+    def test_end_to_end_data_consistency_across_runs(self)
+    def test_end_to_end_incremental_flags_behavior(self)
 ```
 
 #### **3.2 Configuration Integration Tests**
@@ -159,6 +268,67 @@ class TestConfigurationIntegration:
     def test_table_configuration_validation(self)
     def test_error_handling_invalid_configs(self)
     def test_config_reload_mechanisms(self)
+```
+
+#### **3.3 Idempotency Integration Tests (NEW SECTION) - CRITICAL**
+```python
+# tests/integration/test_idempotency_integration.py
+class TestIdempotencyIntegration:
+    """CRITICAL: End-to-end integration tests for idempotency and incremental behavior"""
+    
+    def test_full_pipeline_idempotency_with_real_data(self):
+        """Test complete pipeline idempotency with real database data"""
+        # 1. Set up test databases with real data
+        # 2. Run complete pipeline with force_full=False
+        # 3. Record data state and processing metrics
+        # 4. Run pipeline again with force_full=False
+        # 5. Verify data state is identical
+        # 6. Verify no duplicate processing occurs
+        
+    def test_full_pipeline_incremental_with_real_changes(self):
+        """Test complete pipeline incremental processing with real source changes"""
+        # 1. Set up test databases with real data
+        # 2. Run initial pipeline with force_full=False
+        # 3. Make real changes to source database
+        # 4. Run pipeline again with force_full=False
+        # 5. Verify only changed data is processed
+        # 6. Verify data consistency is maintained
+        
+    def test_full_pipeline_schema_change_with_real_schema(self):
+        """Test complete pipeline schema change handling with real schema modifications"""
+        # 1. Set up test databases with real schema
+        # 2. Run initial pipeline with force_full=False
+        # 3. Modify real table schema in source
+        # 4. Run pipeline again with force_full=False
+        # 5. Verify schema change is detected
+        # 6. Verify pipeline reverts to full load
+        # 7. Verify new schema is properly applied
+        
+    def test_full_pipeline_force_full_override_behavior(self):
+        """Test complete pipeline force_full override behavior"""
+        # 1. Set up test databases with real data
+        # 2. Run pipeline with force_full=True
+        # 3. Verify full processing occurs
+        # 4. Run pipeline with force_full=False
+        # 5. Verify incremental processing resumes
+        # 6. Verify data consistency is maintained
+        
+    def test_full_pipeline_incremental_flags_monitoring(self):
+        """Test complete pipeline incremental flags monitoring and behavior"""
+        # 1. Set up test databases with real data
+        # 2. Run pipeline and monitor all incremental flags
+        # 3. Verify flag behavior matches expected patterns
+        # 4. Verify flags are properly logged
+        # 5. Verify flag combinations work correctly
+        
+    def test_full_pipeline_data_consistency_validation(self):
+        """Test complete pipeline data consistency across multiple runs"""
+        # 1. Set up test databases with real data
+        # 2. Run pipeline multiple times with different configurations
+        # 3. Verify data integrity is maintained
+        # 4. Verify referential integrity is preserved
+        # 5. Verify business rules are maintained
+        # 6. Verify no data corruption occurs
 ```
 
 ### **Phase 4: Performance and Load Testing (Week 4) - MUST COMPLETE BEFORE PRODUCTION**
@@ -203,6 +373,7 @@ class TestLoad:
 - [ ] **Postgres Loader**: 0% → 90% coverage (CRITICAL)
 - [ ] **Pipeline Orchestrator**: 32% → 90% coverage (CRITICAL)
 - [ ] **Table Processor**: 16% → 90% coverage (CRITICAL)
+- [ ] **Idempotency and Incremental Load Tests**: 0% → 90% coverage (CRITICAL)
 
 #### **Week 2 Critical Path**
 - [ ] **MySQL Replicator**: 11% → 85% coverage (HIGH)
@@ -211,6 +382,7 @@ class TestLoad:
 #### **Week 3 Critical Path**
 - [ ] **End-to-End Pipeline Tests**: Create comprehensive integration tests
 - [ ] **Configuration Integration Tests**: Validate real-world scenarios
+- [ ] **Idempotency Integration Tests**: Validate end-to-end idempotency behavior (CRITICAL)
 
 #### **Week 4 Critical Path**
 - [ ] **Performance Tests**: Validate production performance requirements
@@ -224,9 +396,11 @@ class TestLoad:
 | **Postgres Loader** | 0% | **> 90%** | CRITICAL |
 | **Pipeline Orchestrator** | 32% | **> 90%** | CRITICAL |
 | **Table Processor** | 16% | **> 90%** | CRITICAL |
+| **Idempotency & Incremental Tests** | 0% | **> 90%** | CRITICAL |
 | **MySQL Replicator** | 11% | **> 85%** | HIGH |
 | **RawToPublicTransformer** | 15% | **> 85%** | HIGH |
 | **Integration Tests** | 0% | **> 80%** | HIGH |
+| **Idempotency Integration Tests** | 0% | **> 90%** | CRITICAL |
 | **Performance Tests** | 0% | **> 90%** | MEDIUM |
 
 ## Test Infrastructure Setup
@@ -480,14 +654,18 @@ class TestReporter:
 3. **All integration tests pass**
 4. **All performance tests meet requirements**
 5. **All load tests validate system stability**
+6. **All idempotency and incremental load tests pass (CRITICAL)**
+7. **All end-to-end idempotency integration tests pass (CRITICAL)**
 
 ### **✅ PRODUCTION READINESS CHECKLIST:**
 - [ ] Postgres Loader: > 90% coverage
 - [ ] Pipeline Orchestrator: > 90% coverage  
 - [ ] Table Processor: > 90% coverage
+- [ ] Idempotency & Incremental Load Tests: > 90% coverage (CRITICAL)
 - [ ] MySQL Replicator: > 85% coverage
 - [ ] RawToPublicTransformer: > 85% coverage
 - [ ] End-to-End Tests: > 80% coverage
+- [ ] Idempotency Integration Tests: > 90% coverage (CRITICAL)
 - [ ] Performance Tests: All pass
 - [ ] Load Tests: All pass
 - [ ] Documentation: Complete
