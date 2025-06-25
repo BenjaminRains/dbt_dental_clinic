@@ -3,12 +3,12 @@ Database connection factory for the ETL pipeline.
 Handles connections to source, replication, and analytics databases.
 """
 import os
+import time
 from typing import Optional, Dict
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from dotenv import load_dotenv
 import logging
-from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -413,3 +413,84 @@ class ConnectionFactory:
             pool_timeout=pool_timeout,
             pool_recycle=pool_recycle
         )
+
+class ConnectionManager:
+    """
+    Manages database connections efficiently to avoid overwhelming the source server.
+    
+    Features:
+    - Single connection reuse for batch operations
+    - Connection pooling with proper cleanup
+    - Rate limiting to be respectful to source server
+    - Automatic retry logic for transient failures
+    """
+    
+    def __init__(self, engine: Engine, max_retries: int = 3, retry_delay: float = 1.0):
+        self.engine = engine
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self._current_connection = None
+        self._connection_count = 0
+        self._last_query_time = 0
+        
+    def get_connection(self):
+        """Get a connection, reusing existing one if available."""
+        if self._current_connection is None:
+            self._current_connection = self.engine.connect()
+            self._connection_count += 1
+            logger.debug(f"Created new connection (total: {self._connection_count})")
+        return self._current_connection
+    
+    def close_connection(self):
+        """Close the current connection if it exists."""
+        if self._current_connection is not None:
+            self._current_connection.close()
+            self._current_connection = None
+            logger.debug("Closed connection")
+    
+    def execute_with_retry(self, query, params=None, rate_limit: bool = True):
+        """
+        Execute a query with retry logic and optional rate limiting.
+        
+        Args:
+            query: SQL query to execute
+            params: Query parameters
+            rate_limit: Whether to add delay between queries
+            
+        Returns:
+            Query result
+        """
+        # Rate limiting to be respectful to source server
+        if rate_limit:
+            current_time = time.time()
+            time_since_last = current_time - self._last_query_time
+            if time_since_last < 0.1:  # 100ms minimum between queries
+                time.sleep(0.1 - time_since_last)
+            self._last_query_time = time.time()
+        
+        # Retry logic
+        for attempt in range(self.max_retries):
+            try:
+                conn = self.get_connection()
+                if params:
+                    result = conn.execute(text(query), params)
+                else:
+                    result = conn.execute(text(query))
+                return result
+                
+            except Exception as e:
+                if attempt < self.max_retries - 1:
+                    logger.warning(f"Query failed (attempt {attempt + 1}/{self.max_retries}): {str(e)}")
+                    time.sleep(self.retry_delay * (attempt + 1))  # Exponential backoff
+                    # Close connection and retry with fresh one
+                    self.close_connection()
+                else:
+                    raise
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures connection cleanup."""
+        self.close_connection()
