@@ -1,8 +1,7 @@
 """
 Priority Processor
 
-Handles the processing of tables based on their priority levels,
-including parallel processing for critical tables.
+Handles table processing based on priority levels with intelligent parallelization.
 
 STATUS: ACTIVE - Core Orchestration Component
 ============================================
@@ -17,9 +16,8 @@ CURRENT STATE:
 - ✅ SEQUENTIAL PROCESSING: Sequential processing for non-critical tables
 - ✅ ERROR HANDLING: Proper error handling and failure propagation
 - ✅ RESOURCE MANAGEMENT: ThreadPoolExecutor for parallel processing
-- ❌ DEPENDENCY ISSUE: References table_processor.config (legacy config)
+- ✅ MODERN CONFIG: Uses Settings class for table priority lookup
 - ❌ UNTESTED: No comprehensive testing of parallel processing
-- ❌ CONFIGURATION: Uses legacy config system instead of Settings
 
 ACTIVE USAGE:
 - PipelineOrchestrator: Calls process_by_priority for batch table processing
@@ -29,7 +27,7 @@ ACTIVE USAGE:
 DEPENDENCIES:
 - TableProcessor: Processes individual tables
 - ThreadPoolExecutor: Manages parallel processing
-- Legacy Config: Uses table_processor.config.get_tables_by_priority()
+- Settings: Uses Settings.get_tables_by_priority() for table priority lookup
 
 PROCESSING LOGIC:
 1. Priority Levels: critical, important, audit, reference
@@ -41,22 +39,20 @@ PROCESSING LOGIC:
 INTEGRATION POINTS:
 - PipelineOrchestrator: Main integration point for batch processing
 - TableProcessor: Delegates individual table processing
-- Configuration: Uses legacy config system for table priority lookup
+- Settings: Uses modern Settings system for table priority lookup
 - Logging: Comprehensive logging for monitoring and debugging
 
 CRITICAL ISSUES:
-1. LEGACY CONFIG DEPENDENCY: Uses table_processor.config instead of Settings
-2. UNTESTED PARALLEL PROCESSING: No validation of parallel processing logic
-3. RESOURCE MANAGEMENT: No validation of thread pool management
-4. ERROR PROPAGATION: Limited testing of failure scenarios
+1. UNTESTED PARALLEL PROCESSING: No validation of parallel processing logic
+2. RESOURCE MANAGEMENT: No validation of thread pool management
+3. ERROR PROPAGATION: Limited testing of failure scenarios
 
 DEVELOPMENT NEEDS:
-1. MIGRATE CONFIG: Update to use Settings class instead of legacy config
-2. COMPREHENSIVE TESTING: Add tests for parallel and sequential processing
-3. PERFORMANCE TESTING: Validate parallel processing performance
-4. ERROR HANDLING: Test failure scenarios and error propagation
-5. RESOURCE OPTIMIZATION: Optimize thread pool management
-6. MONITORING: Add performance metrics for parallel processing
+1. COMPREHENSIVE TESTING: Add tests for parallel and sequential processing
+2. PERFORMANCE TESTING: Validate parallel processing performance
+3. ERROR HANDLING: Test failure scenarios and error propagation
+4. RESOURCE OPTIMIZATION: Optimize thread pool management
+5. MONITORING: Add performance metrics for parallel processing
 
 TESTING REQUIREMENTS:
 1. Parallel Processing: Test with various worker counts and table sets
@@ -67,30 +63,33 @@ TESTING REQUIREMENTS:
 6. Integration: Test integration with TableProcessor and PipelineOrchestrator
 
 This component is critical for efficient batch processing and needs
-migration to the modern configuration system and comprehensive testing.
+comprehensive testing for production readiness.
 """
 
 import logging
 from typing import Dict, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .table_processor import TableProcessor
+from ..config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 class PriorityProcessor:
+    def __init__(self, settings: Settings = None):
+        """
+        Initialize the priority processor.
+        
+        Args:
+            settings: Settings instance for table configuration (defaults to global settings)
+        """
+        self.settings = settings or Settings()
+    
     def process_by_priority(self, table_processor: TableProcessor,
                           importance_levels: List[str] = None,
                           max_workers: int = 5,
                           force_full: bool = False) -> Dict[str, List[str]]:
         """
         Process tables by priority with intelligent parallelization.
-        
-        LEGACY CONFIG DEPENDENCY: This method uses table_processor.config.get_tables_by_priority()
-        which references the legacy PipelineConfig class instead of the modern Settings class.
-        This creates a dependency on the old configuration system and should be migrated to:
-        1. Accept a Settings instance or table list directly
-        2. Use Settings.get_tables_by_priority() instead of legacy config
-        3. Remove dependency on table_processor.config
         
         PROCESSING STRATEGY:
         - Critical tables: Processed in parallel for speed
@@ -112,8 +111,8 @@ class PriorityProcessor:
         results = {}
         
         for importance in importance_levels:
-            # LEGACY CONFIG: This should use Settings instead of table_processor.config
-            tables = table_processor.config.get_tables_by_priority(importance)
+            # Use Settings class for table priority lookup
+            tables = self.settings.get_tables_by_priority(importance)
             if not tables:
                 logger.info(f"No tables found for importance level: {importance}")
                 continue
