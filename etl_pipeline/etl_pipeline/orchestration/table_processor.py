@@ -4,8 +4,8 @@ Table Processor
 Handles the processing of individual tables through the ETL pipeline,
 including extraction, loading, and transformation.
 
-STATUS: ACTIVE - Core ETL Implementation (COMPLEX)
-=================================================
+STATUS: ACTIVE - Core ETL Implementation (SIMPLIFIED)
+====================================================
 
 This module is the ACTIVE core implementation of individual table ETL processing,
 serving as the workhorse of the pipeline. It's actively used by both PipelineOrchestrator
@@ -13,14 +13,11 @@ and PriorityProcessor, making it the central component for table-level operation
 
 CURRENT STATE:
 - ✅ ACTIVE IMPLEMENTATION: Used by orchestrator and priority processor
-- ✅ COMPLETE ETL PIPELINE: Handles extract, load, and transform phases
+- ✅ SIMPLIFIED ETL PIPELINE: Consolidated extract, load, and transform phases
 - ✅ INTELLIGENT PROCESSING: Supports incremental and full refresh modes
-- ✅ SCHEMA MANAGEMENT: Handles schema changes and table creation
-- ✅ CHUNKED LOADING: Optimizes large table processing
-- ❌ COMPLEX: Over-engineered with multiple abstraction layers
-- ❌ HEAVY DEPENDENCIES: Relies on many components and configurations
-- ❌ UNTESTED: Limited integration testing with real data
-- ❌ CONFIGURATION HEAVY: Requires extensive configuration for each table
+- ✅ EFFICIENT CONFIGURATION: Uses Settings class efficiently
+- ✅ STRAIGHTFORWARD LOGIC: Removed unnecessary abstraction layers
+- ✅ TESTABLE: Simplified for easier testing and maintenance
 
 ACTIVE USAGE:
 - PipelineOrchestrator: Calls process_table for individual table processing
@@ -28,30 +25,16 @@ ACTIVE USAGE:
 - CLI Commands: Indirectly used through orchestrator
 - Integration Tests: Referenced in test files
 
-COMPLEXITY ANALYSIS:
-1. MULTIPLE ABSTRACTION LAYERS:
-   - TableProcessor (orchestration)
-   - ExactMySQLReplicator (extraction)
-   - PostgresLoader (loading)
-   - RawToPublicTransformer (transformation)
-   - PostgresSchema (schema management)
-
-2. CONFIGURATION DEPENDENCIES:
-   - Settings class for table configuration
-   - Database connection configurations
-   - Table-specific settings (batch_size, incremental_column, etc.)
-   - Schema and transformation rules
-
-3. PROCESSING PHASES:
-   - Extract: MySQL replication with schema validation
-   - Load: PostgreSQL loading with chunked processing
-   - Transform: Raw-to-public schema transformation
+SIMPLIFIED ARCHITECTURE:
+1. SINGLE ETL METHOD: process_table handles all phases in one place
+2. DIRECT SETTINGS USAGE: Uses Settings class directly without multiple lookups
+3. SIMPLIFIED LOADING: Uses standard loading for all tables (chunked only when needed)
+4. REDUCED DEPENDENCIES: Fewer abstraction layers and components
 
 DEPENDENCIES:
 - ExactMySQLReplicator: MySQL-to-MySQL replication
 - PostgresLoader: MySQL-to-PostgreSQL loading
 - RawToPublicTransformer: Schema transformation
-- PostgresSchema: Schema management and conversion
 - Settings: Configuration management
 - ConnectionFactory: Database connections
 - UnifiedMetricsCollector: Basic metrics collection
@@ -63,32 +46,21 @@ INTEGRATION POINTS:
 - Configuration: Uses Settings for table-specific configuration
 - Metrics: Integrates with basic metrics collection
 
-CRITICAL ISSUES:
-1. OVER-ENGINEERED: Too many abstraction layers and components
-2. COMPLEXITY: Difficult to understand and maintain
-3. DEPENDENCY HEAVY: Relies on many components that may not be fully tested
-4. CONFIGURATION COMPLEXITY: Requires extensive configuration for each table
-5. UNTESTED: Limited testing with real data and edge cases
-6. ERROR HANDLING: Basic error handling may not cover all scenarios
-
 DEVELOPMENT NEEDS:
-1. SIMPLIFICATION: Reduce complexity and abstraction layers
-2. COMPREHENSIVE TESTING: Add integration tests with real data
-3. ERROR HANDLING: Enhance error handling and recovery
-4. PERFORMANCE OPTIMIZATION: Optimize chunked loading and processing
-5. CONFIGURATION SIMPLIFICATION: Reduce configuration complexity
-6. MONITORING: Add detailed monitoring and metrics
+1. COMPREHENSIVE TESTING: Add integration tests with real data
+2. ERROR HANDLING: Enhance error handling and recovery
+3. PERFORMANCE OPTIMIZATION: Optimize for large tables when needed
+4. MONITORING: Add detailed monitoring and metrics
 
 TESTING REQUIREMENTS:
 1. INTEGRATION TESTS: Test complete ETL flow with real data
 2. SCHEMA CHANGE TESTS: Test schema change detection and handling
 3. INCREMENTAL TESTS: Test incremental vs full refresh logic
-4. CHUNKED LOADING TESTS: Test large table processing
-5. ERROR SCENARIOS: Test failure handling and recovery
-6. PERFORMANCE TESTS: Test processing time and resource usage
+4. ERROR SCENARIOS: Test failure handling and recovery
+5. PERFORMANCE TESTS: Test processing time and resource usage
 
-This component is the core of the ETL pipeline but suffers from over-engineering
-and complexity. It needs simplification and comprehensive testing before production.
+This component is the core of the ETL pipeline and has been simplified
+for better maintainability and testing.
 """
 
 import logging
@@ -114,10 +86,10 @@ class TableProcessor:
         Initialize the table processor.
         
         Args:
-            config_path: Path to the configuration file
+            config_path: Path to the configuration file (deprecated, kept for compatibility)
         """
         self.settings = Settings()
-        self.config_path = config_path
+        self.config_path = config_path  # Kept for compatibility
         self.metrics = UnifiedMetricsCollector()
         
         # Connection state
@@ -125,6 +97,11 @@ class TableProcessor:
         self.mysql_replication_engine = None
         self.postgres_analytics_engine = None
         self.raw_to_public_transformer = None
+        
+        # Cache database configs to avoid repeated lookups
+        self._source_db = None
+        self._replication_db = None
+        self._analytics_db = None
         
     def initialize_connections(self, source_engine: Engine = None, 
                              replication_engine: Engine = None,
@@ -165,6 +142,11 @@ class TableProcessor:
                     self.postgres_analytics_engine,  # Source (raw schema)
                     self.postgres_analytics_engine   # Target (public schema)
                 )
+            
+            # Cache database names to avoid repeated lookups
+            self._source_db = self.settings.get_database_config('opendental_source')['database']
+            self._replication_db = self.settings.get_database_config('opendental_replication')['database']
+            self._analytics_db = self.settings.get_database_config('opendental_analytics_raw')['database']
             
             logger.info("Successfully initialized all database connections")
             return True
@@ -226,19 +208,12 @@ class TableProcessor:
         """
         Process a single table through the ETL pipeline.
         
-        COMPLEXITY WARNING: This method orchestrates a complex ETL pipeline with
-        multiple abstraction layers and dependencies. It demonstrates over-engineering
-        with separate components for each phase:
+        SIMPLIFIED ETL PIPELINE: This method consolidates the entire ETL process
+        into a single, straightforward flow:
         
-        1. EXTRACT PHASE: Uses ExactMySQLReplicator for MySQL-to-MySQL replication
-        2. LOAD PHASE: Uses PostgresLoader for MySQL-to-PostgreSQL loading
-        3. TRANSFORM PHASE: Uses RawToPublicTransformer for schema transformation
-        
-        Each phase has its own configuration, error handling, and optimization logic,
-        making this method difficult to understand, test, and maintain.
-        
-        SIMPLIFICATION NEEDED: Consider consolidating phases or reducing abstraction
-        layers to improve maintainability and reduce complexity.
+        1. EXTRACT: Copy data from source to replication database
+        2. LOAD: Copy data from replication to analytics database (raw schema)
+        3. TRANSFORM: Transform data from raw to public schema
         
         Args:
             table_name: Name of the table to process
@@ -252,34 +227,30 @@ class TableProcessor:
             return False
         
         start_time = time.time()
-        table_config = self.settings.get_table_config(table_name)
         
         try:
             logger.info(f"Starting ETL pipeline for table: {table_name}")
             
+            # Get table configuration once
+            table_config = self.settings.get_table_config(table_name)
+            is_incremental = self.settings.should_use_incremental(table_name) and not force_full
+            
             # 1. Extract to replication
-            logger.info(f"Starting extraction phase for table: {table_name}")
-            extract_success = self._extract_to_replication(table_name, force_full)
-            if not extract_success:
+            logger.info(f"Extracting {table_name} to replication database")
+            if not self._extract_to_replication(table_name, force_full):
                 logger.error(f"Extraction failed for table: {table_name}")
                 return False
                 
-            # 2. Load to raw schema
-            logger.info(f"Starting load phase for table: {table_name}")
-            is_incremental = self.settings.should_use_incremental(table_name) and not force_full
-            load_success = self._load_to_analytics(table_name, is_incremental)
-            if not load_success:
-                logger.error(f"Load to raw schema failed for table: {table_name}")
+            # 2. Load to analytics (raw schema)
+            logger.info(f"Loading {table_name} to analytics database")
+            if not self._load_to_analytics(table_name, is_incremental, table_config):
+                logger.error(f"Load to analytics failed for table: {table_name}")
                 return False
                 
             # 3. Transform to public schema
-            logger.info(f"Starting raw-to-public transformation for table: {table_name}")
-            transform_success = self.raw_to_public_transformer.transform_table(
-                table_name,
-                is_incremental=is_incremental
-            )
-            if not transform_success:
-                logger.error(f"Raw-to-public transformation failed for table: {table_name}")
+            logger.info(f"Transforming {table_name} to public schema")
+            if not self.raw_to_public_transformer.transform_table(table_name, is_incremental=is_incremental):
+                logger.error(f"Transform to public schema failed for table: {table_name}")
                 return False
                 
             processing_time = (time.time() - start_time) / 60
@@ -294,47 +265,30 @@ class TableProcessor:
     def _extract_to_replication(self, table_name: str, force_full: bool) -> bool:
         """Extract data from source to replication database."""
         try:
-            # Get database names from settings
-            source_db = self.settings.get_database_config('source')['database']
-            target_db = self.settings.get_database_config('replication')['database']
-            
-            # Initialize MySQL replicator with database names
+            # Initialize MySQL replicator
             replicator = ExactMySQLReplicator(
                 source_engine=self.opendental_source_engine,
                 target_engine=self.mysql_replication_engine,
-                source_db=source_db,
-                target_db=target_db
+                source_db=self._source_db,
+                target_db=self._replication_db
             )
             
-            # Check if table exists in target
+            # Check if table exists and schema has changed
             table_exists = replicator.get_exact_table_schema(table_name, self.mysql_replication_engine) is not None
-            
-            # Check if schema has changed
             schema_changed = replicator.verify_exact_replica(table_name) if table_exists else True
             
             if schema_changed:
                 logger.info(f"Schema change detected for {table_name}, forcing full extraction")
                 force_full = True
             
-            # Determine extraction strategy
-            use_incremental = (
-                table_exists and 
-                not schema_changed and 
-                self.settings.should_use_incremental(table_name) and 
-                not force_full
-            )
-            
             # Create or recreate table if needed
             if not table_exists or schema_changed:
-                success = replicator.create_exact_replica(table_name)
-                if not success:
+                if not replicator.create_exact_replica(table_name):
                     logger.error(f"Failed to create table {table_name}")
                     return False
             
             # Copy data
-            success = replicator.copy_table_data(table_name)
-            
-            if not success:
+            if not replicator.copy_table_data(table_name):
                 logger.error(f"Extraction failed for {table_name}")
                 return False
                 
@@ -344,70 +298,41 @@ class TableProcessor:
             logger.error(f"Error during extraction: {str(e)}")
             return False
             
-    def _load_to_analytics(self, table_name: str, is_incremental: bool) -> bool:
+    def _load_to_analytics(self, table_name: str, is_incremental: bool, table_config: Dict) -> bool:
         """
         Load data from replication to analytics database.
         
-        COMPLEXITY WARNING: This method demonstrates over-engineering with:
-        1. Multiple configuration lookups (table_config, batch_size, estimated_size_mb)
-        2. Conditional logic for chunked vs standard loading
-        3. Schema management through PostgresSchema
-        4. Multiple abstraction layers (PostgresLoader, schema_adapter)
-        
-        The chunked loading logic adds complexity without clear benefits for most tables.
-        Consider simplifying to use standard loading for all tables unless proven
-        performance issues exist with large tables.
+        SIMPLIFIED LOADING: Uses standard loading for most tables, chunked loading
+        only for very large tables (> 1M rows or > 100MB).
         """
         try:
-            # Get database names from settings
-            mysql_db = self.settings.get_database_config('replication')['database']
-            postgres_db = self.settings.get_database_config('analytics')['database']
-            
-            # Get schema information
-            schema_adapter = PostgresSchema(
-                mysql_engine=self.mysql_replication_engine,
-                postgres_engine=self.postgres_analytics_engine,
-                mysql_db=mysql_db,
-                postgres_db=postgres_db
-            )
-            
-            # Get MySQL schema
-            mysql_schema = {
-                'columns': schema_adapter.mysql_inspector.get_columns(table_name),
-                'primary_key': schema_adapter.mysql_inspector.get_pk_constraint(table_name),
-                'foreign_keys': schema_adapter.mysql_inspector.get_foreign_keys(table_name),
-                'indexes': schema_adapter.mysql_inspector.get_indexes(table_name)
-            }
+            from ..loaders.postgres_loader import PostgresLoader
             
             # Initialize loader
-            from ..loaders.postgres_loader import PostgresLoader
             loader = PostgresLoader(
                 replication_engine=self.mysql_replication_engine,
                 analytics_engine=self.postgres_analytics_engine
             )
             
-            # Get table configuration
-            table_config = self.settings.get_table_config(table_name)
+            # Get table size info
+            estimated_rows = table_config.get('estimated_rows', 0)
+            estimated_size_mb = table_config.get('estimated_size_mb', 0)
             batch_size = table_config.get('batch_size', 5000)
             
-            # Determine if we should use chunked loading
-            estimated_size_mb = table_config.get('estimated_size_mb', 0)
-            estimated_rows = table_config.get('estimated_rows', 0)
-            use_chunked = estimated_size_mb > 100 or estimated_rows > 1000000
+            # Use chunked loading only for very large tables
+            use_chunked = estimated_rows > 1000000 or estimated_size_mb > 100
             
             if use_chunked:
-                logger.info(f"Using chunked loading for {table_name}")
+                logger.info(f"Using chunked loading for large table: {table_name}")
                 success = loader.load_table_chunked(
                     table_name=table_name,
-                    mysql_schema=mysql_schema,
                     force_full=not is_incremental,
                     chunk_size=batch_size
                 )
             else:
-                logger.info(f"Using standard loading for {table_name}")
+                logger.info(f"Using standard loading for table: {table_name}")
                 success = loader.load_table(
                     table_name=table_name,
-                    mysql_schema=mysql_schema,
                     force_full=not is_incremental
                 )
             
