@@ -171,122 +171,118 @@ class PipelineConfigManager:
         except Exception as e:
             logger.error(f"Failed to show configuration: {e}")
 
+def validate_configuration(config):
+    """Validate the configuration structure."""
+    try:
+        # Check required top-level keys
+        required_keys = ['metadata', 'tables']
+        for key in required_keys:
+            if key not in config:
+                print(f"Missing required key: {key}")
+                return False
+        
+        # Validate metadata
+        metadata = config.get('metadata', {})
+        if not isinstance(metadata, dict):
+            print("Metadata must be a dictionary")
+            return False
+        
+        # Validate tables
+        tables = config.get('tables', {})
+        if not isinstance(tables, dict):
+            print("Tables must be a dictionary")
+            return False
+        
+        # Validate each table configuration
+        for table_name, table_config in tables.items():
+            if not isinstance(table_config, dict):
+                print(f"Table {table_name} configuration must be a dictionary")
+                return False
+            
+            # Check required table keys
+            required_table_keys = ['columns', 'incremental_column', 'batch_size']
+            for key in required_table_keys:
+                if key not in table_config:
+                    print(f"Table {table_name} missing required key: {key}")
+                    return False
+        
+        print("Configuration is valid")
+        return True
+        
+    except Exception as e:
+        print(f"Configuration validation failed: {str(e)}")
+        return False
+
+def save_configuration(config, output_path):
+    """Save configuration to file."""
+    try:
+        with open(output_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        print("Configuration saved successfully")
+        return True
+    except Exception as e:
+        print(f"Failed to save configuration: {str(e)}")
+        return False
+
 def main():
-    """Main CLI interface."""
-    parser = argparse.ArgumentParser(description="Update pipeline.yml configuration")
-    parser.add_argument('--config-path', default='etl_pipeline/config/pipeline.yml', 
-                       help='Path to pipeline.yml file')
-    parser.add_argument('--show', action='store_true', help='Show current configuration')
-    parser.add_argument('--section', help='Show specific section only')
-    parser.add_argument('--validate', action='store_true', help='Validate configuration')
-    parser.add_argument('--add-setting', nargs=3, metavar=('SECTION', 'KEY', 'VALUE'),
-                       help='Add/update a setting (section key value)')
-    parser.add_argument('--add-nested', nargs=2, metavar=('PATH', 'VALUE'),
-                       help='Add/update nested setting using dot notation (e.g., general.batch_size 2000)')
-    parser.add_argument('--add-connection', nargs=2, metavar=('DB_TYPE', 'CONFIG_FILE'),
-                       help='Add connection config from JSON file')
-    parser.add_argument('--add-stage', nargs=2, metavar=('STAGE', 'CONFIG_FILE'),
-                       help='Add stage config from JSON file')
-    parser.add_argument('--add-alert', nargs=2, metavar=('ALERT_TYPE', 'CONFIG_FILE'),
-                       help='Add alert config from JSON file')
+    """Main function to update pipeline configuration."""
+    parser = argparse.ArgumentParser(description='Update pipeline configuration')
+    parser.add_argument('--config', required=True, help='Path to configuration file')
     parser.add_argument('--save', action='store_true', help='Save changes to file')
+    parser.add_argument('--table', help='Specific table to update')
+    parser.add_argument('--incremental-column', help='Set incremental column for table')
+    parser.add_argument('--batch-size', type=int, help='Set batch size for table')
+    parser.add_argument('--priority', choices=['high', 'medium', 'low'], help='Set table priority')
     
     args = parser.parse_args()
     
-    # Initialize manager
-    manager = PipelineConfigManager(args.config_path)
+    # Load configuration
+    try:
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+    except Exception as e:
+        print(f"Failed to load configuration: {str(e)}")
+        return 1
     
-    # Handle commands
-    if args.show:
-        manager.show_config(args.section)
-        return
+    # Validate configuration
+    if not validate_configuration(config):
+        return 1
     
-    if args.validate:
-        if manager.validate_config():
-            print("✅ Configuration is valid")
-        else:
-            print("❌ Configuration validation failed")
-        return
-    
-    # Track if we made changes
+    # Apply updates
     changes_made = False
     
-    if args.add_setting:
-        section, key, value = args.add_setting
-        # Try to convert value to appropriate type
-        try:
-            if value.lower() in ('true', 'false'):
-                value = value.lower() == 'true'
-            elif value.isdigit():
-                value = int(value)
-            elif value.replace('.', '').isdigit():
-                value = float(value)
-        except:
-            pass  # Keep as string if conversion fails
+    if args.table:
+        if args.table not in config.get('tables', {}):
+            print(f"Table {args.table} not found in configuration")
+            return 1
         
-        if manager.add_setting(section, key, value):
-            changes_made = True
-    
-    if args.add_nested:
-        path, value = args.add_nested
-        # Try to convert value to appropriate type
-        try:
-            if value.lower() in ('true', 'false'):
-                value = value.lower() == 'true'
-            elif value.isdigit():
-                value = int(value)
-            elif value.replace('.', '').isdigit():
-                value = float(value)
-        except:
-            pass  # Keep as string if conversion fails
+        table_config = config['tables'][args.table]
         
-        if manager.add_nested_setting(path, value):
+        if args.incremental_column:
+            table_config['incremental_column'] = args.incremental_column
             changes_made = True
+            print(f"Updated incremental column for {args.table}: {args.incremental_column}")
+        
+        if args.batch_size:
+            table_config['batch_size'] = args.batch_size
+            changes_made = True
+            print(f"Updated batch size for {args.table}: {args.batch_size}")
+        
+        if args.priority:
+            table_config['priority'] = args.priority
+            changes_made = True
+            print(f"Updated priority for {args.table}: {args.priority}")
     
-    if args.add_connection:
-        db_type, config_file = args.add_connection
-        try:
-            import json
-            with open(config_file, 'r') as f:
-                config_data = json.load(f)
-            if manager.add_connection_config(db_type, **config_data):
-                changes_made = True
-        except Exception as e:
-            logger.error(f"Failed to load connection config: {e}")
-    
-    if args.add_stage:
-        stage, config_file = args.add_stage
-        try:
-            import json
-            with open(config_file, 'r') as f:
-                config_data = json.load(f)
-            if manager.add_stage_config(stage, **config_data):
-                changes_made = True
-        except Exception as e:
-            logger.error(f"Failed to load stage config: {e}")
-    
-    if args.add_alert:
-        alert_type, config_file = args.add_alert
-        try:
-            import json
-            with open(config_file, 'r') as f:
-                config_data = json.load(f)
-            if manager.add_alert_config(alert_type, **config_data):
-                changes_made = True
-        except Exception as e:
-            logger.error(f"Failed to load alert config: {e}")
-    
-    # Save if requested and changes were made
+    # Save if requested
     if args.save and changes_made:
-        if manager._save_config():
-            print("✅ Configuration saved successfully")
+        if save_configuration(config, args.config):
+            return 0
         else:
-            print("❌ Failed to save configuration")
-            sys.exit(1)
+            return 1
     elif changes_made:
-        print("⚠️  Changes made but not saved. Use --save to persist changes.")
-    elif not args.show and not args.validate:
-        print("No changes specified. Use --help for usage information.")
+        print("Changes made but not saved. Use --save to persist changes.")
+    
+    return 0
 
 if __name__ == "__main__":
     main() 
