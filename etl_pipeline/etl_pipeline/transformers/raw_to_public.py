@@ -4,26 +4,61 @@ Raw to Public Schema Transformer
 This module handles the transformation of data from the raw schema to the public schema,
 performing basic data cleaning, type standardization, and structure normalization.
 
-STATUS: ACTIVE - Core Transformation Component
-=============================================
+REVISED IMPLEMENTATION STRATEGY
+================================
 
-This module is the core transformation component of the ETL pipeline, actively used by
-TableProcessor for schema transformation. It represents the final transformation phase
-of the ETL pipeline.
+ARCHITECTURAL ROLE:
+This is a DATA PIPELINE INFRASTRUCTURE LAYER that standardizes data structure
+and prepares data for dbt processing. It is NOT a business logic transformation layer.
 
-CORE FUNCTIONALITY:
-1. READ: Read data from raw schema using pandas
-2. TRANSFORM: Apply data cleaning and type conversions
-3. WRITE: Write transformed data to public schema
-4. TRACK: Update transformation status and metadata
+DATA FLOW ARCHITECTURE:
+1. postgres_loader.py (MySQL → PostgreSQL raw)
+   - Purpose: Type conversion from MySQL to PostgreSQL
+   - Transformation: Minimal - just data type mapping
+   - Output: opendental_analytics.raw schema with PostgreSQL-compatible types
+
+2. raw_to_public.py (raw → public) ← THIS LAYER
+   - Purpose: Light transformation layer - standardization and basic cleaning
+   - Transformation: Column name standardization, NULL handling, basic structure
+   - Output: opendental_analytics.public schema with standardized column names
+
+3. dbt staging models (public → staging)
+   - Purpose: Business logic transformations - the heavy lifting
+   - Transformation: Field mappings, boolean conversions, date cleaning, calculations
+   - Output: opendental_analytics.staging schema with business-ready data
+
+CURRENT TRANSFORMATIONS (KEEP THESE):
+1. Column Name Standardization: PatNum → patnum (lowercase)
+2. NULL Value Handling: Standardize pandas NA values
+3. Basic Table Structure: Ensure proper PostgreSQL table creation
+
+WHAT NOT TO ADD (These belong in dbt):
+- Business logic transformations
+- Field mappings (PatNum → patient_id)
+- Boolean conversions (convert_opendental_boolean)
+- Date cleaning (clean_opendental_dates)
+- Age calculations
+- Metadata standardization
+- Complex data quality rules
+
+WHAT TO ADD (Configuration-driven standardization):
+- Configuration-driven column type mapping (from tables.yml)
+- Basic data validation (non-null constraints, data type validation)
+- Incremental update logic (proper merge/upsert)
+- Error handling and logging
+
+IMPLEMENTATION GOALS:
+1. Standardize the data structure (column names, types, NULL handling)
+2. Prepare data for dbt processing (clean, consistent format)
+3. Handle pipeline mechanics (incremental updates, error tracking)
+
+This component is critical for the ETL pipeline and should focus on infrastructure
+rather than business intelligence, which is properly handled by dbt models.
 
 TESTING STATUS:
 - ✅ UNIT TESTS: 91% coverage with 73 comprehensive test cases
 - ✅ ERROR HANDLING: All error paths tested and validated
 - ✅ INTEGRATION: Ready for production deployment
-
-This component is critical for the ETL pipeline and has been thoroughly tested
-for production readiness.
 
 """
 
