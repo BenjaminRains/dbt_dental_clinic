@@ -381,9 +381,13 @@ class ExactMySQLReplicator:
 
     def _get_row_count(self, table_name: str, engine) -> int:
         """Get the row count for a table."""
-        with engine.connect() as conn:
-            result = conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}`")).scalar()
-            return result if result is not None else 0
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}`")).scalar()
+                return result if result is not None else 0
+        except Exception as e:
+            logger.error(f"Error getting row count for {table_name}: {str(e)}")
+            return 0
 
     def get_exact_table_schema(self, table_name: str, engine) -> Optional[Dict[str, Any]]:
         """Get the exact schema of a table including its CREATE statement."""
