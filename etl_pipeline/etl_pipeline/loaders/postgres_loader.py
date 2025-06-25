@@ -1,5 +1,83 @@
 """
+DEPRECATION NOTICE - REFACTORING IN PROGRESS
+============================================
+
+This file is part of the ETL Pipeline Schema Analysis Refactoring Plan.
+See: docs/refactoring_plan_schema_analysis.md
+
+PLANNED CHANGES:
+- Will update for simplified tables.yml configuration structure
+- Will remove three-section YAML support (source_tables, staging_tables, target_tables)
+- Will use new get_table_config() method from settings
+- Will integrate with enhanced SchemaDiscovery for configuration
+- Will maintain current data movement functionality
+
+TIMELINE: Phase 4 of refactoring plan
+STATUS: Configuration update in progress
+
 PostgreSQL loader implementation for loading data from MySQL replication to PostgreSQL analytics.
+
+DATA FLOW ARCHITECTURE
+======================
+
+ARCHITECTURAL ROLE:
+This is a PURE DATA MOVEMENT LAYER that moves data from MySQL replication to PostgreSQL raw schema.
+It performs minimal transformations (only data type conversion) and focuses on infrastructure operations.
+
+DATA FLOW:
+MySQL OpenDental (Source Database)
+    ↓
+opendental_replication (MySQL Replication Database)
+    ↓
+PostgresLoader (ETL Infrastructure Layer)
+    ├── Schema Conversion (MySQL → PostgreSQL types)
+    ├── Data Extraction (with incremental support)
+    ├── Data Loading (bulk/chunked operations)
+    └── Load Verification (row count validation)
+    ↓
+opendental_analytics.raw (PostgreSQL Raw Schema)
+
+KEY ARCHITECTURAL PRINCIPLES:
+
+1. PURE DATA MOVEMENT LAYER
+   - Purpose: Move data from MySQL replication to PostgreSQL raw schema
+   - Transformation: MINIMAL - only data type conversion (MySQL → PostgreSQL)
+   - No Business Logic: No field mappings, calculations, or business rules
+
+2. CONFIGURATION-DRIVEN TYPE CONVERSION
+   - Source: MySQL data types from SchemaDiscovery
+   - Target: PostgreSQL data types via PostgresSchema
+   - Standardization: Consistent type mapping across all tables
+
+3. INCREMENTAL LOADING SUPPORT
+   - Strategy: Time-based incremental loading using incremental_columns
+   - Fallback: Full load when incremental not possible
+   - Tracking: Load status tracking in etl_load_status table
+
+4. PERFORMANCE OPTIMIZATION
+   - Chunked Loading: Memory-efficient processing for large tables
+   - Bulk Operations: Optimized INSERT statements
+   - Connection Management: Proper transaction handling
+
+5. DATA INTEGRITY
+   - Schema Validation: Ensure PostgreSQL table structure matches MySQL
+   - Row Count Verification: Validate data completeness
+   - Error Handling: Graceful failure with detailed logging
+
+WHAT POSTGRESLOADER SHOULD NOT DO:
+- Business Logic Transformations (field name changes, calculations)
+- Data Quality Rules (complex validation, business-specific checks)
+- Analytics Preparation (data enrichment, metadata standardization)
+
+WHAT POSTGRESLOADER SHOULD DO:
+- Infrastructure Operations (schema conversion, data extraction/loading)
+- Configuration Integration (tables.yml, SchemaDiscovery, PostgresSchema)
+- Pipeline Mechanics (incremental loading, chunking, verification)
+
+This creates a clean separation where:
+- PostgresLoader = Data Movement Infrastructure
+- RawToPublicTransformer = Data Standardization Infrastructure
+- dbt models = Business Logic & Analytics
 
 SIMPLIFIED VERSION - CORE LOADING FUNCTIONALITY ONLY
 ===================================================
