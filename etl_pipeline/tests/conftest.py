@@ -19,6 +19,8 @@ from etl_pipeline.config.settings import Settings
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.transformers.raw_to_public import RawToPublicTransformer
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
+from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
 
 # =============================================================================
@@ -626,7 +628,7 @@ def mock_settings():
         settings_instance.should_use_incremental.return_value = True
         
         # Mock table priority settings
-        settings_instance.get_tables_by_priority.return_value = [
+        settings_instance.get_tables_by_importance.return_value = [
             'patient', 'appointment', 'procedurelog'
         ]
         
@@ -1167,8 +1169,6 @@ def sample_create_statement():
   PRIMARY KEY (`PatNum`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"""
 
-from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
-
 @pytest.fixture
 def mock_target_engine():
     """Mock target database engine for MySQLReplicator tests."""
@@ -1177,19 +1177,22 @@ def mock_target_engine():
     return engine
 
 @pytest.fixture
-def replicator(mock_source_engine, mock_target_engine):
-    """Create ExactMySQLReplicator instance with mocked engines."""
-    with patch('etl_pipeline.core.mysql_replicator.inspect') as mock_inspect:
-        mock_inspector = MagicMock()
-        mock_inspect.return_value = mock_inspector
-        replicator = ExactMySQLReplicator(
-            source_engine=mock_source_engine,
-            target_engine=mock_target_engine,
-            source_db='test_source',
-            target_db='test_target'
-        )
-        replicator.inspector = mock_inspector
-        return replicator
+def mock_schema_discovery():
+    """Mock SchemaDiscovery instance for MySQLReplicator tests."""
+    mock_discovery = MagicMock(spec=SchemaDiscovery)
+    return mock_discovery
+
+@pytest.fixture
+def replicator(mock_source_engine, mock_target_engine, mock_schema_discovery):
+    """Create ExactMySQLReplicator instance with mocked engines and SchemaDiscovery."""
+    replicator = ExactMySQLReplicator(
+        source_engine=mock_source_engine,
+        target_engine=mock_target_engine,
+        source_db='test_source',
+        target_db='test_target',
+        schema_discovery=mock_schema_discovery
+    )
+    return replicator
 
 
 # =============================================================================
@@ -1201,7 +1204,7 @@ def mock_priority_processor_settings():
     """Mock Settings instance for PriorityProcessor tests."""
     from etl_pipeline.config.settings import Settings
     settings = MagicMock(spec=Settings)
-    settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: {
+    settings.get_tables_by_importance.side_effect = lambda importance: {
         'critical': ['patient', 'appointment', 'procedurelog'],
         'important': ['payment', 'claim', 'insplan'],
         'audit': ['securitylog', 'entrylog'],
@@ -1223,7 +1226,12 @@ def mock_priority_processor_table_processor():
 def priority_processor(mock_priority_processor_settings):
     """Create PriorityProcessor instance with mocked settings."""
     from etl_pipeline.orchestration.priority_processor import PriorityProcessor
-    return PriorityProcessor(settings=mock_priority_processor_settings)
+    from etl_pipeline.core.schema_discovery import SchemaDiscovery
+    
+    # Create a mock schema discovery
+    mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+    
+    return PriorityProcessor(settings=mock_priority_processor_settings, schema_discovery=mock_schema_discovery)
 
 
 # =============================================================================
