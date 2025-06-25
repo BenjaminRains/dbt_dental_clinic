@@ -8,9 +8,6 @@ profile: 'dbt_dental_clinic'
 
 # Paths configuration
 model-paths: ["models"]
-# Comment out analysis-paths. these scripts are for EDA. 
-# analysis-paths: ["analysis"] 
-# analysis_intermediate-paths: ["analysis_intermediate"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
 seed-paths: ["seeds"]
