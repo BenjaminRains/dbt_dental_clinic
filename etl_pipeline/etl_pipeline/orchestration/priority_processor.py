@@ -1,4 +1,20 @@
 """
+DEPRECATION NOTICE - REFACTORING IN PROGRESS
+============================================
+
+This file is part of the ETL Pipeline Schema Analysis Refactoring Plan.
+See: docs/refactoring_plan_schema_analysis.md
+
+PLANNED CHANGES:
+- Will need to handle SchemaDiscovery dependency (for TableProcessor)
+- Will update Settings integration for simplified tables.yml structure
+- Will maintain current parallel/sequential processing logic
+- Will require updates to calling code (PipelineOrchestrator)
+- Will preserve process_table() interface compatibility
+
+TIMELINE: Phase 4 of refactoring plan
+STATUS: Dependency update in progress
+
 Priority Processor
 
 Handles table processing based on priority levels with intelligent parallelization.
@@ -27,7 +43,7 @@ ACTIVE USAGE:
 DEPENDENCIES:
 - TableProcessor: Processes individual tables
 - ThreadPoolExecutor: Manages parallel processing
-- Settings: Uses Settings.get_tables_by_priority() for table priority lookup
+- Settings: Uses Settings.get_tables_by_importance() for table priority lookup
 
 PROCESSING LOGIC:
 1. Priority Levels: critical, important, audit, reference
@@ -71,21 +87,26 @@ from typing import Dict, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .table_processor import TableProcessor
 from ..config.settings import Settings
+from ..core.schema_discovery import SchemaDiscovery
 
 logger = logging.getLogger(__name__)
 
 class PriorityProcessor:
-    def __init__(self, settings: Settings = None):
+    def __init__(self, schema_discovery: SchemaDiscovery, settings: Settings = None):
         """
         Initialize the priority processor.
         
         Args:
+            schema_discovery: SchemaDiscovery instance (REQUIRED for TableProcessor)
             settings: Settings instance for table configuration (defaults to global settings)
         """
+        if not isinstance(schema_discovery, SchemaDiscovery):
+            raise ValueError("SchemaDiscovery instance is required")
+        
+        self.schema_discovery = schema_discovery
         self.settings = settings or Settings()
     
-    def process_by_priority(self, table_processor: TableProcessor,
-                          importance_levels: List[str] = None,
+    def process_by_priority(self, importance_levels: List[str] = None,
                           max_workers: int = 5,
                           force_full: bool = False) -> Dict[str, List[str]]:
         """
@@ -97,7 +118,6 @@ class PriorityProcessor:
         - Failure handling: Stops processing if critical tables fail
         
         Args:
-            table_processor: Table processor instance
             importance_levels: List of importance levels to process
             max_workers: Maximum number of parallel workers
             force_full: Whether to force full extraction
@@ -112,7 +132,7 @@ class PriorityProcessor:
         
         for importance in importance_levels:
             # Use Settings class for table priority lookup
-            tables = self.settings.get_tables_by_priority(importance)
+            tables = self.settings.get_tables_by_importance(importance)
             if not tables:
                 logger.info(f"No tables found for importance level: {importance}")
                 continue
@@ -122,7 +142,6 @@ class PriorityProcessor:
             if importance == 'critical' and len(tables) > 1:
                 # Process critical tables in parallel for speed
                 success_tables, failed_tables = self._process_parallel(
-                    table_processor,
                     tables,
                     max_workers,
                     force_full
@@ -130,7 +149,6 @@ class PriorityProcessor:
             else:
                 # Process other tables sequentially to manage resources
                 success_tables, failed_tables = self._process_sequential(
-                    table_processor,
                     tables,
                     force_full
                 )
@@ -150,8 +168,7 @@ class PriorityProcessor:
         
         return results
         
-    def _process_parallel(self, table_processor: TableProcessor,
-                         tables: List[str],
+    def _process_parallel(self, tables: List[str],
                          max_workers: int,
                          force_full: bool) -> Tuple[List[str], List[str]]:
         """Process tables in parallel using ThreadPoolExecutor."""
@@ -161,9 +178,9 @@ class PriorityProcessor:
         logger.info(f"Processing {len(tables)} tables in parallel (max workers: {max_workers})")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
+            # Submit all tasks - create TableProcessor for each task
             future_to_table = {
-                executor.submit(table_processor.process_table, table, force_full): table 
+                executor.submit(self._process_single_table, table, force_full): table 
                 for table in tables
             }
             
@@ -182,8 +199,7 @@ class PriorityProcessor:
         
         return success_tables, failed_tables
         
-    def _process_sequential(self, table_processor: TableProcessor,
-                          tables: List[str],
+    def _process_sequential(self, tables: List[str],
                           force_full: bool) -> Tuple[List[str], List[str]]:
         """Process tables sequentially."""
         success_tables = []
@@ -193,7 +209,7 @@ class PriorityProcessor:
         
         for table in tables:
             try:
-                success = table_processor.process_table(table, force_full)
+                success = self._process_single_table(table, force_full)
                 if success:
                     success_tables.append(table)
                 else:
@@ -202,4 +218,22 @@ class PriorityProcessor:
                 logger.error(f"Exception in sequential processing for {table}: {str(e)}")
                 failed_tables.append(table)
         
-        return success_tables, failed_tables 
+        return success_tables, failed_tables
+    
+    def _process_single_table(self, table_name: str, force_full: bool) -> bool:
+        """Process a single table using a new TableProcessor instance."""
+        try:
+            # Create TableProcessor with required SchemaDiscovery dependency
+            table_processor = TableProcessor(self.schema_discovery)
+            
+            # Initialize connections
+            if not table_processor.initialize_connections():
+                logger.error(f"Failed to initialize connections for {table_name}")
+                return False
+            
+            # Process the table
+            return table_processor.process_table(table_name, force_full)
+            
+        except Exception as e:
+            logger.error(f"Error processing table {table_name}: {str(e)}")
+            return False 
