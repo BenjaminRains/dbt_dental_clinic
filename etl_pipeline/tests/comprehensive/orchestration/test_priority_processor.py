@@ -78,7 +78,7 @@ class TestProcessByPriority(TestPriorityProcessor):
         assert len(critical_result['failed']) == 0
         
         # Verify settings was called for each importance level
-        assert priority_processor.settings.get_tables_by_priority.call_count == 4
+        assert priority_processor.settings.get_tables_by_importance.call_count == 4
     
     @pytest.mark.unit
     def test_process_by_priority_custom_levels(self, priority_processor, mock_priority_processor_table_processor):
@@ -97,13 +97,13 @@ class TestProcessByPriority(TestPriorityProcessor):
         assert 'reference' not in results
         
         # Verify settings was called for each custom level
-        assert priority_processor.settings.get_tables_by_priority.call_count == 2
+        assert priority_processor.settings.get_tables_by_importance.call_count == 2
     
     @pytest.mark.unit
     def test_process_by_priority_no_tables(self, priority_processor, mock_priority_processor_table_processor):
         """Test processing when no tables are found for an importance level."""
         # Mock settings to return empty list for 'critical'
-        priority_processor.settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: []
+        priority_processor.settings.get_tables_by_importance.side_effect = lambda importance: []
         
         results = priority_processor.process_by_priority(mock_priority_processor_table_processor, importance_levels=['critical'])
         
@@ -112,7 +112,7 @@ class TestProcessByPriority(TestPriorityProcessor):
         assert results == {}
         
         # Reset the mock to restore original behavior for other tests
-        priority_processor.settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: {
+        priority_processor.settings.get_tables_by_importance.side_effect = lambda importance: {
             'critical': ['patient', 'appointment', 'procedurelog'],
             'important': ['payment', 'claim', 'insplan'],
             'audit': ['securitylog', 'entrylog'],
@@ -261,7 +261,7 @@ class TestParallelProcessing(TestPriorityProcessor):
     def test_parallel_processing_single_critical_table(self, priority_processor, mock_priority_processor_table_processor):
         """Test that single critical table is processed sequentially (not parallel)."""
         # Mock settings to return only one critical table
-        priority_processor.settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: {
+        priority_processor.settings.get_tables_by_importance.side_effect = lambda importance: {
             'critical': ['patient'],
             'important': ['payment', 'claim', 'insplan'],
             'audit': ['securitylog', 'entrylog'],
@@ -280,7 +280,7 @@ class TestParallelProcessing(TestPriorityProcessor):
         assert mock_priority_processor_table_processor.process_table.call_count == 8  # All tables processed
         
         # Reset the mock to restore original behavior for other tests
-        priority_processor.settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: {
+        priority_processor.settings.get_tables_by_importance.side_effect = lambda importance: {
             'critical': ['patient', 'appointment', 'procedurelog'],
             'important': ['payment', 'claim', 'insplan'],
             'audit': ['securitylog', 'entrylog'],
@@ -443,7 +443,7 @@ class TestErrorHandling(TestPriorityProcessor):
     def test_invalid_importance_levels(self, priority_processor, mock_priority_processor_table_processor):
         """Test processing with invalid importance levels."""
         # Mock settings to return empty list for invalid levels
-        priority_processor.settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: []
+        priority_processor.settings.get_tables_by_importance.side_effect = lambda importance: []
         
         results = priority_processor.process_by_priority(
             mock_priority_processor_table_processor, 
@@ -455,7 +455,7 @@ class TestErrorHandling(TestPriorityProcessor):
         assert results == {}
         
         # Reset the mock to restore original behavior for other tests
-        priority_processor.settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: {
+        priority_processor.settings.get_tables_by_importance.side_effect = lambda importance: {
             'critical': ['patient', 'appointment', 'procedurelog'],
             'important': ['payment', 'claim', 'insplan'],
             'audit': ['securitylog', 'entrylog'],
@@ -466,7 +466,7 @@ class TestErrorHandling(TestPriorityProcessor):
     def test_settings_exception_handling(self, priority_processor, mock_priority_processor_table_processor):
         """Test handling of settings exceptions."""
         # Mock settings to raise exception
-        priority_processor.settings.get_tables_by_priority.side_effect = Exception("Settings error")
+        priority_processor.settings.get_tables_by_importance.side_effect = Exception("Settings error")
         
         with pytest.raises(Exception, match="Settings error"):
             priority_processor.process_by_priority(mock_priority_processor_table_processor)
