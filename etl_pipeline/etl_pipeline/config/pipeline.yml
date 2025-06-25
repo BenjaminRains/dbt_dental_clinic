@@ -29,12 +29,13 @@ general:
   timezone: "UTC"
   max_retries: 3
   retry_delay_seconds: 300
-  batch_size: 1000
-  parallel_jobs: 4
+  batch_size: 5000  # Larger batches for nightly runs
+  parallel_jobs: 2  # Fewer parallel jobs for manual execution
 
 # Database connections
 connections:
-  source:
+  # OpenDental source database (production OpenDental MySQL database)
+  opendental_source:
     type: "mysql"
     pool_size: 5
     pool_timeout: 30
@@ -43,7 +44,8 @@ connections:
     read_timeout: 300
     write_timeout: 300
 
-  staging:
+  # OpenDental replication database (local MySQL replica for ETL processing)
+  opendental_replication:
     type: "mysql"
     pool_size: 5
     pool_timeout: 30
@@ -52,7 +54,8 @@ connections:
     read_timeout: 300
     write_timeout: 300
 
-  target:
+  # Analytics database - raw schema (PostgreSQL opendental_analytics.raw)
+  opendental_analytics_raw:
     type: "postgresql"
     pool_size: 5
     pool_timeout: 30
@@ -60,12 +63,56 @@ connections:
     connect_timeout: 60
     read_timeout: 300
     write_timeout: 300
+    schema: "raw"
+
+  # Analytics database - public schema (PostgreSQL opendental_analytics.public)
+  opendental_analytics_public:
+    type: "postgresql"
+    pool_size: 5
+    pool_timeout: 30
+    pool_recycle: 3600
+    connect_timeout: 60
+    read_timeout: 300
+    write_timeout: 300
+    schema: "public"
+
+  # Analytics database - public_staging schema (PostgreSQL opendental_analytics.public_staging)
+  opendental_analytics_staging:
+    type: "postgresql"
+    pool_size: 5
+    pool_timeout: 30
+    pool_recycle: 3600
+    connect_timeout: 60
+    read_timeout: 300
+    write_timeout: 300
+    schema: "public_staging"
+
+  # Analytics database - public_intermediate schema (PostgreSQL opendental_analytics.public_intermediate)
+  opendental_analytics_intermediate:
+    type: "postgresql"
+    pool_size: 5
+    pool_timeout: 30
+    pool_recycle: 3600
+    connect_timeout: 60
+    read_timeout: 300
+    write_timeout: 300
+    schema: "public_intermediate"
+
+  # Analytics database - public_marts schema (PostgreSQL opendental_analytics.public_marts)
+  opendental_analytics_marts:
+    type: "postgresql"
+    pool_size: 5
+    pool_timeout: 30
+    pool_recycle: 3600
+    connect_timeout: 60
+    read_timeout: 300
+    write_timeout: 300
+    schema: "public_marts"
 
 # Pipeline stages
 stages:
   extract:
     enabled: true
-    schedule: "*/15 * * * *"  # Every 15 minutes
     timeout_minutes: 30
     error_threshold: 0.01  # 1% error rate threshold
     validation:
@@ -79,7 +126,6 @@ stages:
 
   load:
     enabled: true
-    schedule: "*/30 * * * *"  # Every 30 minutes
     timeout_minutes: 45
     error_threshold: 0.01
     validation:
@@ -93,7 +139,6 @@ stages:
 
   transform:
     enabled: true
-    schedule: "0 * * * *"  # Every hour
     timeout_minutes: 60
     error_threshold: 0.01
     validation:
@@ -108,7 +153,7 @@ stages:
 # Monitoring and alerting
 monitoring:
   metrics:
-    collection_interval: 60  # seconds
+    collection_interval: 300  # 5 minutes (during pipeline runs)
     retention_days: 30
     storage_path: "metrics/"
 
