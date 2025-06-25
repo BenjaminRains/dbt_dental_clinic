@@ -86,6 +86,11 @@ class SchemaDiscovery:
         Get the complete schema information for a table.
         Includes CREATE TABLE statement, indexes, constraints, and detailed column information.
         """
+        # Check cache first
+        if table_name in self._schema_cache:
+            logger.debug(f"Returning cached schema for {table_name}")
+            return self._schema_cache[table_name]
+        
         try:
             logger.info(f"Getting schema information for {table_name}...")
             start_time = time.time()
