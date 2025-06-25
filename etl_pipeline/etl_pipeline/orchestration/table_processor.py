@@ -1,4 +1,20 @@
 """
+DEPRECATION NOTICE - REFACTORING IN PROGRESS
+============================================
+
+This file is part of the ETL Pipeline Schema Analysis Refactoring Plan.
+See: docs/refactoring_plan_schema_analysis.md
+
+PLANNED CHANGES:
+- Will require SchemaDiscovery as mandatory dependency in constructor
+- Will use SchemaDiscovery for all table configuration and analysis
+- Will eliminate duplicate schema analysis calls
+- Will integrate with enhanced SchemaDiscovery methods
+- Will maintain current orchestration functionality
+
+TIMELINE: Phase 4 of refactoring plan
+STATUS: Dependency update in progress
+
 Table Processor
 
 Handles the processing of individual tables through the ETL pipeline,
@@ -38,6 +54,7 @@ DEPENDENCIES:
 - Settings: Configuration management
 - ConnectionFactory: Database connections
 - UnifiedMetricsCollector: Basic metrics collection
+- SchemaDiscovery: Schema analysis
 
 INTEGRATION POINTS:
 - PipelineOrchestrator: Main orchestration integration
@@ -76,18 +93,24 @@ from ..config.logging import get_logger
 from ..core.postgres_schema import PostgresSchema
 from ..transformers.raw_to_public import RawToPublicTransformer
 from ..core.mysql_replicator import ExactMySQLReplicator
+from ..core.schema_discovery import SchemaDiscovery
 from ..config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 class TableProcessor:
-    def __init__(self, config_path: str = None):
+    def __init__(self, schema_discovery: SchemaDiscovery, config_path: str = None):
         """
         Initialize the table processor.
         
         Args:
+            schema_discovery: SchemaDiscovery instance (REQUIRED)
             config_path: Path to the configuration file (deprecated, kept for compatibility)
         """
+        if not isinstance(schema_discovery, SchemaDiscovery):
+            raise ValueError("SchemaDiscovery instance is required")
+        
+        self.schema_discovery = schema_discovery
         self.settings = Settings()
         self.config_path = config_path  # Kept for compatibility
         self.metrics = UnifiedMetricsCollector()
@@ -142,6 +165,8 @@ class TableProcessor:
                     self.postgres_analytics_engine,  # Source (raw schema)
                     self.postgres_analytics_engine   # Target (public schema)
                 )
+            
+            # SchemaDiscovery is already initialized in constructor
             
             # Cache database names to avoid repeated lookups
             self._source_db = self.settings.get_database_config('opendental_source')['database']
@@ -265,16 +290,17 @@ class TableProcessor:
     def _extract_to_replication(self, table_name: str, force_full: bool) -> bool:
         """Extract data from source to replication database."""
         try:
-            # Initialize MySQL replicator
+            # Initialize MySQL replicator with SchemaDiscovery
             replicator = ExactMySQLReplicator(
                 source_engine=self.opendental_source_engine,
                 target_engine=self.mysql_replication_engine,
                 source_db=self._source_db,
-                target_db=self._replication_db
+                target_db=self._replication_db,
+                schema_discovery=self.schema_discovery
             )
             
-            # Check if table exists and schema has changed
-            table_exists = replicator.get_exact_table_schema(table_name, self.mysql_replication_engine) is not None
+            # Check if table exists and schema has changed using SchemaDiscovery
+            table_exists = self.schema_discovery.get_table_schema(table_name) is not None
             schema_changed = replicator.verify_exact_replica(table_name) if table_exists else True
             
             if schema_changed:
