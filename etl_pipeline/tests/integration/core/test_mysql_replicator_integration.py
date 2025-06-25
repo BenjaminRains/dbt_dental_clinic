@@ -23,9 +23,11 @@ import tempfile
 import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.engine import Engine
 
 # Import the component under test
 from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
 
 @pytest.mark.integration
@@ -35,29 +37,28 @@ class TestExactMySQLReplicator:
     @pytest.fixture
     def test_databases(self):
         """Create temporary SQLite databases for testing."""
-        # Create temporary files for our databases
-        source_file = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
-        target_file = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+        # Create temporary database files
+        source_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+        target_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         
-        # Close the files (SQLite will handle them)
-        source_file.close()
-        target_file.close()
-        
-        # Create SQLAlchemy engines
-        source_engine = create_engine(f'sqlite:///{source_file.name}')
-        target_engine = create_engine(f'sqlite:///{target_file.name}')
-        
-        # Yield the engines for the test to use
-        yield source_engine, target_engine
-        
-        # Cleanup after test
-        source_engine.dispose()
-        target_engine.dispose()
-        os.unlink(source_file.name)  # Delete the file
-        os.unlink(target_file.name)  # Delete the file
+        try:
+            # Create engines
+            source_engine = create_engine(f'sqlite:///{source_db.name}')
+            target_engine = create_engine(f'sqlite:///{target_db.name}')
+            
+            yield source_engine, target_engine
+            
+        finally:
+            # Cleanup
+            source_engine.dispose()
+            target_engine.dispose()
+            
+            # Remove temporary files
+            os.unlink(source_db.name)
+            os.unlink(target_db.name)
     
     def create_test_table(self, engine, table_name, schema_sql, data_sql=None):
-        """Helper to create a test table with optional data."""
+        """Create a test table with optional data."""
         with engine.connect() as conn:
             conn.execute(text(schema_sql))
             if data_sql:
@@ -65,34 +66,37 @@ class TestExactMySQLReplicator:
             conn.commit()
     
     def get_table_row_count(self, engine, table_name):
-        """Helper to get row count of a table."""
+        """Get row count for a table."""
         with engine.connect() as conn:
-            return conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+            result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+            return result.scalar()
     
     def get_table_data(self, engine, table_name):
-        """Helper to get all data from a table."""
+        """Get all data from a table."""
         with engine.connect() as conn:
             result = conn.execute(text(f"SELECT * FROM {table_name}"))
             return result.fetchall()
     
     @pytest.mark.skip(reason="MySQL/SQLite dialect differences - needs SQLite adapter")
     def test_can_get_table_schema(self, test_databases):
-        """Test: Can retrieve table schema from source database."""
+        """Test: Can retrieve table schema information."""
         source_engine, target_engine = test_databases
         
-        # Create test table
+        # Create source table
         self.create_test_table(source_engine, 'patient', """
             CREATE TABLE patient (
                 PatNum INTEGER PRIMARY KEY,
                 LName TEXT NOT NULL,
-                FName TEXT NOT NULL,
-                Email TEXT
+                FName TEXT NOT NULL
             )
         """)
         
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
         # Test schema retrieval
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
-        schema = replicator.get_exact_table_schema('patient', source_engine)
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
+        schema = schema_discovery.get_table_schema('patient')
         
         # Verify schema was retrieved
         assert schema is not None
@@ -116,8 +120,11 @@ class TestExactMySQLReplicator:
             )
         """)
         
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
         # Create replica
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
         success = replicator.create_exact_replica('patient')
         
         assert success is True
@@ -147,8 +154,11 @@ class TestExactMySQLReplicator:
             (3, 'Johnson', 'Bob', 'bob@example.com')
         """)
         
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
         # Copy data
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
         success = replicator.copy_table_data('patient')
         
         assert success is True
@@ -190,8 +200,11 @@ class TestExactMySQLReplicator:
                 """))
             conn.commit()
         
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
         # Copy data
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
         success = replicator.copy_table_data('patient')
         
         assert success is True
@@ -220,8 +233,11 @@ class TestExactMySQLReplicator:
             (3, 'Johnson', 'Bob')
         """)
         
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
         # Copy data
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
         replicator.copy_table_data('patient')
         
         # Verify replica matches
@@ -232,10 +248,13 @@ class TestExactMySQLReplicator:
         """Test: Graceful handling when table doesn't exist."""
         source_engine, target_engine = test_databases
         
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
         
         # Try to get schema of non-existent table
-        schema = replicator.get_exact_table_schema('nonexistent', source_engine)
+        schema = schema_discovery.get_table_schema('nonexistent')
         assert schema is None
         
         # Try to copy non-existent table
@@ -265,8 +284,11 @@ class TestExactMySQLReplicator:
             (3, 'Third message', '2024-01-03')
         """)
         
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
         # Copy data
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
         success = replicator.copy_table_data('log')
         
         assert success is True
@@ -289,13 +311,16 @@ class TestExactMySQLReplicator:
             )
         """)
         
+        # Create SchemaDiscovery instance
+        schema_discovery = SchemaDiscovery(source_engine, 'test')
+        
         # Copy data
-        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test')
+        replicator = ExactMySQLReplicator(source_engine, target_engine, 'test', 'test', schema_discovery)
         success = replicator.copy_table_data('empty_table')
         
         assert success is True
         
-        # Verify both tables are empty
+        # Verify empty table was handled
         source_count = self.get_table_row_count(source_engine, 'empty_table')
         target_count = self.get_table_row_count(target_engine, 'empty_table')
         assert source_count == target_count == 0
