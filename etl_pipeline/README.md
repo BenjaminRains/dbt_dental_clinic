@@ -1,10 +1,10 @@
 # OpenDental ETL Pipeline
 
-A robust ETL pipeline for extracting data from OpenDental MySQL, replicating it locally, and loading it into a PostgreSQL analytics database.
+A modern, simplified ETL pipeline for extracting data from OpenDental MySQL, replicating it locally, and loading it into a PostgreSQL analytics database with intelligent orchestration and priority-based processing.
 
-## Architecture
+## Architecture Overview
 
-The pipeline follows a three-database architecture with multiple schemas in the analytics database:
+The pipeline follows a simplified three-database architecture with intelligent orchestration:
 
 ```
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────────────────────────────┐
@@ -14,239 +14,358 @@ The pipeline follows a three-database architecture with multiple schemas in the 
 │ - opendental        │    │ - opendental_repl   │    │ - opendental_analytics                      │
 │ - Read-only access  │    │ - Full read/write   │    │ - Schemas:                                  │
 │ - Port 3306         │    │ - Port 3305         │    │   • raw (initial load)                      │
-│                     │    │                     │    │   • public (base tables)                     │
+│                     │    │                     │    │   • public (transformed data)                │
 │                     │    │                     │    │   • public_staging (dbt staging)            │
 │                     │    │                     │    │   • public_intermediate (dbt intermediate)  │
 │                     │    │                     │    │   • public_marts (dbt marts)                │
 └─────────────────────┘    └─────────────────────┘    └─────────────────────────────────────────────┘
+                                    ▲
+                                    │
+                        ┌─────────────────────┐
+                        │   Orchestration     │
+                        │   Layer             │
+                        │                     │
+                        │ • PipelineOrchestrator │
+                        │ • TableProcessor    │
+                        │ • PriorityProcessor │
+                        └─────────────────────┘
 ```
 
-### Database Roles and Schemas
+## Core Components
 
-1. **Source MySQL (OpenDental)**
-   - Production OpenDental database
-   - Read-only access
-   - Used for initial data extraction
+### 1. **Orchestration Layer** (`orchestration/`)
+The brain of the pipeline that coordinates all operations:
 
-2. **Replication MySQL**
-   - Local MySQL database
-   - Exact copy of source data
-   - Used for staging and validation
+- **`PipelineOrchestrator`**: Main coordinator that manages the entire pipeline lifecycle
+- **`TableProcessor`**: Handles individual table ETL processing (extract → load → transform)
+- **`PriorityProcessor`**: Manages batch processing with intelligent parallelization for critical tables
 
-3. **Analytics PostgreSQL**
-   - Analytics data warehouse with multiple schemas:
-     - `raw`: Initial landing zone for replicated data
-     - `public`: Base tables with minimal transformations
-     - `public_staging`: dbt staging models
-     - `public_intermediate`: dbt intermediate models
-     - `public_marts`: dbt final models for consumption
+### 2. **Core Components** (`core/`)
+Essential pipeline building blocks:
+
+- **`mysql_replicator.py`**: ExactMySQLReplicator for MySQL-to-MySQL replication with schema validation
+- **`connections.py`**: ConnectionFactory for managing database connections
+- **`postgres_schema.py`**: Schema management and conversion utilities
+- **`schema_discovery.py`**: Automatic schema discovery and analysis
+- **`exceptions.py`**: Custom exception classes for error handling
+
+### 3. **Data Loading** (`loaders/`)
+PostgreSQL data loading with optimization:
+
+- **`postgres_loader.py`**: PostgresLoader for MySQL-to-PostgreSQL loading with chunked processing for large tables
+
+### 4. **Data Transformation** (`transformers/`)
+Schema and data transformation:
+
+- **`raw_to_public.py`**: RawToPublicTransformer for converting raw data to public schema
+
+### 5. **Configuration** (`config/`)
+Modern configuration management:
+
+- **`settings.py`**: Settings class for centralized configuration management
+- **`logging.py`**: Advanced logging configuration
+- **`pipeline.yml`**: Pipeline configuration
+- **`tables.yml`**: Table-specific configurations with priority levels
+
+### 6. **Command Line Interface** (`cli/`)
+User-friendly command interface:
+
+- **`commands.py`**: CLI commands for pipeline operations
+- **`main.py`**: CLI entry point
+
+### 7. **Monitoring** (`monitoring/`)
+Observability and metrics:
+
+- **`unified_metrics.py`**: UnifiedMetricsCollector for comprehensive metrics collection
 
 ## Data Flow
 
-1. **Extract Phase**
-   - Reads from source OpenDental MySQL
-   - Performs exact replication to local MySQL
-   - Tracks extraction status and schema changes
+### 1. **Extract Phase**
+```
+Source MySQL → ExactMySQLReplicator → Replication MySQL
+```
+- Exact schema replication with validation
+- Intelligent incremental vs full refresh
+- Schema change detection and handling
 
-2. **Load Phase**
-   - Reads from replication MySQL
-   - Applies basic type conversions
-   - Loads to PostgreSQL `raw` schema
-   - Tracks load status
+### 2. **Load Phase**
+```
+Replication MySQL → PostgresLoader → PostgreSQL (raw schema)
+```
+- Optimized loading with chunked processing for large tables
+- Automatic type conversion and schema adaptation
+- Connection pooling and resource management
 
-3. **Transform Phase**
-   - `raw` → `public`: Basic transformations and standardization
-     - Type casting and normalization
-     - Basic data cleaning
-     - Table structure standardization
-   - `public` → `public_staging`: dbt staging models
-     - Source table definitions
-     - Basic transformations
-   - `public_staging` → `public_intermediate`: dbt intermediate models
-     - Complex transformations
-     - Business logic
-   - `public_intermediate` → `public_marts`: dbt final models
-     - Final presentation layer
-     - Ready for consumption
+### 3. **Transform Phase**
+```
+PostgreSQL (raw) → RawToPublicTransformer → PostgreSQL (public)
+```
+- Data cleaning and standardization
+- Type casting and normalization
+- Schema structure optimization
 
-## Monitoring
+### 4. **Orchestration**
+```
+PipelineOrchestrator → PriorityProcessor → TableProcessor
+```
+- Priority-based table processing (critical → important → audit → reference)
+- Parallel processing for critical tables
+- Sequential processing for resource management
+- Comprehensive error handling and recovery
 
-The pipeline includes built-in monitoring:
+## Key Features
 
-1. **Logging**
-   - Detailed logs in `elt_pipeline.log`
-   - Connection logs in `connection.log`
+### **Intelligent Processing**
+- **Priority-Based**: Tables processed by importance (critical, important, audit, reference)
+- **Parallel Processing**: Critical tables processed in parallel for speed
+- **Resource Management**: Sequential processing for non-critical tables
+- **Incremental Loading**: Smart detection of changes for efficient processing
 
-2. **Tracking Tables**
-   - `etl_extract_status`: Tracks extraction status in replication MySQL
-   - `etl_transform_status`: Tracks load status in PostgreSQL
+### **Simplified Architecture**
+- **Reduced Complexity**: Eliminated over-engineering and unnecessary abstraction layers
+- **Efficient Configuration**: Centralized Settings class with caching
+- **Streamlined Connections**: Automatic connection management and cleanup
+- **Clear Separation**: Each component has a single, well-defined responsibility
 
-3. **Metrics**
-   - Extraction counts
-   - Load counts
-   - Processing times
-   - Error rates
+### **Robust Error Handling**
+- **Comprehensive Logging**: Detailed logs for debugging and monitoring
+- **Graceful Degradation**: Failures don't stop the entire pipeline
+- **Resource Cleanup**: Automatic cleanup of connections and resources
+- **Context Managers**: Proper resource lifecycle management
 
-## Development
+### **Modern Configuration**
+- **Environment Variables**: Secure configuration through environment variables
+- **YAML Configuration**: Human-readable table and pipeline configurations
+- **Priority Management**: Table importance levels for intelligent processing
+- **Flexible Settings**: Support for custom configurations and overrides
 
-1. **Code Structure**
-   ```
-   etl_pipeline/
-   ├── core/              # Core pipeline components
-   ├── extractors/        # Data extraction logic
-   ├── transformers/      # Data transformation logic
-   ├── loaders/          # Data loading logic
-   ├── monitoring/       # Monitoring and metrics
-   ├── utils/            # Utility functions
-   ├── tests/            # Test files
-   └── docs/             # Documentation
-   ```
+## Database Architecture
 
-2. **Adding New Tables**
-   - Add table to source database
-   - Pipeline will automatically detect and process
-   - No configuration needed for standard tables
+### **Source MySQL (OpenDental)**
+- Production OpenDental database
+- Read-only access for safety
+- Used for initial data extraction
 
-3. **Custom Transformations**
-   - Add transformation logic in `transformers/`
-   - Update tracking tables as needed
-   - Follow existing patterns for consistency
+### **Replication MySQL**
+- Local MySQL database for staging
+- Exact copy of source data
+- Used for validation and intermediate processing
 
-## Schema Management
+### **Analytics PostgreSQL**
+- Multi-schema analytics data warehouse:
+  - **`raw`**: Initial landing zone (exact replica of source)
+  - **`public`**: Cleaned and standardized base tables
+  - **`public_staging`**: dbt staging models
+  - **`public_intermediate`**: dbt intermediate models
+  - **`public_marts`**: dbt final models for consumption
 
-1. **Raw Schema**
-   - Initial landing zone for replicated data
-   - Maintains exact structure from source
-   - Minimal transformations
-   - Used for data validation and debugging
+## Setup and Configuration
 
-2. **Public Schema**
-   - Base tables for analytics
-   - Standardized data types
-   - Cleaned and normalized data
-   - Foundation for dbt models
+### 1. **Environment Configuration**
 
-3. **dbt Schemas**
-   - `public_staging`: Source definitions and basic transformations
-   - `public_intermediate`: Complex transformations and business logic
-   - `public_marts`: Final presentation layer
+Copy the template and configure your environment:
+```bash
+cp .env.template .env
+```
 
-## Setup
+Required environment variables:
+```bash
+# Source Database (OpenDental Production)
+OPENDENTAL_SOURCE_HOST=client-server
+OPENDENTAL_SOURCE_PORT=3306
+OPENDENTAL_SOURCE_DB=opendental
+OPENDENTAL_SOURCE_USER=readonly_user
+OPENDENTAL_SOURCE_PASSWORD=your_password
 
-1. **Environment Configuration**
+# Replication Database (Local MySQL)
+MYSQL_REPLICATION_HOST=localhost
+MYSQL_REPLICATION_PORT=3305
+MYSQL_REPLICATION_DB=opendental_repl
+MYSQL_REPLICATION_USER=replication_user
+MYSQL_REPLICATION_PASSWORD=your_password
 
-   Copy the template environment file and update with your settings:
-   ```bash
-   cp .env.template .env
-   ```
+# Analytics Database (PostgreSQL)
+POSTGRES_ANALYTICS_HOST=localhost
+POSTGRES_ANALYTICS_PORT=5432
+POSTGRES_ANALYTICS_DB=opendental_analytics
+POSTGRES_ANALYTICS_SCHEMA=raw
+POSTGRES_ANALYTICS_USER=analytics_user
+POSTGRES_ANALYTICS_PASSWORD=your_password
+```
 
-   Required environment variables:
-   ```bash
-   # Source Database (OpenDental Production)
-   SOURCE_MYSQL_HOST=client-server
-   SOURCE_MYSQL_PORT=3306
-   SOURCE_MYSQL_DB=opendental
-   SOURCE_MYSQL_USER=readonly_user
-   SOURCE_MYSQL_PASSWORD=your_password
+### 2. **Database Setup**
 
-   # Replication Database (Local MySQL)
-   REPLICATION_MYSQL_HOST=localhost
-   REPLICATION_MYSQL_PORT=3305
-   REPLICATION_MYSQL_DB=opendental_replication
-   REPLICATION_MYSQL_USER=replication_user
-   REPLICATION_MYSQL_PASSWORD=your_password
+```sql
+-- MySQL Replication Database
+CREATE DATABASE opendental_repl;
+GRANT ALL PRIVILEGES ON opendental_repl.* TO 'replication_user'@'localhost';
 
-   # Analytics Database (PostgreSQL)
-   ANALYTICS_POSTGRES_HOST=localhost
-   ANALYTICS_POSTGRES_PORT=5432
-   ANALYTICS_POSTGRES_DB=opendental_analytics
-   ANALYTICS_POSTGRES_SCHEMA=raw
-   ANALYTICS_POSTGRES_USER=analytics_user
-   ANALYTICS_POSTGRES_PASSWORD=your_password
-   ```
+-- PostgreSQL Analytics Database
+CREATE DATABASE opendental_analytics;
+CREATE SCHEMA raw;
+CREATE SCHEMA public;
+CREATE SCHEMA public_staging;
+CREATE SCHEMA public_intermediate;
+CREATE SCHEMA public_marts;
 
-2. **Database Setup**
+GRANT ALL PRIVILEGES ON DATABASE opendental_analytics TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA raw TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA public TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA public_staging TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA public_intermediate TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA public_marts TO analytics_user;
+```
 
-   Create the replication and analytics databases:
-   ```sql
-   -- MySQL Replication Database
-   CREATE DATABASE opendental_replication;
-   GRANT ALL PRIVILEGES ON opendental_replication.* TO 'replication_user'@'localhost';
-   FLUSH PRIVILEGES;
+### 3. **Install Dependencies**
 
-   -- PostgreSQL Analytics Database
-   CREATE DATABASE opendental_analytics;
-   
-   -- Create schemas
-   CREATE SCHEMA raw;
-   CREATE SCHEMA public;
-   CREATE SCHEMA public_staging;
-   CREATE SCHEMA public_intermediate;
-   CREATE SCHEMA public_marts;
-   
-   -- Grant permissions
-   GRANT ALL PRIVILEGES ON DATABASE opendental_analytics TO analytics_user;
-   GRANT ALL PRIVILEGES ON SCHEMA raw TO analytics_user;
-   GRANT ALL PRIVILEGES ON SCHEMA public TO analytics_user;
-   GRANT ALL PRIVILEGES ON SCHEMA public_staging TO analytics_user;
-   GRANT ALL PRIVILEGES ON SCHEMA public_intermediate TO analytics_user;
-   GRANT ALL PRIVILEGES ON SCHEMA public_marts TO analytics_user;
-   ```
-
-3. **Install Dependencies**
-
-   Using pipenv:
-   ```bash
-   pipenv install
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 
-1. **Run Full Pipeline**
+### **Command Line Interface**
 
-   ```bash
-   python -m etl_pipeline
-   ```
+```bash
+# Process all tables by priority
+python -m etl_pipeline process-all
 
-2. **Process Specific Tables**
+# Process specific table
+python -m etl_pipeline process-table patient
 
-   ```python
-   from etl_pipeline.elt_pipeline import ELTPipeline
+# Process tables by importance level
+python -m etl_pipeline process-priority critical
 
-   pipeline = ELTPipeline()
-   pipeline.run_elt_pipeline('patient')
-   pipeline.run_elt_pipeline('appointment')
-   ```
+# Force full refresh
+python -m etl_pipeline process-table patient --force-full
 
-3. **Force Full Sync**
+# Show pipeline status
+python -m etl_pipeline status
+```
 
-   ```python
-   pipeline.run_elt_pipeline('patient', force_full=True)
-   ```
+### **Programmatic Usage**
+
+```python
+from etl_pipeline.orchestration import PipelineOrchestrator
+
+# Initialize and run pipeline
+with PipelineOrchestrator() as orchestrator:
+    orchestrator.initialize_connections()
+    
+    # Process single table
+    success = orchestrator.run_pipeline_for_table('patient')
+    
+    # Process tables by priority
+    results = orchestrator.process_tables_by_priority(
+        importance_levels=['critical', 'important'],
+        max_workers=5
+    )
+```
+
+### **Configuration Management**
+
+```python
+from etl_pipeline.config.settings import Settings
+
+# Access configuration
+settings = Settings()
+table_config = settings.get_table_config('patient')
+critical_tables = settings.get_tables_by_priority('critical')
+```
+
+## Monitoring and Observability
+
+### **Logging**
+- **Pipeline Logs**: `etl_pipeline.log` - Main pipeline operations
+- **Connection Logs**: `connection.log` - Database connection events
+- **Error Logs**: Detailed error tracking and debugging information
+
+### **Metrics Collection**
+- **Processing Times**: Table-level processing duration
+- **Success Rates**: Success/failure tracking by table and priority
+- **Resource Usage**: Connection pool and memory utilization
+- **Performance Metrics**: Throughput and efficiency measurements
+
+### **Status Tracking**
+- **Table Status**: Current processing status for each table
+- **Priority Progress**: Progress tracking by importance level
+- **Error Reporting**: Detailed error information and recovery status
+
+## Development and Testing
+
+### **Code Structure**
+```
+etl_pipeline/
+├── orchestration/     # Pipeline orchestration and coordination
+├── core/             # Core pipeline components and utilities
+├── loaders/          # Data loading components
+├── transformers/     # Data transformation components
+├── config/           # Configuration management
+├── cli/              # Command line interface
+├── monitoring/       # Monitoring and metrics
+├── tests/            # Comprehensive test suite
+└── docs/             # Documentation
+```
+
+### **Testing Strategy**
+- **Unit Tests**: Individual component testing
+- **Integration Tests**: End-to-end pipeline testing
+- **Performance Tests**: Large dataset processing validation
+- **Error Handling Tests**: Failure scenario validation
+
+### **Adding New Tables**
+1. Tables are automatically detected from source database
+2. Configuration in `tables.yml` defines processing behavior
+3. Priority levels determine processing order and strategy
+4. No code changes required for standard tables
+
+## Performance Optimization
+
+### **Parallel Processing**
+- Critical tables processed in parallel for speed
+- Configurable worker count for resource management
+- Intelligent load balancing across available resources
+
+### **Chunked Loading**
+- Large tables (>1M rows or >100MB) use chunked loading
+- Memory-efficient processing for large datasets
+- Configurable batch sizes for optimal performance
+
+### **Connection Management**
+- Connection pooling for efficient resource usage
+- Automatic cleanup and resource management
+- Context manager support for safe resource handling
 
 ## Troubleshooting
 
-1. **Connection Issues**
-   - Check environment variables
-   - Verify database permissions
-   - Check network connectivity
+### **Common Issues**
 
-2. **Data Issues**
-   - Check extraction status in `etl_extract_status`
-   - Check load status in `etl_transform_status`
-   - Review logs for specific errors
+1. **Connection Problems**
+   - Verify environment variables
+   - Check database permissions
+   - Validate network connectivity
+
+2. **Processing Failures**
+   - Check logs for specific error messages
+   - Verify table configurations in `tables.yml`
+   - Review database schema compatibility
 
 3. **Performance Issues**
-   - Monitor connection pool settings
-   - Check batch sizes
-   - Review database indexes
+   - Monitor worker count and parallel processing
+   - Check batch sizes for large tables
+   - Review database indexes and query optimization
+
+### **Debugging Tools**
+- **Detailed Logging**: Comprehensive log output for debugging
+- **Status Commands**: CLI commands for pipeline status
+- **Configuration Validation**: Settings validation and error reporting
 
 ## Contributing
 
-1. Follow the existing code style
-2. Add tests for new features
-3. Update documentation
-4. Submit pull requests
+1. **Code Style**: Follow existing patterns and conventions
+2. **Testing**: Add tests for new features and changes
+3. **Documentation**: Update documentation for any changes
+4. **Review Process**: Submit pull requests for review
 
 ## License
 
