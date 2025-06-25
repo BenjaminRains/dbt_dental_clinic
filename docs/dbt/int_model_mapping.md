@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document provides a comprehensive mapping of all intermediate models in the dental clinic analytics system, organized by their respective systems and showing their dependencies and relationships.
+This document provides a comprehensive mapping of all intermediate models in the dental clinic
+ analytics system, organized by their respective systems and showing their dependencies and
+  relationships.
 
 ## System Dependencies
 
