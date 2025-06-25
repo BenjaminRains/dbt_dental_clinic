@@ -8,7 +8,7 @@
 │   (OpenDental)      │───▶│   (Local Copy)      │───▶│   (Analytics)         │
 │                     │    │                     │     │                       │
 │ - opendental        │    │ - opendental_repl   │     │ - opendental_analytics│
-│ - Read-only access  │    │ - Full read/write   │     │ - Analytics warehouse │
+│ - Read-only access  │    │ - Full read/write   │     │ - Multiple schemas    │
 │ - Port 3306         │    │ - Port 3305         │     │ - Port 5432           │
 └─────────────────────┘    └─────────────────────┘     └────────────────────── ┘
 ```
@@ -18,34 +18,46 @@
 ### 1. Environment Variables
 ```bash
 # Source Database (OpenDental Production)
-SOURCE_MYSQL_HOST=client-opendental-server
-SOURCE_MYSQL_PORT=3306
-SOURCE_MYSQL_DB=opendental
-SOURCE_MYSQL_USER=readonly_user
-SOURCE_MYSQL_PASSWORD=secure_password
+OPENDENTAL_SOURCE_HOST=client-opendental-server
+OPENDENTAL_SOURCE_PORT=3306
+OPENDENTAL_SOURCE_DB=opendental
+OPENDENTAL_SOURCE_USER=readonly_user
+OPENDENTAL_SOURCE_PASSWORD=secure_password
 
 # Replication Database (Local MySQL)
-REPLICATION_MYSQL_HOST=localhost
-REPLICATION_MYSQL_PORT=3305
-REPLICATION_MYSQL_DB=opendental_replication
-REPLICATION_MYSQL_USER=replication_user
-REPLICATION_MYSQL_PASSWORD=replication_password
+MYSQL_REPLICATION_HOST=localhost
+MYSQL_REPLICATION_PORT=3305
+MYSQL_REPLICATION_DB=opendental_replication
+MYSQL_REPLICATION_USER=replication_user
+MYSQL_REPLICATION_PASSWORD=replication_password
 
-# Analytics Database (PostgreSQL)
-ANALYTICS_POSTGRES_HOST=localhost
-ANALYTICS_POSTGRES_PORT=5432
-ANALYTICS_POSTGRES_DB=opendental_analytics
-ANALYTICS_POSTGRES_SCHEMA=raw
-ANALYTICS_POSTGRES_USER=analytics_user
-ANALYTICS_POSTGRES_PASSWORD=analytics_password
+# Analytics Database (PostgreSQL) - Single database with multiple schemas
+POSTGRES_ANALYTICS_HOST=localhost
+POSTGRES_ANALYTICS_PORT=5432
+POSTGRES_ANALYTICS_DB=opendental_analytics
+POSTGRES_ANALYTICS_SCHEMA=raw
+POSTGRES_ANALYTICS_USER=analytics_user
+POSTGRES_ANALYTICS_PASSWORD=analytics_password
 ```
 
-### 2. Connection Factory Functions
+### 2. Connection Factory Methods
+
+The `ConnectionFactory` provides specific methods for each database and schema:
+
 ```python
-# New clear naming
-get_source_connection()      # Source MySQL (OpenDental)
-get_replication_connection() # Replication MySQL (Local copy)
-get_analytics_connection()   # Analytics PostgreSQL
+# Source connections
+get_opendental_source_connection()           # Source MySQL (OpenDental)
+
+# Replication connections  
+get_mysql_replication_connection()           # Replication MySQL (Local copy)
+
+# Analytics connections (PostgreSQL with specific schemas)
+get_postgres_analytics_connection()          # Default: raw schema
+get_opendental_analytics_raw_connection()    # Explicit: raw schema
+get_opendental_analytics_public_connection() # Explicit: public schema
+get_opendental_analytics_staging_connection() # Explicit: public_staging schema
+get_opendental_analytics_intermediate_connection() # Explicit: public_intermediate schema
+get_opendental_analytics_marts_connection()  # Explicit: public_marts schema
 ```
 
 ### 3. Pipeline Engine Variables
@@ -55,7 +67,7 @@ class ELTPipeline:
         # Clear, descriptive naming
         self.source_engine = None          # Source MySQL (OpenDental)
         self.replication_engine = None     # Replication MySQL (Local copy)
-        self.analytics_engine = None       # Analytics PostgreSQL
+        self.analytics_engine = None       # Analytics PostgreSQL (raw schema)
         
         # Database names
         self.source_db = "opendental"
@@ -64,9 +76,9 @@ class ELTPipeline:
         self.analytics_schema = "raw"
 ```
 
-## Schema and Table Naming in PostgreSQL
+## PostgreSQL Analytics Database Schema Structure
 
-### Current Structure
+### Single Database with Multiple Schemas
 ```sql
 -- PostgreSQL Database: opendental_analytics
 
@@ -74,6 +86,9 @@ class ELTPipeline:
 raw.patient              -- Direct from replication MySQL
 raw.appointment          -- Direct from replication MySQL
 raw.treatment            -- Direct from replication MySQL
+
+-- Public schema (general purpose)
+public.general_tables    -- Any general purpose tables
 
 -- Staging schema (dbt models)
 public_staging.stg_opendental__patient
@@ -89,6 +104,27 @@ public_intermediate.int_treatment_history
 public_marts.dim_patient
 public_marts.fact_appointments
 public_marts.fact_treatments
+```
+
+### Schema-Specific Connection Methods
+
+Each schema has its own connection method for clear separation:
+
+```python
+# Raw schema (ELT pipeline output)
+raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+
+# Public schema (general purpose)
+public_engine = ConnectionFactory.get_opendental_analytics_public_connection()
+
+# Staging schema (dbt staging models)
+staging_engine = ConnectionFactory.get_opendental_analytics_staging_connection()
+
+# Intermediate schema (dbt intermediate models)
+intermediate_engine = ConnectionFactory.get_opendental_analytics_intermediate_connection()
+
+# Marts schema (dbt mart models)
+marts_engine = ConnectionFactory.get_opendental_analytics_marts_connection()
 ```
 
 ## ELT Pipeline Phases
@@ -172,31 +208,81 @@ fact_treatments.sql
 ## Configuration Updates Needed
 
 ### 1. Environment Variables
-- Use `REPLICATION_MYSQL_*` for local MySQL database
-- Use `ANALYTICS_POSTGRES_*` for PostgreSQL database
+- Use `OPENDENTAL_SOURCE_*` for source OpenDental database
+- Use `MYSQL_REPLICATION_*` for local MySQL database
+- Use `POSTGRES_ANALYTICS_*` for PostgreSQL database
 - Ensure consistency between `.env` and code
 
 ### 2. Connection Factory
-- Use `get_replication_connection()` for local MySQL
-- Use `get_analytics_connection()` for PostgreSQL
+- Use `get_opendental_source_connection()` for source OpenDental
+- Use `get_mysql_replication_connection()` for local MySQL
+- Use schema-specific methods for PostgreSQL analytics:
+  - `get_opendental_analytics_raw_connection()` for raw schema
+  - `get_opendental_analytics_staging_connection()` for staging schema
+  - `get_opendental_analytics_intermediate_connection()` for intermediate schema
+  - `get_opendental_analytics_marts_connection()` for marts schema
 - Maintain clear separation of concerns
 
 ### 3. Pipeline Code
 - Use clean table names in raw schema (no _raw suffix)
 - Update variable names for clarity
 - Align tracking table names with purpose
+- Use appropriate schema-specific connections
 
 ### 4. Documentation
 - Keep README.md updated with current architecture
 - Document clear boundaries between ELT and dbt
 - Maintain clear data flow diagrams
+- Document schema-specific connection methods
+
+## Connection Usage Examples
+
+### ELT Pipeline Usage
+```python
+# Extract phase
+source_engine = ConnectionFactory.get_opendental_source_connection()
+replication_engine = ConnectionFactory.get_mysql_replication_connection()
+
+# Load phase
+raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+
+# Transform phase (if needed)
+raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+```
+
+### dbt Usage
+```python
+# Staging models
+staging_engine = ConnectionFactory.get_opendental_analytics_staging_connection()
+
+# Intermediate models
+intermediate_engine = ConnectionFactory.get_opendental_analytics_intermediate_connection()
+
+# Mart models
+marts_engine = ConnectionFactory.get_opendental_analytics_marts_connection()
+```
+
+### Testing Usage
+```python
+# Unit tests with mocking
+mock_source = ConnectionFactory.get_opendental_source_connection()
+mock_replication = ConnectionFactory.get_mysql_replication_connection()
+mock_raw = ConnectionFactory.get_opendental_analytics_raw_connection()
+
+# Integration tests with real databases
+source_engine = ConnectionFactory.get_opendental_source_connection()
+replication_engine = ConnectionFactory.get_mysql_replication_connection()
+raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+```
 
 ## Benefits of This Approach
 
-1. **Clear Separation**: Each database has a distinct role
+1. **Clear Separation**: Each database and schema has a distinct role
 2. **Consistent Naming**: No confusion about data location
-3. **dbt Integration**: Clean handoff from ELT to dbt
-4. **Maintainability**: Easy to understand and modify
-5. **Monitoring**: Clear tracking at each stage
-6. **Scalability**: Clear boundaries allow independent scaling
-7. **Debuggability**: Clear data lineage and tracking
+3. **Schema-Specific Connections**: Clear boundaries between different data layers
+4. **dbt Integration**: Clean handoff from ELT to dbt with proper schema separation
+5. **Maintainability**: Easy to understand and modify
+6. **Monitoring**: Clear tracking at each stage
+7. **Scalability**: Clear boundaries allow independent scaling
+8. **Debuggability**: Clear data lineage and tracking
+9. **Testability**: Easy to mock specific connections for testing
