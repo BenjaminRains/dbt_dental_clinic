@@ -155,11 +155,11 @@ class TestPriorityProcessorIntegration:
         """Create PriorityProcessor instance with integration-specific settings."""
         # Create integration-specific settings (different from shared fixture)
         settings = MagicMock(spec=Settings)
-        settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: {
+        settings.get_tables_by_importance.side_effect = lambda importance: {
             'critical': ['patient', 'appointment', 'procedurelog'],
-            'important': ['payment'],
-            'audit': ['securitylog'],
-            'reference': ['zipcode']
+            'important': ['payment', 'claim', 'insplan'],
+            'audit': ['securitylog', 'entrylog'],
+            'reference': ['zipcode', 'definition']
         }.get(importance, [])
         
         return PriorityProcessor(settings=settings)
@@ -275,7 +275,7 @@ class TestIntegrationErrorHandling(TestPriorityProcessorIntegration):
     def test_integration_settings_exception(self, integration_priority_processor, real_table_processor):
         """Test handling of settings exceptions in integration."""
         # Mock settings to raise exception
-        integration_priority_processor.settings.get_tables_by_priority.side_effect = Exception("Settings configuration error")
+        integration_priority_processor.settings.get_tables_by_importance.side_effect = Exception("Settings configuration error")
         
         with pytest.raises(Exception, match="Settings configuration error"):
             integration_priority_processor.process_by_priority(real_table_processor)
