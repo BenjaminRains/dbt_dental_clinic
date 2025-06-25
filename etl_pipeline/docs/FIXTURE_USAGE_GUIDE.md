@@ -563,7 +563,7 @@ def test_settings_with_mock(mock_settings):
     assert mock_settings.should_use_incremental() is True
     
     # Test table priority
-    tables = mock_settings.get_tables_by_priority()
+    tables = mock_settings.get_tables_by_importance()
     assert 'patient' in tables
     assert 'appointment' in tables
 ```
