@@ -4,7 +4,7 @@ A modern, simplified ETL pipeline for extracting data from OpenDental MySQL, rep
 
 ## Architecture Overview
 
-The pipeline follows a simplified three-database architecture with intelligent orchestration:
+The pipeline follows a simplified three-database architecture with intelligent orchestration and **single-source-of-truth schema analysis**:
 
 ```
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────────────────────────────┐
@@ -28,6 +28,7 @@ The pipeline follows a simplified three-database architecture with intelligent o
                         │ • PipelineOrchestrator │
                         │ • TableProcessor    │
                         │ • PriorityProcessor │
+                        │ • SchemaDiscovery   │ ← Single Source of Truth
                         └─────────────────────┘
 ```
 
@@ -37,22 +38,22 @@ The pipeline follows a simplified three-database architecture with intelligent o
 The brain of the pipeline that coordinates all operations:
 
 - **`PipelineOrchestrator`**: Main coordinator that manages the entire pipeline lifecycle
-- **`TableProcessor`**: Handles individual table ETL processing (extract → load → transform)
-- **`PriorityProcessor`**: Manages batch processing with intelligent parallelization for critical tables
+- **`TableProcessor`**: Handles individual table ETL processing (extract → load → transform) with **mandatory SchemaDiscovery dependency**
+- **`PriorityProcessor`**: Manages batch processing with intelligent parallelization for critical tables, **requires SchemaDiscovery for TableProcessor creation**
 
 ### 2. **Core Components** (`core/`)
-Essential pipeline building blocks:
+Essential pipeline building blocks with **single-source-of-truth architecture**:
 
-- **`mysql_replicator.py`**: ExactMySQLReplicator for MySQL-to-MySQL replication with schema validation
-- **`connections.py`**: ConnectionFactory for managing database connections
+- **`schema_discovery.py`**: **Enhanced SchemaDiscovery** - **THE single source of truth** for ALL MySQL schema analysis, configuration generation, and replication
+- **`mysql_replicator.py`**: **Cleaned ExactMySQLReplicator** - Pure replication executor using SchemaDiscovery for ALL schema operations
+- **`connections.py`**: ConnectionFactory and ConnectionManager for efficient database connection management
 - **`postgres_schema.py`**: Schema management and conversion utilities
-- **`schema_discovery.py`**: Automatic schema discovery and analysis
 - **`exceptions.py`**: Custom exception classes for error handling
 
 ### 3. **Data Loading** (`loaders/`)
 PostgreSQL data loading with optimization:
 
-- **`postgres_loader.py`**: PostgresLoader for MySQL-to-PostgreSQL loading with chunked processing for large tables
+- **`postgres_loader.py`**: PostgresLoader for MySQL-to-PostgreSQL loading with chunked processing for large tables (**updated for simplified configuration structure**)
 
 ### 4. **Data Transformation** (`transformers/`)
 Schema and data transformation:
@@ -60,12 +61,12 @@ Schema and data transformation:
 - **`raw_to_public.py`**: RawToPublicTransformer for converting raw data to public schema
 
 ### 5. **Configuration** (`config/`)
-Modern configuration management:
+**Simplified, modern configuration management**:
 
-- **`settings.py`**: Settings class for centralized configuration management
+- **`settings.py`**: **Clean Settings class** - centralized configuration management with **single-section tables.yml structure**
 - **`logging.py`**: Advanced logging configuration
 - **`pipeline.yml`**: Pipeline configuration
-- **`tables.yml`**: Table-specific configurations with priority levels
+- **`tables.yml`**: **Simplified table configurations** with priority levels and comprehensive metadata
 
 ### 6. **Command Line Interface** (`cli/`)
 User-friendly command interface:
@@ -78,12 +79,18 @@ Observability and metrics:
 
 - **`unified_metrics.py`**: UnifiedMetricsCollector for comprehensive metrics collection
 
+### 8. **Schema Analysis** (`scripts/`)
+**Single source of truth for schema analysis**:
+
+- **`analyze_opendental_schema.py`**: **THE main schema analysis script** - generates complete `tables.yml` configuration using SchemaDiscovery
+
 ## Data Flow
 
 ### 1. **Extract Phase**
 ```
-Source MySQL → ExactMySQLReplicator → Replication MySQL
+Source MySQL → SchemaDiscovery → ExactMySQLReplicator → Replication MySQL
 ```
+- **Single SchemaDiscovery instance** performs ALL schema analysis
 - Exact schema replication with validation
 - Intelligent incremental vs full refresh
 - Schema change detection and handling
@@ -106,14 +113,21 @@ PostgreSQL (raw) → RawToPublicTransformer → PostgreSQL (public)
 
 ### 4. **Orchestration**
 ```
-PipelineOrchestrator → PriorityProcessor → TableProcessor
+PipelineOrchestrator → PriorityProcessor → TableProcessor → SchemaDiscovery
 ```
+- **SchemaDiscovery provides ALL schema information** to all components
 - Priority-based table processing (critical → important → audit → reference)
 - Parallel processing for critical tables
 - Sequential processing for resource management
 - Comprehensive error handling and recovery
 
 ## Key Features
+
+### **Single Source of Truth Architecture**
+- **SchemaDiscovery**: ALL schema analysis happens in one place
+- **No Duplicate Code**: Eliminated duplicate schema analysis across components
+- **Simplified Configuration**: Single `tables.yml` structure with comprehensive metadata
+- **Explicit Dependencies**: All components require SchemaDiscovery for schema operations
 
 ### **Intelligent Processing**
 - **Priority-Based**: Tables processed by importance (critical, important, audit, reference)
@@ -222,6 +236,18 @@ GRANT ALL PRIVILEGES ON SCHEMA public_marts TO analytics_user;
 pip install -r requirements.txt
 ```
 
+### 4. **Generate Schema Configuration**
+
+**Single command to generate complete schema analysis and configuration**:
+```bash
+python etl_pipeline/scripts/analyze_opendental_schema.py
+```
+
+This generates:
+- `etl_pipeline/config/tables.yml` - Complete table configurations
+- Detailed analysis reports and logs
+- Summary statistics and recommendations
+
 ## Usage
 
 ### **Command Line Interface**
@@ -247,9 +273,13 @@ python -m etl_pipeline status
 
 ```python
 from etl_pipeline.orchestration import PipelineOrchestrator
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
-# Initialize and run pipeline
-with PipelineOrchestrator() as orchestrator:
+# Initialize SchemaDiscovery (single source of truth)
+schema_discovery = SchemaDiscovery(source_engine, source_db)
+
+# Initialize and run pipeline with SchemaDiscovery
+with PipelineOrchestrator(schema_discovery=schema_discovery) as orchestrator:
     orchestrator.initialize_connections()
     
     # Process single table
@@ -270,7 +300,7 @@ from etl_pipeline.config.settings import Settings
 # Access configuration
 settings = Settings()
 table_config = settings.get_table_config('patient')
-critical_tables = settings.get_tables_by_priority('critical')
+critical_tables = settings.get_tables_by_importance('critical')
 ```
 
 ## Monitoring and Observability
@@ -278,6 +308,7 @@ critical_tables = settings.get_tables_by_priority('critical')
 ### **Logging**
 - **Pipeline Logs**: `etl_pipeline.log` - Main pipeline operations
 - **Connection Logs**: `connection.log` - Database connection events
+- **Schema Analysis Logs**: `schema_analysis_YYYYMMDD_HHMMSS.log` - Schema discovery and configuration generation
 - **Error Logs**: Detailed error tracking and debugging information
 
 ### **Metrics Collection**
@@ -298,28 +329,37 @@ critical_tables = settings.get_tables_by_priority('critical')
 etl_pipeline/
 ├── orchestration/     # Pipeline orchestration and coordination
 ├── core/             # Core pipeline components and utilities
+│   └── schema_discovery.py  # ← Single source of truth for schema analysis
 ├── loaders/          # Data loading components
 ├── transformers/     # Data transformation components
 ├── config/           # Configuration management
 ├── cli/              # Command line interface
 ├── monitoring/       # Monitoring and metrics
+├── scripts/          # Schema analysis scripts
+│   └── analyze_opendental_schema.py  # ← Main schema analysis script
 ├── tests/            # Comprehensive test suite
 └── docs/             # Documentation
 ```
 
 ### **Testing Strategy**
-- **Unit Tests**: Individual component testing
-- **Integration Tests**: End-to-end pipeline testing
+- **Unit Tests**: Individual component testing with SchemaDiscovery mocking
+- **Integration Tests**: End-to-end pipeline testing with real SchemaDiscovery
 - **Performance Tests**: Large dataset processing validation
 - **Error Handling Tests**: Failure scenario validation
 
 ### **Adding New Tables**
-1. Tables are automatically detected from source database
+1. Tables are automatically detected from source database by SchemaDiscovery
 2. Configuration in `tables.yml` defines processing behavior
 3. Priority levels determine processing order and strategy
-4. No code changes required for standard tables
+4. **No code changes required** - SchemaDiscovery handles everything automatically
 
 ## Performance Optimization
+
+### **Single Schema Analysis**
+- **SchemaDiscovery runs once** per pipeline execution
+- **Comprehensive caching** for all schema information
+- **Batch analysis** for efficiency
+- **No duplicate queries** across components
 
 ### **Parallel Processing**
 - Critical tables processed in parallel for speed
@@ -355,10 +395,16 @@ etl_pipeline/
    - Check batch sizes for large tables
    - Review database indexes and query optimization
 
+4. **Schema Analysis Issues**
+   - Run `analyze_opendental_schema.py` to regenerate configurations
+   - Check SchemaDiscovery logs for analysis errors
+   - Verify source database connectivity
+
 ### **Debugging Tools**
 - **Detailed Logging**: Comprehensive log output for debugging
 - **Status Commands**: CLI commands for pipeline status
 - **Configuration Validation**: Settings validation and error reporting
+- **Schema Analysis Reports**: Detailed analysis from SchemaDiscovery
 
 ## Contributing
 
