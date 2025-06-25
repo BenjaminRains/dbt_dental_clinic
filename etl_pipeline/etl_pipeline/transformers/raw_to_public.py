@@ -504,11 +504,26 @@ class RawToPublicTransformer:
     def _ensure_table_exists(self, table_name: str, df: pd.DataFrame):
         """Ensure the target table exists with correct structure."""
         try:
-            # Create table with appropriate structure
-            create_table_sql = self._generate_create_table_sql(table_name, df)
-            
             with self.target_engine.connect() as conn:
-                conn.execute(text(create_table_sql))
+                # Check if table exists
+                check_query = text(f"""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = '{self.target_schema}' 
+                        AND table_name = '{table_name}'
+                    )
+                """)
+                result = conn.execute(check_query)
+                table_exists = result.scalar()
+                
+                if not table_exists:
+                    # Create table with appropriate structure
+                    create_table_sql = self._generate_create_table_sql(table_name, df)
+                    conn.execute(text(create_table_sql))
+                    logger.info(f"Created table {self.target_schema}.{table_name}")
+                else:
+                    logger.debug(f"Table {self.target_schema}.{table_name} already exists")
+                
                 conn.commit()
                 
         except Exception as e:
@@ -541,74 +556,181 @@ class RawToPublicTransformer:
         """
         Get column type mappings for a table.
         
-        MISSING IMPLEMENTATION: This method is called by _convert_data_types but
-        is not implemented. It should return a dictionary mapping column names
-        to their target PostgreSQL data types.
+        Basic implementation that provides common type mappings.
+        In a production environment, this would load from configuration files.
         
-        TODO: Implement this method to:
-        1. Load column type mappings from configuration files
-        2. Define default type mappings for common columns
-        3. Handle dental-specific data types
-        4. Provide fallback mappings for unknown columns
-        5. Support table-specific type overrides
-        
-        Example return value:
-        {
+        Args:
+            table_name: Name of the table
+            
+        Returns:
+            Dict mapping column names to PostgreSQL data types
+        """
+        # Basic type mappings for common dental clinic columns
+        common_mappings = {
+            # Patient table
+            'patnum': 'integer',
+            'lname': 'varchar(255)',
+            'fname': 'varchar(255)',
+            'birthdate': 'date',
+            'gender': 'varchar(10)',
+            'ssn': 'varchar(20)',
+            'address': 'varchar(500)',
+            'city': 'varchar(100)',
+            'state': 'varchar(50)',
+            'zip': 'varchar(20)',
+            
+            # Appointment table
+            'aptnum': 'integer',
+            'aptdatetime': 'timestamp',
+            'aptstatus': 'varchar(50)',
+            'prognote': 'text',
+            
+            # Procedure table
+            'procnum': 'integer',
+            'procdate': 'date',
+            'procstatus': 'varchar(50)',
+            'procnote': 'text',
+            
+            # Common fields
             'id': 'integer',
             'name': 'varchar(255)',
+            'description': 'text',
             'created_date': 'timestamp',
-            'is_active': 'boolean'
+            'updated_date': 'timestamp',
+            'is_active': 'boolean',
+            'status': 'varchar(50)',
+            'type': 'varchar(100)',
+            'code': 'varchar(50)',
+            'amount': 'decimal(10,2)',
+            'quantity': 'integer',
+            'date': 'date',
+            'datetime': 'timestamp',
+            'time': 'time',
+            'email': 'varchar(255)',
+            'phone': 'varchar(50)',
+            'notes': 'text',
+            'comments': 'text'
         }
-        """
-        # TODO: Implement column type mapping logic
-        logger.warning(f"Column type mapping not implemented for table: {table_name}")
-        return {}
+        
+        # Table-specific overrides
+        table_specific = {
+            'patient': {
+                'patnum': 'integer',
+                'lname': 'varchar(255)',
+                'fname': 'varchar(255)',
+                'birthdate': 'date',
+                'gender': 'varchar(10)',
+                'ssn': 'varchar(20)',
+                'address': 'varchar(500)',
+                'city': 'varchar(100)',
+                'state': 'varchar(50)',
+                'zip': 'varchar(20)'
+            },
+            'appointment': {
+                'aptnum': 'integer',
+                'patnum': 'integer',
+                'aptdatetime': 'timestamp',
+                'aptstatus': 'varchar(50)',
+                'prognote': 'text'
+            },
+            'procedurelog': {
+                'procnum': 'integer',
+                'patnum': 'integer',
+                'procdate': 'date',
+                'procstatus': 'varchar(50)',
+                'procnote': 'text'
+            }
+        }
+        
+        # Return table-specific mappings if available, otherwise common mappings
+        if table_name.lower() in table_specific:
+            return table_specific[table_name.lower()]
+        
+        return common_mappings
         
     def _generate_create_table_sql(self, table_name: str, df: pd.DataFrame) -> str:
         """
-        Generate CREATE TABLE SQL statement for a DataFrame.
-        
-        MISSING IMPLEMENTATION: This method is called by _ensure_table_exists but
-        is not implemented. It should generate appropriate PostgreSQL CREATE TABLE
-        statements based on the DataFrame structure.
-        
-        TODO: Implement this method to:
-        1. Analyze DataFrame column types and data
-        2. Generate appropriate PostgreSQL data types
-        3. Handle primary keys and constraints
-        4. Support table-specific schema requirements
-        5. Generate indexes and other database objects
+        Generate PostgreSQL CREATE TABLE statement from DataFrame structure.
         
         Args:
             table_name: Name of the table to create
             df: DataFrame containing the data structure
             
         Returns:
-            str: CREATE TABLE SQL statement
+            str: PostgreSQL CREATE TABLE statement
         """
-        # TODO: Implement CREATE TABLE SQL generation
-        logger.warning(f"CREATE TABLE SQL generation not implemented for table: {table_name}")
-        
-        # Basic placeholder implementation
-        columns = []
-        for col, dtype in df.dtypes.items():
-            if 'int' in str(dtype):
-                pg_type = 'INTEGER'
-            elif 'float' in str(dtype):
-                pg_type = 'NUMERIC'
-            elif 'datetime' in str(dtype):
-                pg_type = 'TIMESTAMP'
-            elif 'bool' in str(dtype):
-                pg_type = 'BOOLEAN'
-            else:
-                pg_type = 'TEXT'
-            columns.append(f'"{col.lower()}" {pg_type}')
+        try:
+            # Get column type mappings
+            column_types = self._get_column_types(table_name)
             
-        return f"""
-        CREATE TABLE IF NOT EXISTS {self.target_schema}.{table_name} (
-            {', '.join(columns)}
-        );
-        """
+            # Generate column definitions
+            column_definitions = []
+            for col in df.columns:
+                col_lower = col.lower()
+                
+                # Get PostgreSQL type for this column
+                pg_type = column_types.get(col_lower, 'text')  # Default to text
+                
+                # Handle special cases
+                if col_lower in ['id', 'patnum', 'aptnum', 'procnum']:
+                    pg_type = 'integer'
+                elif col_lower in ['birthdate', 'procdate', 'date']:
+                    pg_type = 'date'
+                elif col_lower in ['aptdatetime', 'created_date', 'updated_date', 'datetime']:
+                    pg_type = 'timestamp'
+                elif col_lower in ['is_active', 'is_hidden']:
+                    pg_type = 'boolean'
+                elif col_lower in ['amount', 'price', 'cost']:
+                    pg_type = 'decimal(10,2)'
+                elif col_lower in ['ssn', 'phone']:
+                    pg_type = 'varchar(20)'
+                elif col_lower in ['email']:
+                    pg_type = 'varchar(255)'
+                elif col_lower in ['notes', 'comments', 'description']:
+                    pg_type = 'text'
+                elif col_lower in ['name', 'lname', 'fname']:
+                    pg_type = 'varchar(255)'
+                elif col_lower in ['address']:
+                    pg_type = 'varchar(500)'
+                elif col_lower in ['city']:
+                    pg_type = 'varchar(100)'
+                elif col_lower in ['state']:
+                    pg_type = 'varchar(50)'
+                elif col_lower in ['zip']:
+                    pg_type = 'varchar(20)'
+                elif col_lower in ['gender']:
+                    pg_type = 'varchar(10)'
+                elif col_lower in ['status', 'type']:
+                    pg_type = 'varchar(50)'
+                else:
+                    # Default mapping based on data type
+                    if df[col].dtype == 'int64':
+                        pg_type = 'integer'
+                    elif df[col].dtype == 'float64':
+                        pg_type = 'decimal(10,2)'
+                    elif df[col].dtype == 'bool':
+                        pg_type = 'boolean'
+                    elif df[col].dtype == 'datetime64[ns]':
+                        pg_type = 'timestamp'
+                    else:
+                        pg_type = 'text'
+                
+                column_definitions.append(f'    "{col}" {pg_type}')
+            
+            # Create the CREATE TABLE statement
+            column_defs_str = ',\n'.join(column_definitions)
+            create_sql = f"""CREATE TABLE {self.target_schema}.{table_name} (
+{column_defs_str}
+)"""
+            
+            return create_sql
+            
+        except Exception as e:
+            logger.error(f"Error generating CREATE TABLE SQL for {table_name}: {str(e)}")
+            # Return a basic CREATE TABLE statement as fallback
+            return f"""CREATE TABLE {self.target_schema}.{table_name} (
+    id integer
+)"""
         
     def _handle_incremental_update(self, conn, table_name: str, df: pd.DataFrame):
         """
