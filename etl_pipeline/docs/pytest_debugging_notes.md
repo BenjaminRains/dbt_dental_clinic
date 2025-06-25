@@ -448,10 +448,10 @@ mock_func.side_effect = lambda **kwargs: logger.debug("Mock called")
 **Real-world example from PriorityProcessor:**
 ```python
 # WRONG - fails when called with kwargs
-settings.get_tables_by_priority.side_effect = lambda importance: {...}
+settings.get_tables_by_importance.side_effect = lambda importance: {...}
 
 # CORRECT - accepts any kwargs
-settings.get_tables_by_priority.side_effect = lambda importance, **kwargs: {...}
+settings.get_tables_by_importance.side_effect = lambda importance, **kwargs: {...}
 ```
 
 This approach makes your mocks more robust and prevents unexpected failures when the real function's signature changes or when called with additional parameters.
