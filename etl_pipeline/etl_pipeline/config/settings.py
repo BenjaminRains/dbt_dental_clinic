@@ -21,7 +21,7 @@ Usage:
 """
 import os
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from pathlib import Path
 from dotenv import load_dotenv
 import yaml
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class Settings:
     """Configuration settings manager."""
     
-    # Environment variable mappings
+    # Environment variable mappings for base database connections
     ENV_MAPPINGS = {
         'source': {
             'host': 'OPENDENTAL_SOURCE_HOST',
@@ -56,6 +56,23 @@ class Settings:
             'user': 'POSTGRES_ANALYTICS_USER',
             'password': 'POSTGRES_ANALYTICS_PASSWORD'
         }
+    }
+    
+    # Mapping from specific connection names to base connection types
+    CONNECTION_MAPPINGS = {
+        # Specific connection names -> base connection types
+        'opendental_source': 'source',
+        'opendental_replication': 'replication',
+        'opendental_analytics_public': 'analytics',
+        'opendental_analytics_raw': 'analytics',
+        'opendental_analytics_staging': 'analytics',
+        'opendental_analytics_intermediate': 'analytics',
+        'opendental_analytics_marts': 'analytics',
+        
+        # Legacy names for backward compatibility
+        'source': 'source',
+        'staging': 'replication',  # staging was actually replication
+        'target': 'analytics'      # target was actually analytics
     }
     
     def __init__(self):
@@ -123,7 +140,10 @@ class Settings:
         if db_type in self._connection_cache:
             return self._connection_cache[db_type]
         
-        config = self._get_base_config(db_type)
+        # Map specific connection names to base connection types
+        base_db_type = self.CONNECTION_MAPPINGS.get(db_type, db_type)
+        
+        config = self._get_base_config(base_db_type)
         
         # Merge with any pipeline config overrides
         pipeline_connections = self.pipeline_config.get('connections', {})
@@ -131,7 +151,7 @@ class Settings:
             config.update(pipeline_connections[db_type])
         
         # Add default connection parameters
-        if db_type in ['source', 'replication']:  # Updated to match new naming
+        if base_db_type in ['source', 'replication']:
             # MySQL defaults
             config.setdefault('connect_timeout', 10)
             config.setdefault('read_timeout', 30)
@@ -141,6 +161,20 @@ class Settings:
             # PostgreSQL defaults
             config.setdefault('connect_timeout', 10)
             config.setdefault('application_name', 'etl_pipeline')
+            
+            # Handle schema-specific configurations for analytics
+            if db_type in ['opendental_analytics_public', 'opendental_analytics_raw', 
+                          'opendental_analytics_staging', 'opendental_analytics_intermediate', 
+                          'opendental_analytics_marts']:
+                # Extract schema from connection name
+                schema_map = {
+                    'opendental_analytics_public': 'public',
+                    'opendental_analytics_raw': 'raw',
+                    'opendental_analytics_staging': 'public_staging',
+                    'opendental_analytics_intermediate': 'public_intermediate',
+                    'opendental_analytics_marts': 'public_marts'
+                }
+                config['schema'] = schema_map.get(db_type, 'public')
         
         self._connection_cache[db_type] = config
         return config
@@ -175,7 +209,10 @@ class Settings:
         if missing_fields:
             raise ValueError(f"Missing required database config fields for {db_type}: {missing_fields}")
         
-        if db_type in ['source', 'replication']:  # Updated to match new naming
+        # Map specific connection names to base connection types
+        base_db_type = self.CONNECTION_MAPPINGS.get(db_type, db_type)
+        
+        if base_db_type in ['source', 'replication']:
             # MySQL connection string
             return (
                 f"mysql+pymysql://{config['user']}:{config['password']}@"
@@ -275,6 +312,25 @@ class Settings:
         """
         table_config = self.get_table_config(table_name)
         return table_config.get('incremental', False)
+    
+    def get_tables_by_priority(self, importance_level: str, table_type: str = 'source_tables') -> List[str]:
+        """Get list of tables by importance level.
+        
+        Args:
+            importance_level: The importance level to filter by (critical, important, audit, reference)
+            table_type: The type of tables to search (default: 'source_tables')
+            
+        Returns:
+            List of table names that match the importance level
+        """
+        tables = self.tables_config.get(table_type, {})
+        matching_tables = []
+        
+        for table_name, table_config in tables.items():
+            if table_config.get('table_importance') == importance_level:
+                matching_tables.append(table_name)
+        
+        return matching_tables
 
 # Create global settings instance
 settings = Settings()
