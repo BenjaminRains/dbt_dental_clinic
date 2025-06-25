@@ -268,3 +268,148 @@ class ConnectionFactory:
             pool_timeout=pool_timeout,
             pool_recycle=pool_recycle
         )
+
+    # New specific schema connection methods
+    @classmethod
+    def get_opendental_analytics_raw_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics database raw schema."""
+        return cls.get_postgres_analytics_connection(
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_analytics_public_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics database public schema."""
+        # Get environment variables
+        host = os.getenv('POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('POSTGRES_ANALYTICS_DB')
+        schema = 'public'  # Explicitly use public schema
+        user = os.getenv('POSTGRES_ANALYTICS_USER')
+        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using analytics public connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_analytics_staging_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics database public_staging schema."""
+        # Get environment variables
+        host = os.getenv('POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('POSTGRES_ANALYTICS_DB')
+        schema = 'public_staging'  # Explicitly use public_staging schema
+        user = os.getenv('POSTGRES_ANALYTICS_USER')
+        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using analytics staging connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_analytics_intermediate_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics database public_intermediate schema."""
+        # Get environment variables
+        host = os.getenv('POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('POSTGRES_ANALYTICS_DB')
+        schema = 'public_intermediate'  # Explicitly use public_intermediate schema
+        user = os.getenv('POSTGRES_ANALYTICS_USER')
+        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using analytics intermediate connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_analytics_marts_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics database public_marts schema."""
+        # Get environment variables
+        host = os.getenv('POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('POSTGRES_ANALYTICS_DB')
+        schema = 'public_marts'  # Explicitly use public_marts schema
+        user = os.getenv('POSTGRES_ANALYTICS_USER')
+        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using analytics marts connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
