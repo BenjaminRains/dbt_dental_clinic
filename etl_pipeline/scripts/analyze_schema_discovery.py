@@ -11,15 +11,10 @@ import json
 from datetime import datetime
 from tabulate import tabulate
 from dotenv import load_dotenv
-from etl_pipeline.scripts.generate_table_config import (
-    get_optimized_source_engine,
-    analyze_table_relationships,
-    analyze_table_usage,
-    determine_table_importance
-)
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
 from etl_pipeline.core.connections import ConnectionFactory
 from sqlalchemy import text
+import sys
 
 # Load environment variables
 load_dotenv()
@@ -49,219 +44,134 @@ def test_database_connection():
         print(f"❌ Database connection failed: {str(e)}")
         raise
 
-def test_schema_discovery(source_engine, replication_engine, table_name: str):
-    """Test SchemaDiscovery functionality for a single table."""
-    print(f"\n🔍 Testing SchemaDiscovery for table: {table_name}")
-    
-    schema_discovery = SchemaDiscovery(
-        source_engine, 
-        replication_engine, 
-        os.getenv('SOURCE_MYSQL_DB'), 
-        os.getenv('REPLICATION_MYSQL_DB')
-    )
-    
-    # Get schema information
-    schema_info = schema_discovery.get_table_schema(table_name)
-    print("\n📋 Schema Information:")
-    print(f"- Engine: {schema_info['metadata']['engine']}")
-    print(f"- Row Count: {schema_info['metadata']['row_count']}")
-    print(f"- Indexes: {len(schema_info['indexes'])}")
-    print(f"- Foreign Keys: {len(schema_info['foreign_keys'])}")
-    
-    # Display detailed column information
-    print("\n📊 Column Information:")
-    columns_data = []
-    for col in schema_info['columns']:
-        columns_data.append([
-            col['name'],
-            col['type'],
-            'NULL' if col['is_nullable'] else 'NOT NULL',
-            col['key_type'] or '',
-            col['default'] or '',
-            col['extra'] or ''
-        ])
-    
-    print(tabulate(
-        columns_data,
-        headers=['Column', 'Type', 'Nullable', 'Key', 'Default', 'Extra'],
-        tablefmt='grid'
-    ))
-    
-    # Get incremental columns
-    incremental_columns = schema_discovery.get_incremental_columns(table_name)
-    print("\n⏱️ Incremental Columns:")
-    for col in incremental_columns:
-        print(f"- {col['column_name']} ({col['data_type']}) - Priority: {col['priority']}")
-    
-    return schema_info, incremental_columns
-
-def get_test_tables(engine, limit: int = 10):
-    """Get a small subset of tables for testing."""
-    with engine.connect() as conn:
-        # Get all tables from the database
-        query = text("""
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = :db_name
-            AND table_type = 'BASE TABLE'
-            ORDER BY table_name
-            LIMIT :limit
-        """)
-        
-        results = conn.execute(
-            query, 
-            {
-                'db_name': os.getenv('SOURCE_MYSQL_DB'),
-                'limit': limit
-            }
-        ).fetchall()
-        return [row.table_name for row in results]
-
-def display_relationship_analysis(relationships: dict):
-    """Display table relationship analysis results."""
-    print("\n📊 Table Relationship Analysis:")
-    
-    # Prepare data for display
-    data = []
-    for table, metrics in relationships.items():
-        data.append([
-            table,
-            metrics['referenced_by_count'],
-            metrics['references_count'],
-            f"{metrics['pagerank_score']:.4f}",
-            "Yes" if metrics['is_core_reference'] else "No"
-        ])
-    
-    # Display table
-    print(tabulate(
-        data,
-        headers=['Table', 'Referenced By', 'References', 'PageRank', 'Core Reference'],
-        tablefmt='grid'
-    ))
-
-def display_usage_analysis(usage: dict):
-    """Display table usage analysis results."""
-    print("\n📈 Table Usage Analysis:")
-    
-    # Prepare data for display
-    data = []
-    for table, metrics in usage.items():
-        data.append([
-            table,
-            f"{metrics['size_mb']:.2f} MB",
-            metrics['row_count'],
-            metrics['update_frequency'],
-            "Yes" if metrics['has_audit_columns'] else "No",
-            "Yes" if metrics['has_timestamp_columns'] else "No",
-            "Yes" if metrics['has_soft_delete'] else "No"
-        ])
-    
-    # Display table
-    print(tabulate(
-        data,
-        headers=['Table', 'Size', 'Rows', 'Update Freq', 'Audit Cols', 'Timestamp Cols', 'Soft Delete'],
-        tablefmt='grid'
-    ))
-
-def display_importance_analysis(importance: dict, relationships: dict, usage: dict):
-    """Display table importance analysis results."""
-    print("\n🎯 Table Importance Analysis:")
-    
-    # Calculate scores for display
-    data = []
-    for table in importance.keys():
-        rel_metrics = relationships[table]
-        usage_metrics = usage[table]
-        
-        # Calculate score components
-        ref_score = rel_metrics['referenced_by_count'] * 2
-        pagerank_score = rel_metrics['pagerank_score'] * 100
-        core_bonus = 50 if rel_metrics['is_core_reference'] else 0
-        audit_score = 30 if usage_metrics['has_audit_columns'] else 0
-        timestamp_score = 20 if usage_metrics['has_timestamp_columns'] else 0
-        update_score = 25 if usage_metrics['update_frequency'] == 'high' else 0
-        size_score = 15 if usage_metrics['size_mb'] > 100 else 0
-        
-        total_score = ref_score + pagerank_score + core_bonus + audit_score + timestamp_score + update_score + size_score
-        
-        data.append([
-            table,
-            importance[table],
-            total_score,
-            ref_score,
-            pagerank_score,
-            core_bonus,
-            audit_score + timestamp_score + update_score + size_score
-        ])
-    
-    # Sort by total score
-    data.sort(key=lambda x: x[2], reverse=True)
-    
-    # Display table
-    print(tabulate(
-        data,
-        headers=['Table', 'Importance', 'Total Score', 'Ref Score', 'PageRank', 'Core Bonus', 'Usage Score'],
-        tablefmt='grid'
-    ))
-
-def save_test_results(relationships: dict, usage: dict, importance: dict, schema_info: dict = None):
-    """Save test results to a JSON file."""
-    results = {
-        'timestamp': datetime.now().isoformat(),
-        'relationships': relationships,
-        'usage': usage,
-        'importance': importance
-    }
-    
-    if schema_info:
-        results['schema_info'] = schema_info
-    
-    # Create logs directory if it doesn't exist
-    os.makedirs('etl_pipeline/logs', exist_ok=True)
-    
-    # Save results
-    output_file = f'etl_pipeline/logs/schema_discovery_test_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
-    with open(output_file, 'w') as f:
-        json.dump(results, f, indent=2)
-    
-    print(f"\n💾 Test results saved to: {output_file}")
-
-def main():
-    """Main test function."""
-    print("🔍 Starting Schema Discovery Test")
-    print("=" * 50)
+def test_schema_discovery():
+    """Test SchemaDiscovery functionality."""
+    print("Testing SchemaDiscovery")
+    print("=" * 40)
     
     try:
         # Test database connections
-        source_engine, replication_engine = test_database_connection()
+        source_engine = ConnectionFactory.get_opendental_source_connection()
+        replication_engine = ConnectionFactory.get_opendental_replication_connection()
         
-        # Get test tables
-        test_tables = get_test_tables(source_engine, limit=5)  # Reduced to 5 for clearer output
-        print(f"\n📋 Testing with {len(test_tables)} tables:")
-        print(", ".join(test_tables))
+        print("Source database connection successful (readonly)")
+        print("Replication database connection successful")
         
-        # Test SchemaDiscovery for first table
-        schema_info, incremental_columns = test_schema_discovery(source_engine, replication_engine, test_tables[0])
+        # Test SchemaDiscovery initialization
+        schema_discovery = SchemaDiscovery()
         
-        # Run configuration analysis
-        print("\n🔄 Running configuration analysis...")
-        relationships = analyze_table_relationships(source_engine, os.getenv('SOURCE_MYSQL_DB'), test_tables)
-        usage = analyze_table_usage(source_engine, os.getenv('SOURCE_MYSQL_DB'), test_tables)
-        importance = determine_table_importance(relationships, usage)
+        # Test table discovery
+        tables = schema_discovery.discover_all_tables()
+        if not tables:
+            print("No tables found")
+            return False
         
-        # Display results
-        display_relationship_analysis(relationships)
-        display_usage_analysis(usage)
-        display_importance_analysis(importance, relationships, usage)
+        # Test with first table
+        table_name = tables[0]
+        print(f"\nTesting SchemaDiscovery for table: {table_name}")
         
-        # Save results
-        save_test_results(relationships, usage, importance, schema_info)
+        # Test schema retrieval
+        schema = schema_discovery.get_table_schema(table_name)
+        print("\nSchema Information:")
+        print(f"  Columns: {len(schema.get('columns', []))}")
+        print(f"  Indexes: {len(schema.get('indexes', []))}")
+        print(f"  Foreign Keys: {len(schema.get('foreign_keys', []))}")
         
-        print("\n✅ Test completed successfully")
+        # Test column information
+        print("\nColumn Information:")
+        for col in schema.get('columns', [])[:5]:  # Show first 5 columns
+            print(f"  {col['name']}: {col['type']} ({col['nullable']})")
+        
+        # Test size information
+        size_info = schema_discovery.get_table_size_info(table_name)
+        print(f"\nSize Info: {size_info.get('row_count', 0)} rows, {size_info.get('total_size_mb', 0):.2f} MB")
+        
+        # Test incremental columns
+        incremental_cols = schema_discovery.get_incremental_columns(table_name)
+        print(f"\nIncremental Columns:")
+        for col in incremental_cols:
+            print(f"  {col['name']}: {col['type']}")
+        
+        # Test relationship analysis
+        test_tables = tables[:3]
+        print(f"\nTable Relationship Analysis:")
+        relationships = schema_discovery.analyze_table_relationships(test_tables)
+        for table, deps in relationships.items():
+            if deps:
+                print(f"  {table}: {len(deps)} dependencies")
+        
+        # Test usage pattern analysis
+        print(f"\nTable Usage Analysis:")
+        usage_patterns = schema_discovery.analyze_table_usage_patterns(test_tables)
+        for table, pattern in usage_patterns.items():
+            print(f"  {table}: {pattern.get('update_frequency', 'unknown')}")
+        
+        # Test importance determination
+        print(f"\nTable Importance Analysis:")
+        importance_scores = schema_discovery.determine_table_importance(test_tables)
+        for table, importance in importance_scores.items():
+            print(f"  {table}: {importance}")
+        
+        return True
         
     except Exception as e:
-        print(f"\n❌ Test failed: {str(e)}")
-        raise
+        print(f"Database connection failed: {str(e)}")
+        return False
+
+def test_complete_analysis():
+    """Test complete schema analysis."""
+    print("\nTesting Complete Schema Analysis")
+    print("=" * 50)
+    
+    try:
+        schema_discovery = SchemaDiscovery()
+        tables = schema_discovery.discover_all_tables()
+        
+        if not tables:
+            print("No tables found")
+            return False
+        
+        # Test with limited tables for performance
+        test_tables = tables[:5]
+        print(f"\nTesting with {len(test_tables)} tables:")
+        for table in test_tables:
+            print(f"  {table}")
+        
+        # Run complete analysis
+        analysis = schema_discovery.analyze_complete_schema(test_tables)
+        
+        # Save test results
+        output_file = 'test_schema_analysis.json'
+        with open(output_file, 'w') as f:
+            json.dump(analysis, f, indent=2, default=str)
+        
+        print(f"\nTest results saved to: {output_file}")
+        print(f"Analysis completed successfully")
+        
+        return True
+        
+    except Exception as e:
+        print(f"\nTest failed: {str(e)}")
+        return False
+
+def main():
+    """Main test function."""
+    print("Schema Discovery Test")
+    print("=" * 30)
+    
+    # Test basic functionality
+    basic_success = test_schema_discovery()
+    
+    # Test complete analysis
+    complete_success = test_complete_analysis()
+    
+    if basic_success and complete_success:
+        print("\nTest completed successfully")
+        return True
+    else:
+        print(f"\nTest failed")
+        return False
 
 if __name__ == "__main__":
-    main() 
+    success = main()
+    sys.exit(0 if success else 1) 
