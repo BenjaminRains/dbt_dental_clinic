@@ -10,6 +10,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from unittest.mock import MagicMock
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
 from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.orchestration.table_processor import TableProcessor
+from etl_pipeline.orchestration.priority_processor import PriorityProcessor
 
 def test_exact_mysql_replicator_integration():
     """Test ExactMySQLReplicator integration with SchemaDiscovery."""
@@ -78,8 +80,11 @@ def test_priority_processor_integration():
     print("=" * 50)
     
     try:
+        # Create mock schema discovery
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        
         # Test PriorityProcessor initialization with SchemaDiscovery
-        processor = PriorityProcessor()
+        processor = PriorityProcessor(schema_discovery=mock_schema_discovery)
         print("PriorityProcessor initialized successfully with SchemaDiscovery")
         
         # Verify SchemaDiscovery is properly set
