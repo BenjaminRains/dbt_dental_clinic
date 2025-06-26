@@ -23,6 +23,7 @@ import logging
 from etl_pipeline.orchestration.priority_processor import PriorityProcessor
 from etl_pipeline.orchestration.table_processor import TableProcessor
 from etl_pipeline.config.settings import Settings
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
 
 class TestPriorityProcessor:
@@ -40,20 +41,28 @@ class TestInitialization(TestPriorityProcessor):
     @pytest.mark.unit
     def test_initialization_with_settings(self, mock_priority_processor_settings):
         """Test successful initialization with provided settings."""
-        processor = PriorityProcessor(settings=mock_priority_processor_settings)
+        # Create mock schema discovery
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        
+        processor = PriorityProcessor(schema_discovery=mock_schema_discovery, settings=mock_priority_processor_settings)
         
         assert processor.settings == mock_priority_processor_settings
+        assert processor.schema_discovery == mock_schema_discovery
     
     @pytest.mark.unit
     def test_initialization_without_settings(self):
         """Test initialization with default settings."""
+        # Create mock schema discovery
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        
         with patch('etl_pipeline.orchestration.priority_processor.Settings') as mock_settings_class:
             mock_settings = MagicMock(spec=Settings)
             mock_settings_class.return_value = mock_settings
             
-            processor = PriorityProcessor()
+            processor = PriorityProcessor(schema_discovery=mock_schema_discovery)
             
             assert processor.settings == mock_settings
+            assert processor.schema_discovery == mock_schema_discovery
             mock_settings_class.assert_called_once()
 
 
