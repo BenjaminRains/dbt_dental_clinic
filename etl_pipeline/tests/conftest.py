@@ -1250,23 +1250,42 @@ def mock_components():
 
 @pytest.fixture
 def orchestrator(mock_components):
-    """Create REAL PipelineOrchestrator instance with mocked dependencies."""
+    """Create PipelineOrchestrator instance with mocked components."""
     with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
         mock_settings.return_value = MagicMock()
         
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor') as mock_processor_class:
-            mock_processor_class.return_value = mock_components['table_processor']
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
+            mock_connection_factory.get_opendental_source_connection.return_value = MagicMock()
             
-            with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor') as mock_priority_class:
-                mock_priority_class.return_value = mock_components['priority_processor']
+            with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
+                mock_schema_discovery = MagicMock()
+                mock_schema_discovery_class.return_value = mock_schema_discovery
                 
-                with patch('etl_pipeline.orchestration.pipeline_orchestrator.UnifiedMetricsCollector') as mock_metrics_class:
-                    mock_metrics_class.return_value = mock_components['metrics']
+                with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor') as mock_processor_class:
+                    mock_processor_class.return_value = mock_components['table_processor']
                     
-                    # Create REAL orchestrator with mocked dependencies
-                    from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
-                    orchestrator = PipelineOrchestrator()
-                    return orchestrator
+                    with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor') as mock_priority_class:
+                        mock_priority_class.return_value = mock_components['priority_processor']
+                        
+                        with patch('etl_pipeline.orchestration.pipeline_orchestrator.UnifiedMetricsCollector') as mock_metrics_class:
+                            mock_metrics_class.return_value = mock_components['metrics']
+                            
+                            # Create REAL orchestrator with mocked dependencies
+                            from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+                            orchestrator = PipelineOrchestrator()
+                            
+                            # Mock the initialize_connections method to avoid real database connections
+                            with patch.object(orchestrator, 'initialize_connections') as mock_init_connections:
+                                mock_init_connections.return_value = True
+                                
+                                # Manually set up the components and state as if initialize_connections was called
+                                orchestrator.table_processor = mock_components['table_processor']
+                                orchestrator.priority_processor = mock_components['priority_processor']
+                                orchestrator.metrics_collector = mock_components['metrics']
+                                orchestrator.schema_discovery = mock_schema_discovery
+                                orchestrator._initialized = True
+                                
+                                return orchestrator
 
 
 @pytest.fixture
@@ -1315,19 +1334,39 @@ def sqlite_compatible_orchestrator(sqlite_engines):
     
     with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
         mock_settings.return_value = MagicMock()
+        mock_settings.return_value.get_database_config.return_value = {'database': 'test_db'}
         
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor') as mock_processor_class:
-            mock_processor_class.return_value = mock_table_processor
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
+            mock_connection_factory.get_opendental_source_connection.return_value = raw_engine
             
-            with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor') as mock_priority_class:
-                mock_priority_class.return_value = mock_priority_processor
+            with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
+                mock_schema_discovery = MagicMock()
+                mock_schema_discovery_class.return_value = mock_schema_discovery
                 
-                with patch('etl_pipeline.orchestration.pipeline_orchestrator.UnifiedMetricsCollector') as mock_metrics_class:
-                    mock_metrics_class.return_value = mock_metrics
+                with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor') as mock_processor_class:
+                    mock_processor_class.return_value = mock_table_processor
                     
-                    from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
-                    orchestrator = PipelineOrchestrator()
-                    return orchestrator 
+                    with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor') as mock_priority_class:
+                        mock_priority_class.return_value = mock_priority_processor
+                        
+                        with patch('etl_pipeline.orchestration.pipeline_orchestrator.UnifiedMetricsCollector') as mock_metrics_class:
+                            mock_metrics_class.return_value = mock_metrics
+                            
+                            from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+                            orchestrator = PipelineOrchestrator()
+                            
+                            # Mock the initialize_connections method to avoid real database connections
+                            with patch.object(orchestrator, 'initialize_connections') as mock_init:
+                                mock_init.return_value = True
+                                
+                                # Set up the orchestrator state manually
+                                orchestrator.schema_discovery = mock_schema_discovery
+                                orchestrator.table_processor = mock_table_processor
+                                orchestrator.priority_processor = mock_priority_processor
+                                orchestrator.metrics = mock_metrics
+                                orchestrator._initialized = True
+                                
+                                return orchestrator
 
 
 # =============================================================================
