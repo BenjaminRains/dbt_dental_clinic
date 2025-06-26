@@ -61,6 +61,7 @@ from ..monitoring.unified_metrics import UnifiedMetricsCollector
 from .table_processor import TableProcessor
 from .priority_processor import PriorityProcessor
 from ..config.settings import Settings
+from ..core.schema_discovery import SchemaDiscovery
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +77,13 @@ class PipelineOrchestrator:
             config_path: Path to the configuration file (deprecated, kept for compatibility)
         """
         self.settings = Settings()
-        self.table_processor = TableProcessor()
-        self.priority_processor = PriorityProcessor()
+        
+        # Defer SchemaDiscovery creation until connections are established
+        self.schema_discovery = None
+        
+        # Initialize components without SchemaDiscovery (will be set during connection initialization)
+        self.table_processor = None
+        self.priority_processor = None
         
         # Initialize metrics
         self.metrics = UnifiedMetricsCollector()
@@ -97,6 +103,15 @@ class PipelineOrchestrator:
         """
         try:
             logger.info("Initializing pipeline connections...")
+            
+            # Create SchemaDiscovery with source database connection
+            source_engine = ConnectionFactory.get_opendental_source_connection()
+            source_db = self.settings.get_database_config('opendental_source')['database']
+            self.schema_discovery = SchemaDiscovery(source_engine, source_db)
+            
+            # Initialize components with SchemaDiscovery
+            self.table_processor = TableProcessor(schema_discovery=self.schema_discovery)
+            self.priority_processor = PriorityProcessor(schema_discovery=self.schema_discovery)
             
             # Initialize table processor connections (handles all database connections)
             success = self.table_processor.initialize_connections()
@@ -118,10 +133,12 @@ class PipelineOrchestrator:
         try:
             if self.table_processor:
                 self.table_processor.cleanup()
-            self._initialized = False
             logger.info("Pipeline cleanup completed")
         except Exception as e:
             logger.error(f"Error during cleanup: {str(e)}")
+        finally:
+            # Always reset initialization state, even if cleanup fails
+            self._initialized = False
             
     def run_pipeline_for_table(self, table_name: str, force_full: bool = False) -> bool:
         """
@@ -161,7 +178,6 @@ class PipelineOrchestrator:
             
         logger.info(f"Processing tables by priority with {max_workers} workers")
         return self.priority_processor.process_by_priority(
-            self.table_processor,
             importance_levels,
             max_workers,
             force_full
