@@ -66,7 +66,7 @@ from ..core.schema_discovery import SchemaDiscovery
 logger = logging.getLogger(__name__)
 
 class PipelineOrchestrator:
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: str = None, environment: str = 'production'):
         """
         Initialize the pipeline orchestrator.
         
@@ -75,8 +75,9 @@ class PipelineOrchestrator:
         
         Args:
             config_path: Path to the configuration file (deprecated, kept for compatibility)
+            environment: Environment name ('production', 'test') for database connections
         """
-        self.settings = Settings()
+        self.settings = Settings(environment=environment)
         
         # Defer SchemaDiscovery creation until connections are established
         self.schema_discovery = None
@@ -102,11 +103,16 @@ class PipelineOrchestrator:
             bool: True if initialization was successful
         """
         try:
-            logger.info("Initializing pipeline connections...")
+            logger.info(f"Initializing pipeline connections for environment: {self.settings.environment}")
             
-            # Create SchemaDiscovery with source database connection
-            source_engine = ConnectionFactory.get_opendental_source_connection()
-            source_db = self.settings.get_database_config('opendental_source')['database']
+            # Create SchemaDiscovery with appropriate source database connection
+            if self.settings.environment == 'test':
+                source_engine = ConnectionFactory.get_opendental_source_test_connection()
+                source_db = self.settings.get_database_config('test_opendental_source')['database']
+            else:
+                source_engine = ConnectionFactory.get_opendental_source_connection()
+                source_db = self.settings.get_database_config('opendental_source')['database']
+            
             self.schema_discovery = SchemaDiscovery(source_engine, source_db)
             
             # Initialize components with SchemaDiscovery
