@@ -705,10 +705,13 @@ class TestPostgresSchemaUnit:
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=None)
         
-        # Add debug logging to mock (Lesson 1)
-        mock_conn.execute.side_effect = lambda **kwargs: logger.debug(f"Mock called with: {kwargs}")
+        # Set up the mock to return the result object and also log
+        def mock_execute(query):
+            logger.debug(f"Mock called with: {query}")
+            return mock_result
+        
+        mock_conn.execute.side_effect = mock_execute
         mock_result.scalar.return_value = 0
-        mock_conn.execute.return_value = mock_result
         mysql_engine.connect.return_value = mock_conn
         
         # Test with debug logging enabled
@@ -732,6 +735,7 @@ class TestPostgresSchemaUnit:
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=None)
         
+        # Set up the mock to return the result object
         mock_conn.execute.return_value = mock_result
         mock_result.scalar.return_value = 0
         mysql_engine.connect.return_value = mock_conn
