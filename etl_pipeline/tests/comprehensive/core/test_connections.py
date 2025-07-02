@@ -295,6 +295,52 @@ def test_get_opendental_analytics_marts_connection(mock_create_engine):
         call_args = mock_create_engine.call_args[1]
         assert call_args['connect_args']['options'] == '-csearch_path=public_marts'
 
+def test_get_mysql_replication_test_connection(mock_create_engine):
+    """Test MySQL replication test connection creation."""
+    with patch.dict('os.environ', {
+        'MYSQL_REPLICATION_TEST_HOST': 'localhost',
+        'MYSQL_REPLICATION_TEST_PORT': '3305',
+        'MYSQL_REPLICATION_TEST_DB': 'opendental_replication_test',
+        'MYSQL_REPLICATION_TEST_USER': 'replication_test_user',
+        'MYSQL_REPLICATION_TEST_PASSWORD': 'test_pass'
+    }):
+        engine = ConnectionFactory.get_mysql_replication_test_connection()
+        assert isinstance(engine, Engine)
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://replication_test_user:test_pass@localhost:3305/opendental_replication_test' in call_args
+
+def test_get_opendental_source_test_connection(mock_create_engine):
+    """Test OpenDental source test connection creation."""
+    with patch.dict('os.environ', {
+        'OPENDENTAL_SOURCE_TEST_HOST': 'client-server',
+        'OPENDENTAL_SOURCE_TEST_PORT': '3306',
+        'OPENDENTAL_SOURCE_TEST_DB': 'opendental_test',
+        'OPENDENTAL_SOURCE_TEST_USER': 'test_user',
+        'OPENDENTAL_SOURCE_TEST_PASSWORD': 'test_pass'
+    }):
+        engine = ConnectionFactory.get_opendental_source_test_connection()
+        assert isinstance(engine, Engine)
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://test_user:test_pass@client-server:3306/opendental_test' in call_args
+
+def test_get_postgres_analytics_test_connection(mock_create_engine):
+    """Test PostgreSQL analytics test connection creation."""
+    with patch.dict('os.environ', {
+        'POSTGRES_ANALYTICS_TEST_HOST': 'localhost',
+        'POSTGRES_ANALYTICS_TEST_PORT': '5432',
+        'POSTGRES_ANALYTICS_TEST_DB': 'opendental_analytics_test',
+        'POSTGRES_ANALYTICS_TEST_SCHEMA': 'raw',
+        'POSTGRES_ANALYTICS_TEST_USER': 'analytics_test_user',
+        'POSTGRES_ANALYTICS_TEST_PASSWORD': 'test_pass'
+    }):
+        engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        assert isinstance(engine, Engine)
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[1]
+        assert call_args['connect_args']['options'] == '-csearch_path=raw'
+
 def test_postgres_connection_with_custom_pool_settings(mock_create_engine):
     """Test PostgreSQL connection with custom pool settings."""
     with patch.dict('os.environ', {
@@ -318,6 +364,77 @@ def test_postgres_connection_with_custom_pool_settings(mock_create_engine):
         assert call_args['max_overflow'] == 25
         assert call_args['pool_timeout'] == 45
         assert call_args['pool_recycle'] == 2400
+
+def test_test_connections_with_custom_pool_settings(mock_create_engine):
+    """Test test database connections with custom pool settings."""
+    # Test MySQL replication test connection with custom settings
+    with patch.dict('os.environ', {
+        'MYSQL_REPLICATION_TEST_HOST': 'localhost',
+        'MYSQL_REPLICATION_TEST_PORT': '3305',
+        'MYSQL_REPLICATION_TEST_DB': 'opendental_replication_test',
+        'MYSQL_REPLICATION_TEST_USER': 'replication_test_user',
+        'MYSQL_REPLICATION_TEST_PASSWORD': 'test_pass'
+    }):
+        engine = ConnectionFactory.get_mysql_replication_test_connection(
+            pool_size=8,
+            max_overflow=15,
+            pool_timeout=40,
+            pool_recycle=2000
+        )
+        assert isinstance(engine, Engine)
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[1]
+        assert call_args['pool_size'] == 8
+        assert call_args['max_overflow'] == 15
+        assert call_args['pool_timeout'] == 40
+        assert call_args['pool_recycle'] == 2000
+
+    # Test OpenDental source test connection with custom settings
+    mock_create_engine.reset_mock()
+    with patch.dict('os.environ', {
+        'OPENDENTAL_SOURCE_TEST_HOST': 'client-server',
+        'OPENDENTAL_SOURCE_TEST_PORT': '3306',
+        'OPENDENTAL_SOURCE_TEST_DB': 'opendental_test',
+        'OPENDENTAL_SOURCE_TEST_USER': 'test_user',
+        'OPENDENTAL_SOURCE_TEST_PASSWORD': 'test_pass'
+    }):
+        engine = ConnectionFactory.get_opendental_source_test_connection(
+            pool_size=3,
+            max_overflow=5,
+            pool_timeout=20,
+            pool_recycle=1000
+        )
+        assert isinstance(engine, Engine)
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[1]
+        assert call_args['pool_size'] == 3
+        assert call_args['max_overflow'] == 5
+        assert call_args['pool_timeout'] == 20
+        assert call_args['pool_recycle'] == 1000
+
+    # Test PostgreSQL analytics test connection with custom settings
+    mock_create_engine.reset_mock()
+    with patch.dict('os.environ', {
+        'POSTGRES_ANALYTICS_TEST_HOST': 'localhost',
+        'POSTGRES_ANALYTICS_TEST_PORT': '5432',
+        'POSTGRES_ANALYTICS_TEST_DB': 'opendental_analytics_test',
+        'POSTGRES_ANALYTICS_TEST_SCHEMA': 'raw',
+        'POSTGRES_ANALYTICS_TEST_USER': 'analytics_test_user',
+        'POSTGRES_ANALYTICS_TEST_PASSWORD': 'test_pass'
+    }):
+        engine = ConnectionFactory.get_postgres_analytics_test_connection(
+            pool_size=4,
+            max_overflow=8,
+            pool_timeout=25,
+            pool_recycle=1200
+        )
+        assert isinstance(engine, Engine)
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[1]
+        assert call_args['pool_size'] == 4
+        assert call_args['max_overflow'] == 8
+        assert call_args['pool_timeout'] == 25
+        assert call_args['pool_recycle'] == 1200
 
 @patch('etl_pipeline.core.connections.logger')
 def test_postgres_default_schema(mock_logger, mock_create_engine):
@@ -382,6 +499,18 @@ def test_environment_variable_missing_handling(mock_create_engine):
         
         with pytest.raises(ValueError) as exc_info:
             ConnectionFactory.get_postgres_analytics_connection()
+        assert "Missing required PostgreSQL connection parameters" in str(exc_info.value)
+        
+        with pytest.raises(ValueError) as exc_info:
+            ConnectionFactory.get_mysql_replication_test_connection()
+        assert "Missing required MySQL connection parameters" in str(exc_info.value)
+        
+        with pytest.raises(ValueError) as exc_info:
+            ConnectionFactory.get_opendental_source_test_connection()
+        assert "Missing required MySQL connection parameters" in str(exc_info.value)
+        
+        with pytest.raises(ValueError) as exc_info:
+            ConnectionFactory.get_postgres_analytics_test_connection()
         assert "Missing required PostgreSQL connection parameters" in str(exc_info.value)
 
 def test_connection_string_formatting():
