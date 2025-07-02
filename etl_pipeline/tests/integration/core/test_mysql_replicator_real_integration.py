@@ -236,7 +236,8 @@ class TestMySQLReplicatorRealIntegration:
                     logger.info("All required test tables are ready")
             
             def cleanup_test_data(self):
-                """Remove all test data from both source and target databases."""
+                """Remove all test data from both source and target databases.
+                Only cleans up data created by this test (REPLICATOR_TEST_*)."""
                 logger.info("Cleaning up test data from both source and target databases...")
                 
                 # Clean up source database
