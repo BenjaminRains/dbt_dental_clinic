@@ -192,7 +192,7 @@ class SchemaDiscovery:
                 conn.execute(text(f"USE {self.source_db}"))
                 
                 # Get CREATE TABLE statement
-                result = conn_mgr.execute_with_retry(f"SHOW CREATE TABLE {table_name}")
+                result = conn_mgr.execute_with_retry(f"SHOW CREATE TABLE `{table_name}`")
                 row = result.fetchone()
                 
                 if not row:
@@ -935,37 +935,41 @@ class SchemaDiscovery:
                 'row_count': 0
             }
         
+        # Use dictionary access to avoid case sensitivity issues
+        row_dict = dict(row._mapping)
         return {
-            'engine': row.Engine or 'InnoDB',
-            'charset': getattr(row, 'Collation', 'utf8mb4_general_ci').split('_')[0] if hasattr(row, 'Collation') else 'utf8mb4',
-            'collation': getattr(row, 'Collation', 'utf8mb4_general_ci') if hasattr(row, 'Collation') else 'utf8mb4_general_ci',
-            'auto_increment': getattr(row, 'Auto_increment', None) if hasattr(row, 'Auto_increment') else None,
-            'row_count': getattr(row, 'Rows', 0) if hasattr(row, 'Rows') else 0
+            'engine': row_dict.get('Engine', 'InnoDB'),
+            'charset': row_dict.get('Collation', 'utf8mb4_general_ci').split('_')[0] if row_dict.get('Collation') else 'utf8mb4',
+            'collation': row_dict.get('Collation', 'utf8mb4_general_ci'),
+            'auto_increment': row_dict.get('Auto_increment'),
+            'row_count': row_dict.get('Rows', 0)
         }
     
     def _get_table_indexes_with_conn(self, conn, table_name: str) -> List[Dict]:
         """Get all indexes for a table using provided connection."""
         query = text("""
             SELECT 
-                index_name,
-                GROUP_CONCAT(column_name ORDER BY seq_in_index) as columns,
-                non_unique,
-                index_type
+                INDEX_NAME,
+                GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) as columns,
+                NON_UNIQUE,
+                INDEX_TYPE
             FROM information_schema.statistics
             WHERE table_schema = :db_name
             AND table_name = :table_name
-            GROUP BY index_name, non_unique, index_type
+            GROUP BY INDEX_NAME, NON_UNIQUE, INDEX_TYPE
         """)
         
         result = conn.execute(query.bindparams(db_name=self.source_db, table_name=table_name))
         
         indexes = []
         for row in result:
+            # Use dictionary access to avoid case sensitivity issues
+            row_dict = dict(row._mapping)
             indexes.append({
-                'name': row.index_name,
-                'columns': row.columns.split(','),
-                'is_unique': not row.non_unique,
-                'type': row.index_type
+                'name': row_dict.get('INDEX_NAME', row_dict.get('index_name')),
+                'columns': row_dict.get('columns', '').split(','),
+                'is_unique': not row_dict.get('NON_UNIQUE', row_dict.get('non_unique')),
+                'type': row_dict.get('INDEX_TYPE', row_dict.get('index_type'))
             })
         
         return indexes
@@ -988,11 +992,13 @@ class SchemaDiscovery:
         
         foreign_keys = []
         for row in result:
+            # Use dictionary access to avoid case sensitivity issues
+            row_dict = dict(row._mapping)
             foreign_keys.append({
-                'name': row.constraint_name,
-                'column': row.column_name,
-                'referenced_table': row.referenced_table_name,
-                'referenced_column': row.referenced_column_name
+                'name': row_dict.get('CONSTRAINT_NAME', row_dict.get('constraint_name')),
+                'column': row_dict.get('COLUMN_NAME', row_dict.get('column_name')),
+                'referenced_table': row_dict.get('REFERENCED_TABLE_NAME', row_dict.get('referenced_table_name')),
+                'referenced_column': row_dict.get('REFERENCED_COLUMN_NAME', row_dict.get('referenced_column_name'))
             })
         
         return foreign_keys
@@ -1018,14 +1024,16 @@ class SchemaDiscovery:
         
         columns = []
         for row in result:
+            # Use dictionary access to avoid case sensitivity issues
+            row_dict = dict(row._mapping)
             columns.append({
-                'name': row.column_name,
-                'type': row.data_type,
-                'is_nullable': row.is_nullable == 'YES',
-                'default': row.column_default,
-                'extra': row.extra,
-                'comment': row.column_comment,
-                'key_type': row.column_key
+                'name': row_dict.get('COLUMN_NAME', row_dict.get('column_name')),
+                'type': row_dict.get('DATA_TYPE', row_dict.get('data_type')),
+                'is_nullable': row_dict.get('IS_NULLABLE', row_dict.get('is_nullable')) == 'YES',
+                'default': row_dict.get('COLUMN_DEFAULT', row_dict.get('column_default')),
+                'extra': row_dict.get('EXTRA', row_dict.get('extra')),
+                'comment': row_dict.get('COLUMN_COMMENT', row_dict.get('column_comment', '')),
+                'key_type': row_dict.get('COLUMN_KEY', row_dict.get('column_key'))
             })
         
         return columns
@@ -1033,9 +1041,14 @@ class SchemaDiscovery:
     def _get_table_size_info_with_conn(self, conn, table_name: str) -> Dict:
         """Get size information for a table using provided connection."""
         try:
-            query = text("""
+            # Get actual row count using COUNT(*)
+            count_query = text(f"SELECT COUNT(*) as row_count FROM `{table_name}`")
+            count_result = conn.execute(count_query)
+            actual_row_count = count_result.scalar()
+            
+            # Get table size information from information_schema
+            size_query = text("""
                     SELECT 
-                        table_rows as row_count,
                         data_length as data_size_bytes,
                         index_length as index_size_bytes,
                         data_length + index_length as total_size_bytes
@@ -1044,12 +1057,12 @@ class SchemaDiscovery:
                     AND table_name = :table_name
             """)
             
-            result = conn.execute(query.bindparams(db_name=self.source_db, table_name=table_name))
+            size_result = conn.execute(size_query.bindparams(db_name=self.source_db, table_name=table_name))
+            size_row = size_result.fetchone()
             
-            row = result.fetchone()
-            if not row:
+            if not size_row:
                 return {
-                    'row_count': 0,
+                    'row_count': actual_row_count,
                     'data_size_bytes': 0,
                     'index_size_bytes': 0,
                     'total_size_bytes': 0,
@@ -1058,16 +1071,19 @@ class SchemaDiscovery:
                     'total_size_mb': 0
                 }
             
+            # Use dictionary access to avoid case sensitivity issues
+            size_row_dict = dict(size_row._mapping)
+            
             # Convert bytes to MB
-            data_size_mb = row.data_size_bytes / (1024 * 1024)
-            index_size_mb = row.index_size_bytes / (1024 * 1024)
-            total_size_mb = row.total_size_bytes / (1024 * 1024)
+            data_size_mb = size_row_dict['data_size_bytes'] / (1024 * 1024) if size_row_dict['data_size_bytes'] else 0
+            index_size_mb = size_row_dict['index_size_bytes'] / (1024 * 1024) if size_row_dict['index_size_bytes'] else 0
+            total_size_mb = size_row_dict['total_size_bytes'] / (1024 * 1024) if size_row_dict['total_size_bytes'] else 0
             
             return {
-                'row_count': row.row_count,
-                'data_size_bytes': row.data_size_bytes,
-                'index_size_bytes': row.index_size_bytes,
-                'total_size_bytes': row.total_size_bytes,
+                'row_count': actual_row_count,
+                'data_size_bytes': size_row_dict['data_size_bytes'] or 0,
+                'index_size_bytes': size_row_dict['index_size_bytes'] or 0,
+                'total_size_bytes': size_row_dict['total_size_bytes'] or 0,
                 'data_size_mb': round(data_size_mb, 2),
                 'index_size_mb': round(index_size_mb, 2),
                 'total_size_mb': round(total_size_mb, 2)
@@ -1087,9 +1103,31 @@ class SchemaDiscovery:
     
     def _calculate_schema_hash(self, create_statement: str) -> str:
         """Calculate a hash of the schema for change detection."""
-        # Normalize the CREATE statement by removing variable parts
-        normalized = re.sub(r'AUTO_INCREMENT=\d+', 'AUTO_INCREMENT=1', create_statement)
+        # Normalize the CREATE statement by removing MySQL version-specific differences
+        normalized = create_statement
+        
+        # Remove AUTO_INCREMENT values (they can differ between versions)
+        normalized = re.sub(r'AUTO_INCREMENT=\d+', 'AUTO_INCREMENT=1', normalized)
+        
+        # Normalize integer display widths (MySQL 8.4 might handle int(11) differently)
+        normalized = re.sub(r'int\(\d+\)', 'int', normalized)
+        normalized = re.sub(r'bigint\(\d+\)', 'bigint', normalized)
+        normalized = re.sub(r'smallint\(\d+\)', 'smallint', normalized)
+        normalized = re.sub(r'tinyint\(\d+\)', 'tinyint', normalized)
+        
+        # Normalize character sets (different defaults between versions)
+        normalized = re.sub(r'CHARACTER SET \w+', '', normalized)
+        normalized = re.sub(r'COLLATE \w+', '', normalized)
+        
+        # Normalize engine specifications (different defaults)
+        normalized = re.sub(r'ENGINE=\w+', '', normalized)
+        
+        # Normalize comment formatting (different syntax between versions)
+        normalized = re.sub(r"COMMENT='[^']*'", '', normalized)
+        
+        # Normalize whitespace and remove extra spaces
         normalized = re.sub(r'\s+', ' ', normalized).strip()
+        
         return hashlib.md5(normalized.encode()).hexdigest()
     
     def has_schema_changed(self, table_name: str, stored_hash: str) -> bool:
@@ -1195,7 +1233,7 @@ class SchemaDiscovery:
             start_time = time.time()
             
             # Get CREATE TABLE statement
-            result = conn.execute(text(f"SHOW CREATE TABLE {table_name}"))
+            result = conn.execute(text(f"SHOW CREATE TABLE `{table_name}`"))
             row = result.fetchone()
             
             if not row:
