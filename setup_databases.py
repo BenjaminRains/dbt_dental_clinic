@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file in the same directory as .env.template
 base_dir = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(base_dir, '..', '.env')
+env_path = os.path.join(base_dir, '.env')
 load_dotenv(dotenv_path=env_path)
 
 if os.path.exists(env_path):
@@ -38,7 +38,7 @@ if os.path.exists(env_path):
 else:
     logger.warning(f".env file not found at: {env_path}")
 
-logger.info(f"POSTGRES_ANALYTICS_TEST_DB from env: {os.environ.get('POSTGRES_ANALYTICS_TEST_DB')}")
+logger.info(f"TEST_POSTGRES_ANALYTICS_DB from env: {os.environ.get('TEST_POSTGRES_ANALYTICS_DB')}")
 
 def setup_postgresql_test_database():
     """Set up PostgreSQL test analytics database using environment variables."""
@@ -46,12 +46,12 @@ def setup_postgresql_test_database():
     
     # Database configuration from environment variables
     config = {
-        'host': os.environ.get('POSTGRES_ANALYTICS_TEST_HOST', 'localhost'),
-        'port': int(os.environ.get('POSTGRES_ANALYTICS_TEST_PORT', 5432)),
-        'database': os.environ.get('POSTGRES_ANALYTICS_TEST_DB', 'opendental_analytics_test'),
-        'user': os.environ.get('POSTGRES_ANALYTICS_TEST_USER', 'analytics_test_user'),
-        'password': os.environ.get('POSTGRES_ANALYTICS_TEST_PASSWORD', 'test_password'),
-        'schema': os.environ.get('POSTGRES_ANALYTICS_TEST_SCHEMA', 'raw')
+        'host': os.environ.get('TEST_POSTGRES_ANALYTICS_HOST', 'localhost'),
+        'port': int(os.environ.get('TEST_POSTGRES_ANALYTICS_PORT', 5432)),
+        'database': os.environ.get('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics'),
+        'user': os.environ.get('TEST_POSTGRES_ANALYTICS_USER', 'analytics_test_user'),
+        'password': os.environ.get('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_password'),
+        'schema': os.environ.get('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw')
     }
     
     try:
@@ -167,11 +167,11 @@ def setup_mysql_test_database():
     
     # Database configuration from environment variables
     config = {
-        'host': os.environ.get('MYSQL_REPLICATION_TEST_HOST', 'localhost'),
-        'port': int(os.environ.get('MYSQL_REPLICATION_TEST_PORT', 3305)),
-        'database': os.environ.get('MYSQL_REPLICATION_TEST_DB', 'opendental_replication_test'),
-        'user': os.environ.get('MYSQL_REPLICATION_TEST_USER', 'replication_test_user'),
-        'password': os.environ.get('MYSQL_REPLICATION_TEST_PASSWORD', 'test_password')
+        'host': os.environ.get('TEST_MYSQL_REPLICATION_HOST', 'localhost'),
+        'port': int(os.environ.get('TEST_MYSQL_REPLICATION_PORT', 3305)),
+        'database': os.environ.get('TEST_MYSQL_REPLICATION_DB', 'test_opendental_replication'),
+        'user': os.environ.get('TEST_MYSQL_REPLICATION_USER', 'replication_test_user'),
+        'password': os.environ.get('TEST_MYSQL_REPLICATION_PASSWORD', 'test_password')
     }
     
     try:
@@ -287,15 +287,15 @@ def main():
     """Main function to set up all test databases."""
     logger.info("Starting test database setup...")
     # Debug: Print relevant environment variables
-    logger.info(f"POSTGRES_ANALYTICS_TEST_DB: {os.environ.get('POSTGRES_ANALYTICS_TEST_DB')}")
-    logger.info(f"POSTGRES_ANALYTICS_TEST_USER: {os.environ.get('POSTGRES_ANALYTICS_TEST_USER')}")
-    logger.info(f"POSTGRES_ANALYTICS_TEST_HOST: {os.environ.get('POSTGRES_ANALYTICS_TEST_HOST')}")
-    logger.info(f"POSTGRES_ANALYTICS_TEST_PORT: {os.environ.get('POSTGRES_ANALYTICS_TEST_PORT')}")
-    logger.info(f"POSTGRES_ANALYTICS_TEST_SCHEMA: {os.environ.get('POSTGRES_ANALYTICS_TEST_SCHEMA')}")
-    logger.info(f"MYSQL_REPLICATION_TEST_DB: {os.environ.get('MYSQL_REPLICATION_TEST_DB')}")
-    logger.info(f"MYSQL_REPLICATION_TEST_USER: {os.environ.get('MYSQL_REPLICATION_TEST_USER')}")
-    logger.info(f"MYSQL_REPLICATION_TEST_HOST: {os.environ.get('MYSQL_REPLICATION_TEST_HOST')}")
-    logger.info(f"MYSQL_REPLICATION_TEST_PORT: {os.environ.get('MYSQL_REPLICATION_TEST_PORT')}")
+    logger.info(f"TEST_POSTGRES_ANALYTICS_DB: {os.environ.get('TEST_POSTGRES_ANALYTICS_DB')}")
+    logger.info(f"TEST_POSTGRES_ANALYTICS_USER: {os.environ.get('TEST_POSTGRES_ANALYTICS_USER')}")
+    logger.info(f"TEST_POSTGRES_ANALYTICS_HOST: {os.environ.get('TEST_POSTGRES_ANALYTICS_HOST')}")
+    logger.info(f"TEST_POSTGRES_ANALYTICS_PORT: {os.environ.get('TEST_POSTGRES_ANALYTICS_PORT')}")
+    logger.info(f"TEST_POSTGRES_ANALYTICS_SCHEMA: {os.environ.get('TEST_POSTGRES_ANALYTICS_SCHEMA')}")
+    logger.info(f"TEST_MYSQL_REPLICATION_DB: {os.environ.get('TEST_MYSQL_REPLICATION_DB')}")
+    logger.info(f"TEST_MYSQL_REPLICATION_USER: {os.environ.get('TEST_MYSQL_REPLICATION_USER')}")
+    logger.info(f"TEST_MYSQL_REPLICATION_HOST: {os.environ.get('TEST_MYSQL_REPLICATION_HOST')}")
+    logger.info(f"TEST_MYSQL_REPLICATION_PORT: {os.environ.get('TEST_MYSQL_REPLICATION_PORT')}")
     try:
         # Set up PostgreSQL test database
         setup_postgresql_test_database()
