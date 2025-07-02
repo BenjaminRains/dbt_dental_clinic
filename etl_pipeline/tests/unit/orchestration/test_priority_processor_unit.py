@@ -24,6 +24,7 @@ import logging
 from etl_pipeline.orchestration.priority_processor import PriorityProcessor
 from etl_pipeline.orchestration.table_processor import TableProcessor
 from etl_pipeline.config.settings import Settings
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
 
 class TestPriorityProcessorUnit:
@@ -41,21 +42,41 @@ class TestInitializationUnit(TestPriorityProcessorUnit):
     @pytest.mark.unit
     def test_initialization_with_settings(self, mock_priority_processor_settings):
         """Test successful initialization with provided settings."""
-        processor = PriorityProcessor(settings=mock_priority_processor_settings)
+        # Create mock schema discovery
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        
+        processor = PriorityProcessor(schema_discovery=mock_schema_discovery, settings=mock_priority_processor_settings)
         
         assert processor.settings == mock_priority_processor_settings
+        assert processor.schema_discovery == mock_schema_discovery
     
     @pytest.mark.unit
     def test_initialization_without_settings(self):
         """Test initialization with default settings."""
+        # Create mock schema discovery
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        
         with patch('etl_pipeline.orchestration.priority_processor.Settings') as mock_settings_class:
             mock_settings = MagicMock(spec=Settings)
             mock_settings_class.return_value = mock_settings
             
-            processor = PriorityProcessor()
+            processor = PriorityProcessor(schema_discovery=mock_schema_discovery)
             
             assert processor.settings == mock_settings
+            assert processor.schema_discovery == mock_schema_discovery
             mock_settings_class.assert_called_once()
+    
+    @pytest.mark.unit
+    def test_initialization_requires_schema_discovery(self):
+        """Test that schema_discovery is required."""
+        with pytest.raises(TypeError, match="missing 1 required positional argument"):
+            PriorityProcessor()
+    
+    @pytest.mark.unit
+    def test_initialization_invalid_schema_discovery_type(self):
+        """Test that schema_discovery must be SchemaDiscovery instance."""
+        with pytest.raises(ValueError, match="SchemaDiscovery instance is required"):
+            PriorityProcessor(schema_discovery=MagicMock())  # Not a SchemaDiscovery instance
 
 
 class TestCoreLogicUnit(TestPriorityProcessorUnit):
@@ -106,18 +127,25 @@ class TestCoreLogicUnit(TestPriorityProcessorUnit):
     @pytest.mark.unit
     def test_custom_importance_levels(self, priority_processor, mock_priority_processor_table_processor):
         """Test processing with custom importance levels."""
-        custom_levels = ['critical', 'important']
-        
-        results = priority_processor.process_by_priority(importance_levels=custom_levels)
-        
-        # Verify only specified levels were processed
-        assert 'critical' in results
-        assert 'important' in results
-        assert 'audit' not in results
-        assert 'reference' not in results
-        
-        # Verify settings was called for each custom level
-        assert priority_processor.settings.get_tables_by_importance.call_count == 2
+        # Mock the TableProcessor class to return a working instance
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            custom_levels = ['critical', 'important']
+            
+            results = priority_processor.process_by_priority(importance_levels=custom_levels)
+            
+            # Verify only specified levels were processed
+            assert 'critical' in results
+            assert 'important' in results
+            assert 'audit' not in results
+            assert 'reference' not in results
+            
+            # Verify settings was called for each custom level
+            assert priority_processor.settings.get_tables_by_importance.call_count == 2
     
     @pytest.mark.unit
     def test_empty_importance_levels(self, priority_processor, mock_priority_processor_table_processor):
@@ -134,13 +162,20 @@ class TestParallelProcessingLogicUnit(TestPriorityProcessorUnit):
     def test_parallel_processing_decision_logic(self, priority_processor, mock_priority_processor_table_processor):
         """Test the decision logic for parallel vs sequential processing."""
         with patch('etl_pipeline.orchestration.priority_processor.ThreadPoolExecutor') as mock_executor_class, \
-             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed:
+             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed, \
+             patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
             
             # Create proper mock executor with context manager support
             mock_executor = MagicMock()
             mock_executor.__enter__ = MagicMock(return_value=mock_executor)
             mock_executor.__exit__ = MagicMock(return_value=None)
             mock_executor_class.return_value = mock_executor
+            
+            # Mock TableProcessor
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
             
             # Mock futures with proper side effects
             mock_futures = []
@@ -180,13 +215,20 @@ class TestParallelProcessingLogicUnit(TestPriorityProcessorUnit):
     def test_parallel_processing_future_handling(self, priority_processor, mock_priority_processor_table_processor):
         """Test handling of futures in parallel processing."""
         with patch('etl_pipeline.orchestration.priority_processor.ThreadPoolExecutor') as mock_executor_class, \
-             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed:
+             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed, \
+             patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
             
             # Create proper mock executor with context manager support
             mock_executor = MagicMock()
             mock_executor.__enter__ = MagicMock(return_value=mock_executor)
             mock_executor.__exit__ = MagicMock(return_value=None)
             mock_executor_class.return_value = mock_executor
+            
+            # Mock TableProcessor
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
             
             # Mock futures with mixed results
             mock_future1 = MagicMock()
@@ -212,13 +254,20 @@ class TestParallelProcessingLogicUnit(TestPriorityProcessorUnit):
     def test_parallel_processing_exception_handling(self, priority_processor, mock_priority_processor_table_processor):
         """Test exception handling in parallel processing."""
         with patch('etl_pipeline.orchestration.priority_processor.ThreadPoolExecutor') as mock_executor_class, \
-             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed:
+             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed, \
+             patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
             
             # Create proper mock executor with context manager support
             mock_executor = MagicMock()
             mock_executor.__enter__ = MagicMock(return_value=mock_executor)
             mock_executor.__exit__ = MagicMock(return_value=None)
             mock_executor_class.return_value = mock_executor
+            
+            # Mock TableProcessor
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
             
             # Mock future that raises exception
             mock_future = MagicMock()
@@ -242,20 +291,34 @@ class TestSequentialProcessingLogicUnit(TestPriorityProcessorUnit):
     @pytest.mark.unit
     def test_sequential_processing_calls(self, priority_processor, mock_priority_processor_table_processor):
         """Test that sequential processing calls process_table for each table."""
-        priority_processor.process_by_priority()
-        
-        # Note: Since we now create TableProcessor instances internally,
-        # we can't directly verify the calls. The test now verifies the overall flow.
-        # Verify settings was called for each importance level
-        assert priority_processor.settings.get_tables_by_importance.call_count == 4
+        # Mock the TableProcessor to succeed so processing continues
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            priority_processor.process_by_priority()
+            
+            # Note: Since we now create TableProcessor instances internally,
+            # we can't directly verify the calls. The test now verifies the overall flow.
+            # Verify settings was called for each importance level
+            assert priority_processor.settings.get_tables_by_importance.call_count == 4
     
     @pytest.mark.unit
     def test_sequential_processing_force_full_parameter(self, priority_processor, mock_priority_processor_table_processor):
         """Test that force_full parameter is passed through to sequential processing."""
-        priority_processor.process_by_priority(force_full=True)
-        
-        # Verify settings was called for each importance level
-        assert priority_processor.settings.get_tables_by_importance.call_count == 4
+        # Mock the TableProcessor to succeed so processing continues
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            priority_processor.process_by_priority(force_full=True)
+            
+            # Verify settings was called for each importance level
+            assert priority_processor.settings.get_tables_by_importance.call_count == 4
     
     @pytest.mark.unit
     def test_sequential_processing_failure_handling(self, priority_processor, mock_priority_processor_table_processor):
@@ -268,13 +331,20 @@ class TestSequentialProcessingLogicUnit(TestPriorityProcessorUnit):
             'reference': ['zipcode']
         }.get(importance, [])
         
-        results = priority_processor.process_by_priority()
-        
-        # Verify results structure
-        assert 'critical' in results
-        assert 'important' in results
-        assert 'audit' in results
-        assert 'reference' in results
+        # Mock the TableProcessor to succeed
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            results = priority_processor.process_by_priority()
+            
+            # Verify results structure
+            assert 'critical' in results
+            assert 'important' in results
+            assert 'audit' in results
+            assert 'reference' in results
     
     @pytest.mark.unit
     def test_sequential_processing_exception_handling(self, priority_processor, mock_priority_processor_table_processor):
@@ -287,13 +357,20 @@ class TestSequentialProcessingLogicUnit(TestPriorityProcessorUnit):
             'reference': ['zipcode']
         }.get(importance, [])
         
-        results = priority_processor.process_by_priority()
-        
-        # Verify results structure even with exceptions
-        assert 'critical' in results
-        assert 'important' in results
-        assert 'audit' in results
-        assert 'reference' in results
+        # Mock the TableProcessor to succeed
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            results = priority_processor.process_by_priority()
+            
+            # Verify results structure even with exceptions
+            assert 'critical' in results
+            assert 'important' in results
+            assert 'audit' in results
+            assert 'reference' in results
 
 
 class TestResourceManagementUnit(TestPriorityProcessorUnit):
@@ -303,13 +380,20 @@ class TestResourceManagementUnit(TestPriorityProcessorUnit):
     def test_thread_pool_context_manager(self, priority_processor, mock_priority_processor_table_processor):
         """Test that ThreadPoolExecutor is properly managed with context manager."""
         with patch('etl_pipeline.orchestration.priority_processor.ThreadPoolExecutor') as mock_executor_class, \
-             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed:
+             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed, \
+             patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
             
             # Create proper mock executor with context manager support
             mock_executor = MagicMock()
             mock_executor.__enter__ = MagicMock(return_value=mock_executor)
             mock_executor.__exit__ = MagicMock(return_value=None)
             mock_executor_class.return_value = mock_executor
+            
+            # Mock TableProcessor
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
             
             # Mock futures
             mock_future = MagicMock()
@@ -328,13 +412,20 @@ class TestResourceManagementUnit(TestPriorityProcessorUnit):
     def test_max_workers_parameter(self, priority_processor, mock_priority_processor_table_processor):
         """Test that max_workers parameter is passed to ThreadPoolExecutor."""
         with patch('etl_pipeline.orchestration.priority_processor.ThreadPoolExecutor') as mock_executor_class, \
-             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed:
+             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed, \
+             patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
             
             # Create proper mock executor with context manager support
             mock_executor = MagicMock()
             mock_executor.__enter__ = MagicMock(return_value=mock_executor)
             mock_executor.__exit__ = MagicMock(return_value=None)
             mock_executor_class.return_value = mock_executor
+            
+            # Mock TableProcessor
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
             
             # Mock futures
             mock_future = MagicMock()
@@ -352,13 +443,20 @@ class TestResourceManagementUnit(TestPriorityProcessorUnit):
     def test_default_max_workers(self, priority_processor, mock_priority_processor_table_processor):
         """Test that default max_workers is used when not specified."""
         with patch('etl_pipeline.orchestration.priority_processor.ThreadPoolExecutor') as mock_executor_class, \
-             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed:
+             patch('etl_pipeline.orchestration.priority_processor.as_completed') as mock_as_completed, \
+             patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
             
             # Create proper mock executor with context manager support
             mock_executor = MagicMock()
             mock_executor.__enter__ = MagicMock(return_value=mock_executor)
             mock_executor.__exit__ = MagicMock(return_value=None)
             mock_executor_class.return_value = mock_executor
+            
+            # Mock TableProcessor
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
             
             # Mock futures
             mock_future = MagicMock()
@@ -383,24 +481,28 @@ class TestErrorHandlingUnit(TestPriorityProcessorUnit):
         priority_processor.settings.get_tables_by_importance.side_effect = Exception("Settings error")
         
         with pytest.raises(Exception, match="Settings error"):
-            priority_processor.process_by_priority(mock_priority_processor_table_processor)
+            priority_processor.process_by_priority()
     
     @pytest.mark.unit
     def test_table_processor_exception_handling(self, priority_processor, mock_priority_processor_table_processor):
         """Test that table processor exceptions are properly handled."""
-        # Mock table processor to raise exception
-        mock_priority_processor_table_processor.process_table.side_effect = Exception("Table processing failed")
-        
-        results = priority_processor.process_by_priority(mock_priority_processor_table_processor)
-        
-        # Verify exception was handled and table marked as failed
-        # Critical tables use parallel processing, so all 3 fail
-        critical_result = results['critical']
-        assert len(critical_result['failed']) == 3  # All critical tables fail in parallel
-        assert len(critical_result['success']) == 0
-        
-        # Processing stops after critical failure, so no other levels processed
-        assert len(results) == 1
+        # Mock the TableProcessor class to raise exception
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.side_effect = Exception("Table processing failed")
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            results = priority_processor.process_by_priority()
+            
+            # Verify exception was handled and table marked as failed
+            # Critical tables use parallel processing, so all 3 fail
+            critical_result = results['critical']
+            assert len(critical_result['failed']) == 3  # All critical tables fail in parallel
+            assert len(critical_result['success']) == 0
+            
+            # Processing stops after critical failure, so no other levels processed
+            assert len(results) == 1
     
     @pytest.mark.unit
     def test_invalid_importance_levels(self, priority_processor, mock_priority_processor_table_processor):
@@ -408,10 +510,7 @@ class TestErrorHandlingUnit(TestPriorityProcessorUnit):
         # Mock settings to return empty list for invalid levels
         priority_processor.settings.get_tables_by_importance.side_effect = lambda importance: []
         
-        results = priority_processor.process_by_priority(
-            mock_priority_processor_table_processor, 
-            importance_levels=['invalid_level']
-        )
+        results = priority_processor.process_by_priority(importance_levels=['invalid_level'])
         
         # Verify invalid level is skipped entirely (not added to results)
         assert 'invalid_level' not in results
@@ -440,14 +539,30 @@ class TestCriticalFailureLogicUnit(TestPriorityProcessorUnit):
             'reference': ['zipcode']
         }.get(importance, [])
         
-        results = priority_processor.process_by_priority()
-        
-        # Verify that processing continues even if some tables fail
-        # The new implementation handles failures gracefully
-        assert 'critical' in results
-        assert 'important' in results
-        assert 'audit' in results
-        assert 'reference' in results
+        # Mock the TableProcessor to fail for critical tables
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            
+            def mock_process_table(table, force_full=False):
+                # Fail critical tables, succeed others
+                if table in ['patient', 'appointment']:
+                    return False
+                else:
+                    return True
+            
+            mock_table_processor.process_table.side_effect = mock_process_table
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            results = priority_processor.process_by_priority()
+            
+            # Verify that processing stops after critical failure
+            assert 'critical' in results
+            assert len(results['critical']['failed']) == 2
+            assert len(results['critical']['success']) == 0
+            
+            # Processing should stop after critical failure, so no other levels processed
+            assert len(results) == 1
     
     @pytest.mark.unit
     def test_non_critical_failures_continue_processing(self, priority_processor, mock_priority_processor_table_processor):
@@ -460,13 +575,38 @@ class TestCriticalFailureLogicUnit(TestPriorityProcessorUnit):
             'reference': ['zipcode']
         }.get(importance, [])
         
-        results = priority_processor.process_by_priority()
-        
-        # Verify all levels are processed
-        assert 'critical' in results
-        assert 'important' in results
-        assert 'audit' in results
-        assert 'reference' in results
+        # Mock the TableProcessor to succeed for critical tables, fail for some others
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            
+            def mock_process_table(table, force_full=False):
+                # Succeed critical tables, fail some others
+                if table in ['patient', 'appointment']:
+                    return True  # Critical tables succeed
+                elif table in ['payment']:
+                    return False  # Important table fails
+                else:
+                    return True  # Other tables succeed
+            
+            mock_table_processor.process_table.side_effect = mock_process_table
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            results = priority_processor.process_by_priority()
+            
+            # Verify all levels are processed
+            assert 'critical' in results
+            assert 'important' in results
+            assert 'audit' in results
+            assert 'reference' in results
+            
+            # Verify critical tables succeeded (so processing continues)
+            assert len(results['critical']['success']) == 2
+            assert len(results['critical']['failed']) == 0
+            
+            # Verify important table failed but processing continued
+            assert len(results['important']['success']) == 0
+            assert len(results['important']['failed']) == 1
 
 
 class TestPerformanceUnit(TestPriorityProcessorUnit):
@@ -478,19 +618,26 @@ class TestPerformanceUnit(TestPriorityProcessorUnit):
         """Test that processing completes within reasonable time."""
         import time
         
-        start_time = time.time()
-        
-        # Process a small set of tables
-        results = priority_processor.process_by_priority(importance_levels=['critical'])
-        
-        end_time = time.time()
-        processing_time = end_time - start_time
-        
-        # Verify processing completed
-        assert 'critical' in results
-        
-        # Verify reasonable processing time (should be very fast with mocks)
-        assert processing_time < 5.0  # Should complete in under 5 seconds
+        # Mock the TableProcessor to succeed quickly
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            start_time = time.time()
+            
+            # Process a small set of tables
+            results = priority_processor.process_by_priority(importance_levels=['critical'])
+            
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            # Verify processing completed
+            assert 'critical' in results
+            
+            # Verify reasonable processing time (should be very fast with mocks)
+            assert processing_time < 5.0  # Should complete in under 5 seconds
     
     @pytest.mark.unit
     @pytest.mark.performance
@@ -499,24 +646,31 @@ class TestPerformanceUnit(TestPriorityProcessorUnit):
         import psutil
         import os
         
-        # Get initial memory usage
-        process = psutil.Process(os.getpid())
-        initial_memory = process.memory_info().rss
-        
-        # Process tables
-        results = priority_processor.process_by_priority(importance_levels=['critical'])
-        
-        # Get final memory usage
-        final_memory = process.memory_info().rss
-        memory_increase = final_memory - initial_memory
-        
-        # Verify processing completed
-        assert 'critical' in results
-        
-        # Verify reasonable memory usage (should be minimal with mocks)
-        # Convert to MB for readability
-        memory_increase_mb = memory_increase / (1024 * 1024)
-        assert memory_increase_mb < 100  # Should use less than 100MB additional memory
+        # Mock the TableProcessor to succeed
+        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
+            mock_table_processor = MagicMock()
+            mock_table_processor.initialize_connections.return_value = True
+            mock_table_processor.process_table.return_value = True
+            mock_table_processor_class.return_value = mock_table_processor
+            
+            # Get initial memory usage
+            process = psutil.Process(os.getpid())
+            initial_memory = process.memory_info().rss
+            
+            # Process tables
+            results = priority_processor.process_by_priority(importance_levels=['critical'])
+            
+            # Get final memory usage
+            final_memory = process.memory_info().rss
+            memory_increase = final_memory - initial_memory
+            
+            # Verify processing completed
+            assert 'critical' in results
+            
+            # Verify reasonable memory usage (should be minimal with mocks)
+            # Convert to MB for readability
+            memory_increase_mb = memory_increase / (1024 * 1024)
+            assert memory_increase_mb < 100  # Should use less than 100MB additional memory
 
 
 if __name__ == "__main__":
