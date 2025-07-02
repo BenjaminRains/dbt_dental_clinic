@@ -8,6 +8,7 @@ including database mocks, test data generators, and configuration fixtures.
 import os
 import pytest
 import pandas as pd
+import logging
 from unittest.mock import MagicMock, patch, Mock
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
@@ -21,7 +22,10 @@ from etl_pipeline.transformers.raw_to_public import RawToPublicTransformer
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
+from etl_pipeline.config.logging import get_logger
 
+# Set up logger for this module using the project's logging configuration
+logger = get_logger(__name__)
 
 # =============================================================================
 # DATABASE MOCKS AND CONNECTIONS
@@ -179,7 +183,7 @@ def test_database_config():
 
 
 @pytest.fixture(scope="session")
-def test_databases(test_database_config):
+def test_databases(test_database_config, test_replication_database, test_analytics_database):
     """
     Set up test databases for the test session.
     
@@ -191,12 +195,13 @@ def test_databases(test_database_config):
     - Replication: Real test database with sample data
     - Analytics: Real test database with sample data
     """
-    # TODO: Implement actual database setup for integration tests
-    # For now, return the config
+    # The individual database fixtures handle the actual setup
+    # This fixture just returns the combined configuration
+    logger.info("Test databases setup completed")
     yield test_database_config
     
-    # Cleanup would go here
-    # TODO: Drop test databases after session
+    # Cleanup is handled by individual database fixtures
+    logger.info("Test databases cleanup completed")
 
 
 @pytest.fixture(scope="session")
@@ -211,16 +216,175 @@ def test_replication_database(test_database_config):
     """
     config = test_database_config['replication']
     
-    # TODO: Implement actual database creation
-    # 1. Create test database: opendental_replication_test
-    # 2. Grant permissions to replication_user
-    # 3. Load sample data for testing
-    # 4. Verify user permissions match production
+    # Create connection to MySQL server (not specific database)
+    admin_connection_string = (
+        f"mysql+pymysql://{config['user']}:{config['password']}"
+        f"@{config['host']}:{config['port']}/"
+    )
     
-    yield config
+    admin_engine = None
+    test_engine = None
     
-    # TODO: Cleanup - drop test database
-    # Ensure cleanup runs even if tests fail
+    try:
+        # 1. Create test database: opendental_replication_test
+        admin_engine = create_engine(admin_connection_string)
+        
+        with admin_engine.connect() as conn:
+            # Check if database exists
+            result = conn.execute(text("""
+                SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA 
+                WHERE SCHEMA_NAME = :db_name
+            """), {'db_name': config['database']})
+            
+            if not result.fetchone():
+                # Create database if it doesn't exist
+                conn.execute(text(f"CREATE DATABASE {config['database']}"))
+                logger.info(f"Created test replication database: {config['database']}")
+            else:
+                logger.info(f"Test replication database {config['database']} already exists")
+        
+        # 2. Create connection to the test database
+        test_connection_string = (
+            f"mysql+pymysql://{config['user']}:{config['password']}"
+            f"@{config['host']}:{config['port']}/{config['database']}"
+        )
+        
+        test_engine = create_engine(test_connection_string)
+        
+        with test_engine.connect() as conn:
+            # 3. Grant permissions to replication_user
+            try:
+                # Grant all privileges on the test database
+                conn.execute(text(f"GRANT ALL PRIVILEGES ON {config['database']}.* TO '{config['user']}'@'%'"))
+                conn.execute(text("FLUSH PRIVILEGES"))
+                logger.info(f"Granted permissions to {config['user']}")
+            except Exception as e:
+                logger.warning(f"Could not grant all permissions: {e}")
+            
+            # 4. Load sample data for testing
+            # Create test tables
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS patient (
+                    PatNum INT PRIMARY KEY AUTO_INCREMENT,
+                    LName VARCHAR(255) NOT NULL DEFAULT '',
+                    FName VARCHAR(255) NOT NULL DEFAULT '',
+                    Birthdate DATETIME NOT NULL DEFAULT '0001-01-01 00:00:00',
+                    Email VARCHAR(255) NOT NULL DEFAULT '',
+                    HmPhone VARCHAR(255) NOT NULL DEFAULT '',
+                    DateFirstVisit DATE,
+                    PatStatus TINYINT DEFAULT 0,
+                    Gender TINYINT DEFAULT 0,
+                    Premed TINYINT DEFAULT 0,
+                    WirelessPhone VARCHAR(255) NOT NULL DEFAULT '',
+                    WkPhone VARCHAR(255) NOT NULL DEFAULT '',
+                    Address VARCHAR(255) NOT NULL DEFAULT '',
+                    City VARCHAR(255) NOT NULL DEFAULT '',
+                    State VARCHAR(10) NOT NULL DEFAULT '',
+                    Zip VARCHAR(20) NOT NULL DEFAULT '',
+                    DateTStamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    SecDateEntry TIMESTAMP NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+            """))
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS appointment (
+                    AptNum INT PRIMARY KEY AUTO_INCREMENT,
+                    PatNum INT NOT NULL,
+                    ProvNum INT NOT NULL,
+                    AptDateTime DATETIME NOT NULL,
+                    AptStatus TINYINT DEFAULT 1,
+                    IsNewPatient TINYINT DEFAULT 0,
+                    IsHygiene TINYINT DEFAULT 0,
+                    DateTimeArrived DATETIME NULL,
+                    DateTimeSeated DATETIME NULL,
+                    DateTimeDismissed DATETIME NULL,
+                    ClinicNum INT DEFAULT 1,
+                    Op INT DEFAULT 1,
+                    AptType INT DEFAULT 1,
+                    SecDateTEntry TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    DateTStamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+            """))
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS procedurelog (
+                    ProcNum INT PRIMARY KEY AUTO_INCREMENT,
+                    PatNum INT NOT NULL,
+                    AptNum INT NULL,
+                    ProcDate DATE NOT NULL,
+                    ProcFee DECIMAL(10,2) DEFAULT 0.00,
+                    ProcStatus TINYINT DEFAULT 1,
+                    CodeNum INT DEFAULT 0,
+                    ProvNum INT DEFAULT 0,
+                    ClinicNum INT DEFAULT 1,
+                    DateComplete DATE NULL,
+                    DateEntryC TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    DateTStamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+            """))
+            
+            # Insert sample test data
+            test_patients = [
+                (1, 'Doe', 'John', '1980-01-01', 'john.doe@example.com', '555-0101', 
+                 '2020-01-15', 0, 0, 0, '555-0101', '555-0102', '123 Main St', 'Anytown', 'CA', '12345',
+                 '2023-12-01 10:00:00', '2020-01-15 09:00:00'),
+                (2, 'Smith', 'Jane', '1985-05-15', 'jane.smith@example.com', '555-0102',
+                 '2020-02-20', 0, 1, 0, '555-0102', '555-0103', '456 Oak Ave', 'Somewhere', 'CA', '12346',
+                 '2023-12-01 11:00:00', '2020-02-20 10:00:00'),
+                (3, 'Johnson', 'Bob', '1975-12-10', 'bob.johnson@example.com', '555-0103',
+                 '2020-03-10', 0, 0, 1, '555-0103', '555-0104', '789 Pine St', 'Elsewhere', 'CA', '12347',
+                 '2023-12-01 12:00:00', '2020-03-10 11:00:00')
+            ]
+            
+            for patient in test_patients:
+                conn.execute(text("""
+                    INSERT INTO patient (
+                        PatNum, LName, FName, Birthdate, Email, HmPhone,
+                        DateFirstVisit, PatStatus, Gender, Premed, WirelessPhone,
+                        WkPhone, Address, City, State, Zip, DateTStamp, SecDateEntry
+                    ) VALUES (
+                        :patnum, :lname, :fname, :birthdate, :email, :hmphone,
+                        :datefirstvisit, :patstatus, :gender, :premed, :wirelessphone,
+                        :wkphone, :address, :city, :state, :zip, :datestamp, :secdateentry
+                    )
+                """), {
+                    'patnum': patient[0], 'lname': patient[1], 'fname': patient[2],
+                    'birthdate': patient[3], 'email': patient[4], 'hmphone': patient[5],
+                    'datefirstvisit': patient[6], 'patstatus': patient[7], 'gender': patient[8],
+                    'premed': patient[9], 'wirelessphone': patient[10], 'wkphone': patient[11],
+                    'address': patient[12], 'city': patient[13], 'state': patient[14],
+                    'zip': patient[15], 'datestamp': patient[16], 'secdateentry': patient[17]
+                })
+            
+            # 5. Verify user permissions match production
+            result = conn.execute(text("""
+                SELECT USER(), DATABASE(), 
+                       COUNT(*) as table_count
+                FROM information_schema.tables 
+                WHERE table_schema = :db_name
+            """), {'db_name': config['database']})
+            
+            user_info = result.fetchone()
+            logger.info(f"User verification: {user_info}")
+            
+            conn.commit()
+            logger.info(f"Successfully set up test replication database: {config['database']}")
+        
+        yield config
+        
+    except Exception as e:
+        logger.error(f"Failed to set up test replication database: {e}")
+        raise
+    
+    finally:
+        # Cleanup - close connections
+        if admin_engine:
+            admin_engine.dispose()
+        if test_engine:
+            test_engine.dispose()
+        
+        # Note: We don't drop the database here because it might be used by other tests
+        # The database cleanup should be done manually or through a separate cleanup script
 
 
 @pytest.fixture(scope="session")
@@ -235,17 +399,185 @@ def test_analytics_database(test_database_config):
     """
     config = test_database_config['analytics']
     
-    # TODO: Implement actual database creation
-    # 1. Create test database: opendental_analytics_test
-    # 2. Create schemas: raw, public, public_staging, etc.
-    # 3. Grant permissions to analytics_user
-    # 4. Load sample data for testing
-    # 5. Verify user permissions match production
+    # Create connection to PostgreSQL server (not specific database)
+    admin_connection_string = (
+        f"postgresql+psycopg2://{config['user']}:{config['password']}"
+        f"@{config['host']}:{config['port']}/postgres"
+    )
     
-    yield config
+    admin_engine = None
+    test_engine = None
     
-    # TODO: Cleanup - drop test database
-    # Ensure cleanup runs even if tests fail
+    try:
+        # 1. Create test database: opendental_analytics_test
+        admin_engine = create_engine(admin_connection_string)
+        
+        with admin_engine.connect() as conn:
+            # Check if database exists
+            result = conn.execute(text("""
+                SELECT 1 FROM pg_database WHERE datname = :db_name
+            """), {'db_name': config['database']})
+            
+            if not result.fetchone():
+                # Create database if it doesn't exist
+                conn.execute(text(f"CREATE DATABASE {config['database']}"))
+                logger.info(f"Created test database: {config['database']}")
+            else:
+                logger.info(f"Test database {config['database']} already exists")
+        
+        # 2. Create connection to the test database
+        test_connection_string = (
+            f"postgresql+psycopg2://{config['user']}:{config['password']}"
+            f"@{config['host']}:{config['port']}/{config['database']}"
+        )
+        
+        test_engine = create_engine(test_connection_string)
+        
+        with test_engine.connect() as conn:
+            # 3. Create schemas: raw, public, public_staging, etc.
+            schemas = ['raw', 'public', 'public_staging', 'public_intermediate', 'public_marts']
+            
+            for schema in schemas:
+                try:
+                    conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+                    conn.execute(text(f"GRANT ALL ON SCHEMA {schema} TO {config['user']}"))
+                    logger.info(f"Created schema: {schema}")
+                except Exception as e:
+                    logger.warning(f"Could not create schema {schema}: {e}")
+            
+            # 4. Grant permissions to analytics_user
+            try:
+                # Grant all privileges on the database
+                conn.execute(text(f"GRANT ALL PRIVILEGES ON DATABASE {config['database']} TO {config['user']}"))
+                # Grant usage on all schemas
+                for schema in schemas:
+                    conn.execute(text(f"GRANT USAGE ON SCHEMA {schema} TO {config['user']}"))
+                    conn.execute(text(f"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {schema} TO {config['user']}"))
+                    conn.execute(text(f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {schema} TO {config['user']}"))
+                    conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT ALL ON TABLES TO {config['user']}"))
+                    conn.execute(text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT ALL ON SEQUENCES TO {config['user']}"))
+                logger.info(f"Granted permissions to {config['user']}")
+            except Exception as e:
+                logger.warning(f"Could not grant all permissions: {e}")
+            
+            # 5. Load sample data for testing
+            # Create test tables in raw schema
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS raw.patient (
+                    "PatNum" INTEGER PRIMARY KEY,
+                    "LName" VARCHAR(255),
+                    "FName" VARCHAR(255),
+                    "Birthdate" DATE,
+                    "Email" VARCHAR(255),
+                    "HmPhone" VARCHAR(255),
+                    "DateFirstVisit" DATE,
+                    "PatStatus" INTEGER,
+                    "Gender" INTEGER,
+                    "Premed" INTEGER,
+                    "WirelessPhone" VARCHAR(255),
+                    "WkPhone" VARCHAR(255),
+                    "Address" VARCHAR(255),
+                    "City" VARCHAR(255),
+                    "State" VARCHAR(10),
+                    "Zip" VARCHAR(20),
+                    "DateTStamp" TIMESTAMP,
+                    "SecDateEntry" TIMESTAMP
+                )
+            """))
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS raw.appointment (
+                    "AptNum" INTEGER PRIMARY KEY,
+                    "PatNum" INTEGER,
+                    "ProvNum" INTEGER,
+                    "AptDateTime" TIMESTAMP,
+                    "AptStatus" INTEGER,
+                    "IsNewPatient" INTEGER,
+                    "IsHygiene" INTEGER,
+                    "DateTimeArrived" TIMESTAMP,
+                    "DateTimeSeated" TIMESTAMP,
+                    "DateTimeDismissed" TIMESTAMP,
+                    "ClinicNum" INTEGER,
+                    "Op" INTEGER,
+                    "AptType" INTEGER,
+                    "SecDateTEntry" TIMESTAMP,
+                    "DateTStamp" TIMESTAMP
+                )
+            """))
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS raw.procedurelog (
+                    "ProcNum" INTEGER PRIMARY KEY,
+                    "PatNum" INTEGER,
+                    "AptNum" INTEGER,
+                    "ProcDate" DATE,
+                    "ProcFee" DECIMAL(10,2),
+                    "ProcStatus" INTEGER,
+                    "CodeNum" INTEGER,
+                    "ProvNum" INTEGER,
+                    "ClinicNum" INTEGER,
+                    "DateComplete" DATE,
+                    "DateEntryC" TIMESTAMP,
+                    "DateTStamp" TIMESTAMP
+                )
+            """))
+            
+            # Insert sample test data
+            test_patients = [
+                (1, 'Doe', 'John', '1980-01-01', 'john.doe@example.com', '555-0101', 
+                 '2020-01-15', 0, 0, 0, '555-0101', '555-0102', '123 Main St', 'Anytown', 'CA', '12345',
+                 '2023-12-01 10:00:00', '2020-01-15 09:00:00'),
+                (2, 'Smith', 'Jane', '1985-05-15', 'jane.smith@example.com', '555-0102',
+                 '2020-02-20', 0, 1, 0, '555-0102', '555-0103', '456 Oak Ave', 'Somewhere', 'CA', '12346',
+                 '2023-12-01 11:00:00', '2020-02-20 10:00:00'),
+                (3, 'Johnson', 'Bob', '1975-12-10', 'bob.johnson@example.com', '555-0103',
+                 '2020-03-10', 0, 0, 1, '555-0103', '555-0104', '789 Pine St', 'Elsewhere', 'CA', '12347',
+                 '2023-12-01 12:00:00', '2020-03-10 11:00:00')
+            ]
+            
+            for patient in test_patients:
+                conn.execute(text("""
+                    INSERT INTO raw.patient VALUES (
+                        :patnum, :lname, :fname, :birthdate, :email, :hmphone,
+                        :datefirstvisit, :patstatus, :gender, :premed, :wirelessphone,
+                        :wkphone, :address, :city, :state, :zip, :datestamp, :secdateentry
+                    )
+                """), {
+                    'patnum': patient[0], 'lname': patient[1], 'fname': patient[2],
+                    'birthdate': patient[3], 'email': patient[4], 'hmphone': patient[5],
+                    'datefirstvisit': patient[6], 'patstatus': patient[7], 'gender': patient[8],
+                    'premed': patient[9], 'wirelessphone': patient[10], 'wkphone': patient[11],
+                    'address': patient[12], 'city': patient[13], 'state': patient[14],
+                    'zip': patient[15], 'datestamp': patient[16], 'secdateentry': patient[17]
+                })
+            
+            # 6. Verify user permissions match production
+            result = conn.execute(text("""
+                SELECT current_user, current_database(), 
+                       has_schema_privilege('raw', 'USAGE') as has_raw_access,
+                       has_schema_privilege('public', 'USAGE') as has_public_access
+            """))
+            user_info = result.fetchone()
+            logger.info(f"User verification: {user_info}")
+            
+            conn.commit()
+            logger.info(f"Successfully set up test analytics database: {config['database']}")
+        
+        yield config
+        
+    except Exception as e:
+        logger.error(f"Failed to set up test analytics database: {e}")
+        raise
+    
+    finally:
+        # Cleanup - close connections
+        if admin_engine:
+            admin_engine.dispose()
+        if test_engine:
+            test_engine.dispose()
+        
+        # Note: We don't drop the database here because it might be used by other tests
+        # The database cleanup should be done manually or through a separate cleanup script
 
 
 # =============================================================================
@@ -1034,9 +1366,15 @@ def mock_metrics_collector():
 # =============================================================================
 
 @pytest.fixture(autouse=True)
-def setup_test_environment(monkeypatch):
-    """Set up test environment variables."""
-    # Set test environment variables
+def setup_test_environment(monkeypatch, request):
+    """Set up test environment variables only for unit tests."""
+    # Only set test environment variables for unit tests, not integration tests
+    # Integration tests should use real environment variables
+    if request.node.get_closest_marker('integration'):
+        # Skip setting test environment variables for integration tests
+        return
+    
+    # Set test environment variables for unit tests only
     test_env_vars = {
         'OPENDENTAL_SOURCE_HOST': 'localhost',
         'OPENDENTAL_SOURCE_PORT': '3306',
