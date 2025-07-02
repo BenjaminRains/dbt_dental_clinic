@@ -1,31 +1,13 @@
 """
-DEPRECATION NOTICE - REFACTORING IN PROGRESS
-============================================
-
-This file is part of the ETL Pipeline Schema Analysis Refactoring Plan.
-See: docs/refactoring_plan_schema_analysis.md
-
-PLANNED CHANGES:
-- Will require SchemaDiscovery as mandatory dependency in constructor
-- Will use SchemaDiscovery for all table configuration and analysis
-- Will eliminate duplicate schema analysis calls
-- Will integrate with enhanced SchemaDiscovery methods
-- Will maintain current orchestration functionality
-
-TIMELINE: Phase 4 of refactoring plan
-STATUS: Dependency update in progress
-
-Table Processor
-
-Handles the processing of individual tables through the ETL pipeline,
-including extraction, loading, and transformation.
-
-STATUS: ACTIVE - Core ETL Implementation (SIMPLIFIED)
-====================================================
+Table Processor - Core ETL Component
+===================================
 
 This module is the ACTIVE core implementation of individual table ETL processing,
 serving as the workhorse of the pipeline. It's actively used by both PipelineOrchestrator
 and PriorityProcessor, making it the central component for table-level operations.
+
+STATUS: ACTIVE - Core ETL Implementation (SIMPLIFIED)
+====================================================
 
 CURRENT STATE:
 - ✅ ACTIVE IMPLEMENTATION: Used by orchestrator and priority processor
@@ -34,6 +16,7 @@ CURRENT STATE:
 - ✅ EFFICIENT CONFIGURATION: Uses Settings class efficiently
 - ✅ STRAIGHTFORWARD LOGIC: Removed unnecessary abstraction layers
 - ✅ TESTABLE: Simplified for easier testing and maintenance
+- ✅ SCHEMA DISCOVERY INTEGRATION: Uses SchemaDiscovery for all schema analysis
 
 ACTIVE USAGE:
 - PipelineOrchestrator: Calls process_table for individual table processing
@@ -46,15 +29,16 @@ SIMPLIFIED ARCHITECTURE:
 2. DIRECT SETTINGS USAGE: Uses Settings class directly without multiple lookups
 3. SIMPLIFIED LOADING: Uses standard loading for all tables (chunked only when needed)
 4. REDUCED DEPENDENCIES: Fewer abstraction layers and components
+5. SCHEMA DISCOVERY INTEGRATION: Uses SchemaDiscovery for all schema analysis
 
 DEPENDENCIES:
+- SchemaDiscovery: Schema analysis and table configuration (REQUIRED)
 - ExactMySQLReplicator: MySQL-to-MySQL replication
 - PostgresLoader: MySQL-to-PostgreSQL loading
 - RawToPublicTransformer: Schema transformation
 - Settings: Configuration management
 - ConnectionFactory: Database connections
 - UnifiedMetricsCollector: Basic metrics collection
-- SchemaDiscovery: Schema analysis
 
 INTEGRATION POINTS:
 - PipelineOrchestrator: Main orchestration integration
@@ -63,18 +47,14 @@ INTEGRATION POINTS:
 - Configuration: Uses Settings for table-specific configuration
 - Metrics: Integrates with basic metrics collection
 
-DEVELOPMENT NEEDS:
-1. COMPREHENSIVE TESTING: Add integration tests with real data
-2. ERROR HANDLING: Enhance error handling and recovery
-3. PERFORMANCE OPTIMIZATION: Optimize for large tables when needed
-4. MONITORING: Add detailed monitoring and metrics
+ETL PIPELINE FLOW:
+1. EXTRACT: Copy data from source MySQL to replication MySQL database
+2. LOAD: Copy data from replication MySQL to PostgreSQL analytics (raw schema)
+3. TRANSFORM: Transform data from raw schema to public schema
 
-TESTING REQUIREMENTS:
-1. INTEGRATION TESTS: Test complete ETL flow with real data
-2. SCHEMA CHANGE TESTS: Test schema change detection and handling
-3. INCREMENTAL TESTS: Test incremental vs full refresh logic
-4. ERROR SCENARIOS: Test failure handling and recovery
-5. PERFORMANCE TESTS: Test processing time and resource usage
+CONSTRUCTOR REQUIREMENTS:
+- schema_discovery: SchemaDiscovery instance (REQUIRED)
+- config_path: Path to configuration file (deprecated, kept for compatibility)
 
 This component is the core of the ETL pipeline and has been simplified
 for better maintainability and testing.
