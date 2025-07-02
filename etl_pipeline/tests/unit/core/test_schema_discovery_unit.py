@@ -19,53 +19,42 @@ from etl_pipeline.core.schema_discovery import SchemaDiscovery
 def test_schema_discovery_initialization(mock_database_engines):
     """Test SchemaDiscovery initialization with mocked engines."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the URL attributes properly
     source_engine.url = Mock()
     source_engine.url.database = 'opendental'
-    target_engine.url = Mock()
-    target_engine.url.database = 'opendental_replication'
     
     # Mock the inspect function to avoid SQLAlchemy inspection errors
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         assert schema_discovery.source_engine == source_engine
-        assert schema_discovery.target_engine == target_engine
         assert schema_discovery.source_db == 'opendental'
-        assert schema_discovery.target_db == 'opendental_replication'
         assert schema_discovery._schema_cache == {}
+        assert schema_discovery.source_inspector == mock_source_inspector
 
 
 @pytest.mark.unit
 def test_get_table_schema_success(mock_database_engines):
     """Test successful schema retrieval with mocked database."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Mock connection and execute with proper context manager protocol
@@ -82,10 +71,10 @@ def test_get_table_schema_success(mock_database_engines):
         source_engine.connect.return_value = mock_conn
         
         # Mock the private methods
-        with patch.object(schema_discovery, '_get_table_metadata') as mock_metadata, \
-             patch.object(schema_discovery, '_get_table_indexes') as mock_indexes, \
-             patch.object(schema_discovery, '_get_foreign_keys') as mock_fks, \
-             patch.object(schema_discovery, '_get_detailed_columns') as mock_columns, \
+        with patch.object(schema_discovery, '_get_table_metadata_with_conn') as mock_metadata, \
+             patch.object(schema_discovery, '_get_table_indexes_with_conn') as mock_indexes, \
+             patch.object(schema_discovery, '_get_foreign_keys_with_conn') as mock_fks, \
+             patch.object(schema_discovery, '_get_detailed_columns_with_conn') as mock_columns, \
              patch.object(schema_discovery, '_calculate_schema_hash') as mock_hash:
             
             mock_metadata.return_value = {'engine': 'InnoDB', 'charset': 'utf8mb4'}
@@ -109,20 +98,16 @@ def test_get_table_schema_success(mock_database_engines):
 def test_get_table_schema_table_not_found(mock_database_engines):
     """Test schema retrieval when table doesn't exist."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Mock connection that returns no results with proper context manager
@@ -135,7 +120,7 @@ def test_get_table_schema_table_not_found(mock_database_engines):
         mock_conn.execute.return_value = mock_result
         source_engine.connect.return_value = mock_conn
         
-        with pytest.raises(ValueError, match="Table non_existent not found"):
+        with pytest.raises(Exception, match="Table non_existent not found"):
             schema_discovery.get_table_schema('non_existent')
 
 
@@ -143,20 +128,16 @@ def test_get_table_schema_table_not_found(mock_database_engines):
 def test_schema_hash_calculation():
     """Test schema hash calculation logic."""
     source_engine = Mock(spec=Engine)
-    target_engine = Mock(spec=Engine)
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Test hash calculation
@@ -178,20 +159,16 @@ def test_schema_hash_calculation():
 def test_has_schema_changed_true(mock_database_engines):
     """Test schema change detection when schema has changed."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         with patch.object(schema_discovery, 'get_table_schema') as mock_get_schema:
@@ -205,20 +182,16 @@ def test_has_schema_changed_true(mock_database_engines):
 def test_has_schema_changed_false(mock_database_engines):
     """Test schema change detection when schema hasn't changed."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         with patch.object(schema_discovery, 'get_table_schema') as mock_get_schema:
@@ -232,20 +205,16 @@ def test_has_schema_changed_false(mock_database_engines):
 def test_has_schema_changed_exception_handling(mock_database_engines):
     """Test schema change detection when exception occurs."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         with patch.object(schema_discovery, 'get_table_schema') as mock_get_schema:
@@ -260,20 +229,16 @@ def test_has_schema_changed_exception_handling(mock_database_engines):
 def test_adapt_create_statement_for_target():
     """Test CREATE statement adaptation for target database."""
     source_engine = Mock(spec=Engine)
-    target_engine = Mock(spec=Engine)
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         original_statement = "CREATE TABLE `source_table` (id INT PRIMARY KEY, name VARCHAR(50))"
@@ -289,20 +254,16 @@ def test_adapt_create_statement_for_target():
 def test_adapt_create_statement_invalid_input():
     """Test CREATE statement adaptation with invalid input."""
     source_engine = Mock(spec=Engine)
-    target_engine = Mock(spec=Engine)
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         with pytest.raises(ValueError, match="Invalid CREATE TABLE statement"):
@@ -313,24 +274,20 @@ def test_adapt_create_statement_invalid_input():
 def test_get_incremental_columns_success(mock_database_engines):
     """Test getting incremental columns with mocked data."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
-        # Mock the _get_detailed_columns method
-        with patch.object(schema_discovery, '_get_detailed_columns') as mock_get_columns:
+        # Mock the _get_detailed_columns_with_conn method
+        with patch.object(schema_discovery, '_get_detailed_columns_with_conn') as mock_get_columns:
             mock_get_columns.return_value = [
                 {
                     'name': 'id',
@@ -366,23 +323,19 @@ def test_get_incremental_columns_success(mock_database_engines):
 def test_get_incremental_columns_exception_handling(mock_database_engines):
     """Test getting incremental columns when exception occurs."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
-        with patch.object(schema_discovery, '_get_detailed_columns') as mock_get_columns:
+        with patch.object(schema_discovery, '_get_detailed_columns_with_conn') as mock_get_columns:
             mock_get_columns.side_effect = Exception("Database error")
             
             # Should return empty list when exception occurs
@@ -394,20 +347,16 @@ def test_get_incremental_columns_exception_handling(mock_database_engines):
 def test_discover_all_tables_success(mock_database_engines):
     """Test discovering all tables with mocked data."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Mock connection and execute with proper context manager
@@ -433,20 +382,16 @@ def test_discover_all_tables_success(mock_database_engines):
 def test_discover_all_tables_exception_handling(mock_database_engines):
     """Test discovering all tables when exception occurs."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Mock connection that raises exception with proper context manager
@@ -465,20 +410,16 @@ def test_discover_all_tables_exception_handling(mock_database_engines):
 def test_get_table_size_info_success(mock_database_engines):
     """Test getting table size information with mocked data."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Mock connection and execute with proper context manager
@@ -512,20 +453,16 @@ def test_get_table_size_info_success(mock_database_engines):
 def test_get_table_size_info_no_data(mock_database_engines):
     """Test getting table size information when no data exists."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Mock connection that returns no results with proper context manager
@@ -553,20 +490,16 @@ def test_get_table_size_info_no_data(mock_database_engines):
 def test_get_table_size_info_exception_handling(mock_database_engines):
     """Test getting table size information when exception occurs."""
     source_engine = mock_database_engines['source']
-    target_engine = mock_database_engines['replication']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
-    mock_target_inspector = Mock()
     
     with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
-        mock_inspect.side_effect = lambda engine: mock_source_inspector if engine == source_engine else mock_target_inspector
+        mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
             source_engine=source_engine,
-            target_engine=target_engine,
-            source_db='opendental',
-            target_db='opendental_replication'
+            source_db='opendental'
         )
         
         # Mock connection that raises exception with proper context manager
