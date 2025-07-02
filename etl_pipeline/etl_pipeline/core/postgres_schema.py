@@ -56,9 +56,11 @@ class PostgresSchema:
             if mysql_type.lower().startswith('tinyint'):
                 with self.mysql_engine.connect() as conn:
                     # Use a more efficient query that checks for non-0/1 values
+                    # Handle reserved words by backticking table name
+                    safe_table_name = f"`{table_name}`" if table_name.lower() in ['procedure', 'order', 'group', 'user'] else table_name
                     query = text(f"""
                         SELECT COUNT(*) 
-                        FROM {table_name} 
+                        FROM {safe_table_name} 
                         WHERE {column_name} IS NOT NULL 
                         AND {column_name} NOT IN (0, 1)
                         LIMIT 1
@@ -73,11 +75,17 @@ class PostgresSchema:
                     logger.info(f"Column {table_name}.{column_name} kept as smallint (contains non-boolean values)")
                     return 'smallint'
             
+            # For other types, use standard conversion
+            pg_type = self._convert_mysql_type_standard(mysql_type)
+            logger.debug(f"Column {table_name}.{column_name} ({mysql_type}) converted to {pg_type}")
+            return pg_type
+            
         except Exception as e:
             logger.warning(f"Could not analyze column data for {table_name}.{column_name}: {str(e)}")
-        
-        # Fall back to standard type conversion
-        return self._convert_mysql_type_standard(mysql_type)
+            # Fall back to standard type conversion
+            pg_type = self._convert_mysql_type_standard(mysql_type)
+            logger.debug(f"Fallback conversion for {table_name}.{column_name} ({mysql_type}) to {pg_type}")
+            return pg_type
     
     def _convert_mysql_type_standard(self, mysql_type: str) -> str:
         """Standard MySQL to PostgreSQL type conversion."""
@@ -121,6 +129,7 @@ class PostgresSchema:
         if params and pg_type in ['character varying', 'character', 'numeric']:
             pg_type += f"({params[0]})"
         
+        logger.debug(f"Standard conversion: {mysql_type} -> base_type={base_type} -> {pg_type}")
         return pg_type
     
     def _convert_mysql_type(self, mysql_type: str, table_name: str = None, column_name: str = None) -> str:
@@ -156,9 +165,15 @@ class PostgresSchema:
         try:
             # Get the MySQL CREATE statement
             create_statement = mysql_schema['create_statement']
+            logger.debug(f"MySQL CREATE statement for {table_name}: {create_statement}")
             
             # Convert MySQL types to PostgreSQL types with intelligent analysis
             pg_columns = self._convert_mysql_to_postgres_intelligent(create_statement, table_name)
+            logger.debug(f"PostgreSQL columns for {table_name}: {pg_columns}")
+            
+            # Check if we have any columns
+            if not pg_columns.strip():
+                raise ValueError(f"No valid columns found in MySQL schema for table {table_name}")
             
             # Create the final CREATE TABLE statement
             pg_create = f"CREATE TABLE {self.postgres_schema}.{table_name} (\n{pg_columns}\n)"
@@ -181,13 +196,16 @@ class PostgresSchema:
         # Extract column definitions
         columns = []
         
-        # Pattern to match column definitions: `name` type [NOT NULL] [AUTO_INCREMENT]
-        col_pattern = r'`(\w+)`\s+([a-zA-Z][a-zA-Z0-9_\s]*(?:\([^)]+\))?)(?:\s+(?:NOT NULL|AUTO_INCREMENT))?(?:,|$)'
+        # Pattern to match column definitions: `name` type [modifiers...]
+        # Robust: matches any number/order of modifiers, handles last column (no trailing comma)
+        col_pattern = r'`(\w+)`\s+([a-zA-Z0-9_]+(?:\([^)]+\))?)(?:\s+[^,]*)?(?:,|$)'
         
         # Find all column definitions
         for match in re.finditer(col_pattern, content):
             col_name = match.group(1)
             col_type = match.group(2).strip()
+            
+            logger.debug(f"Extracted column: {col_name} -> {col_type}")
             
             # Convert the type
             pg_type = self._convert_mysql_type(col_type, table_name, col_name)
@@ -218,10 +236,14 @@ class PostgresSchema:
             
             # Create table in PostgreSQL
             with self.postgres_engine.begin() as conn:
-                # Ensure schema exists
-                conn.execute(text(f"""
-                    CREATE SCHEMA IF NOT EXISTS {self.postgres_schema}
-                """))
+                # Try to create schema if it doesn't exist (graceful failure)
+                try:
+                    conn.execute(text(f"""
+                        CREATE SCHEMA IF NOT EXISTS {self.postgres_schema}
+                    """))
+                except Exception as e:
+                    # If schema creation fails, assume it already exists
+                    logger.debug(f"Schema creation failed (likely already exists): {str(e)}")
                 
                 # Drop existing table if it exists
                 conn.execute(text(f"""
@@ -263,9 +285,15 @@ class PostgresSchema:
                 logger.error(f"Could not extract column definitions from MySQL create statement for {table_name}")
                 return False
                 
-            # Extract column definitions
+            # Extract column definitions using the same pattern as table creation
             content = content_match.group(1)
-            column_defs = re.findall(r'`([^`]+)`\s+([^,]+)(?:,|$)', content)
+            column_defs = []
+            col_pattern = r'`(\w+)`\s+([a-zA-Z0-9_]+(?:\([^)]+\))?)(?:\s+[^,]*)?(?:,|$)'
+            
+            for match in re.finditer(col_pattern, content):
+                col_name = match.group(1)
+                col_type = match.group(2).strip()
+                column_defs.append((col_name, col_type))
             
             # Compare column counts
             if len(pg_columns) != len(column_defs):
@@ -278,7 +306,7 @@ class PostgresSchema:
                     logger.error(f"Column name mismatch: {pg_col['name']} != {mysql_name}")
                     return False
                 
-                # Convert MySQL type to PostgreSQL type for comparison
+                # Convert MySQL type to PostgreSQL type for comparison (use same logic as table creation)
                 pg_type = self._convert_mysql_type(mysql_type.strip(), table_name, mysql_name)
                 
                 # Normalize type strings for comparison
@@ -289,6 +317,8 @@ class PostgresSchema:
                     type_str = type_str.lower()
                     # Handle character varying vs varchar
                     type_str = type_str.replace('character varying', 'varchar')
+                    # Remove all spaces inside parentheses (e.g., numeric(10, 2) -> numeric(10,2))
+                    type_str = re.sub(r'\(\s*([0-9]+)\s*,\s*([0-9]+)\s*\)', r'(\1,\2)', type_str)
                     return type_str
                 
                 pg_type_normalized = normalize_type(pg_type)
