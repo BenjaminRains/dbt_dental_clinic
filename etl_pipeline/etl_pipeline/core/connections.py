@@ -13,7 +13,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-load_dotenv()
+# Try to load from etl_pipeline/.env first, then fall back to parent directory
+env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    logger.info(f"Loaded environment from: {env_path}")
+else:
+    # Try parent directory
+    parent_env_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '.env')
+    if os.path.exists(parent_env_path):
+        load_dotenv(parent_env_path)
+        logger.info(f"Loaded environment from: {parent_env_path}")
+    else:
+        # Fall back to default behavior
+        load_dotenv()
+        logger.info("Loaded environment using default load_dotenv() behavior")
 
 class ConnectionFactory:
     """Factory class for creating database connections."""
@@ -401,6 +415,129 @@ class ConnectionFactory:
         
         logger.debug(f"Using analytics marts connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
         
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_mysql_replication_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to MySQL replication test database."""
+        # Get environment variables
+        host = os.getenv('TEST_MYSQL_REPLICATION_HOST')
+        port = os.getenv('TEST_MYSQL_REPLICATION_PORT')
+        database = os.getenv('TEST_MYSQL_REPLICATION_DB')
+        user = os.getenv('TEST_MYSQL_REPLICATION_USER')
+        password = os.getenv('TEST_MYSQL_REPLICATION_PASSWORD')
+        
+        # Enhanced logging to debug the issue
+        logger.info(f"TEST_MYSQL_REPLICATION_HOST: {host}")
+        logger.info(f"TEST_MYSQL_REPLICATION_PORT: {port}")
+        logger.info(f"TEST_MYSQL_REPLICATION_DB: {database}")
+        logger.info(f"TEST_MYSQL_REPLICATION_USER: {user}")
+        logger.info(f"TEST_MYSQL_REPLICATION_PASSWORD: {'*' * len(password) if password else 'NOT SET'}")
+        
+        # Validate that we have all required parameters
+        if not all([host, port, database, user, password]):
+            missing = []
+            if not host: missing.append('TEST_MYSQL_REPLICATION_HOST')
+            if not port: missing.append('TEST_MYSQL_REPLICATION_PORT')
+            if not database: missing.append('TEST_MYSQL_REPLICATION_DB')
+            if not user: missing.append('TEST_MYSQL_REPLICATION_USER')
+            if not password: missing.append('TEST_MYSQL_REPLICATION_PASSWORD')
+            raise ValueError(f"Missing required replication test connection environment variables: {', '.join(missing)}")
+        
+        # Log which environment variables were used
+        logger.debug(f"Using replication test connection parameters: host={host}, port={port}, database={database}, user={user}")
+        
+        return cls.create_mysql_connection(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_source_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to OpenDental test database on client server."""
+        # Get environment variables
+        host = os.getenv('TEST_OPENDENTAL_SOURCE_HOST')
+        port = os.getenv('TEST_OPENDENTAL_SOURCE_PORT')
+        database = os.getenv('TEST_OPENDENTAL_SOURCE_DB')
+        user = os.getenv('TEST_OPENDENTAL_SOURCE_USER')
+        password = os.getenv('TEST_OPENDENTAL_SOURCE_PASSWORD')
+        
+        # Enhanced logging to debug the issue
+        logger.info(f"TEST_OPENDENTAL_SOURCE_HOST: {host}")
+        logger.info(f"TEST_OPENDENTAL_SOURCE_PORT: {port}")
+        logger.info(f"TEST_OPENDENTAL_SOURCE_DB: {database}")
+        logger.info(f"TEST_OPENDENTAL_SOURCE_USER: {user}")
+        logger.info(f"TEST_OPENDENTAL_SOURCE_PASSWORD: {'*' * len(password) if password else 'NOT SET'}")
+        
+        # Validate that we have all required parameters
+        if not all([host, port, database, user, password]):
+            missing = []
+            if not host: missing.append('TEST_OPENDENTAL_SOURCE_HOST')
+            if not port: missing.append('TEST_OPENDENTAL_SOURCE_PORT')
+            if not database: missing.append('TEST_OPENDENTAL_SOURCE_DB')
+            if not user: missing.append('TEST_OPENDENTAL_SOURCE_USER')
+            if not password: missing.append('TEST_OPENDENTAL_SOURCE_PASSWORD')
+            raise ValueError(f"Missing required test connection environment variables: {', '.join(missing)}")
+        
+        # Log which environment variables were used
+        logger.debug(f"Using OpenDental source test connection parameters: host={host}, port={port}, database={database}, user={user}")
+        
+        return cls.create_mysql_connection(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_postgres_analytics_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
+        schema = os.getenv('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw')
+        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
+        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
         return cls.create_postgres_connection(
             host=host,
             port=port,
