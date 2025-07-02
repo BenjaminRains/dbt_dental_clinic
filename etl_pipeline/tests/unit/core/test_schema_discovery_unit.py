@@ -427,15 +427,30 @@ def test_get_table_size_info_success(mock_database_engines):
         mock_conn.__enter__ = Mock(return_value=mock_conn)
         mock_conn.__exit__ = Mock(return_value=None)
         
-        mock_result = Mock()
-        mock_row = Mock()
-        mock_row.row_count = 1000
-        mock_row.data_size_bytes = 1048576  # Exactly 1 MB (1024^2)
-        mock_row.index_size_bytes = 524288   # Exactly 0.5 MB (1024^2 / 2)
-        mock_row.total_size_bytes = 1572864  # Exactly 1.5 MB (1024^2 * 1.5)
+        # Mock the count query result
+        mock_count_result = Mock()
+        mock_count_result.scalar.return_value = 1000
         
-        mock_result.fetchone.return_value = mock_row
-        mock_conn.execute.return_value = mock_result
+        # Mock the size query result
+        mock_size_result = Mock()
+        mock_size_row = Mock()
+        # Create a proper mapping object that behaves like a dictionary
+        mock_mapping = {
+            'data_size_bytes': 1048576,  # Exactly 1 MB (1024^2)
+            'index_size_bytes': 524288,   # Exactly 0.5 MB (1024^2 / 2)
+            'total_size_bytes': 1572864   # Exactly 1.5 MB (1024^2 * 1.5)
+        }
+        mock_size_row._mapping = mock_mapping
+        mock_size_result.fetchone.return_value = mock_size_row
+        
+        # Set up the execute method to return different results based on the query
+        def execute_side_effect(query):
+            if 'COUNT(*)' in str(query):
+                return mock_count_result
+            else:
+                return mock_size_result
+        
+        mock_conn.execute.side_effect = execute_side_effect
         source_engine.connect.return_value = mock_conn
         
         size_info = schema_discovery.get_table_size_info('definition')
@@ -470,9 +485,22 @@ def test_get_table_size_info_no_data(mock_database_engines):
         mock_conn.__enter__ = Mock(return_value=mock_conn)
         mock_conn.__exit__ = Mock(return_value=None)
         
-        mock_result = Mock()
-        mock_result.fetchone.return_value = None
-        mock_conn.execute.return_value = mock_result
+        # Mock the count query result
+        mock_count_result = Mock()
+        mock_count_result.scalar.return_value = 0
+        
+        # Mock the size query result - no data found
+        mock_size_result = Mock()
+        mock_size_result.fetchone.return_value = None
+        
+        # Set up the execute method to return different results based on the query
+        def execute_side_effect(query):
+            if 'COUNT(*)' in str(query):
+                return mock_count_result
+            else:
+                return mock_size_result
+        
+        mock_conn.execute.side_effect = execute_side_effect
         source_engine.connect.return_value = mock_conn
         
         size_info = schema_discovery.get_table_size_info('empty_table')
@@ -514,4 +542,8 @@ def test_get_table_size_info_exception_handling(mock_database_engines):
         # Should return zero values when exception occurs
         assert size_info['row_count'] == 0
         assert size_info['data_size_bytes'] == 0
-        assert size_info['index_size_mb'] == 0 
+        assert size_info['index_size_bytes'] == 0
+        assert size_info['total_size_bytes'] == 0
+        assert size_info['data_size_mb'] == 0
+        assert size_info['index_size_mb'] == 0
+        assert size_info['total_size_mb'] == 0 
