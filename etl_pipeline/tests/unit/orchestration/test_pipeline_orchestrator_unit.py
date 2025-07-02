@@ -675,8 +675,9 @@ class TestPerformanceAndResourceManagement(TestPipelineOrchestratorUnit):
             )
             
             # Verify max_workers parameter was passed correctly
+            # Parameters are: importance_levels, max_workers, force_full
             call_args = mock_components['priority_processor'].process_by_priority.call_args
-            assert call_args[0][2] == max_workers
+            assert call_args[0][1] == max_workers  # max_workers is at index 1
     
     def test_interrupt_handling(self, orchestrator, mock_components):
         """Test handling of processing interrupts."""
