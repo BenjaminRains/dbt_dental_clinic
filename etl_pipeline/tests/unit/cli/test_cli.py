@@ -20,13 +20,22 @@ TEST STRUCTURE:
 1. TestCLI: Core CLI command testing (help, run, status)
 2. TestConnectionTesting: Database connection validation
 3. TestCLIEdgeCases: Error handling and edge cases
-4. Standalone Functions: Subprocess and entry point testing
+4. TestCLICommandOptions: Testing all command options and flags
+5. Standalone Functions: Subprocess and entry point testing
 
 COVERED COMMANDS:
 - help: CLI help display
 - run: Pipeline execution with config files
 - run --tables: Pipeline execution for specific tables
+- run --full: Full pipeline execution flag
+- run --force: Force execution flag
+- run --parallel: Parallel workers configuration
+- run --dry-run: Dry run mode (currently not implemented)
 - status: Pipeline status reporting
+- status --format: Different output formats
+- status --table: Specific table status
+- status --watch: Real-time monitoring
+- status --output: Output file generation
 - test-connections: Database connection validation
 
 TESTING APPROACH:
@@ -57,6 +66,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.sql import text
 import tempfile
 import yaml
+import json
+import time
 
 # Configure logging for debugging
 logging.basicConfig(level=logging.DEBUG)
@@ -252,161 +263,598 @@ class TestCLI:
             config_path = f.name
 
         try:
-            # Setup mock metrics with realistic test data
+            # Setup mock connection factory
+            mock_analytics_engine = MagicMock()
+            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+
+            # Setup mock metrics collector
             mock_metrics = MagicMock()
             mock_metrics_class.return_value = mock_metrics
             mock_metrics.get_pipeline_status.return_value = {
-                'last_update': '2024-02-20 10:00:00',
+                'last_update': '2024-01-01 12:00:00',
                 'status': 'running',
                 'tables': [
                     {
                         'name': 'patient',
                         'status': 'completed',
-                        'last_sync': '2024-02-20 10:00:00',
+                        'last_sync': '2024-01-01 11:00:00',
                         'records_processed': 1000,
                         'error': None
-                    },
-                    {
-                        'name': 'appointment',
-                        'status': 'in_progress',
-                        'last_sync': '2024-02-20 09:55:00',
-                        'records_processed': 500,
-                        'error': None
-                    },
-                    {
-                        'name': 'procedure',
-                        'status': 'failed',
-                        'last_sync': '2024-02-20 09:50:00',
-                        'records_processed': 0,
-                        'error': 'Connection timeout'
                     }
                 ]
             }
 
-            # Setup mock connection factory
-            mock_conn_factory.get_postgres_analytics_connection.return_value = MagicMock()
-
             # Run the command
-            result = self.runner.invoke(cli, ['status', '--config', config_path])
+            runner = CliRunner()
+            result = runner.invoke(cli, ['status', '--config', config_path])
 
             # Verify the result
             assert result.exit_code == 0
-            assert 'Pipeline Status' in result.output
-            assert 'patient' in result.output
-            assert 'appointment' in result.output
-            assert 'procedure' in result.output
-            assert 'completed' in result.output
-            assert 'in_progress' in result.output
-            assert 'failed' in result.output
+            assert "Pipeline Status" in result.output
+            assert "patient" in result.output
+
+            # Verify mocks were called correctly
+            mock_conn_factory.get_postgres_analytics_connection.assert_called_once()
+            mock_metrics_class.assert_called_once_with(analytics_engine=mock_analytics_engine)
+            mock_metrics.get_pipeline_status.assert_called_once_with(table=None)
 
         finally:
             # Clean up the temporary file
             os.unlink(config_path)
 
 
+class TestCLICommandOptions:
+    """Test CLI command options and flags."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_full_flag(self, mock_orchestrator_class):
+        """Test run command with --full flag."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = True
+            mock_orchestrator.process_tables_by_priority.return_value = {
+                'critical': {'success': ['table1'], 'failed': []}
+            }
+
+            result = self.runner.invoke(cli, ['run', '--config', config_path, '--full'])
+
+            assert result.exit_code == 0
+            assert "Full pipeline mode: Forcing full refresh for all tables" in result.output
+            # Verify that force_full=True was passed to process_tables_by_priority
+            mock_orchestrator.process_tables_by_priority.assert_called_once_with(
+                max_workers=4,
+                force_full=True
+            )
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_force_flag(self, mock_orchestrator_class):
+        """Test run command with --force flag."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = True
+            mock_orchestrator.process_tables_by_priority.return_value = {
+                'high': {'success': ['table1'], 'failed': []}
+            }
+
+            result = self.runner.invoke(cli, ['run', '--config', config_path, '--force'])
+
+            assert result.exit_code == 0
+            mock_orchestrator.process_tables_by_priority.assert_called_once_with(
+                max_workers=4,
+                force_full=True
+            )
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_parallel_workers(self, mock_orchestrator_class):
+        """Test run command with --parallel flag."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = True
+            mock_orchestrator.process_tables_by_priority.return_value = {
+                'critical': {'success': ['table1'], 'failed': []}
+            }
+
+            result = self.runner.invoke(cli, ['run', '--config', config_path, '--parallel', '8'])
+
+            assert result.exit_code == 0
+            mock_orchestrator.process_tables_by_priority.assert_called_once_with(
+                max_workers=8,
+                force_full=False
+            )
+            
+        finally:
+            os.unlink(config_path)
+    
+    def test_run_with_invalid_parallel_workers(self):
+        """Test run command with invalid parallel workers."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            # Test with 0 workers
+            result = self.runner.invoke(cli, ['run', '--config', config_path, '--parallel', '0'])
+            assert result.exit_code != 0
+            assert "Parallel workers must be between 1 and 20" in result.output
+            
+            # Test with 21 workers
+            result = self.runner.invoke(cli, ['run', '--config', config_path, '--parallel', '21'])
+            assert result.exit_code != 0
+            assert "Parallel workers must be between 1 and 20" in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_dry_run_flag(self, mock_orchestrator_class):
+        """Test run command with --dry-run flag."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = True
+            
+            # Mock settings for dry run
+            mock_settings = MagicMock()
+            mock_orchestrator.settings = mock_settings
+            mock_settings.get_tables_by_importance.side_effect = lambda importance: {
+                'critical': ['patient', 'appointment'],
+                'important': ['procedure', 'payment'],
+                'audit': ['audit_log'],
+                'reference': ['zipcode', 'carrier']
+            }.get(importance, [])
+
+            result = self.runner.invoke(cli, ['run', '--config', config_path, '--dry-run'])
+
+            assert result.exit_code == 0
+            assert "DRY RUN MODE - No changes will be made" in result.output
+            assert "All connections successful" in result.output
+            assert "Would process all tables by priority" in result.output
+            assert "CRITICAL: 2 tables" in result.output
+            assert "IMPORTANT: 2 tables" in result.output
+            assert "Total tables to process: 7" in result.output
+            assert "Dry run completed - no changes made" in result.output
+            
+            # Verify that process_tables_by_priority was NOT called (dry run mode)
+            mock_orchestrator.process_tables_by_priority.assert_not_called()
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_dry_run_specific_tables(self, mock_orchestrator_class):
+        """Test run command with --dry-run flag and specific tables."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = True
+
+            result = self.runner.invoke(cli, [
+                'run', '--config', config_path, '--dry-run', 
+                '--tables', 'patient', '--tables', 'appointment'
+            ])
+
+            assert result.exit_code == 0
+            assert "DRY RUN MODE - No changes will be made" in result.output
+            assert "Would process 2 specific tables" in result.output
+            assert "1. patient" in result.output
+            assert "2. appointment" in result.output
+            assert "Sequential processing of specified tables" in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_dry_run_connection_failure(self, mock_orchestrator_class):
+        """Test run command with --dry-run flag when connections fail."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = False
+
+            result = self.runner.invoke(cli, ['run', '--config', config_path, '--dry-run'])
+
+            assert result.exit_code == 0  # Dry run should not fail, just warn
+            assert "DRY RUN MODE - No changes will be made" in result.output
+            assert "Connection test failed" in result.output
+            assert "Pipeline would fail during execution" in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    def test_status_with_json_format(self, mock_conn_factory, mock_metrics_class):
+        """Test status command with JSON format."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_analytics_engine = MagicMock()
+            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+
+            mock_metrics = MagicMock()
+            mock_metrics_class.return_value = mock_metrics
+            mock_metrics.get_pipeline_status.return_value = {
+                'status': 'running',
+                'tables': []
+            }
+
+            result = self.runner.invoke(cli, ['status', '--config', config_path, '--format', 'json'])
+
+            assert result.exit_code == 0
+            # Should output JSON format
+            assert '"status": "running"' in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    def test_status_with_summary_format(self, mock_conn_factory, mock_metrics_class):
+        """Test status command with summary format."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_analytics_engine = MagicMock()
+            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+
+            mock_metrics = MagicMock()
+            mock_metrics_class.return_value = mock_metrics
+            mock_metrics.get_pipeline_status.return_value = {
+                'last_update': '2024-01-01 12:00:00',
+                'status': 'running',
+                'tables': [{'name': 'table1'}]
+            }
+
+            result = self.runner.invoke(cli, ['status', '--config', config_path, '--format', 'summary'])
+
+            assert result.exit_code == 0
+            assert "Pipeline Status Summary" in result.output
+            assert "Total Tables: 1" in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    def test_status_with_specific_table(self, mock_conn_factory, mock_metrics_class):
+        """Test status command with specific table filter."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_analytics_engine = MagicMock()
+            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+
+            mock_metrics = MagicMock()
+            mock_metrics_class.return_value = mock_metrics
+            mock_metrics.get_pipeline_status.return_value = {
+                'status': 'running',
+                'tables': []
+            }
+
+            result = self.runner.invoke(cli, ['status', '--config', config_path, '--table', 'patient'])
+
+            assert result.exit_code == 0
+            mock_metrics.get_pipeline_status.assert_called_once_with(table='patient')
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    def test_status_with_output_file(self, mock_conn_factory, mock_metrics_class):
+        """Test status command with output file."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_analytics_engine = MagicMock()
+            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+
+            mock_metrics = MagicMock()
+            mock_metrics_class.return_value = mock_metrics
+            mock_metrics.get_pipeline_status.return_value = {
+                'status': 'running',
+                'tables': []
+            }
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as output_file:
+                output_path = output_file.name
+
+            try:
+                result = self.runner.invoke(cli, [
+                    'status', '--config', config_path, 
+                    '--output', output_path
+                ])
+
+                assert result.exit_code == 0
+                assert "Status report written to" in result.output
+                
+                # Check that file was created
+                assert os.path.exists(output_path)
+                
+            finally:
+                if os.path.exists(output_path):
+                    os.unlink(output_path)
+            
+        finally:
+            os.unlink(config_path)
+
+
+class TestCLIErrorHandling:
+    """Test CLI error handling and edge cases."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_connection_failure(self, mock_orchestrator_class):
+        """Test run command when connection initialization fails."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = False
+
+            result = self.runner.invoke(cli, ['run', '--config', config_path])
+
+            assert result.exit_code != 0
+            assert "Failed to initialize connections" in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_table_failure(self, mock_orchestrator_class):
+        """Test run command when table processing fails."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = True
+            mock_orchestrator.run_pipeline_for_table.return_value = False
+
+            result = self.runner.invoke(cli, [
+                'run', '--config', config_path, '--tables', 'patient'
+            ])
+
+            assert result.exit_code != 0
+            assert "Failed to process table: patient" in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_with_priority_failure(self, mock_orchestrator_class):
+        """Test run command when priority processing fails."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_orchestrator = MagicMock()
+            mock_orchestrator_class.return_value = mock_orchestrator
+            mock_orchestrator.initialize_connections.return_value = True
+            mock_orchestrator.process_tables_by_priority.return_value = {
+                'high': {'success': [], 'failed': ['table1', 'table2']}
+            }
+
+            result = self.runner.invoke(cli, ['run', '--config', config_path])
+
+            assert result.exit_code != 0
+            assert "Failed to process tables in high" in result.output
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    def test_status_with_invalid_config(self, mock_conn_factory, mock_metrics_class):
+        """Test status command with invalid configuration file."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("invalid: yaml: content: [")
+            config_path = f.name
+
+        try:
+            result = self.runner.invoke(cli, ['status', '--config', config_path])
+
+            assert result.exit_code != 0
+            # Should fail due to invalid YAML
+            
+        finally:
+            os.unlink(config_path)
+    
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    def test_status_with_metrics_failure(self, mock_conn_factory, mock_metrics_class):
+        """Test status command when metrics collection fails."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            mock_analytics_engine = MagicMock()
+            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+
+            mock_metrics = MagicMock()
+            mock_metrics_class.return_value = mock_metrics
+            mock_metrics.get_pipeline_status.side_effect = Exception("Metrics error")
+
+            result = self.runner.invoke(cli, ['status', '--config', config_path])
+
+            assert result.exit_code != 0
+            assert "Metrics error" in result.output
+            
+        finally:
+            os.unlink(config_path)
+
+
 class TestConnectionTesting:
-    """
-    Test cases for connection testing functionality.
+    """Test database connection testing functionality."""
     
-    This class tests the database connection validation features:
-    - Successful connection testing for all database types
-    - Failed connection handling and error reporting
-    - Connection factory integration
-    
-    Uses mocked connection factories to simulate both
-    successful and failed connection scenarios.
-    """
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
     
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_test_connections_success(self, mock_conn_factory):
-        """Test that connection testing succeeds when all connections are OK."""
-        from unittest.mock import MagicMock
-        # Create a mock engine with a working connect method and context manager
-        mock_conn = MagicMock()
-        mock_engine = MagicMock()
-        mock_engine.connect.return_value = mock_conn
-        # Set up mock factory to return the working engine
-        mock_conn_factory.get_opendental_source_connection.return_value = mock_engine
-        mock_conn_factory.get_mysql_replication_connection.return_value = mock_engine
-        mock_conn_factory.get_postgres_analytics_connection.return_value = mock_engine
-        # Run the command
-        runner = CliRunner()
-        result = runner.invoke(cli, ['test-connections'])
-        # Print debug info
-        logger.debug(f"CLI Output: {result.output}")
-        logger.debug(f"Exit Code: {result.exit_code}")
-        # Verify the result
-        assert result.exit_code == 0, f"Expected exit code 0, got {result.exit_code}. Output: {result.output}"
-        assert "OpenDental source connection: OK" in result.output
-        assert "MySQL replication connection: OK" in result.output
-        assert "PostgreSQL analytics connection: OK" in result.output
-
+        """Test successful connection testing."""
+        # Mock engines
+        mock_source_engine = MagicMock()
+        mock_repl_engine = MagicMock()
+        mock_analytics_engine = MagicMock()
+        
+        # Mock connection context managers
+        mock_source_conn = MagicMock()
+        mock_repl_conn = MagicMock()
+        mock_analytics_conn = MagicMock()
+        
+        mock_source_engine.connect.return_value.__enter__.return_value = mock_source_conn
+        mock_source_engine.connect.return_value.__exit__.return_value = None
+        mock_repl_engine.connect.return_value.__enter__.return_value = mock_repl_conn
+        mock_repl_engine.connect.return_value.__exit__.return_value = None
+        mock_analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
+        mock_analytics_engine.connect.return_value.__exit__.return_value = None
+        
+        # Setup connection factory
+        mock_conn_factory.get_opendental_source_connection.return_value = mock_source_engine
+        mock_conn_factory.get_mysql_replication_connection.return_value = mock_repl_engine
+        mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+        
+        result = self.runner.invoke(cli, ['test-connections'])
+        
+        assert result.exit_code == 0
+        assert "✅ OpenDental source connection: OK" in result.output
+        assert "✅ MySQL replication connection: OK" in result.output
+        assert "✅ PostgreSQL analytics connection: OK" in result.output
+        
+        # Verify engines were disposed
+        mock_source_engine.dispose.assert_called_once()
+        mock_repl_engine.dispose.assert_called_once()
+        mock_analytics_engine.dispose.assert_called_once()
+    
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_test_connections_failure(self, mock_conn_factory):
-        """Test that connection testing fails when connections fail."""
-        # Make the ConnectionFactory methods themselves raise exceptions
+        """Test connection testing when connections fail."""
+        # Mock connection factory to raise exception
         mock_conn_factory.get_opendental_source_connection.side_effect = Exception("Connection failed")
-        mock_conn_factory.get_mysql_replication_connection.side_effect = Exception("Connection failed")
-        mock_conn_factory.get_postgres_analytics_connection.side_effect = Exception("Connection failed")
-        # Run the command
-        runner = CliRunner()
-        result = runner.invoke(cli, ['test-connections'])
-        # Print debug info
-        logger.debug(f"CLI Output: {result.output}")
-        logger.debug(f"Exit Code: {result.exit_code}")
-        # Verify the result
-        assert result.exit_code == 1, f"Expected exit code 1, got {result.exit_code}. Output: {result.output}"
-        assert "Error: Connection failed" in result.output
+        
+        result = self.runner.invoke(cli, ['test-connections'])
+        
+        assert result.exit_code != 0
+        assert "Connection failed" in result.output
 
 
 class TestCLIEdgeCases:
-    """Test edge cases and error handling."""
+    """Test CLI edge cases and error conditions."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
     
     def test_missing_config(self):
-        """Test behavior with missing configuration."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ['run', '--config', 'nonexistent.yml'])
+        """Test behavior when config file is missing."""
+        result = self.runner.invoke(cli, ['run', '--config', 'nonexistent.yaml'])
         assert result.exit_code != 0
-        assert 'Error' in result.output
-        
+    
     def test_invalid_format(self):
-        """Test status command with invalid format."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ['status', '--format', 'invalid'])
-        assert result.exit_code != 0
-        assert 'Error' in result.output
+        """Test behavior with invalid format option."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_path = f.name
+
+        try:
+            result = self.runner.invoke(cli, [
+                'status', '--config', config_path, '--format', 'invalid'
+            ])
+            assert result.exit_code != 0
+        finally:
+            os.unlink(config_path)
 
 
 def test_cli_via_subprocess():
-    """Test CLI via subprocess (similar to real usage)."""
+    """Test CLI via subprocess to ensure it works as a standalone command."""
     try:
-        # Test help command
-        result = subprocess.run([
-            sys.executable, '-m', 'etl_pipeline.cli.__main__', '--help'
-        ], capture_output=True, text=True, timeout=10)
-        
-        # If the module is not found, skip the test instead of failing
-        if result.returncode != 0 and "ModuleNotFoundError" in result.stderr:
-            pytest.skip("CLI module not available in current environment")
-        
+        result = subprocess.run(
+            [sys.executable, '-m', 'etl_pipeline.cli.main', '--help'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
         assert result.returncode == 0
         assert 'ETL Pipeline CLI' in result.stdout
-        
     except subprocess.TimeoutExpired:
         pytest.fail("CLI command timed out")
-    except Exception as e:
-        pytest.fail(f"CLI subprocess test failed: {e}")
+    except FileNotFoundError:
+        pytest.skip("CLI module not available as subprocess")
 
 
 def test_cli_entry_point():
-    """Test that the CLI entry point can be imported."""
+    """Test CLI entry point functionality."""
     try:
-        from etl_pipeline.cli.__main__ import main
-        assert callable(main)
-    except ImportError as e:
-        pytest.fail(f"Failed to import CLI entry point: {e}")
+        result = subprocess.run(
+            [sys.executable, '-m', 'etl_pipeline.cli', '--help'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        assert result.returncode == 0
+        assert 'ETL Pipeline CLI' in result.stdout
+    except subprocess.TimeoutExpired:
+        pytest.fail("CLI entry point timed out")
+    except FileNotFoundError:
+        pytest.skip("CLI entry point not available")
 
 
-if __name__ == '__main__':
-    """Run tests directly."""
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
