@@ -156,8 +156,8 @@ def table_processor_standard_config():
 def table_processor_large_config():
     """Large table configuration for TableProcessor tests."""
     return {
-        'estimated_rows': 1000000,
-        'estimated_size_mb': 100,
+        'estimated_rows': 1000001,  # > 1,000,000 to trigger chunked loading
+        'estimated_size_mb': 101,   # > 100 to trigger chunked loading
         'batch_size': 5000,
         'priority': 'critical'
     }
@@ -166,8 +166,8 @@ def table_processor_large_config():
 def table_processor_medium_large_config():
     """Medium-large table configuration for TableProcessor tests."""
     return {
-        'estimated_rows': 500000,
-        'estimated_size_mb': 50,
+        'estimated_rows': 1000001,  # > 1,000,000 to trigger chunked loading
+        'estimated_size_mb': 101,   # > 100 to trigger chunked loading
         'batch_size': 2500,
         'priority': 'important'
     }
