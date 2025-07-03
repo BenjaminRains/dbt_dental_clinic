@@ -14,7 +14,7 @@ Testing Strategy:
 Requirements:
 - test_opendental_analytics database must exist
 - analytics_test_user must have CREATE, INSERT, SELECT, DELETE permissions on schemas
-- Schemas (raw, public, public_staging, public_intermediate, public_marts) must be accessible
+- Schemas (raw, staging, intermediate, marts) must be accessible
 - Database admin should pre-configure permissions for analytics_test_user
 - Tests will verify permissions are correctly set up
 """
@@ -85,7 +85,7 @@ class TestPipelineOrchestratorRealIntegration:
     def test_data_setup(self, analytics_engine):
         """Set up test data in the analytics database."""
         # Create test schemas if they don't exist
-        schemas = ['raw', 'public', 'public_staging', 'public_intermediate', 'public_marts']
+        schemas = ['raw', 'staging', 'intermediate', 'marts']
         
         with analytics_engine.connect() as conn:
             for schema in schemas:
@@ -254,14 +254,14 @@ class TestPipelineOrchestratorRealIntegration:
     
     def test_etl_schema_access(self, analytics_engine):
         """Test that analytics_test_user can access ETL pipeline schemas."""
-        expected_schemas = ['raw', 'public', 'public_staging', 'public_intermediate', 'public_marts']
+        expected_schemas = ['raw', 'staging', 'intermediate', 'marts']
         
         with analytics_engine.connect() as conn:
             # Check which schemas exist and are accessible
             result = conn.execute(text("""
                 SELECT schema_name 
                 FROM information_schema.schemata 
-                WHERE schema_name IN ('raw', 'public', 'public_staging', 'public_intermediate', 'public_marts')
+                WHERE schema_name IN ('raw', 'staging', 'intermediate', 'marts')
                 ORDER BY schema_name
             """))
             
