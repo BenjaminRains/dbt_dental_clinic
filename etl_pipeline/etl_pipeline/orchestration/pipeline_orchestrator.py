@@ -56,7 +56,7 @@ from datetime import datetime
 import time
 
 from ..core.connections import ConnectionFactory
-from ..transformers.raw_to_public import RawToPublicTransformer
+
 from ..monitoring.unified_metrics import UnifiedMetricsCollector
 from .table_processor import TableProcessor
 from .priority_processor import PriorityProcessor
