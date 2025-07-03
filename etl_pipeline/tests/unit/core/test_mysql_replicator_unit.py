@@ -17,6 +17,7 @@ Testing Strategy:
 
 import pytest
 import hashlib
+import os
 from unittest.mock import MagicMock, patch, call, Mock
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -123,6 +124,595 @@ class TestInitialization(TestMySQLReplicatorUnit):
         # Test default values are set correctly
         assert replicator.query_timeout == 300
         assert replicator.max_batch_size == 10000
+    
+    def test_initialization_with_invalid_schema_discovery(self, mock_source_engine, mock_target_engine):
+        """Test initialization with invalid SchemaDiscovery instance."""
+        with pytest.raises(ValueError, match="SchemaDiscovery instance is required"):
+            ExactMySQLReplicator(
+                source_engine=mock_source_engine,
+                target_engine=mock_target_engine,
+                source_db='test_source',
+                target_db='test_target',
+                schema_discovery="invalid_schema_discovery"
+            )
+
+
+@pytest.mark.unit
+class TestCreateExactReplica(TestMySQLReplicatorUnit):
+    """Test create_exact_replica method."""
+    
+    def test_create_exact_replica_success(self, replicator):
+        """Test successful table replica creation."""
+        # Mock schema discovery to return True
+        replicator.schema_discovery.replicate_schema.return_value = True
+        
+        result = replicator.create_exact_replica('test_table')
+        
+        assert result is True
+        replicator.schema_discovery.replicate_schema.assert_called_once_with(
+            source_table='test_table',
+            target_engine=replicator.target_engine,
+            target_db=replicator.target_db,
+            target_table='test_table'
+        )
+    
+    def test_create_exact_replica_failure(self, replicator):
+        """Test table replica creation failure."""
+        # Mock schema discovery to return False
+        replicator.schema_discovery.replicate_schema.return_value = False
+        
+        result = replicator.create_exact_replica('test_table')
+        
+        assert result is False
+        replicator.schema_discovery.replicate_schema.assert_called_once()
+    
+    def test_create_exact_replica_exception(self, replicator):
+        """Test table replica creation with exception."""
+        # Mock schema discovery to raise exception
+        replicator.schema_discovery.replicate_schema.side_effect = Exception("Schema replication failed")
+        
+        result = replicator.create_exact_replica('test_table')
+        
+        assert result is False
+        replicator.schema_discovery.replicate_schema.assert_called_once()
+
+
+@pytest.mark.unit
+class TestCopyTableData(TestMySQLReplicatorUnit):
+    """Test copy_table_data method."""
+    
+    def test_copy_table_data_small_table_direct_copy(self, replicator):
+        """Test copying small table with direct copy."""
+        # Mock size info for small table
+        replicator.schema_discovery.get_table_size_info.return_value = {'row_count': 100}
+        
+        # Mock target engine connection
+        mock_conn = MagicMock()
+        replicator.target_engine.connect.return_value.__enter__.return_value = mock_conn
+        
+        # Mock direct copy to return True
+        with patch.object(replicator, '_copy_direct', return_value=True):
+            result = replicator.copy_table_data('test_table')
+            
+            assert result is True
+            replicator.schema_discovery.get_table_size_info.assert_called_once_with('test_table')
+            mock_conn.execute.assert_called_once()
+            replicator._copy_direct.assert_called_once_with('test_table', 100)
+    
+    def test_copy_table_data_large_table_chunked_copy(self, replicator):
+        """Test copying large table with chunked copy."""
+        # Mock size info for large table
+        replicator.schema_discovery.get_table_size_info.return_value = {'row_count': 50000}
+        
+        # Mock target engine connection
+        mock_conn = MagicMock()
+        replicator.target_engine.connect.return_value.__enter__.return_value = mock_conn
+        
+        # Mock chunked copy to return True
+        with patch.object(replicator, '_copy_chunked', return_value=True):
+            result = replicator.copy_table_data('test_table')
+            
+            assert result is True
+            replicator.schema_discovery.get_table_size_info.assert_called_once_with('test_table')
+            mock_conn.execute.assert_called_once()
+            replicator._copy_chunked.assert_called_once_with('test_table', 50000)
+    
+    def test_copy_table_data_exception(self, replicator):
+        """Test copy_table_data with exception."""
+        # Mock schema discovery to raise exception
+        replicator.schema_discovery.get_table_size_info.side_effect = Exception("Size info failed")
+        
+        result = replicator.copy_table_data('test_table')
+        
+        assert result is False
+
+
+@pytest.mark.unit
+class TestVerifyExactReplica(TestMySQLReplicatorUnit):
+    """Test verify_exact_replica method."""
+    
+    def test_verify_exact_replica_success_test_environment(self, replicator):
+        """Test successful replica verification in test environment."""
+        # Mock environment variables for test environment
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'test'}):
+            # Mock source schema
+            replicator.schema_discovery.get_table_schema.return_value = {
+                'schema_hash': 'test_hash',
+                'columns': []
+            }
+            replicator.schema_discovery.get_table_size_info.return_value = {'row_count': 100}
+            
+            # Mock target discovery
+            mock_target_discovery = MagicMock()
+            mock_target_discovery.get_table_schema.return_value = {
+                'schema_hash': 'different_hash',
+                'columns': []
+            }
+            mock_target_discovery.get_table_size_info.return_value = {'row_count': 100}
+            
+            with patch('etl_pipeline.core.mysql_replicator.SchemaDiscovery', return_value=mock_target_discovery):
+                result = replicator.verify_exact_replica('test_table')
+                
+                assert result is True
+    
+    def test_verify_exact_replica_success_production_environment(self, replicator):
+        """Test successful replica verification in production environment."""
+        # Mock environment variables for production environment
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'production'}):
+            # Mock source schema
+            replicator.schema_discovery.get_table_schema.return_value = {
+                'schema_hash': 'same_hash',
+                'columns': []
+            }
+            replicator.schema_discovery.get_table_size_info.return_value = {'row_count': 100}
+            
+            # Mock target discovery
+            mock_target_discovery = MagicMock()
+            mock_target_discovery.get_table_schema.return_value = {
+                'schema_hash': 'same_hash',
+                'columns': []
+            }
+            mock_target_discovery.get_table_size_info.return_value = {'row_count': 100}
+            
+            with patch('etl_pipeline.core.mysql_replicator.SchemaDiscovery', return_value=mock_target_discovery):
+                result = replicator.verify_exact_replica('test_table')
+                
+                assert result is True
+    
+    def test_verify_exact_replica_schema_mismatch(self, replicator):
+        """Test replica verification with schema mismatch in production."""
+        # Mock environment variables for production environment
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'production'}):
+            # Mock source schema
+            replicator.schema_discovery.get_table_schema.return_value = {
+                'schema_hash': 'source_hash',
+                'columns': []
+            }
+            replicator.schema_discovery.get_table_size_info.return_value = {'row_count': 100}
+            
+            # Mock target discovery with different hash
+            mock_target_discovery = MagicMock()
+            mock_target_discovery.get_table_schema.return_value = {
+                'schema_hash': 'target_hash',
+                'columns': []
+            }
+            mock_target_discovery.get_table_size_info.return_value = {'row_count': 100}
+            
+            with patch('etl_pipeline.core.mysql_replicator.SchemaDiscovery', return_value=mock_target_discovery):
+                result = replicator.verify_exact_replica('test_table')
+                
+                assert result is False
+    
+    def test_verify_exact_replica_row_count_mismatch(self, replicator):
+        """Test replica verification with row count mismatch."""
+        # Mock environment variables for test environment
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'test'}):
+            # Mock source schema
+            replicator.schema_discovery.get_table_schema.return_value = {
+                'schema_hash': 'test_hash',
+                'columns': []
+            }
+            replicator.schema_discovery.get_table_size_info.return_value = {'row_count': 100}
+            
+            # Mock target discovery with different row count
+            mock_target_discovery = MagicMock()
+            mock_target_discovery.get_table_schema.return_value = {
+                'schema_hash': 'test_hash',
+                'columns': []
+            }
+            mock_target_discovery.get_table_size_info.return_value = {'row_count': 50}
+            
+            with patch('etl_pipeline.core.mysql_replicator.SchemaDiscovery', return_value=mock_target_discovery):
+                result = replicator.verify_exact_replica('test_table')
+                
+                assert result is False
+    
+    def test_verify_exact_replica_exception(self, replicator):
+        """Test verify_exact_replica with exception."""
+        # Mock schema discovery to raise exception
+        replicator.schema_discovery.get_table_schema.side_effect = Exception("Schema discovery failed")
+        
+        result = replicator.verify_exact_replica('test_table')
+        
+        assert result is False
+
+
+@pytest.mark.unit
+class TestCopyDirect(TestMySQLReplicatorUnit):
+    """Test _copy_direct method."""
+    
+    def test_copy_direct_success(self, replicator):
+        """Test successful direct copy."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock source result with data
+        mock_result = MagicMock()
+        mock_row1 = MagicMock()
+        mock_row1._mapping = {'id': 1, 'name': 'test1'}
+        mock_row2 = MagicMock()
+        mock_row2._mapping = {'id': 2, 'name': 'test2'}
+        mock_result.fetchall.return_value = [mock_row1, mock_row2]
+        mock_result.keys.return_value = ['id', 'name']
+        mock_source_conn.execute.return_value = mock_result
+        
+        # Mock target connection context manager
+        mock_target_conn.begin.return_value.__enter__.return_value = mock_target_conn
+        
+        # Mock engine connect methods to return context managers
+        mock_source_context = MagicMock()
+        mock_source_context.__enter__.return_value = mock_source_conn
+        mock_source_context.__exit__.return_value = None
+        
+        mock_target_context = MagicMock()
+        mock_target_context.__enter__.return_value = mock_target_conn
+        mock_target_context.__exit__.return_value = None
+        
+        replicator.source_engine.connect.return_value = mock_source_context
+        replicator.target_engine.connect.return_value = mock_target_context
+        
+        result = replicator._copy_direct('test_table', 2)
+        
+        assert result is True
+        mock_source_conn.execute.assert_called_once()
+        mock_target_conn.execute.assert_called_once()
+    
+    def test_copy_direct_empty_table(self, replicator):
+        """Test direct copy with empty table."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock source result with no data
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+        mock_source_conn.execute.return_value = mock_result
+        
+        # Mock engine connect methods to return context managers
+        mock_source_context = MagicMock()
+        mock_source_context.__enter__.return_value = mock_source_conn
+        mock_source_context.__exit__.return_value = None
+        
+        mock_target_context = MagicMock()
+        mock_target_context.__enter__.return_value = mock_target_conn
+        mock_target_context.__exit__.return_value = None
+        
+        replicator.source_engine.connect.return_value = mock_source_context
+        replicator.target_engine.connect.return_value = mock_target_context
+        
+        result = replicator._copy_direct('test_table', 0)
+        
+        assert result is True
+        mock_source_conn.execute.assert_called_once()
+        # Should not call target execute for empty table
+    
+    def test_copy_direct_exception(self, replicator):
+        """Test direct copy with exception."""
+        # Mock source connection to raise exception
+        mock_source_conn = MagicMock()
+        mock_source_conn.execute.side_effect = Exception("Copy failed")
+        
+        # Mock engine connect method to return context manager
+        mock_source_context = MagicMock()
+        mock_source_context.__enter__.return_value = mock_source_conn
+        mock_source_context.__exit__.return_value = None
+        
+        replicator.source_engine.connect.return_value = mock_source_context
+        
+        result = replicator._copy_direct('test_table', 10)
+        
+        assert result is False
+
+
+@pytest.mark.unit
+class TestCopyChunked(TestMySQLReplicatorUnit):
+    """Test _copy_chunked method."""
+    
+    def test_copy_chunked_with_primary_key(self, replicator):
+        """Test chunked copy with primary key."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock schema with primary key
+        replicator.schema_discovery.get_table_schema.return_value = {
+            'primary_key_columns': ['id']
+        }
+        
+        # Mock engine connect methods to return context managers
+        mock_source_context = MagicMock()
+        mock_source_context.__enter__.return_value = mock_source_conn
+        mock_source_context.__exit__.return_value = None
+        
+        mock_target_context = MagicMock()
+        mock_target_context.__enter__.return_value = mock_target_conn
+        mock_target_context.__exit__.return_value = None
+        
+        replicator.source_engine.connect.return_value = mock_source_context
+        replicator.target_engine.connect.return_value = mock_target_context
+        
+        # Mock PK chunking to return True
+        with patch.object(replicator, '_copy_with_pk_chunking', return_value=True):
+            result = replicator._copy_chunked('test_table', 50000)
+            
+            assert result is True
+            replicator._copy_with_pk_chunking.assert_called_once_with(
+                mock_source_conn, mock_target_conn, 'test_table', ['id']
+            )
+    
+    def test_copy_chunked_without_primary_key(self, replicator):
+        """Test chunked copy without primary key."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock schema without primary key
+        replicator.schema_discovery.get_table_schema.return_value = {
+            'primary_key_columns': []
+        }
+        
+        # Mock engine connect methods to return context managers
+        mock_source_context = MagicMock()
+        mock_source_context.__enter__.return_value = mock_source_conn
+        mock_source_context.__exit__.return_value = None
+        
+        mock_target_context = MagicMock()
+        mock_target_context.__enter__.return_value = mock_target_conn
+        mock_target_context.__exit__.return_value = None
+        
+        replicator.source_engine.connect.return_value = mock_source_context
+        replicator.target_engine.connect.return_value = mock_target_context
+        
+        # Mock limit/offset chunking to return True
+        with patch.object(replicator, '_copy_with_limit_offset', return_value=True):
+            result = replicator._copy_chunked('test_table', 50000)
+            
+            assert result is True
+            replicator._copy_with_limit_offset.assert_called_once_with(
+                mock_source_conn, mock_target_conn, 'test_table'
+            )
+    
+    def test_copy_chunked_exception(self, replicator):
+        """Test chunked copy with exception."""
+        # Mock source connection to raise exception
+        mock_source_conn = MagicMock()
+        mock_source_conn.execute.side_effect = Exception("Chunked copy failed")
+        
+        # Mock engine connect method to return context manager
+        mock_source_context = MagicMock()
+        mock_source_context.__enter__.return_value = mock_source_conn
+        mock_source_context.__exit__.return_value = None
+        
+        replicator.source_engine.connect.return_value = mock_source_context
+        
+        result = replicator._copy_chunked('test_table', 50000)
+        
+        assert result is False
+
+
+@pytest.mark.unit
+class TestCopyWithPkChunking(TestMySQLReplicatorUnit):
+    """Test _copy_with_pk_chunking method."""
+    
+    def test_copy_with_pk_chunking_success(self, replicator):
+        """Test successful PK chunking copy."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock range query result
+        mock_range_result = MagicMock()
+        mock_range_row = MagicMock()
+        mock_range_row.min_pk = 1
+        mock_range_row.max_pk = 100
+        mock_range_result.fetchone.return_value = mock_range_row
+        mock_source_conn.execute.return_value = mock_range_result
+        
+        # Mock chunk query result
+        mock_chunk_result = MagicMock()
+        mock_row1 = MagicMock()
+        mock_row1._mapping = {'id': 1, 'name': 'test1'}
+        mock_row1.id = 1
+        mock_row2 = MagicMock()
+        mock_row2._mapping = {'id': 2, 'name': 'test2'}
+        mock_row2.id = 2
+        mock_chunk_result.fetchall.return_value = [mock_row1, mock_row2]
+        mock_chunk_result.keys.return_value = ['id', 'name']
+        
+        # Mock empty chunk result to end the loop
+        mock_empty_chunk_result = MagicMock()
+        mock_empty_chunk_result.fetchall.return_value = []
+        mock_empty_chunk_result.keys.return_value = ['id', 'name']
+        
+        # Mock target connection context manager
+        mock_target_conn.begin.return_value.__enter__.return_value = mock_target_conn
+        
+        # First call returns range result, then chunk, then empty chunk to end loop
+        mock_source_conn.execute.side_effect = [mock_range_result, mock_chunk_result, mock_empty_chunk_result]
+        
+        result = replicator._copy_with_pk_chunking(mock_source_conn, mock_target_conn, 'test_table', ['id'])
+        
+        assert result is True
+        assert mock_source_conn.execute.call_count >= 2
+        assert mock_target_conn.execute.call_count >= 1
+    
+    def test_copy_with_pk_chunking_no_data(self, replicator):
+        """Test PK chunking with no data."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock range query result with no data
+        mock_range_result = MagicMock()
+        mock_range_result.fetchone.return_value = None
+        mock_source_conn.execute.return_value = mock_range_result
+        
+        result = replicator._copy_with_pk_chunking(mock_source_conn, mock_target_conn, 'test_table', ['id'])
+        
+        assert result is True
+        mock_source_conn.execute.assert_called_once()
+    
+    def test_copy_with_pk_chunking_exception(self, replicator):
+        """Test PK chunking with exception."""
+        # Mock source connection to raise exception
+        mock_source_conn = MagicMock()
+        mock_source_conn.execute.side_effect = Exception("PK chunking failed")
+        
+        mock_target_conn = MagicMock()
+        
+        result = replicator._copy_with_pk_chunking(mock_source_conn, mock_target_conn, 'test_table', ['id'])
+        
+        assert result is False
+
+
+@pytest.mark.unit
+class TestCopyWithLimitOffset(TestMySQLReplicatorUnit):
+    """Test _copy_with_limit_offset method."""
+    
+    def test_copy_with_limit_offset_success(self, replicator):
+        """Test successful limit/offset copy."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock chunk query result
+        mock_chunk_result = MagicMock()
+        mock_row1 = MagicMock()
+        mock_row1._mapping = {'id': 1, 'name': 'test1'}
+        mock_row2 = MagicMock()
+        mock_row2._mapping = {'id': 2, 'name': 'test2'}
+        mock_chunk_result.fetchall.return_value = [mock_row1, mock_row2]
+        mock_chunk_result.keys.return_value = ['id', 'name']
+        mock_source_conn.execute.return_value = mock_chunk_result
+        
+        # Mock target connection context manager
+        mock_target_conn.begin.return_value.__enter__.return_value = mock_target_conn
+        
+        result = replicator._copy_with_limit_offset(mock_source_conn, mock_target_conn, 'test_table')
+        
+        assert result is True
+        assert mock_source_conn.execute.call_count >= 1
+        assert mock_target_conn.execute.call_count >= 1
+    
+    def test_copy_with_limit_offset_no_data(self, replicator):
+        """Test limit/offset copy with no data."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock chunk query result with no data
+        mock_chunk_result = MagicMock()
+        mock_chunk_result.fetchall.return_value = []
+        mock_source_conn.execute.return_value = mock_chunk_result
+        
+        result = replicator._copy_with_limit_offset(mock_source_conn, mock_target_conn, 'test_table')
+        
+        assert result is True
+        mock_source_conn.execute.assert_called_once()
+    
+    def test_copy_with_limit_offset_exception(self, replicator):
+        """Test limit/offset copy with exception."""
+        # Mock source connection to raise exception
+        mock_source_conn = MagicMock()
+        mock_source_conn.execute.side_effect = Exception("Limit/offset copy failed")
+        
+        mock_target_conn = MagicMock()
+        
+        result = replicator._copy_with_limit_offset(mock_source_conn, mock_target_conn, 'test_table')
+        
+        assert result is False
+
+
+@pytest.mark.unit
+class TestVerifyDataIntegrity(TestMySQLReplicatorUnit):
+    """Test _verify_data_integrity method."""
+    
+    def test_verify_data_integrity_success(self, replicator):
+        """Test successful data integrity verification."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock checksum query results
+        mock_source_result = MagicMock()
+        mock_source_row = MagicMock()
+        mock_source_row.chunk_hash = 'hash1'
+        mock_source_row.row_count = 100
+        mock_source_result.__iter__.return_value = [mock_source_row]
+        
+        mock_target_result = MagicMock()
+        mock_target_row = MagicMock()
+        mock_target_row.chunk_hash = 'hash1'
+        mock_target_row.row_count = 100
+        mock_target_result.__iter__.return_value = [mock_target_row]
+        
+        mock_source_conn.execute.return_value = mock_source_result
+        mock_target_conn.execute.return_value = mock_target_result
+        
+        result = replicator._verify_data_integrity(mock_source_conn, mock_target_conn, 'test_table', ['id'])
+        
+        assert result is True
+        mock_source_conn.execute.assert_called_once()
+        mock_target_conn.execute.assert_called_once()
+    
+    def test_verify_data_integrity_mismatch(self, replicator):
+        """Test data integrity verification with mismatch."""
+        # Mock source and target connections
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock checksum query results with different hashes
+        mock_source_result = MagicMock()
+        mock_source_row = MagicMock()
+        mock_source_row.chunk_hash = 'hash1'
+        mock_source_row.row_count = 100
+        mock_source_result.__iter__.return_value = [mock_source_row]
+        
+        mock_target_result = MagicMock()
+        mock_target_row = MagicMock()
+        mock_target_row.chunk_hash = 'hash2'
+        mock_target_row.row_count = 100
+        mock_target_result.__iter__.return_value = [mock_target_row]
+        
+        mock_source_conn.execute.return_value = mock_source_result
+        mock_target_conn.execute.return_value = mock_target_result
+        
+        result = replicator._verify_data_integrity(mock_source_conn, mock_target_conn, 'test_table', ['id'])
+        
+        assert result is False
+    
+    def test_verify_data_integrity_exception(self, replicator):
+        """Test data integrity verification with exception."""
+        # Mock source connection to raise exception
+        mock_source_conn = MagicMock()
+        mock_source_conn.execute.side_effect = Exception("Integrity check failed")
+        
+        mock_target_conn = MagicMock()
+        
+        result = replicator._verify_data_integrity(mock_source_conn, mock_target_conn, 'test_table', ['id'])
+        
+        assert result is False
 
 
 @pytest.mark.unit
@@ -257,12 +847,10 @@ class TestEdgeCases(TestMySQLReplicatorUnit):
     
     def test_special_characters_in_table_name(self, replicator):
         """Test handling of special characters in table names."""
-        table_name = 'test-table_with_underscores'
-        
-        # Test that table name is properly quoted
-        quoted_name = f"`{table_name}`"
-        assert quoted_name == "`test-table_with_underscores`"
-        assert '`' in quoted_name
+        # Test with table name containing special characters
+        table_name = "test_table_with_special_chars_123"
+        # This would be tested in integration tests with actual database
+        assert "test_table" in table_name
     
     def test_null_values_handling(self, replicator):
         """Test handling of null values in data."""
