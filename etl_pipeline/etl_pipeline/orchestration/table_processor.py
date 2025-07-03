@@ -253,15 +253,19 @@ class TableProcessor:
         Returns:
             bool: True if processing was successful
         """
-        # Initialize connections if not already done
-        if not self._initialized:
-            if not self.initialize_connections():
-                logger.error("Failed to initialize database connections")
-                return False
-        
+        # Check if connections are available first
         if not self._connections_available():
-            logger.error("Database connections not initialized")
-            return False
+            # Only try to initialize if connections aren't already set
+            if not self._initialized:
+                if not self.initialize_connections():
+                    logger.error("Failed to initialize database connections")
+                    return False
+            else:
+                logger.error("Database connections not initialized")
+                return False
+        elif not self._initialized:
+            # Connections are available but not initialized - set the flag
+            self._initialized = True
         
         start_time = time.time()
         
