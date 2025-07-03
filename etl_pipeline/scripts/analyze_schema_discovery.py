@@ -52,7 +52,7 @@ def test_schema_discovery():
     try:
         # Test database connections
         source_engine = ConnectionFactory.get_opendental_source_connection()
-        replication_engine = ConnectionFactory.get_opendental_replication_connection()
+        replication_engine = ConnectionFactory.get_mysql_replication_connection()
         
         print("Source database connection successful (readonly)")
         print("Replication database connection successful")
