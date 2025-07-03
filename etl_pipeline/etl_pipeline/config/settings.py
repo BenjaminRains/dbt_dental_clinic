@@ -77,7 +77,6 @@ class Settings:
         # Specific connection names -> base connection types
         'opendental_source': 'source',
         'opendental_replication': 'replication',
-        'opendental_analytics_public': 'analytics',
         'opendental_analytics_raw': 'analytics',
         'opendental_analytics_staging': 'analytics',
         'opendental_analytics_intermediate': 'analytics',
@@ -88,7 +87,6 @@ class Settings:
         'test_opendental_replication': 'replication',
         'test_opendental_analytics': 'analytics',
         'test_opendental_analytics_raw': 'analytics',
-        'test_opendental_analytics_public': 'analytics',
         'test_opendental_analytics_staging': 'analytics',
         'test_opendental_analytics_intermediate': 'analytics',
         'test_opendental_analytics_marts': 'analytics',
@@ -205,30 +203,28 @@ class Settings:
             config.setdefault('application_name', 'etl_pipeline')
             
             # Handle schema-specific configurations for analytics
-            if db_type in ['opendental_analytics_public', 'opendental_analytics_raw', 
+            if db_type in ['opendental_analytics_raw', 
                           'opendental_analytics_staging', 'opendental_analytics_intermediate', 
                           'opendental_analytics_marts']:
                 # Extract schema from connection name
                 schema_map = {
-                    'opendental_analytics_public': 'public',
                     'opendental_analytics_raw': 'raw',
-                    'opendental_analytics_staging': 'public_staging',
-                    'opendental_analytics_intermediate': 'public_intermediate',
-                    'opendental_analytics_marts': 'public_marts'
+                    'opendental_analytics_staging': 'staging',
+                    'opendental_analytics_intermediate': 'intermediate',
+                    'opendental_analytics_marts': 'marts'
                 }
-                config['schema'] = schema_map.get(db_type, 'public')
-            elif db_type in ['test_opendental_analytics_raw', 'test_opendental_analytics_public',
+                config['schema'] = schema_map.get(db_type, 'raw')
+            elif db_type in ['test_opendental_analytics_raw',
                            'test_opendental_analytics_staging', 'test_opendental_analytics_intermediate',
                            'test_opendental_analytics_marts']:
                 # Extract schema from test connection name
                 schema_map = {
-                    'test_opendental_analytics_public': 'public',
                     'test_opendental_analytics_raw': 'raw',
-                    'test_opendental_analytics_staging': 'public_staging',
-                    'test_opendental_analytics_intermediate': 'public_intermediate',
-                    'test_opendental_analytics_marts': 'public_marts'
+                    'test_opendental_analytics_staging': 'staging',
+                    'test_opendental_analytics_intermediate': 'intermediate',
+                    'test_opendental_analytics_marts': 'marts'
                 }
-                config['schema'] = schema_map.get(db_type, 'public')
+                config['schema'] = schema_map.get(db_type, 'raw')
         
         self._connection_cache[db_type] = config
         return config
