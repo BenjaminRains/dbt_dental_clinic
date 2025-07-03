@@ -364,13 +364,9 @@ class TestPostgresSchemaUnit:
             'create_statement': 'INVALID CREATE STATEMENT'
         }
         
-        # Act - should return empty string, not raise exception
-        result = postgres_schema.adapt_schema('invalid_table', invalid_schema)
-        
-        # Assert - should return a CREATE TABLE statement with empty columns
-        assert 'CREATE TABLE raw.invalid_table' in result
-        # The result should contain empty parentheses (with possible newlines)
-        assert '(' in result and ')' in result
+        # Act - should raise ValueError when no valid columns are found
+        with pytest.raises(ValueError, match="No valid columns found in MySQL schema for table invalid_table"):
+            postgres_schema.adapt_schema('invalid_table', invalid_schema)
 
     # =============================================================================
     # TABLE CREATION TESTS
@@ -437,16 +433,16 @@ class TestPostgresSchemaUnit:
         """Test PostgreSQL table creation when schema adaptation fails."""
         mysql_engine, postgres_engine = mock_engines
         
-        # Invalid schema that will cause adaptation to return empty columns
+        # Invalid schema that will cause adaptation to fail
         invalid_schema = {
             'create_statement': 'INVALID CREATE STATEMENT'
         }
         
-        # Act - this should actually succeed because adapt_schema returns empty columns, not raises
+        # Act - should fail because adapt_schema raises ValueError for invalid input
         result = postgres_schema.create_postgres_table('invalid_table', invalid_schema)
         
-        # Assert - should succeed because adapt_schema handles invalid input gracefully
-        assert result is True
+        # Assert - should fail because adapt_schema raises an exception for invalid input
+        assert result is False
 
     # =============================================================================
     # SCHEMA VERIFICATION TESTS
