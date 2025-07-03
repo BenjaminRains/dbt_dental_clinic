@@ -33,7 +33,6 @@ class TestTableProcessor:
         assert processor.opendental_source_engine is None
         assert processor.mysql_replication_engine is None
         assert processor.postgres_analytics_engine is None
-        assert processor.raw_to_public_transformer is None
         assert processor._source_db is None
         assert processor._replication_db is None
         assert processor._analytics_db is None
@@ -64,7 +63,7 @@ class TestTableProcessor:
         processor.postgres_analytics_engine = MagicMock(spec=Engine)
         assert processor._connections_available() is True
 
-    def test_initialize_connections_success_with_provided_engines(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer):
+    def test_initialize_connections_success_with_provided_engines(self, mock_table_processor_engines):
         """Test successful connection initialization with provided engines."""
         processor = TableProcessor()
         
@@ -77,20 +76,18 @@ class TestTableProcessor:
             result = processor.initialize_connections(
                 source_engine=mock_source,
                 replication_engine=mock_replication,
-                analytics_engine=mock_analytics,
-                raw_to_public_transformer=mock_table_processor_raw_to_public_transformer
+                analytics_engine=mock_analytics
             )
             
             assert result is True
             assert processor.opendental_source_engine == mock_source
             assert processor.mysql_replication_engine == mock_replication
             assert processor.postgres_analytics_engine == mock_analytics
-            assert processor.raw_to_public_transformer == mock_table_processor_raw_to_public_transformer
             assert processor._source_db == 'source_database'
             assert processor._replication_db == 'replication_database'
             assert processor._analytics_db == 'analytics_database'
 
-    def test_initialize_connections_success_with_connection_factory(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer):
+    def test_initialize_connections_success_with_connection_factory(self, mock_table_processor_engines):
         """Test successful connection initialization using ConnectionFactory."""
         processor = TableProcessor()
         
@@ -98,13 +95,11 @@ class TestTableProcessor:
         
         # Patch where used, not where defined (Section 4.1 from debugging notes)
         with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
-             patch('etl_pipeline.orchestration.table_processor.RawToPublicTransformer') as mock_transformer_class, \
              patch.object(processor.settings, 'get_database_config') as mock_get_config:
             
             mock_factory.get_opendental_source_connection.return_value = mock_source
             mock_factory.get_mysql_replication_connection.return_value = mock_replication
             mock_factory.get_postgres_analytics_connection.return_value = mock_analytics
-            mock_transformer_class.return_value = mock_table_processor_raw_to_public_transformer
             mock_get_config.side_effect = lambda db, **kwargs: {'database': f'{db}_database'}
             
             result = processor.initialize_connections()
@@ -113,7 +108,6 @@ class TestTableProcessor:
             assert processor.opendental_source_engine == mock_source
             assert processor.mysql_replication_engine == mock_replication
             assert processor.postgres_analytics_engine == mock_analytics
-            assert processor.raw_to_public_transformer == mock_table_processor_raw_to_public_transformer
 
     def test_initialize_connections_failure_and_cleanup(self):
         """Test connection initialization failure and cleanup."""
@@ -228,7 +222,7 @@ class TestTableProcessor:
         
         assert result is False
 
-    def test_process_table_success_incremental(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
+    def test_process_table_success_incremental(self, mock_table_processor_engines, table_processor_standard_config):
         """Test successful incremental table processing."""
         processor = TableProcessor()
         
@@ -236,7 +230,6 @@ class TestTableProcessor:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         # Add debug logging to mocks (Section 1 from debugging notes)
         with patch.object(processor, '_extract_to_replication') as mock_extract, \
@@ -263,9 +256,8 @@ class TestTableProcessor:
             assert result is True
             processor._extract_to_replication.assert_called_once_with('test_table', False)
             processor._load_to_analytics.assert_called_once_with('test_table', True, table_processor_standard_config)
-            processor.raw_to_public_transformer.transform_table.assert_called_once_with('test_table', is_incremental=True)
 
-    def test_process_table_success_full_refresh(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
+    def test_process_table_success_full_refresh(self, mock_table_processor_engines, table_processor_standard_config):
         """Test successful full refresh table processing."""
         processor = TableProcessor()
         
@@ -273,7 +265,6 @@ class TestTableProcessor:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         with patch.object(processor, '_extract_to_replication', return_value=True), \
              patch.object(processor, '_load_to_analytics', return_value=True), \
@@ -285,7 +276,6 @@ class TestTableProcessor:
             assert result is True
             processor._extract_to_replication.assert_called_once_with('test_table', True)
             processor._load_to_analytics.assert_called_once_with('test_table', False, table_processor_standard_config)
-            processor.raw_to_public_transformer.transform_table.assert_called_once_with('test_table', is_incremental=False)
 
     def test_process_table_extraction_failure(self, mock_table_processor_engines, table_processor_standard_config):
         """Test process_table when extraction phase fails."""
@@ -322,26 +312,11 @@ class TestTableProcessor:
             
             assert result is False
 
-    def test_process_table_transformation_failure(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
-        """Test process_table when transformation phase fails."""
-        processor = TableProcessor()
-        
-        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
-        processor.opendental_source_engine = mock_source
-        processor.mysql_replication_engine = mock_replication
-        processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
-        
-        with patch.object(processor, '_extract_to_replication', return_value=True), \
-             patch.object(processor, '_load_to_analytics', return_value=True), \
-             patch.object(processor.settings, 'get_table_config', return_value=table_processor_standard_config), \
-             patch.object(processor.settings, 'should_use_incremental', return_value=True):
-            
-            processor.raw_to_public_transformer.transform_table.return_value = False
-            
-            result = processor.process_table('test_table')
-            
-            assert result is False
+    def test_process_table_transformation_failure(self, mock_table_processor_engines, table_processor_standard_config):
+        """Test process_table when transformation phase fails (removed as part of refactoring)."""
+        # This test is no longer applicable since raw_to_public_transformer has been removed
+        # The transformation step is now handled by dbt instead of the ETL pipeline
+        pass
 
     def test_process_table_exception_handling(self, mock_table_processor_engines):
         """Test process_table exception handling."""
@@ -360,7 +335,7 @@ class TestTableProcessor:
             
             assert result is False
 
-    def test_process_table_timing_logging(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
+    def test_process_table_timing_logging(self, mock_table_processor_engines, table_processor_standard_config):
         """Test that process_table logs timing information."""
         processor = TableProcessor()
         
@@ -368,7 +343,6 @@ class TestTableProcessor:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         with patch.object(processor, '_extract_to_replication', return_value=True), \
              patch.object(processor, '_load_to_analytics', return_value=True), \
@@ -692,7 +666,7 @@ class TestTableProcessor:
             # At exactly the threshold, should use standard loading (not chunked)
             mock_loader.load_table.assert_called_once_with(table_name='test_table', force_full=False)
 
-    def test_process_table_incremental_logic(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
+    def test_process_table_incremental_logic(self, mock_table_processor_engines, table_processor_standard_config):
         """Test incremental processing logic in process_table."""
         processor = TableProcessor()
         
@@ -700,7 +674,6 @@ class TestTableProcessor:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         with patch.object(processor, '_extract_to_replication', return_value=True), \
              patch.object(processor, '_load_to_analytics', return_value=True), \
@@ -712,9 +685,8 @@ class TestTableProcessor:
             assert result is True
             processor._extract_to_replication.assert_called_once_with('test_table', False)
             processor._load_to_analytics.assert_called_once_with('test_table', True, table_processor_standard_config)
-            processor.raw_to_public_transformer.transform_table.assert_called_once_with('test_table', is_incremental=True)
 
-    def test_process_table_full_refresh_logic(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
+    def test_process_table_full_refresh_logic(self, mock_table_processor_engines, table_processor_standard_config):
         """Test full refresh processing logic in process_table."""
         processor = TableProcessor()
         
@@ -722,7 +694,6 @@ class TestTableProcessor:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         with patch.object(processor, '_extract_to_replication', return_value=True), \
              patch.object(processor, '_load_to_analytics', return_value=True), \
@@ -734,9 +705,8 @@ class TestTableProcessor:
             assert result is True
             processor._extract_to_replication.assert_called_once_with('test_table', True)
             processor._load_to_analytics.assert_called_once_with('test_table', False, table_processor_standard_config)
-            processor.raw_to_public_transformer.transform_table.assert_called_once_with('test_table', is_incremental=False)
 
-    def test_process_table_settings_integration(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer):
+    def test_process_table_settings_integration(self, mock_table_processor_engines):
         """Test integration with Settings class for table configuration."""
         processor = TableProcessor()
         
@@ -744,7 +714,6 @@ class TestTableProcessor:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         expected_config = {
             'estimated_rows': 5000,
@@ -765,7 +734,7 @@ class TestTableProcessor:
             processor.settings.should_use_incremental.assert_called_once_with('test_table')
             processor._load_to_analytics.assert_called_once_with('test_table', False, expected_config)
 
-    def test_mock_call_verification_with_debug_logging(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
+    def test_mock_call_verification_with_debug_logging(self, mock_table_processor_engines, table_processor_standard_config):
         """Test mock call verification with debug logging for troubleshooting."""
         processor = TableProcessor()
         
@@ -773,7 +742,6 @@ class TestTableProcessor:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         with patch.object(processor, '_extract_to_replication') as mock_extract, \
              patch.object(processor, '_load_to_analytics') as mock_load, \
