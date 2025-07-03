@@ -4,7 +4,7 @@ sources:
   - name: opendental
     description: "OpenDental data in PostgreSQL"
     database: opendental_analytics
-    schema: public  # PostgreSQL schema
+    schema: raw  # Raw data from ETL pipeline
     loaded_at_field: "SecDateTEdit"  # Default loaded_at_field for freshness checks
     freshness:
       warn_after: {count: 24, period: day}

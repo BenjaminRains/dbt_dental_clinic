@@ -5,7 +5,7 @@ sources:
   - name: opendental
     description: "OpenDental backup database schema containing dental practice records"
     database: opendental_analytics
-    schema: public
+    schema: raw  # Raw data from ETL pipeline
     loader: postgres
     loaded_at_field: "DateTStamp"  # Using the timestamp field from patient table
     freshness:

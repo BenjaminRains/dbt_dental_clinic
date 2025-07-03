@@ -5,7 +5,7 @@ sources:
   - name: opendental
     description: "OpenDental dental practice management system data replicated to PostgreSQL analytics database"
     database: opendental_analytics
-    schema: public  # PostgreSQL schema
+    schema: raw  # Raw data from ETL pipeline
     
     # Global configuration for all tables
     loaded_at_field: "_extracted_at"  # ETL pipeline timestamp

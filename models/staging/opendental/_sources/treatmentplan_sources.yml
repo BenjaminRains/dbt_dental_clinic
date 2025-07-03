@@ -5,7 +5,7 @@ sources:
   - name: opendental
     description: "OpenDental dental practice management system data in PostgreSQL"
     database: opendental_analytics
-    schema: public  # PostgreSQL schema
+    schema: raw  # Raw data from ETL pipeline
     loader: postgres
 
     tables:
