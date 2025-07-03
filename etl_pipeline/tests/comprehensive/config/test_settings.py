@@ -21,7 +21,7 @@ def mock_env_vars():
         'POSTGRES_ANALYTICS_HOST': 'analytics_host',
         'POSTGRES_ANALYTICS_PORT': '5432',
         'POSTGRES_ANALYTICS_DB': 'analytics_db',
-        'POSTGRES_ANALYTICS_SCHEMA': 'public',
+        'POSTGRES_ANALYTICS_SCHEMA': 'raw',
         'POSTGRES_ANALYTICS_USER': 'analytics_user',
         'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
     }
@@ -374,7 +374,7 @@ def test_get_connection_string_postgres(mock_env_vars):
         assert 'analytics_user:analytics_pass@analytics_host:5432/analytics_db' in pg_conn_str
         assert 'connect_timeout=10' in pg_conn_str
         assert 'application_name=etl_pipeline' in pg_conn_str
-        assert 'options=-csearch_path%3Dpublic' in pg_conn_str
+        assert 'options=-csearch_path%3Draw' in pg_conn_str
 
 @pytest.mark.unit
 def test_get_connection_string_missing_fields():
