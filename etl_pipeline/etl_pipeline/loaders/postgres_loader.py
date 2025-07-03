@@ -76,7 +76,6 @@ WHAT POSTGRESLOADER SHOULD DO:
 
 This creates a clean separation where:
 - PostgresLoader = Data Movement Infrastructure
-- RawToPublicTransformer = Data Standardization Infrastructure
 - dbt models = Business Logic & Analytics
 
 SIMPLIFIED VERSION - CORE LOADING FUNCTIONALITY ONLY
