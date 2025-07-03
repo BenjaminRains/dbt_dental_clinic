@@ -3,15 +3,46 @@
 ## Clear Data Flow Architecture
 
 ```
-┌─────────────────────┐    ┌─────────────────────┐     ┌────────────────────── ┐
-│   Source MySQL      │    │   Replication MySQL │     │   Analytics PostgreSQL│
-│   (OpenDental)      │───▶│   (Local Copy)      │───▶│   (Analytics)         │
-│                     │    │                     │     │                       │
-│ - opendental        │    │ - opendental_repl   │     │ - opendental_analytics│
-│ - Read-only access  │    │ - Full read/write   │     │ - Multiple schemas    │
-│ - Port 3306         │    │ - Port 3305         │     │ - Port 5432           │
-└─────────────────────┘    └─────────────────────┘     └────────────────────── ┘
+┌─────────────────────┐    ┌─────────────────────┐     ┌────────────────────── ┐    ┌────────────────────── ┐
+│   Source MySQL      │    │   Replication MySQL │     │   Analytics PostgreSQL│    │   Analytics PostgreSQL│
+│   (OpenDental)      │───▶│   (Local Copy)      │───▶│   (Raw Schema)        │───▶│   (Public Schema)     │
+│                     │    │                     │     │                       │    │                       │
+│ - opendental        │    │ - opendental_repl   │     │ - opendental_analytics│    │ - opendental_analytics│
+│ - Read-only access  │    │ - Full read/write   │     │ - raw schema          │    │ - public schema       │
+│ - Port 3306         │    │ - Port 3305         │     │ - Port 5432           │    │ - Port 5432           │
+└─────────────────────┘    └─────────────────────┘     └────────────────────── ┘    └────────────────────── ┘
+                                    │                           │                           │
+                                    │                           │                           │
+                                    ▼                           ▼                           ▼
+                            ExactMySQLReplicator         PostgresLoader            RawToPublicTransformer
+                            (Extract Phase)              (Load Phase)              (Transform Phase)
+                            - Exact replication          - Type conversion         - Column standardization
+                            - Schema discovery           - Data extraction         - NULL handling
+                            - Incremental tracking       - Bulk loading            - Configuration overrides
 ```
+
+## ETL Pipeline Phases
+
+### Extract Phase (ExactMySQLReplicator)
+- **Source**: OpenDental MySQL (`opendental`)
+- **Target**: Replication MySQL (`opendental_replication`)
+- **Method**: Exact MySQL replication using `ExactMySQLReplicator`
+- **Tables**: `patient`, `appointment`, `treatment` (no suffixes)
+- **Purpose**: Create local copy for ETL processing
+
+### Load Phase (PostgresLoader)
+- **Source**: Replication MySQL (`opendental_replication`)
+- **Target**: PostgreSQL raw schema (`opendental_analytics.raw`)
+- **Method**: Intelligent type conversion using `PostgresSchema`
+- **Transformation**: MySQL → PostgreSQL type mapping with data analysis
+- **Purpose**: Convert data types and load to analytics database
+
+### Transform Phase (RawToPublicTransformer)
+- **Source**: PostgreSQL raw schema (`opendental_analytics.raw`)
+- **Target**: PostgreSQL public schema (`opendental_analytics.public`)
+- **Method**: Configuration-driven standardization
+- **Transformation**: Column name standardization, NULL handling, configuration overrides
+- **Purpose**: Prepare data for dbt consumption with standardized structure
 
 ## Consistent Naming Strategy
 
@@ -35,7 +66,6 @@ MYSQL_REPLICATION_PASSWORD=replication_password
 POSTGRES_ANALYTICS_HOST=localhost
 POSTGRES_ANALYTICS_PORT=5432
 POSTGRES_ANALYTICS_DB=opendental_analytics
-POSTGRES_ANALYTICS_SCHEMA=raw
 POSTGRES_ANALYTICS_USER=analytics_user
 POSTGRES_ANALYTICS_PASSWORD=analytics_password
 ```
@@ -52,12 +82,11 @@ get_opendental_source_connection()           # Source MySQL (OpenDental)
 get_mysql_replication_connection()           # Replication MySQL (Local copy)
 
 # Analytics connections (PostgreSQL with specific schemas)
-get_postgres_analytics_connection()          # Default: raw schema
-get_opendental_analytics_raw_connection()    # Explicit: raw schema
-get_opendental_analytics_public_connection() # Explicit: public schema
-get_opendental_analytics_staging_connection() # Explicit: public_staging schema
-get_opendental_analytics_intermediate_connection() # Explicit: public_intermediate schema
-get_opendental_analytics_marts_connection()  # Explicit: public_marts schema
+get_opendental_analytics_raw_connection()    # Raw schema (ETL output)
+get_opendental_analytics_public_connection() # Public schema (standardized)
+get_opendental_analytics_staging_connection() # Staging schema (dbt staging)
+get_opendental_analytics_intermediate_connection() # Intermediate schema (dbt intermediate)
+get_opendental_analytics_marts_connection()  # Marts schema (dbt marts)
 ```
 
 ### 3. Pipeline Engine Variables
@@ -67,13 +96,15 @@ class ELTPipeline:
         # Clear, descriptive naming
         self.source_engine = None          # Source MySQL (OpenDental)
         self.replication_engine = None     # Replication MySQL (Local copy)
-        self.analytics_engine = None       # Analytics PostgreSQL (raw schema)
+        self.raw_engine = None             # Analytics PostgreSQL (raw schema)
+        self.public_engine = None          # Analytics PostgreSQL (public schema)
         
         # Database names
         self.source_db = "opendental"
         self.replication_db = "opendental_replication"
         self.analytics_db = "opendental_analytics"
-        self.analytics_schema = "raw"
+        self.raw_schema = "raw"
+        self.public_schema = "public"
 ```
 
 ## PostgreSQL Analytics Database Schema Structure
@@ -82,13 +113,15 @@ class ELTPipeline:
 ```sql
 -- PostgreSQL Database: opendental_analytics
 
--- Raw schema (ELT pipeline output)
-raw.patient              -- Direct from replication MySQL
-raw.appointment          -- Direct from replication MySQL
-raw.treatment            -- Direct from replication MySQL
+-- Raw schema (ETL pipeline output - direct from replication)
+raw.patient              -- Direct from opendental_replication
+raw.appointment          -- Direct from opendental_replication
+raw.treatment            -- Direct from opendental_replication
 
--- Public schema (general purpose)
-public.general_tables    -- Any general purpose tables
+-- Public schema (standardized data - ready for dbt)
+public.patient           -- Standardized column names, cleaned data
+public.appointment       -- Standardized column names, cleaned data
+public.treatment         -- Standardized column names, cleaned data
 
 -- Staging schema (dbt models)
 public_staging.stg_opendental__patient
@@ -111,10 +144,10 @@ public_marts.fact_treatments
 Each schema has its own connection method for clear separation:
 
 ```python
-# Raw schema (ELT pipeline output)
+# Raw schema (ETL pipeline output)
 raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
 
-# Public schema (general purpose)
+# Public schema (standardized data)
 public_engine = ConnectionFactory.get_opendental_analytics_public_connection()
 
 # Staging schema (dbt staging models)
@@ -127,24 +160,32 @@ intermediate_engine = ConnectionFactory.get_opendental_analytics_intermediate_co
 marts_engine = ConnectionFactory.get_opendental_analytics_marts_connection()
 ```
 
-## ELT Pipeline Phases
+## ETL Pipeline Components
 
-### Extract Phase
-- **Source**: OpenDental MySQL (`opendental`)
-- **Target**: Replication MySQL (`opendental_replication`)
-- **Method**: Exact MySQL replication using `ExactMySQLReplicator`
-- **Tables**: `patient`, `appointment`, `treatment` (no suffixes)
+### Extract Phase (ExactMySQLReplicator)
+- **Purpose**: Create exact copy of source database
+- **Transformation**: None - exact replication
+- **Output**: `opendental_replication` database
 
-### Load Phase
-- **Source**: Replication MySQL (`opendental_replication`)
-- **Target**: PostgreSQL raw schema (`raw.patient`, `raw.appointment`)
-- **Method**: Basic type conversion and data cleaning
-- **No business logic**: Only technical transformations for PostgreSQL compatibility
+### Load Phase (PostgresLoader)
+- **Purpose**: Move data from MySQL to PostgreSQL with type conversion
+- **Transformation**: MySQL → PostgreSQL type mapping using `PostgresSchema`
+- **Output**: `opendental_analytics.raw` schema
+- **Key Features**:
+  - Intelligent type analysis (TINYINT → boolean detection)
+  - Incremental loading support
+  - Chunked processing for large tables
+  - Schema validation and verification
 
-### Transform Phase (Basic)
-- **Scope**: Data type conversions, NULL handling, PostgreSQL compatibility
-- **No business transformations**: Leave complex logic for dbt
-- **Output**: Clean raw tables ready for dbt consumption
+### Transform Phase (RawToPublicTransformer)
+- **Purpose**: Standardize data structure for dbt consumption
+- **Transformation**: Configuration-driven standardization
+- **Output**: `opendental_analytics.public` schema
+- **Key Features**:
+  - Column name standardization (lowercase)
+  - NULL value handling
+  - Configuration-driven overrides from `raw_to_public_mapping.yml`
+  - Basic data structure preparation
 
 ## Tracking Tables
 
@@ -160,14 +201,41 @@ opendental_replication.etl_extract_status
 
 ### PostgreSQL Analytics (Load tracking)
 ```sql
-raw.etl_transform_status
+raw.etl_load_status
 - table_name
-- last_transformed
-- rows_transformed
-- transformation_status
+- last_loaded
+- rows_loaded
+- load_status
 - created_at
 - updated_at
 ```
+
+### PostgreSQL Analytics (Transform tracking)
+```sql
+public.etl_transform_status
+- table_name
+- transform_type
+- rows_processed
+- transform_time
+- status
+```
+
+## Configuration Files
+
+### 1. tables.yml (Source Analysis)
+- **Purpose**: Generated from OpenDental source database analysis
+- **Content**: Table metadata, incremental columns, dependencies, extraction strategy
+- **Used by**: ETL pipeline for extraction and loading strategy
+
+### 2. raw_to_public_mapping.yml (Transform Configuration)
+- **Purpose**: Configuration for raw→public transformations
+- **Content**: Column mappings, type overrides, transformation rules
+- **Used by**: RawToPublicTransformer for data standardization
+
+### 3. dbt Configuration
+- **Purpose**: Business logic and analytics transformations
+- **Content**: Staging, intermediate, and mart models
+- **Used by**: dbt for business intelligence
 
 ## dbt Integration Points
 
@@ -175,16 +243,16 @@ raw.etl_transform_status
 ```yaml
 # models/staging/sources.yml
 sources:
-  - name: opendental_raw
-    description: "Raw OpenDental data from ELT pipeline"
-    schema: raw
+  - name: opendental_public
+    description: "Standardized OpenDental data from ETL pipeline"
+    schema: public
     tables:
       - name: patient
-        description: "Raw patient data"
+        description: "Standardized patient data"
       - name: appointment
-        description: "Raw appointment data"
+        description: "Standardized appointment data"
       - name: treatment
-        description: "Raw treatment data"
+        description: "Standardized treatment data"
 ```
 
 ### dbt Model Naming
@@ -218,6 +286,7 @@ fact_treatments.sql
 - Use `get_mysql_replication_connection()` for local MySQL
 - Use schema-specific methods for PostgreSQL analytics:
   - `get_opendental_analytics_raw_connection()` for raw schema
+  - `get_opendental_analytics_public_connection()` for public schema
   - `get_opendental_analytics_staging_connection()` for staging schema
   - `get_opendental_analytics_intermediate_connection()` for intermediate schema
   - `get_opendental_analytics_marts_connection()` for marts schema
@@ -225,13 +294,14 @@ fact_treatments.sql
 
 ### 3. Pipeline Code
 - Use clean table names in raw schema (no _raw suffix)
+- Use clean table names in public schema (no _public suffix)
 - Update variable names for clarity
 - Align tracking table names with purpose
 - Use appropriate schema-specific connections
 
 ### 4. Documentation
 - Keep README.md updated with current architecture
-- Document clear boundaries between ELT and dbt
+- Document clear boundaries between ELT phases
 - Maintain clear data flow diagrams
 - Document schema-specific connection methods
 
@@ -246,13 +316,17 @@ replication_engine = ConnectionFactory.get_mysql_replication_connection()
 # Load phase
 raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
 
-# Transform phase (if needed)
+# Transform phase
 raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+public_engine = ConnectionFactory.get_opendental_analytics_public_connection()
 ```
 
 ### dbt Usage
 ```python
-# Staging models
+# Staging models (read from public schema)
+public_engine = ConnectionFactory.get_opendental_analytics_public_connection()
+
+# Staging models (write to staging schema)
 staging_engine = ConnectionFactory.get_opendental_analytics_staging_connection()
 
 # Intermediate models
@@ -268,11 +342,13 @@ marts_engine = ConnectionFactory.get_opendental_analytics_marts_connection()
 mock_source = ConnectionFactory.get_opendental_source_connection()
 mock_replication = ConnectionFactory.get_mysql_replication_connection()
 mock_raw = ConnectionFactory.get_opendental_analytics_raw_connection()
+mock_public = ConnectionFactory.get_opendental_analytics_public_connection()
 
 # Integration tests with real databases
 source_engine = ConnectionFactory.get_opendental_source_connection()
 replication_engine = ConnectionFactory.get_mysql_replication_connection()
 raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+public_engine = ConnectionFactory.get_opendental_analytics_public_connection()
 ```
 
 ## Benefits of This Approach
@@ -280,9 +356,11 @@ raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
 1. **Clear Separation**: Each database and schema has a distinct role
 2. **Consistent Naming**: No confusion about data location
 3. **Schema-Specific Connections**: Clear boundaries between different data layers
-4. **dbt Integration**: Clean handoff from ELT to dbt with proper schema separation
-5. **Maintainability**: Easy to understand and modify
-6. **Monitoring**: Clear tracking at each stage
-7. **Scalability**: Clear boundaries allow independent scaling
-8. **Debuggability**: Clear data lineage and tracking
-9. **Testability**: Easy to mock specific connections for testing
+4. **Configuration-Driven**: Separate configs for different transformation phases
+5. **dbt Integration**: Clean handoff from ELT to dbt with proper schema separation
+6. **Maintainability**: Easy to understand and modify
+7. **Monitoring**: Clear tracking at each stage
+8. **Scalability**: Clear boundaries allow independent scaling
+9. **Debuggability**: Clear data lineage and tracking
+10. **Testability**: Easy to mock specific connections for testing
+
