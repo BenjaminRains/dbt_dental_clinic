@@ -28,30 +28,25 @@ models:
       columns: true   # PostgreSQL supports persisting column docs
     
     # Configure materializations by folder
+    raw:
+      +materialized: table
+      +schema: raw  # Raw data from ETL pipeline
+      +description: "Raw data models from ETL pipeline"
+    
     staging:
       +materialized: view  # Default materialization, some models override this to be tables
-      +schema: staging  # dbt will prefix with 'public_'
+      +schema: staging  # Simplified schema name
       +description: "Staging models for raw data transformation"
     
     intermediate:
       +materialized: table
-      +schema: intermediate  # dbt will prefix with 'public_'
+      +schema: intermediate  # Simplified schema name
       +description: "Intermediate models for business logic implementation"
     
     marts:
       +materialized: table
-      +schema: marts  # dbt will prefix with 'public_'
+      +schema: marts  # Simplified schema name
       +description: "Mart models for business reporting and analytics"
-
-    raw:
-      +materialized: table
-      +schema: raw  # Keep raw schema as is since it's used for ETL
-      +description: "Raw ingested and ETL tracking tables"
-
-    public:
-      +materialized: table  # or view, as needed
-      +schema: public
-      +description: "Models and views for public schema (shared or BI outputs)"
 
 # Add vars for flexible configuration
 vars:
