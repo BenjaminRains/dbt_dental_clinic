@@ -37,26 +37,49 @@ Set the following environment variables for PostgreSQL integration tests:
 
 ```bash
 # PostgreSQL connection settings
-export TEST_POSTGRES_HOST=localhost
-export TEST_POSTGRES_PORT=5432
-export TEST_POSTGRES_USER=postgres
-export TEST_POSTGRES_PASSWORD=your_password
-export TEST_POSTGRES_DB=test_analytics
+export TEST_POSTGRES_ANALYTICS_HOST=localhost
+export TEST_POSTGRES_ANALYTICS_PORT=5432
+export TEST_POSTGRES_ANALYTICS_USER=analytics_test_user
+export TEST_POSTGRES_ANALYTICS_PASSWORD=your_password
+export TEST_POSTGRES_ANALYTICS_DB=test_opendental_analytics
+export TEST_POSTGRES_ANALYTICS_SCHEMA=raw
+
+# MySQL test database settings
+export TEST_OPENDENTAL_SOURCE_HOST=localhost
+export TEST_OPENDENTAL_SOURCE_PORT=3306
+export TEST_OPENDENTAL_SOURCE_DB=test_opendental
+export TEST_OPENDENTAL_SOURCE_USER=readonly_user
+export TEST_OPENDENTAL_SOURCE_PASSWORD=your_password
+
+export TEST_MYSQL_REPLICATION_HOST=localhost
+export TEST_MYSQL_REPLICATION_PORT=3306
+export TEST_MYSQL_REPLICATION_DB=test_opendental_replication
+export TEST_MYSQL_REPLICATION_USER=replication_test_user
+export TEST_MYSQL_REPLICATION_PASSWORD=your_password
 ```
 
 ### Default Configuration
 If environment variables are not set, the tests will use these defaults:
-- Host: `localhost`
-- Port: `5432`
-- User: `postgres`
-- Password: `postgres`
-- Database: `test_analytics`
+- PostgreSQL Host: `localhost`
+- PostgreSQL Port: `5432`
+- PostgreSQL User: `analytics_test_user`
+- PostgreSQL Database: `test_opendental_analytics`
+- PostgreSQL Schema: `raw`
+- MySQL Source Database: `test_opendental`
+- MySQL Replication Database: `test_opendental_replication`
 
 ### Database Setup
 The integration tests will automatically:
 1. Create the test database if it doesn't exist
-2. Create the required schemas
+2. Create the required schemas (raw, staging, intermediate, marts)
 3. Clean up after tests complete
+
+### Architecture Overview
+The ETL pipeline follows a simplified architecture:
+- **Source**: MySQL OpenDental database
+- **Replication**: MySQL local copy for staging
+- **Analytics**: PostgreSQL with raw schema (ETL output)
+- **Transformations**: Handled by dbt (raw → staging → intermediate → marts)
 
 ## Running Tests
 
