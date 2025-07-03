@@ -35,7 +35,6 @@ DEPENDENCIES:
 - SchemaDiscovery: Schema analysis and table configuration (REQUIRED)
 - ExactMySQLReplicator: MySQL-to-MySQL replication
 - PostgresLoader: MySQL-to-PostgreSQL loading
-- RawToPublicTransformer: Schema transformation
 - Settings: Configuration management
 - ConnectionFactory: Database connections
 - UnifiedMetricsCollector: Basic metrics collection
@@ -72,7 +71,6 @@ from ..core.connections import ConnectionFactory
 from ..monitoring.unified_metrics import UnifiedMetricsCollector
 from ..config.logging import get_logger
 from ..core.postgres_schema import PostgresSchema
-from ..transformers.raw_to_public import RawToPublicTransformer
 from ..core.mysql_replicator import ExactMySQLReplicator
 from ..core.schema_discovery import SchemaDiscovery
 from ..config.settings import Settings
@@ -113,7 +111,6 @@ class TableProcessor:
         self.opendental_source_engine = None
         self.mysql_replication_engine = None
         self.postgres_analytics_engine = None
-        self.raw_to_public_transformer = None
         
         # Cache database configs to avoid repeated lookups
         self._source_db = None
@@ -125,8 +122,7 @@ class TableProcessor:
         
     def initialize_connections(self, source_engine: Engine = None, 
                              replication_engine: Engine = None,
-                             analytics_engine: Engine = None,
-                             raw_to_public_transformer: RawToPublicTransformer = None):
+                             analytics_engine: Engine = None):
         """
         Initialize database connections.
         
@@ -137,7 +133,6 @@ class TableProcessor:
             source_engine: SQLAlchemy engine for source database
             replication_engine: SQLAlchemy engine for replication database
             analytics_engine: SQLAlchemy engine for analytics database
-            raw_to_public_transformer: Transformer for raw to public schema
         """
         try:
             logger.info(f"Initializing database connections for environment: {self.settings.environment}")
@@ -167,14 +162,6 @@ class TableProcessor:
                 self.postgres_analytics_engine = analytics_engine
             else:
                 self.postgres_analytics_engine = ConnectionFactory.get_postgres_analytics_connection()
-                
-            if raw_to_public_transformer:
-                self.raw_to_public_transformer = raw_to_public_transformer
-            else:
-                self.raw_to_public_transformer = RawToPublicTransformer(
-                    self.postgres_analytics_engine,  # Source (raw schema)
-                    self.postgres_analytics_engine   # Target (public schema)
-                )
             
             # Cache database names to avoid repeated lookups
             if self.settings.environment == 'test':
@@ -258,7 +245,6 @@ class TableProcessor:
         
         1. EXTRACT: Copy data from source to replication database
         2. LOAD: Copy data from replication to analytics database (raw schema)
-        3. TRANSFORM: Transform data from raw to public schema
         
         Args:
             table_name: Name of the table to process
@@ -296,12 +282,6 @@ class TableProcessor:
             logger.info(f"Loading {table_name} to analytics database")
             if not self._load_to_analytics(table_name, is_incremental, table_config):
                 logger.error(f"Load to analytics failed for table: {table_name}")
-                return False
-                
-            # 3. Transform to public schema
-            logger.info(f"Transforming {table_name} to public schema")
-            if not self.raw_to_public_transformer.transform_table(table_name, is_incremental=is_incremental):
-                logger.error(f"Transform to public schema failed for table: {table_name}")
                 return False
                 
             processing_time = (time.time() - start_time) / 60
