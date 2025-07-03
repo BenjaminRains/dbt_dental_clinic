@@ -8,6 +8,13 @@ This document defines the standardized naming conventions and data type transfor
 
 Together, these documents provide a comprehensive framework for standardizing data models and transformations.
 
+## Simplified Architecture
+
+The project now follows a simplified ETL architecture:
+- **ETL Pipeline**: MySQL → Replication → PostgreSQL (raw schema)
+- **dbt Transformations**: raw → staging → intermediate → marts
+- **No intermediate public schema**: Raw data flows directly to dbt staging models
+
 ---
 
 ## Core Principles
@@ -173,7 +180,7 @@ raw.patient
 raw.appointment  
 raw.treatment
 
--- dbt staging models
+-- dbt staging models (read from raw, transform to staging)
 staging.stg_opendental__patient
 staging.stg_opendental__appointment
 staging.stg_opendental__treatment
@@ -182,7 +189,7 @@ staging.stg_opendental__treatment
 intermediate.int_patient_demographics
 intermediate.int_appointment_metrics
 
--- dbt mart models
+-- dbt mart models (final analytics-ready data)
 marts.dim_patient
 marts.fact_appointments
 marts.mart_financial_performance
