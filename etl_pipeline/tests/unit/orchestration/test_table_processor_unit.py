@@ -38,7 +38,7 @@ class TestTableProcessorUnit:
         assert processor.opendental_source_engine is None
         assert processor.mysql_replication_engine is None
         assert processor.postgres_analytics_engine is None
-        assert processor.raw_to_public_transformer is None
+        # raw_to_public_transformer removed as part of refactoring
         assert processor._source_db is None
         assert processor._replication_db is None
         assert processor._analytics_db is None
@@ -90,7 +90,7 @@ class TestTableProcessorUnit:
         assert processor._connections_available() is True
 
     @pytest.mark.unit
-    def test_initialize_connections_with_provided_engines(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer):
+    def test_initialize_connections_with_provided_engines(self, mock_table_processor_engines):
         """Test initialize_connections with provided engines."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
@@ -106,21 +106,19 @@ class TestTableProcessorUnit:
             result = processor.initialize_connections(
                 source_engine=mock_source,
                 replication_engine=mock_replication,
-                analytics_engine=mock_analytics,
-                raw_to_public_transformer=mock_table_processor_raw_to_public_transformer
+                analytics_engine=mock_analytics
             )
             
             assert result is True
             assert processor.opendental_source_engine == mock_source
             assert processor.mysql_replication_engine == mock_replication
             assert processor.postgres_analytics_engine == mock_analytics
-            assert processor.raw_to_public_transformer == mock_table_processor_raw_to_public_transformer
             assert processor._source_db == 'opendental_source_db'
             assert processor._replication_db == 'opendental_replication_db'
             assert processor._analytics_db == 'opendental_analytics_raw_db'
 
     @pytest.mark.unit
-    def test_initialize_connections_with_connection_factory(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer):
+    def test_initialize_connections_with_connection_factory(self, mock_table_processor_engines):
         """Test initialize_connections using ConnectionFactory."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
@@ -131,13 +129,11 @@ class TestTableProcessorUnit:
         
         # Patch where used, not where defined (Section 4.1 from debugging notes)
         with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
-             patch('etl_pipeline.orchestration.table_processor.RawToPublicTransformer') as mock_transformer_class, \
              patch.object(processor.settings, 'get_database_config') as mock_get_config:
             
             mock_factory.get_opendental_source_connection.return_value = mock_source
             mock_factory.get_mysql_replication_connection.return_value = mock_replication
             mock_factory.get_postgres_analytics_connection.return_value = mock_analytics
-            mock_transformer_class.return_value = mock_table_processor_raw_to_public_transformer
             mock_get_config.side_effect = lambda db, **kwargs: {'database': f'{db}_db'}
             
             result = processor.initialize_connections()
@@ -146,7 +142,6 @@ class TestTableProcessorUnit:
             assert processor.opendental_source_engine == mock_source
             assert processor.mysql_replication_engine == mock_replication
             assert processor.postgres_analytics_engine == mock_analytics
-            assert processor.raw_to_public_transformer == mock_table_processor_raw_to_public_transformer
 
     @pytest.mark.unit
     def test_initialize_connections_failure(self):
@@ -248,7 +243,7 @@ class TestTableProcessorUnit:
         assert result is False
 
     @pytest.mark.unit
-    def test_process_table_success(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer, table_processor_standard_config):
+    def test_process_table_success(self, mock_table_processor_engines, table_processor_standard_config):
         """Test successful table processing."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
@@ -259,7 +254,6 @@ class TestTableProcessorUnit:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         with patch.object(processor, '_extract_to_replication', return_value=True), \
              patch.object(processor, '_load_to_analytics', return_value=True), \
@@ -269,7 +263,6 @@ class TestTableProcessorUnit:
             result = processor.process_table('test_table')
             
             assert result is True
-            processor.raw_to_public_transformer.transform_table.assert_called_once_with('test_table', is_incremental=True)
 
     @pytest.mark.unit
     def test_process_table_extraction_failure(self, mock_table_processor_engines):
@@ -315,32 +308,14 @@ class TestTableProcessorUnit:
             assert result is False
 
     @pytest.mark.unit
-    def test_process_table_transformation_failure(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer):
-        """Test process_table when transformation fails."""
-        # Create mock schema discovery
-        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
-        
-        processor = TableProcessor(schema_discovery=mock_schema_discovery)
-        
-        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
-        processor.opendental_source_engine = mock_source
-        processor.mysql_replication_engine = mock_replication
-        processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
-        
-        with patch.object(processor, '_extract_to_replication', return_value=True), \
-             patch.object(processor, '_load_to_analytics', return_value=True), \
-             patch.object(processor.settings, 'get_table_config', return_value={}), \
-             patch.object(processor.settings, 'should_use_incremental', return_value=True):
-            
-            processor.raw_to_public_transformer.transform_table.return_value = False
-            
-            result = processor.process_table('test_table')
-            
-            assert result is False
+    def test_process_table_transformation_failure(self, mock_table_processor_engines):
+        """Test process_table when transformation fails (removed as part of refactoring)."""
+        # This test is no longer applicable since raw_to_public_transformer has been removed
+        # The transformation step is now handled by dbt instead of the ETL pipeline
+        pass
 
     @pytest.mark.unit
-    def test_process_table_force_full(self, mock_table_processor_engines, mock_table_processor_raw_to_public_transformer):
+    def test_process_table_force_full(self, mock_table_processor_engines):
         """Test process_table with force_full=True."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
@@ -351,7 +326,6 @@ class TestTableProcessorUnit:
         processor.opendental_source_engine = mock_source
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
-        processor.raw_to_public_transformer = mock_table_processor_raw_to_public_transformer
         
         with patch.object(processor, '_extract_to_replication', return_value=True), \
              patch.object(processor, '_load_to_analytics', return_value=True), \
@@ -363,9 +337,8 @@ class TestTableProcessorUnit:
             assert result is True
             # Should call with force_full=True for extraction
             processor._extract_to_replication.assert_called_once_with('test_table', True)
-            # Should call with is_incremental=False for loading and transformation
+            # Should call with is_incremental=False for loading
             processor._load_to_analytics.assert_called_once_with('test_table', False, {})
-            processor.raw_to_public_transformer.transform_table.assert_called_once_with('test_table', is_incremental=False)
 
     @pytest.mark.unit
     def test_process_table_exception_handling(self, mock_table_processor_engines):
