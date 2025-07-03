@@ -285,7 +285,7 @@ class ConnectionFactory:
 
     # New specific schema connection methods
     @classmethod
-    def get_opendental_analytics_raw_connection(
+    def get_opendental_analytics_raw_connection
         cls,
         pool_size: int = DEFAULT_POOL_SIZE,
         max_overflow: int = DEFAULT_MAX_OVERFLOW,
