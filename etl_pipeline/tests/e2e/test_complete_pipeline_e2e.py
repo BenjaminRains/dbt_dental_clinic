@@ -33,10 +33,10 @@ class TestCompletePipelineE2E:
         
         class E2ETestDataManager:
             def __init__(self):
-                # Real connections to all databases in the pipeline
-                self.source_engine = ConnectionFactory.get_opendental_source_connection()
-                self.replication_engine = ConnectionFactory.get_opendental_replication_connection()
-                self.analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+                # Real connections to all databases in the pipeline (TEST ENVIRONMENT)
+                self.source_engine = ConnectionFactory.get_opendental_source_test_connection()
+                self.replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
+                self.analytics_engine = ConnectionFactory.get_opendental_analytics_raw_test_connection()
                 
                 # Test data tracking
                 self.test_patients = []
