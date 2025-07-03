@@ -187,6 +187,10 @@ class ConnectionFactory:
             logger.error(error_msg)
             raise Exception(error_msg) from e
     
+    # ============================================================================
+    # PRODUCTION ENVIRONMENT CONNECTIONS
+    # ============================================================================
+    
     @classmethod
     def get_opendental_source_connection(
         cls,
@@ -195,7 +199,7 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to source OpenDental MySQL database (read-only)."""
+        """Get connection to source OpenDental MySQL database (PRODUCTION - read-only)."""
         # Get environment variables
         host = os.getenv('OPENDENTAL_SOURCE_HOST')
         port = os.getenv('OPENDENTAL_SOURCE_PORT')
@@ -204,7 +208,7 @@ class ConnectionFactory:
         password = os.getenv('OPENDENTAL_SOURCE_PASSWORD')
         
         # Log which environment variables were used
-        logger.debug(f"Using source connection parameters: host={host}, port={port}, database={database}, user={user}")
+        logger.debug(f"Using PRODUCTION source connection parameters: host={host}, port={port}, database={database}, user={user}")
         
         return cls.create_mysql_connection(
             host=host,
@@ -227,7 +231,7 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to local MySQL replication database (full access)."""
+        """Get connection to local MySQL replication database (PRODUCTION - full access)."""
         # Get environment variables
         host = os.getenv('MYSQL_REPLICATION_HOST')
         port = os.getenv('MYSQL_REPLICATION_PORT')
@@ -236,7 +240,7 @@ class ConnectionFactory:
         password = os.getenv('MYSQL_REPLICATION_PASSWORD')
         
         # Log which environment variables were used
-        logger.debug(f"Using replication connection parameters: host={host}, port={port}, database={database}, user={user}")
+        logger.debug(f"Using PRODUCTION replication connection parameters: host={host}, port={port}, database={database}, user={user}")
         
         return cls.create_mysql_connection(
             host=host,
@@ -258,7 +262,7 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to PostgreSQL analytics database."""
+        """Get connection to PostgreSQL analytics database (PRODUCTION)."""
         # Get environment variables
         host = os.getenv('POSTGRES_ANALYTICS_HOST')
         port = os.getenv('POSTGRES_ANALYTICS_PORT')
@@ -268,7 +272,7 @@ class ConnectionFactory:
         password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
         
         # Log which environment variables were used
-        logger.debug(f"Using analytics connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        logger.debug(f"Using PRODUCTION analytics connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
         
         return cls.create_postgres_connection(
             host=host,
@@ -283,49 +287,17 @@ class ConnectionFactory:
             pool_recycle=pool_recycle
         )
 
-    # New specific schema connection methods
+    # Production-specific schema connection methods
     @classmethod
-    def get_opendental_analytics_raw_connection
+    def get_opendental_analytics_raw_connection(
         cls,
         pool_size: int = DEFAULT_POOL_SIZE,
         max_overflow: int = DEFAULT_MAX_OVERFLOW,
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to PostgreSQL analytics database raw schema."""
+        """Get connection to PostgreSQL analytics database raw schema (PRODUCTION)."""
         return cls.get_postgres_analytics_connection(
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_opendental_analytics_public_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics database public schema."""
-        # Get environment variables
-        host = os.getenv('POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = 'public'  # Explicitly use public schema
-        user = os.getenv('POSTGRES_ANALYTICS_USER')
-        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using analytics public connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
             pool_size=pool_size,
             max_overflow=max_overflow,
             pool_timeout=pool_timeout,
@@ -340,16 +312,16 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to PostgreSQL analytics database public_staging schema."""
+        """Get connection to PostgreSQL analytics database staging schema (PRODUCTION)."""
         # Get environment variables
         host = os.getenv('POSTGRES_ANALYTICS_HOST')
         port = os.getenv('POSTGRES_ANALYTICS_PORT')
         database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = 'public_staging'  # Explicitly use public_staging schema
+        schema = 'staging'  # Use simplified staging schema
         user = os.getenv('POSTGRES_ANALYTICS_USER')
         password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
         
-        logger.debug(f"Using analytics staging connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        logger.debug(f"Using PRODUCTION analytics staging connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
         
         return cls.create_postgres_connection(
             host=host,
@@ -372,16 +344,16 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to PostgreSQL analytics database public_intermediate schema."""
+        """Get connection to PostgreSQL analytics database intermediate schema (PRODUCTION)."""
         # Get environment variables
         host = os.getenv('POSTGRES_ANALYTICS_HOST')
         port = os.getenv('POSTGRES_ANALYTICS_PORT')
         database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = 'public_intermediate'  # Explicitly use public_intermediate schema
+        schema = 'intermediate'  # Use simplified intermediate schema
         user = os.getenv('POSTGRES_ANALYTICS_USER')
         password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
         
-        logger.debug(f"Using analytics intermediate connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        logger.debug(f"Using PRODUCTION analytics intermediate connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
         
         return cls.create_postgres_connection(
             host=host,
@@ -404,16 +376,16 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to PostgreSQL analytics database public_marts schema."""
+        """Get connection to PostgreSQL analytics database marts schema (PRODUCTION)."""
         # Get environment variables
         host = os.getenv('POSTGRES_ANALYTICS_HOST')
         port = os.getenv('POSTGRES_ANALYTICS_PORT')
         database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = 'public_marts'  # Explicitly use public_marts schema
+        schema = 'marts'  # Use simplified marts schema
         user = os.getenv('POSTGRES_ANALYTICS_USER')
         password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
         
-        logger.debug(f"Using analytics marts connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        logger.debug(f"Using PRODUCTION analytics marts connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
         
         return cls.create_postgres_connection(
             host=host,
@@ -428,54 +400,10 @@ class ConnectionFactory:
             pool_recycle=pool_recycle
         )
 
-    @classmethod
-    def get_mysql_replication_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to MySQL replication test database."""
-        # Get environment variables
-        host = os.getenv('TEST_MYSQL_REPLICATION_HOST')
-        port = os.getenv('TEST_MYSQL_REPLICATION_PORT')
-        database = os.getenv('TEST_MYSQL_REPLICATION_DB')
-        user = os.getenv('TEST_MYSQL_REPLICATION_USER')
-        password = os.getenv('TEST_MYSQL_REPLICATION_PASSWORD')
-        
-        # Enhanced logging to debug the issue
-        logger.info(f"TEST_MYSQL_REPLICATION_HOST: {host}")
-        logger.info(f"TEST_MYSQL_REPLICATION_PORT: {port}")
-        logger.info(f"TEST_MYSQL_REPLICATION_DB: {database}")
-        logger.info(f"TEST_MYSQL_REPLICATION_USER: {user}")
-        logger.info(f"TEST_MYSQL_REPLICATION_PASSWORD: {'*' * len(password) if password else 'NOT SET'}")
-        
-        # Validate that we have all required parameters
-        if not all([host, port, database, user, password]):
-            missing = []
-            if not host: missing.append('TEST_MYSQL_REPLICATION_HOST')
-            if not port: missing.append('TEST_MYSQL_REPLICATION_PORT')
-            if not database: missing.append('TEST_MYSQL_REPLICATION_DB')
-            if not user: missing.append('TEST_MYSQL_REPLICATION_USER')
-            if not password: missing.append('TEST_MYSQL_REPLICATION_PASSWORD')
-            raise ValueError(f"Missing required replication test connection environment variables: {', '.join(missing)}")
-        
-        # Log which environment variables were used
-        logger.debug(f"Using replication test connection parameters: host={host}, port={port}, database={database}, user={user}")
-        
-        return cls.create_mysql_connection(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
+    # ============================================================================
+    # TEST ENVIRONMENT CONNECTIONS
+    # ============================================================================
+    
     @classmethod
     def get_opendental_source_test_connection(
         cls,
@@ -484,7 +412,7 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
-        """Get connection to OpenDental test database on client server."""
+        """Get connection to OpenDental test database on client server (TEST)."""
         # Get environment variables
         host = os.getenv('TEST_OPENDENTAL_SOURCE_HOST')
         port = os.getenv('TEST_OPENDENTAL_SOURCE_PORT')
@@ -510,7 +438,55 @@ class ConnectionFactory:
             raise ValueError(f"Missing required test connection environment variables: {', '.join(missing)}")
         
         # Log which environment variables were used
-        logger.debug(f"Using OpenDental source test connection parameters: host={host}, port={port}, database={database}, user={user}")
+        logger.debug(f"Using TEST OpenDental source connection parameters: host={host}, port={port}, database={database}, user={user}")
+        
+        return cls.create_mysql_connection(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_mysql_replication_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to MySQL replication test database (TEST)."""
+        # Get environment variables
+        host = os.getenv('TEST_MYSQL_REPLICATION_HOST')
+        port = os.getenv('TEST_MYSQL_REPLICATION_PORT')
+        database = os.getenv('TEST_MYSQL_REPLICATION_DB')
+        user = os.getenv('TEST_MYSQL_REPLICATION_USER')
+        password = os.getenv('TEST_MYSQL_REPLICATION_PASSWORD')
+        
+        # Enhanced logging to debug the issue
+        logger.info(f"TEST_MYSQL_REPLICATION_HOST: {host}")
+        logger.info(f"TEST_MYSQL_REPLICATION_PORT: {port}")
+        logger.info(f"TEST_MYSQL_REPLICATION_DB: {database}")
+        logger.info(f"TEST_MYSQL_REPLICATION_USER: {user}")
+        logger.info(f"TEST_MYSQL_REPLICATION_PASSWORD: {'*' * len(password) if password else 'NOT SET'}")
+        
+        # Validate that we have all required parameters
+        if not all([host, port, database, user, password]):
+            missing = []
+            if not host: missing.append('TEST_MYSQL_REPLICATION_HOST')
+            if not port: missing.append('TEST_MYSQL_REPLICATION_PORT')
+            if not database: missing.append('TEST_MYSQL_REPLICATION_DB')
+            if not user: missing.append('TEST_MYSQL_REPLICATION_USER')
+            if not password: missing.append('TEST_MYSQL_REPLICATION_PASSWORD')
+            raise ValueError(f"Missing required replication test connection environment variables: {', '.join(missing)}")
+        
+        # Log which environment variables were used
+        logger.debug(f"Using TEST replication connection parameters: host={host}, port={port}, database={database}, user={user}")
         
         return cls.create_mysql_connection(
             host=host,
@@ -532,12 +508,129 @@ class ConnectionFactory:
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE
     ) -> Engine:
+        """Get connection to PostgreSQL analytics test database (TEST)."""
         host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
         port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
         database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
         schema = os.getenv('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw')
         user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
         password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using TEST analytics connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    # Test-specific schema connection methods
+    @classmethod
+    def get_opendental_analytics_raw_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics test database raw schema (TEST)."""
+        return cls.get_postgres_analytics_test_connection(
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_analytics_staging_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics test database staging schema (TEST)."""
+        # Get environment variables
+        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
+        schema = 'staging'  # Use simplified staging schema
+        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
+        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using TEST analytics staging connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_analytics_intermediate_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics test database intermediate schema (TEST)."""
+        # Get environment variables
+        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
+        schema = 'intermediate'  # Use simplified intermediate schema
+        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
+        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using TEST analytics intermediate connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
+        return cls.create_postgres_connection(
+            host=host,
+            port=port,
+            database=database,
+            schema=schema,
+            user=user,
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle
+        )
+
+    @classmethod
+    def get_opendental_analytics_marts_test_connection(
+        cls,
+        pool_size: int = DEFAULT_POOL_SIZE,
+        max_overflow: int = DEFAULT_MAX_OVERFLOW,
+        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
+        pool_recycle: int = DEFAULT_POOL_RECYCLE
+    ) -> Engine:
+        """Get connection to PostgreSQL analytics test database marts schema (TEST)."""
+        # Get environment variables
+        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
+        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
+        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
+        schema = 'marts'  # Use simplified marts schema
+        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
+        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
+        
+        logger.debug(f"Using TEST analytics marts connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        
         return cls.create_postgres_connection(
             host=host,
             port=port,
