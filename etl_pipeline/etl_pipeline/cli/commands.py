@@ -70,17 +70,33 @@ logger = get_logger(__name__)
 def run(config: Optional[str], tables: List[str], full: bool, force: bool, parallel: int, dry_run: bool):
     """Run the ETL pipeline."""
     try:
+        # Validate parallel workers
+        if parallel < 1 or parallel > 20:
+            click.echo("Error: Parallel workers must be between 1 and 20")
+            raise click.Abort()
+        
         # Initialize pipeline orchestrator
         orchestrator = PipelineOrchestrator(config_path=config)
         
-        # Initialize connections
+        if dry_run:
+            # DRY RUN MODE: Show what would be done without making changes
+            _execute_dry_run(orchestrator, config, tables, full, force, parallel)
+            return
+        
+        # Initialize connections for actual execution
         if not orchestrator.initialize_connections():
             click.echo("Failed to initialize connections")
             raise click.Abort()
             
         try:
+            # Handle --full flag: force full refresh for all tables
+            if full:
+                force = True
+                click.echo("🔄 Full pipeline mode: Forcing full refresh for all tables")
+            
             if tables:
                 # Process specific tables
+                click.echo(f"📋 Processing {len(tables)} specific tables: {', '.join(tables)}")
                 for table in tables:
                     success = orchestrator.run_pipeline_for_table(table, force_full=force)
                     if not success:
@@ -88,18 +104,19 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
                         raise click.Abort()
             else:
                 # Process all tables by priority
+                click.echo(f"🚀 Processing all tables by priority with {parallel} workers")
                 results = orchestrator.process_tables_by_priority(
                     max_workers=parallel,
                     force_full=force
                 )
                 
                 # Check results
-                for level, tables in results.items():
-                    if tables['failed']:
-                        click.echo(f"Failed to process tables in {level}: {', '.join(tables['failed'])}")
+                for level, table_results in results.items():
+                    if table_results['failed']:
+                        click.echo(f"Failed to process tables in {level}: {', '.join(table_results['failed'])}")
                         raise click.Abort()
                         
-            click.echo("Pipeline completed successfully")
+            click.echo("✅ Pipeline completed successfully")
             
         finally:
             orchestrator.cleanup()
@@ -108,6 +125,90 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
         logger.error(f"Pipeline failed: {str(e)}")
         click.echo(f"Error: {str(e)}")
         raise click.Abort()
+
+
+def _execute_dry_run(orchestrator: PipelineOrchestrator, config: Optional[str], 
+                    tables: List[str], full: bool, force: bool, parallel: int):
+    """Execute dry run mode to show what would be done without making changes."""
+    click.echo("🔍 DRY RUN MODE - No changes will be made")
+    click.echo("=" * 60)
+    
+    # Show configuration
+    click.echo("📋 Configuration:")
+    click.echo(f"  • Config file: {config or 'Default settings'}")
+    click.echo(f"  • Parallel workers: {parallel}")
+    click.echo(f"  • Force full run: {force}")
+    click.echo(f"  • Full pipeline mode: {full}")
+    if full:
+        click.echo("  • Note: Full mode will force refresh for all tables")
+    
+    # Test connections
+    click.echo("\n🔌 Testing connections...")
+    try:
+        if orchestrator.initialize_connections():
+            click.echo("✅ All connections successful")
+        else:
+            click.echo("❌ Connection test failed")
+            click.echo("⚠️  Pipeline would fail during execution")
+            return
+    except Exception as e:
+        click.echo(f"❌ Connection test failed: {str(e)}")
+        click.echo("⚠️  Pipeline would fail during execution")
+        return
+    
+    # Show processing plan
+    if tables:
+        click.echo(f"\n📊 Would process {len(tables)} specific tables:")
+        for i, table in enumerate(tables, 1):
+            click.echo(f"  {i}. {table}")
+    else:
+        click.echo("\n📊 Would process all tables by priority:")
+        
+        # Get table information from settings
+        settings = orchestrator.settings
+        importance_levels = ['critical', 'important', 'audit', 'reference']
+        
+        total_tables = 0
+        for importance in importance_levels:
+            try:
+                tables_in_level = settings.get_tables_by_importance(importance)
+                if tables_in_level:
+                    total_tables += len(tables_in_level)
+                    click.echo(f"  • {importance.upper()}: {len(tables_in_level)} tables")
+                    
+                    # Show first few tables in each level
+                    if len(tables_in_level) <= 5:
+                        for table in tables_in_level:
+                            click.echo(f"    - {table}")
+                    else:
+                        for table in tables_in_level[:3]:
+                            click.echo(f"    - {table}")
+                        click.echo(f"    ... and {len(tables_in_level) - 3} more")
+            except Exception as e:
+                click.echo(f"  • {importance.upper()}: Error getting tables - {str(e)}")
+        
+        click.echo(f"\n📈 Total tables to process: {total_tables}")
+    
+    # Show processing strategy
+    click.echo("\n⚡ Processing Strategy:")
+    if tables:
+        click.echo("  • Sequential processing of specified tables")
+    else:
+        click.echo("  • Critical tables: Parallel processing for speed")
+        click.echo("  • Other tables: Sequential processing to manage resources")
+        click.echo(f"  • Max parallel workers: {parallel}")
+    
+    # Show estimated impact
+    click.echo("\n📊 Estimated Impact:")
+    if force or full:
+        click.echo("  • Full refresh mode: All data will be re-extracted")
+        click.echo("  • Longer processing time expected")
+    else:
+        click.echo("  • Incremental mode: Only new/changed data will be processed")
+        click.echo("  • Faster processing time expected")
+    
+    click.echo("\n✅ Dry run completed - no changes made")
+    click.echo("💡 To execute the pipeline, run without --dry-run flag")
 
 @click.command()
 @click.option('--config', '-c', required=True, help='Path to pipeline configuration file')
