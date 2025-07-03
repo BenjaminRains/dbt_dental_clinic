@@ -13,11 +13,10 @@ The pipeline follows a simplified three-database architecture with intelligent o
 │                     │    │                     │    │                                              │
 │ - opendental        │    │ - opendental_repl   │    │ - opendental_analytics                      │
 │ - Read-only access  │    │ - Full read/write   │    │ - Schemas:                                  │
-│ - Port 3306         │    │ - Port 3305         │    │   • raw (initial load)                      │
-│                     │    │                     │    │   • public (transformed data)                │
-│                     │    │                     │    │   • public_staging (dbt staging)            │
-│                     │    │                     │    │   • public_intermediate (dbt intermediate)  │
-│                     │    │                     │    │   • public_marts (dbt marts)                │
+│ - Port 3306         │    │ - Port 3305         │    │   • raw (ETL output)                        │
+│                     │    │                     │    │   • staging (dbt staging)                   │
+│                     │    │                     │    │   • intermediate (dbt intermediate)         │
+│                     │    │                     │    │   • marts (dbt marts)                       │
 └─────────────────────┘    └─────────────────────┘    └─────────────────────────────────────────────┘
                                     ▲
                                     │
@@ -58,7 +57,10 @@ PostgreSQL data loading with optimization:
 ### 4. **Data Transformation** (`transformers/`)
 Schema and data transformation:
 
-- **`raw_to_public.py`**: RawToPublicTransformer for converting raw data to public schema
+- **dbt Models**: Business logic and analytics transformations handled by dbt
+- **Staging Models**: Raw data standardization and cleaning
+- **Intermediate Models**: Business logic implementation
+- **Mart Models**: Final analytics-ready datasets
 
 ### 5. **Configuration** (`config/`)
 **Simplified, modern configuration management**:
@@ -105,11 +107,12 @@ Replication MySQL → PostgresLoader → PostgreSQL (raw schema)
 
 ### 3. **Transform Phase**
 ```
-PostgreSQL (raw) → RawToPublicTransformer → PostgreSQL (public)
+PostgreSQL (raw) → dbt → PostgreSQL (staging/intermediate/marts)
 ```
-- Data cleaning and standardization
-- Type casting and normalization
-- Schema structure optimization
+- Business logic and analytics transformations
+- Data standardization and cleaning via dbt staging models
+- Business logic implementation via dbt intermediate models
+- Final analytics-ready datasets via dbt mart models
 
 ### 4. **Orchestration**
 ```
@@ -167,11 +170,10 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → SchemaDiscover
 
 ### **Analytics PostgreSQL**
 - Multi-schema analytics data warehouse:
-  - **`raw`**: Initial landing zone (exact replica of source)
-  - **`public`**: Cleaned and standardized base tables
-  - **`public_staging`**: dbt staging models
-  - **`public_intermediate`**: dbt intermediate models
-  - **`public_marts`**: dbt final models for consumption
+  - **`raw`**: ETL pipeline output (exact replica of source)
+  - **`staging`**: dbt staging models (data standardization and cleaning)
+  - **`intermediate`**: dbt intermediate models (business logic implementation)
+  - **`marts`**: dbt final models (analytics-ready datasets for consumption)
 
 ## Setup and Configuration
 
@@ -202,7 +204,6 @@ MYSQL_REPLICATION_PASSWORD=your_password
 POSTGRES_ANALYTICS_HOST=localhost
 POSTGRES_ANALYTICS_PORT=5432
 POSTGRES_ANALYTICS_DB=opendental_analytics
-POSTGRES_ANALYTICS_SCHEMA=raw
 POSTGRES_ANALYTICS_USER=analytics_user
 POSTGRES_ANALYTICS_PASSWORD=your_password
 ```
@@ -217,17 +218,15 @@ GRANT ALL PRIVILEGES ON opendental_repl.* TO 'replication_user'@'localhost';
 -- PostgreSQL Analytics Database
 CREATE DATABASE opendental_analytics;
 CREATE SCHEMA raw;
-CREATE SCHEMA public;
-CREATE SCHEMA public_staging;
-CREATE SCHEMA public_intermediate;
-CREATE SCHEMA public_marts;
+CREATE SCHEMA staging;
+CREATE SCHEMA intermediate;
+CREATE SCHEMA marts;
 
 GRANT ALL PRIVILEGES ON DATABASE opendental_analytics TO analytics_user;
 GRANT ALL PRIVILEGES ON SCHEMA raw TO analytics_user;
-GRANT ALL PRIVILEGES ON SCHEMA public TO analytics_user;
-GRANT ALL PRIVILEGES ON SCHEMA public_staging TO analytics_user;
-GRANT ALL PRIVILEGES ON SCHEMA public_intermediate TO analytics_user;
-GRANT ALL PRIVILEGES ON SCHEMA public_marts TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA staging TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA intermediate TO analytics_user;
+GRANT ALL PRIVILEGES ON SCHEMA marts TO analytics_user;
 ```
 
 ### 3. **Install Dependencies**
@@ -352,6 +351,7 @@ etl_pipeline/
 2. Configuration in `tables.yml` defines processing behavior
 3. Priority levels determine processing order and strategy
 4. **No code changes required** - SchemaDiscovery handles everything automatically
+5. **dbt Models**: Transformations are handled by dbt models (staging → intermediate → marts)
 
 ## Performance Optimization
 
