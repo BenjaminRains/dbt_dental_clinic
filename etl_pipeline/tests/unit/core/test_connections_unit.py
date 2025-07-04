@@ -8,6 +8,12 @@ import os
 from dotenv import load_dotenv
 
 from etl_pipeline.core.connections import ConnectionFactory, ConnectionManager
+from etl_pipeline.config import (
+    create_test_settings, 
+    DatabaseType, 
+    PostgresSchema,
+    reset_settings
+)
 
 # Load environment variables for testing
 load_dotenv()
@@ -16,247 +22,371 @@ class TestConnectionFactoryUnit:
     """Unit tests for ConnectionFactory using pure mocks."""
     
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_source_connection_success(self, mock_create_engine):
-        """Test successful production source connection creation."""
+    def test_get_source_connection_success(self, mock_create_engine):
+        """Test successful source connection creation with new settings-based approach."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
+        # Create test settings with environment variables
+        test_env_vars = {
             'OPENDENTAL_SOURCE_HOST': 'prod-host',
             'OPENDENTAL_SOURCE_PORT': '3306',
             'OPENDENTAL_SOURCE_DB': 'opendental',
             'OPENDENTAL_SOURCE_USER': 'readonly_user',
             'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass'
-        }):
-            result = ConnectionFactory.get_opendental_source_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://readonly_user:readonly_pass@prod-host:3306/opendental' in call_args
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_source_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://readonly_user:readonly_pass@prod-host:3306/opendental' in call_args
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_source_test_connection_success(self, mock_create_engine):
+    def test_get_source_connection_test_environment(self, mock_create_engine):
         """Test successful test source connection creation."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
+        # Create test settings with TEST_ prefixed environment variables
+        test_env_vars = {
             'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
             'TEST_OPENDENTAL_SOURCE_PORT': '3306',
             'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
             'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
-        }):
-            result = ConnectionFactory.get_opendental_source_test_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://test_user:test_pass@test-host:3306/test_opendental' in call_args
+            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+            'ETL_ENVIRONMENT': 'test'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_source_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://test_user:test_pass@test-host:3306/test_opendental' in call_args
 
-    def test_get_opendental_source_test_connection_missing_env_vars(self):
-        """Test test source connection with missing environment variables."""
-        # Clear all test environment variables
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_opendental_source_test_connection()
-            
-            assert "Missing required test connection environment variables" in str(exc_info.value)
-            assert "TEST_OPENDENTAL_SOURCE_HOST" in str(exc_info.value)
-            assert "TEST_OPENDENTAL_SOURCE_PORT" in str(exc_info.value)
-            assert "TEST_OPENDENTAL_SOURCE_DB" in str(exc_info.value)
-            assert "TEST_OPENDENTAL_SOURCE_USER" in str(exc_info.value)
-            assert "TEST_OPENDENTAL_SOURCE_PASSWORD" in str(exc_info.value)
+    def test_get_source_connection_missing_env_vars(self):
+        """Test source connection with missing environment variables."""
+        # Create test settings with missing environment variables
+        test_env_vars = {
+            'OPENDENTAL_SOURCE_HOST': 'prod-host',
+            # Missing other required variables
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        with pytest.raises(ValueError) as exc_info:
+            ConnectionFactory.get_source_connection(settings)
+        
+        assert "Missing required MySQL connection parameters" in str(exc_info.value)
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_mysql_replication_test_connection_success(self, mock_create_engine):
+    def test_get_replication_connection_success(self, mock_create_engine):
+        """Test successful replication connection creation."""
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        
+        # Create test settings with environment variables
+        test_env_vars = {
+            'MYSQL_REPLICATION_HOST': 'repl-host',
+            'MYSQL_REPLICATION_PORT': '3306',
+            'MYSQL_REPLICATION_DB': 'opendental_repl',
+            'MYSQL_REPLICATION_USER': 'repl_user',
+            'MYSQL_REPLICATION_PASSWORD': 'repl_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_replication_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://repl_user:repl_pass@repl-host:3306/opendental_repl' in call_args
+
+    @patch('etl_pipeline.core.connections.create_engine')
+    def test_get_replication_connection_test_environment(self, mock_create_engine):
         """Test successful test replication connection creation."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
+        # Create test settings with TEST_ prefixed environment variables
+        test_env_vars = {
             'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
             'TEST_MYSQL_REPLICATION_PORT': '3306',
             'TEST_MYSQL_REPLICATION_DB': 'test_opendental_repl',
             'TEST_MYSQL_REPLICATION_USER': 'test_replication_user',
-            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass'
-        }):
-            result = ConnectionFactory.get_mysql_replication_test_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://test_replication_user:test_repl_pass@test-repl-host:3306/test_opendental_repl' in call_args
+            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+            'ETL_ENVIRONMENT': 'test'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_replication_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://test_replication_user:test_repl_pass@test-repl-host:3306/test_opendental_repl' in call_args
 
-    def test_get_mysql_replication_test_connection_missing_env_vars(self):
-        """Test test replication connection with missing environment variables."""
-        # Clear all test environment variables
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_mysql_replication_test_connection()
-            
-            assert "Missing required replication test connection environment variables" in str(exc_info.value)
-            assert "TEST_MYSQL_REPLICATION_HOST" in str(exc_info.value)
-            assert "TEST_MYSQL_REPLICATION_PORT" in str(exc_info.value)
-            assert "TEST_MYSQL_REPLICATION_DB" in str(exc_info.value)
-            assert "TEST_MYSQL_REPLICATION_USER" in str(exc_info.value)
-            assert "TEST_MYSQL_REPLICATION_PASSWORD" in str(exc_info.value)
+    def test_get_replication_connection_missing_env_vars(self):
+        """Test replication connection with missing environment variables."""
+        # Create test settings with missing environment variables
+        test_env_vars = {
+            'MYSQL_REPLICATION_HOST': 'repl-host',
+            # Missing other required variables
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        with pytest.raises(ValueError) as exc_info:
+            ConnectionFactory.get_replication_connection(settings)
+        
+        assert "Missing required MySQL connection parameters" in str(exc_info.value)
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_postgres_analytics_test_connection_success(self, mock_create_engine):
+    def test_get_analytics_connection_success(self, mock_create_engine):
+        """Test successful analytics connection creation."""
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        
+        # Create test settings with environment variables
+        test_env_vars = {
+            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+            'POSTGRES_ANALYTICS_PORT': '5432',
+            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+            'POSTGRES_ANALYTICS_SCHEMA': 'raw',
+            'POSTGRES_ANALYTICS_USER': 'analytics_user',
+            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'postgresql+psycopg2://analytics_user:analytics_pass@analytics-host:5432/opendental_analytics' in call_args
+
+    @patch('etl_pipeline.core.connections.create_engine')
+    def test_get_analytics_connection_test_environment(self, mock_create_engine):
         """Test successful test analytics connection creation."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
+        # Create test settings with TEST_ prefixed environment variables
+        test_env_vars = {
             'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
             'TEST_POSTGRES_ANALYTICS_PORT': '5432',
             'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
             'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
             'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
-        }):
-            result = ConnectionFactory.get_postgres_analytics_test_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@test-pg-host:5432/test_opendental_analytics' in call_args
+            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass',
+            'ETL_ENVIRONMENT': 'test'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@test-pg-host:5432/test_opendental_analytics' in call_args
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_raw_test_connection_success(self, mock_create_engine):
-        """Test successful test raw schema connection creation."""
+    def test_get_analytics_connection_different_schemas(self, mock_create_engine):
+        """Test analytics connection creation with different schemas."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
-            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_raw_test_connection()
+        # Create test settings
+        test_env_vars = {
+            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+            'POSTGRES_ANALYTICS_PORT': '5432',
+            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+            'POSTGRES_ANALYTICS_USER': 'analytics_user',
+            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        # Test different schemas
+        schemas_to_test = [
+            PostgresSchema.RAW,
+            PostgresSchema.STAGING,
+            PostgresSchema.INTERMEDIATE,
+            PostgresSchema.MARTS
+        ]
+        
+        for schema in schemas_to_test:
+            mock_create_engine.reset_mock()
+            result = ConnectionFactory.get_analytics_connection(settings, schema)
             
             assert result == mock_engine
             mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@test-pg-host:5432/test_opendental_analytics' in call_args
+            
+            # Check that schema is set in connect_args
+            call_kwargs = mock_create_engine.call_args[1]
+            assert call_kwargs['connect_args']['options'] == f'-csearch_path={schema.value}'
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_staging_test_connection_success(self, mock_create_engine):
-        """Test successful test staging schema connection creation."""
+    def test_get_analytics_raw_connection_success(self, mock_create_engine):
+        """Test successful analytics raw schema connection creation."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_staging_test_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            # Should use staging schema, not the environment variable
-            assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@test-pg-host:5432/test_opendental_analytics' in call_args
+        # Create test settings
+        test_env_vars = {
+            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+            'POSTGRES_ANALYTICS_PORT': '5432',
+            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+            'POSTGRES_ANALYTICS_USER': 'analytics_user',
+            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_analytics_raw_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        
+        # Check that raw schema is used
+        call_kwargs = mock_create_engine.call_args[1]
+        assert call_kwargs['connect_args']['options'] == '-csearch_path=raw'
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_intermediate_test_connection_success(self, mock_create_engine):
-        """Test successful test intermediate schema connection creation."""
+    def test_get_analytics_staging_connection_success(self, mock_create_engine):
+        """Test successful analytics staging schema connection creation."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_intermediate_test_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            # Should use intermediate schema, not the environment variable
-            assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@test-pg-host:5432/test_opendental_analytics' in call_args
+        # Create test settings
+        test_env_vars = {
+            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+            'POSTGRES_ANALYTICS_PORT': '5432',
+            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+            'POSTGRES_ANALYTICS_USER': 'analytics_user',
+            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_analytics_staging_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        
+        # Check that staging schema is used
+        call_kwargs = mock_create_engine.call_args[1]
+        assert call_kwargs['connect_args']['options'] == '-csearch_path=staging'
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_marts_test_connection_success(self, mock_create_engine):
-        """Test successful test marts schema connection creation."""
+    def test_get_analytics_intermediate_connection_success(self, mock_create_engine):
+        """Test successful analytics intermediate schema connection creation."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_marts_test_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            # Should use marts schema, not the environment variable
-            assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@test-pg-host:5432/test_opendental_analytics' in call_args
+        # Create test settings
+        test_env_vars = {
+            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+            'POSTGRES_ANALYTICS_PORT': '5432',
+            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+            'POSTGRES_ANALYTICS_USER': 'analytics_user',
+            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_analytics_intermediate_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        
+        # Check that intermediate schema is used
+        call_kwargs = mock_create_engine.call_args[1]
+        assert call_kwargs['connect_args']['options'] == '-csearch_path=intermediate'
+
+    @patch('etl_pipeline.core.connections.create_engine')
+    def test_get_analytics_marts_connection_success(self, mock_create_engine):
+        """Test successful analytics marts schema connection creation."""
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        
+        # Create test settings
+        test_env_vars = {
+            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+            'POSTGRES_ANALYTICS_PORT': '5432',
+            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+            'POSTGRES_ANALYTICS_USER': 'analytics_user',
+            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_analytics_marts_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        
+        # Check that marts schema is used
+        call_kwargs = mock_create_engine.call_args[1]
+        assert call_kwargs['connect_args']['options'] == '-csearch_path=marts'
 
     def test_connection_methods_use_correct_environment_variables(self):
         """Test that production and test methods use different environment variables."""
-        # Test that production methods use production env vars
+        # Test that production and test methods use different environment variables
         with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine:
             mock_engine = MagicMock()
             mock_create_engine.return_value = mock_engine
             
-            # Mock both production and test environment variables
-            with patch.dict(os.environ, {
-                # Production variables
+            # Production environment variables
+            prod_env_vars = {
                 'OPENDENTAL_SOURCE_HOST': 'prod-host',
                 'OPENDENTAL_SOURCE_PORT': '3306',
                 'OPENDENTAL_SOURCE_DB': 'opendental',
                 'OPENDENTAL_SOURCE_USER': 'readonly_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass',
-                # Test variables
+                'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass'
+            }
+            
+            # Test environment variables
+            test_env_vars = {
                 'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
                 'TEST_OPENDENTAL_SOURCE_PORT': '3306',
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
-            }):
-                # Test production method
-                ConnectionFactory.get_opendental_source_connection()
-                prod_call_args = mock_create_engine.call_args[0][0]
-                assert 'prod-host' in prod_call_args
-                assert 'readonly_user' in prod_call_args
-                assert 'opendental' in prod_call_args
-                
-                # Reset mock
-                mock_create_engine.reset_mock()
-                
-                # Test test method
-                ConnectionFactory.get_opendental_source_test_connection()
-                test_call_args = mock_create_engine.call_args[0][0]
-                assert 'test-host' in test_call_args
-                assert 'test_user' in test_call_args
-                assert 'test_opendental' in test_call_args
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'ETL_ENVIRONMENT': 'test'
+            }
+            
+            # Test production method
+            prod_settings = create_test_settings(env_vars=prod_env_vars)
+            ConnectionFactory.get_source_connection(prod_settings)
+            prod_call_args = mock_create_engine.call_args[0][0]
+            assert 'prod-host' in prod_call_args
+            assert 'readonly_user' in prod_call_args
+            assert 'opendental' in prod_call_args
+            
+            # Reset mock
+            mock_create_engine.reset_mock()
+            
+            # Test test method
+            test_settings = create_test_settings(env_vars=test_env_vars)
+            ConnectionFactory.get_source_connection(test_settings)
+            test_call_args = mock_create_engine.call_args[0][0]
+            assert 'test-host' in test_call_args
+            assert 'test_user' in test_call_args
+            assert 'test_opendental' in test_call_args
 
     # ============================================================================
-    # ADDITIONAL TESTS FOR IMPROVED COVERAGE
+    # TESTS FOR NEW ENGINE CREATION METHODS
     # ============================================================================
 
     def test_validate_connection_params_success(self):
@@ -289,16 +419,16 @@ class TestConnectionFactoryUnit:
         assert "database" in str(exc_info.value)
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_create_mysql_connection_success(self, mock_create_engine):
-        """Test successful MySQL connection creation."""
+    def test_create_mysql_engine_success(self, mock_create_engine):
+        """Test successful MySQL engine creation."""
         mock_engine = MagicMock()
         mock_connection = MagicMock()
         mock_engine.connect.return_value.__enter__.return_value = mock_connection
         mock_create_engine.return_value = mock_engine
         
-        result = ConnectionFactory.create_mysql_connection(
+        result = ConnectionFactory.create_mysql_engine(
             host='test-host',
-            port='3306',
+            port=3306,
             database='test_db',
             user='test_user',
             password='test_pass'
@@ -310,16 +440,16 @@ class TestConnectionFactoryUnit:
         assert 'mysql+pymysql://test_user:test_pass@test-host:3306/test_db' in call_args
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_create_mysql_connection_with_pool_settings(self, mock_create_engine):
-        """Test MySQL connection creation with custom pool settings."""
+    def test_create_mysql_engine_with_pool_settings(self, mock_create_engine):
+        """Test MySQL engine creation with custom pool settings."""
         mock_engine = MagicMock()
         mock_connection = MagicMock()
         mock_engine.connect.return_value.__enter__.return_value = mock_connection
         mock_create_engine.return_value = mock_engine
         
-        result = ConnectionFactory.create_mysql_connection(
+        result = ConnectionFactory.create_mysql_engine(
             host='test-host',
-            port='3306',
+            port=3306,
             database='test_db',
             user='test_user',
             password='test_pass',
@@ -338,14 +468,14 @@ class TestConnectionFactoryUnit:
         assert call_kwargs['pool_recycle'] == 3600
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_create_mysql_connection_error(self, mock_create_engine):
-        """Test MySQL connection creation with error."""
+    def test_create_mysql_engine_error(self, mock_create_engine):
+        """Test MySQL engine creation with error."""
         mock_create_engine.side_effect = Exception("Connection failed")
         
         with pytest.raises(Exception) as exc_info:
-            ConnectionFactory.create_mysql_connection(
+            ConnectionFactory.create_mysql_engine(
                 host='test-host',
-                port='3306',
+                port=3306,
                 database='test_db',
                 user='test_user',
                 password='test_pass'
@@ -354,14 +484,14 @@ class TestConnectionFactoryUnit:
         assert "Failed to create MySQL connection to test_db" in str(exc_info.value)
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_create_postgres_connection_success(self, mock_create_engine):
-        """Test successful PostgreSQL connection creation."""
+    def test_create_postgres_engine_success(self, mock_create_engine):
+        """Test successful PostgreSQL engine creation."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        result = ConnectionFactory.create_postgres_connection(
+        result = ConnectionFactory.create_postgres_engine(
             host='test-host',
-            port='5432',
+            port=5432,
             database='test_db',
             schema='test_schema',
             user='test_user',
@@ -378,14 +508,14 @@ class TestConnectionFactoryUnit:
         assert call_kwargs['connect_args']['options'] == '-csearch_path=test_schema'
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_create_postgres_connection_empty_schema(self, mock_create_engine):
-        """Test PostgreSQL connection creation with empty schema (should default to 'raw')."""
+    def test_create_postgres_engine_empty_schema(self, mock_create_engine):
+        """Test PostgreSQL engine creation with empty schema (should default to 'raw')."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        result = ConnectionFactory.create_postgres_connection(
+        result = ConnectionFactory.create_postgres_engine(
             host='test-host',
-            port='5432',
+            port=5432,
             database='test_db',
             schema='',  # Empty schema
             user='test_user',
@@ -397,14 +527,14 @@ class TestConnectionFactoryUnit:
         assert call_kwargs['connect_args']['options'] == '-csearch_path=raw'
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_create_postgres_connection_none_schema(self, mock_create_engine):
-        """Test PostgreSQL connection creation with None schema (should default to 'raw')."""
+    def test_create_postgres_engine_none_schema(self, mock_create_engine):
+        """Test PostgreSQL engine creation with None schema (should default to 'raw')."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        result = ConnectionFactory.create_postgres_connection(
+        result = ConnectionFactory.create_postgres_engine(
             host='test-host',
-            port='5432',
+            port=5432,
             database='test_db',
             schema=None,  # None schema
             user='test_user',
@@ -416,14 +546,14 @@ class TestConnectionFactoryUnit:
         assert call_kwargs['connect_args']['options'] == '-csearch_path=raw'
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_create_postgres_connection_error(self, mock_create_engine):
-        """Test PostgreSQL connection creation with error."""
+    def test_create_postgres_engine_error(self, mock_create_engine):
+        """Test PostgreSQL engine creation with error."""
         mock_create_engine.side_effect = Exception("Connection failed")
         
         with pytest.raises(Exception) as exc_info:
-            ConnectionFactory.create_postgres_connection(
+            ConnectionFactory.create_postgres_engine(
                 host='test-host',
-                port='5432',
+                port=5432,
                 database='test_db',
                 schema='test_schema',
                 user='test_user',
@@ -432,183 +562,82 @@ class TestConnectionFactoryUnit:
         
         assert "Failed to create PostgreSQL connection to test_db.test_schema" in str(exc_info.value)
 
+    # ============================================================================
+    # TESTS FOR LEGACY METHODS (BACKWARD COMPATIBILITY)
+    # ============================================================================
+
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_mysql_replication_connection_success(self, mock_create_engine):
-        """Test successful production MySQL replication connection creation."""
+    def test_legacy_get_opendental_source_connection(self, mock_create_engine):
+        """Test legacy method name still works."""
         mock_engine = MagicMock()
-        mock_connection = MagicMock()
-        mock_engine.connect.return_value.__enter__.return_value = mock_connection
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
+        # Create test settings
+        test_env_vars = {
+            'OPENDENTAL_SOURCE_HOST': 'prod-host',
+            'OPENDENTAL_SOURCE_PORT': '3306',
+            'OPENDENTAL_SOURCE_DB': 'opendental',
+            'OPENDENTAL_SOURCE_USER': 'readonly_user',
+            'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass'
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_opendental_source_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://readonly_user:readonly_pass@prod-host:3306/opendental' in call_args
+
+    @patch('etl_pipeline.core.connections.create_engine')
+    def test_legacy_get_mysql_replication_connection(self, mock_create_engine):
+        """Test legacy method name still works."""
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        
+        # Create test settings
+        test_env_vars = {
             'MYSQL_REPLICATION_HOST': 'repl-host',
             'MYSQL_REPLICATION_PORT': '3306',
             'MYSQL_REPLICATION_DB': 'opendental_repl',
             'MYSQL_REPLICATION_USER': 'repl_user',
             'MYSQL_REPLICATION_PASSWORD': 'repl_pass'
-        }):
-            result = ConnectionFactory.get_mysql_replication_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://repl_user:repl_pass@repl-host:3306/opendental_repl' in call_args
+        }
+        
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        result = ConnectionFactory.get_mysql_replication_connection(settings)
+        
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'mysql+pymysql://repl_user:repl_pass@repl-host:3306/opendental_repl' in call_args
 
     @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_postgres_analytics_connection_success(self, mock_create_engine):
-        """Test successful production PostgreSQL analytics connection creation."""
+    def test_legacy_get_postgres_analytics_connection(self, mock_create_engine):
+        """Test legacy method name still works."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
+        # Create test settings
+        test_env_vars = {
             'POSTGRES_ANALYTICS_HOST': 'analytics-host',
             'POSTGRES_ANALYTICS_PORT': '5432',
             'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
             'POSTGRES_ANALYTICS_SCHEMA': 'raw',
             'POSTGRES_ANALYTICS_USER': 'analytics_user',
             'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }):
-            result = ConnectionFactory.get_postgres_analytics_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://analytics_user:analytics_pass@analytics-host:5432/opendental_analytics' in call_args
-
-    @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_raw_connection_success(self, mock_create_engine):
-        """Test successful production raw schema connection creation."""
-        mock_engine = MagicMock()
-        mock_create_engine.return_value = mock_engine
+        }
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_SCHEMA': 'raw',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_raw_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://analytics_user:analytics_pass@analytics-host:5432/opendental_analytics' in call_args
-
-    @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_staging_connection_success(self, mock_create_engine):
-        """Test successful production staging schema connection creation."""
-        mock_engine = MagicMock()
-        mock_create_engine.return_value = mock_engine
+        settings = create_test_settings(env_vars=test_env_vars)
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_staging_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://analytics_user:analytics_pass@analytics-host:5432/opendental_analytics' in call_args
-            
-            # Check that staging schema is used
-            call_kwargs = mock_create_engine.call_args[1]
-            assert call_kwargs['connect_args']['options'] == '-csearch_path=staging'
-
-    @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_intermediate_connection_success(self, mock_create_engine):
-        """Test successful production intermediate schema connection creation."""
-        mock_engine = MagicMock()
-        mock_create_engine.return_value = mock_engine
+        result = ConnectionFactory.get_postgres_analytics_connection(settings)
         
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_intermediate_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://analytics_user:analytics_pass@analytics-host:5432/opendental_analytics' in call_args
-            
-            # Check that intermediate schema is used
-            call_kwargs = mock_create_engine.call_args[1]
-            assert call_kwargs['connect_args']['options'] == '-csearch_path=intermediate'
-
-    @patch('etl_pipeline.core.connections.create_engine')
-    def test_get_opendental_analytics_marts_connection_success(self, mock_create_engine):
-        """Test successful production marts schema connection creation."""
-        mock_engine = MagicMock()
-        mock_create_engine.return_value = mock_engine
-        
-        # Mock environment variables
-        with patch.dict(os.environ, {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }):
-            result = ConnectionFactory.get_opendental_analytics_marts_connection()
-            
-            assert result == mock_engine
-            mock_create_engine.assert_called_once()
-            call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://analytics_user:analytics_pass@analytics-host:5432/opendental_analytics' in call_args
-            
-            # Check that marts schema is used
-            call_kwargs = mock_create_engine.call_args[1]
-            assert call_kwargs['connect_args']['options'] == '-csearch_path=marts'
-
-    def test_get_opendental_source_connection_missing_env_vars(self):
-        """Test production source connection with missing environment variables."""
-        # Clear all production environment variables
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_opendental_source_connection()
-            
-            assert "Missing required MySQL connection parameters" in str(exc_info.value)
-
-    def test_get_mysql_replication_connection_missing_env_vars(self):
-        """Test production replication connection with missing environment variables."""
-        # Clear all production environment variables
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_mysql_replication_connection()
-            
-            assert "Missing required MySQL connection parameters" in str(exc_info.value)
-
-    def test_get_postgres_analytics_connection_missing_env_vars(self):
-        """Test production analytics connection with missing environment variables."""
-        # Clear all production environment variables
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_postgres_analytics_connection()
-            
-            assert "Missing required PostgreSQL connection parameters" in str(exc_info.value)
-
-    def test_get_postgres_analytics_test_connection_missing_env_vars(self):
-        """Test test analytics connection with missing environment variables."""
-        # Clear all test environment variables
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_postgres_analytics_test_connection()
-            
-            assert "Missing required PostgreSQL connection parameters" in str(exc_info.value)
+        assert result == mock_engine
+        mock_create_engine.assert_called_once()
+        call_args = mock_create_engine.call_args[0][0]
+        assert 'postgresql+psycopg2://analytics_user:analytics_pass@analytics-host:5432/opendental_analytics' in call_args
 
 
 class TestConnectionManagerUnit:
