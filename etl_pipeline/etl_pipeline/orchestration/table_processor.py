@@ -73,7 +73,7 @@ from ..config.logging import get_logger
 from ..core.postgres_schema import PostgresSchema
 from ..core.mysql_replicator import ExactMySQLReplicator
 from ..core.schema_discovery import SchemaDiscovery
-from ..config.settings import Settings
+from ..config import Settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 
 logger = logging.getLogger(__name__)
 
@@ -97,11 +97,11 @@ class TableProcessor:
         # Create SchemaDiscovery immediately if not provided
         if schema_discovery is None:
             if environment == 'test':
-                source_engine = ConnectionFactory.get_opendental_source_test_connection()
-                source_db = self.settings.get_database_config('test_opendental_source')['database']
+                source_engine = ConnectionFactory.get_source_connection(self.settings)
+                source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
             else:
-                source_engine = ConnectionFactory.get_opendental_source_connection()
-                source_db = self.settings.get_database_config('opendental_source')['database']
+                source_engine = ConnectionFactory.get_source_connection(self.settings)
+                source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
             
             self.schema_discovery = SchemaDiscovery(source_engine, source_db)
         else:
@@ -139,39 +139,39 @@ class TableProcessor:
             
             # SchemaDiscovery is already created in __init__, just ensure we have the right source engine
             if self.settings.environment == 'test':
-                source_engine = source_engine or ConnectionFactory.get_opendental_source_test_connection()
+                source_engine = source_engine or ConnectionFactory.get_source_connection(self.settings)
             else:
-                source_engine = source_engine or ConnectionFactory.get_opendental_source_connection()
+                source_engine = source_engine or ConnectionFactory.get_source_connection(self.settings)
             
             # Use provided engines or create new ones based on environment
             if source_engine:
                 self.opendental_source_engine = source_engine
             elif self.settings.environment == 'test':
-                self.opendental_source_engine = ConnectionFactory.get_opendental_source_test_connection()
+                self.opendental_source_engine = ConnectionFactory.get_source_connection(self.settings)
             else:
-                self.opendental_source_engine = ConnectionFactory.get_opendental_source_connection()
+                self.opendental_source_engine = ConnectionFactory.get_source_connection(self.settings)
                 
             if replication_engine:
                 self.mysql_replication_engine = replication_engine
             elif self.settings.environment == 'test':
-                self.mysql_replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
+                self.mysql_replication_engine = ConnectionFactory.get_replication_connection(self.settings)
             else:
-                self.mysql_replication_engine = ConnectionFactory.get_mysql_replication_connection()
+                self.mysql_replication_engine = ConnectionFactory.get_replication_connection(self.settings)
                 
             if analytics_engine:
                 self.postgres_analytics_engine = analytics_engine
             else:
-                self.postgres_analytics_engine = ConnectionFactory.get_postgres_analytics_connection()
+                self.postgres_analytics_engine = ConnectionFactory.get_analytics_connection(self.settings, ConfigPostgresSchema.RAW)
             
             # Cache database names to avoid repeated lookups
             if self.settings.environment == 'test':
-                self._source_db = self.settings.get_database_config('test_opendental_source')['database']
-                self._replication_db = self.settings.get_database_config('test_opendental_replication')['database']
+                self._source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
+                self._replication_db = self.settings.get_database_config(DatabaseType.REPLICATION)['database']
             else:
-                self._source_db = self.settings.get_database_config('opendental_source')['database']
-                self._replication_db = self.settings.get_database_config('opendental_replication')['database']
+                self._source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
+                self._replication_db = self.settings.get_database_config(DatabaseType.REPLICATION)['database']
             
-            self._analytics_db = self.settings.get_database_config('opendental_analytics_raw')['database']
+            self._analytics_db = self.settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)['database']
             
             self._initialized = True
             logger.info("Successfully initialized all database connections")
