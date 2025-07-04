@@ -101,8 +101,8 @@ class TestCLI:
         assert 'test-connections' in result.output
         
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
-    @patch('etl_pipeline.config.settings.Settings')
-    def test_run_command(self, mock_settings, mock_orchestrator):
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_run_command(self, mock_get_settings, mock_orchestrator):
         """Test the run command."""
         # Create a temporary config file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
@@ -130,7 +130,8 @@ class TestCLI:
 
         try:
             # Setup mock settings
-            mock_settings_instance = mock_settings.return_value
+            mock_settings_instance = MagicMock()
+            mock_get_settings.return_value = mock_settings_instance
             mock_settings_instance.get_database_config.return_value = {
                 'host': 'localhost',
                 'port': 3306,
@@ -263,9 +264,9 @@ class TestCLI:
             config_path = f.name
 
         try:
-            # Setup mock connection factory
+            # Setup mock connection factory - use NEW method names
             mock_analytics_engine = MagicMock()
-            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+            mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             # Setup mock metrics collector
             mock_metrics = MagicMock()
@@ -293,8 +294,8 @@ class TestCLI:
             assert "Pipeline Status" in result.output
             assert "patient" in result.output
 
-            # Verify mocks were called correctly
-            mock_conn_factory.get_postgres_analytics_connection.assert_called_once()
+            # Verify mocks were called correctly - use NEW method names
+            mock_conn_factory.get_analytics_connection.assert_called_once()
             mock_metrics_class.assert_called_once_with(analytics_engine=mock_analytics_engine)
             mock_metrics.get_pipeline_status.assert_called_once_with(table=None)
 
@@ -507,8 +508,9 @@ class TestCLICommandOptions:
             config_path = f.name
 
         try:
+            # Use NEW method names
             mock_analytics_engine = MagicMock()
-            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+            mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             mock_metrics = MagicMock()
             mock_metrics_class.return_value = mock_metrics
@@ -535,8 +537,9 @@ class TestCLICommandOptions:
             config_path = f.name
 
         try:
+            # Use NEW method names
             mock_analytics_engine = MagicMock()
-            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+            mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             mock_metrics = MagicMock()
             mock_metrics_class.return_value = mock_metrics
@@ -564,8 +567,9 @@ class TestCLICommandOptions:
             config_path = f.name
 
         try:
+            # Use NEW method names
             mock_analytics_engine = MagicMock()
-            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+            mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             mock_metrics = MagicMock()
             mock_metrics_class.return_value = mock_metrics
@@ -591,8 +595,9 @@ class TestCLICommandOptions:
             config_path = f.name
 
         try:
+            # Use NEW method names
             mock_analytics_engine = MagicMock()
-            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+            mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             mock_metrics = MagicMock()
             mock_metrics_class.return_value = mock_metrics
@@ -723,8 +728,9 @@ class TestCLIErrorHandling:
             config_path = f.name
 
         try:
+            # Use NEW method names
             mock_analytics_engine = MagicMock()
-            mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+            mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             mock_metrics = MagicMock()
             mock_metrics_class.return_value = mock_metrics
@@ -766,10 +772,10 @@ class TestConnectionTesting:
         mock_analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
         mock_analytics_engine.connect.return_value.__exit__.return_value = None
         
-        # Setup connection factory
-        mock_conn_factory.get_opendental_source_connection.return_value = mock_source_engine
-        mock_conn_factory.get_mysql_replication_connection.return_value = mock_repl_engine
-        mock_conn_factory.get_postgres_analytics_connection.return_value = mock_analytics_engine
+        # Setup connection factory - use NEW method names
+        mock_conn_factory.get_source_connection.return_value = mock_source_engine
+        mock_conn_factory.get_replication_connection.return_value = mock_repl_engine
+        mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
         
         result = self.runner.invoke(cli, ['test-connections'])
         
@@ -786,8 +792,8 @@ class TestConnectionTesting:
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_test_connections_failure(self, mock_conn_factory):
         """Test connection testing when connections fail."""
-        # Mock connection factory to raise exception
-        mock_conn_factory.get_opendental_source_connection.side_effect = Exception("Connection failed")
+        # Mock connection factory to raise exception - use NEW method names
+        mock_conn_factory.get_source_connection.side_effect = Exception("Connection failed")
         
         result = self.runner.invoke(cli, ['test-connections'])
         
