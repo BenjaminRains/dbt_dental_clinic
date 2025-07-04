@@ -55,7 +55,7 @@ sys.path.insert(0, str(project_root))
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 from etl_pipeline.config.logging import get_logger
-from etl_pipeline.config.settings import settings
+from etl_pipeline.config import get_settings
 from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
 
 logger = get_logger(__name__)
@@ -226,7 +226,7 @@ def status(config: str, format: str, table: Optional[str], watch: bool, output: 
         
         # Initialize components with analytics engine for persistence
         connection_factory = ConnectionFactory()
-        analytics_engine = ConnectionFactory.get_postgres_analytics_connection()
+        analytics_engine = ConnectionFactory.get_analytics_connection()
         monitor = UnifiedMetricsCollector(analytics_engine=analytics_engine)
         
         # Get pipeline status
@@ -309,7 +309,7 @@ def test_connections() -> None:
         
         # Test OpenDental source connection
         logger.debug("Testing OpenDental source connection...")
-        source_engine = ConnectionFactory.get_opendental_source_connection(**pool_settings)
+        source_engine = ConnectionFactory.get_source_connection()
         # Actually attempt to connect
         logger.debug("Attempting to connect to OpenDental source...")
         with source_engine.connect() as conn:
@@ -319,7 +319,7 @@ def test_connections() -> None:
         
         # Test MySQL replication connection
         logger.debug("Testing MySQL replication connection...")
-        repl_engine = ConnectionFactory.get_mysql_replication_connection(**pool_settings)
+        repl_engine = ConnectionFactory.get_replication_connection()
         # Actually attempt to connect
         logger.debug("Attempting to connect to MySQL replication...")
         with repl_engine.connect() as conn:
@@ -329,7 +329,7 @@ def test_connections() -> None:
         
         # Test PostgreSQL analytics connection
         logger.debug("Testing PostgreSQL analytics connection...")
-        analytics_engine = ConnectionFactory.get_postgres_analytics_connection(**pool_settings)
+        analytics_engine = ConnectionFactory.get_analytics_connection()
         # Actually attempt to connect
         logger.debug("Attempting to connect to PostgreSQL analytics...")
         with analytics_engine.connect() as conn:
