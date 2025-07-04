@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, mock_open, MagicMock
 import os
 from pathlib import Path
-from etl_pipeline.config.settings import Settings
+from etl_pipeline.config import Settings, DatabaseType, PostgresSchema
 
 @pytest.fixture
 def mock_env_vars():
@@ -267,7 +267,7 @@ def test_get_database_config(mock_env_vars):
     """Test getting database configuration."""
     with patch('etl_pipeline.config.settings.Settings.load_environment'):  # Prevent real .env loading
         settings = Settings()
-        config = settings.get_database_config('source')
+        config = settings.get_database_config(DatabaseType.SOURCE)
         assert config['host'] == 'source_host'
         assert config['port'] == 3306
         assert config['database'] == 'source_db'
@@ -277,7 +277,7 @@ def test_get_database_config(mock_env_vars):
 @pytest.mark.unit
 def test_get_database_config_with_pipeline_overrides(mock_settings_instance):
     """Test getting database configuration with pipeline config overrides."""
-    config = mock_settings_instance.get_database_config('source')
+    config = mock_settings_instance.get_database_config(DatabaseType.SOURCE)
     assert config['connect_timeout'] == 20  # From pipeline config
     assert config['read_timeout'] == 40     # From pipeline config
     assert config['host'] == 'source_host'  # From environment
@@ -289,10 +289,10 @@ def test_get_database_config_caching(mock_env_vars):
         settings = Settings()
         
         # First call should populate cache
-        config1 = settings.get_database_config('source')
+        config1 = settings.get_database_config(DatabaseType.SOURCE)
         
         # Second call should use cache
-        config2 = settings.get_database_config('source')
+        config2 = settings.get_database_config(DatabaseType.SOURCE)
         
         assert config1 is config2  # Same object reference
         assert config1 == config2  # Same content
@@ -302,15 +302,19 @@ def test_get_database_config_unknown_type():
     """Test getting database configuration for unknown database type."""
     with patch('etl_pipeline.config.settings.Settings.load_environment'):  # Prevent real .env loading
         settings = Settings()
-        with pytest.raises(ValueError, match="Unknown database type"):
-            settings.get_database_config('unknown')
+        # Test with an invalid enum value (this would raise KeyError in the new implementation)
+        with pytest.raises(KeyError):
+            # Create a mock enum value that's not in ENV_MAPPINGS
+            class MockDatabaseType:
+                value = "unknown"
+            settings.get_database_config(MockDatabaseType())
 
 @pytest.mark.unit
 def test_get_database_config_mysql_defaults(mock_env_vars):
     """Test MySQL default connection parameters."""
     with patch('etl_pipeline.config.settings.Settings.load_environment'):  # Prevent real .env loading
         settings = Settings()
-        config = settings.get_database_config('source')
+        config = settings.get_database_config(DatabaseType.SOURCE)
         
         assert config['connect_timeout'] == 10
         assert config['read_timeout'] == 30
@@ -322,7 +326,7 @@ def test_get_database_config_postgres_defaults(mock_env_vars):
     """Test PostgreSQL default connection parameters."""
     with patch('etl_pipeline.config.settings.Settings.load_environment'):  # Prevent real .env loading
         settings = Settings()
-        config = settings.get_database_config('analytics')
+        config = settings.get_database_config(DatabaseType.ANALYTICS)
         
         assert config['connect_timeout'] == 10
         assert config['application_name'] == 'etl_pipeline'
@@ -341,7 +345,7 @@ def test_get_database_config_invalid_port():
          patch('etl_pipeline.config.settings.Settings.load_environment'), \
          patch('etl_pipeline.config.settings.logger') as mock_logger:
         settings = Settings()
-        config = settings.get_database_config('source')
+        config = settings.get_database_config(DatabaseType.SOURCE)
         assert config['port'] == 3306  # Default MySQL port
         mock_logger.warning.assert_called_once()
 
@@ -354,7 +358,7 @@ def test_get_connection_string_mysql(mock_env_vars):
     """Test generating MySQL connection string."""
     with patch('etl_pipeline.config.settings.Settings.load_environment'):  # Prevent real .env loading
         settings = Settings()
-        mysql_conn_str = settings.get_connection_string('source')
+        mysql_conn_str = settings.get_connection_string(DatabaseType.SOURCE)
         
         assert 'mysql+pymysql://' in mysql_conn_str
         assert 'source_user:source_pass@source_host:3306/source_db' in mysql_conn_str
@@ -368,7 +372,7 @@ def test_get_connection_string_postgres(mock_env_vars):
     """Test generating PostgreSQL connection string."""
     with patch('etl_pipeline.config.settings.Settings.load_environment'):  # Prevent real .env loading
         settings = Settings()
-        pg_conn_str = settings.get_connection_string('analytics')
+        pg_conn_str = settings.get_connection_string(DatabaseType.ANALYTICS)
         
         assert 'postgresql+psycopg2://' in pg_conn_str
         assert 'analytics_user:analytics_pass@analytics_host:5432/analytics_db' in pg_conn_str
@@ -389,7 +393,7 @@ def test_get_connection_string_missing_fields():
          patch('etl_pipeline.config.settings.Settings.load_environment'):
         settings = Settings()
         with pytest.raises(ValueError, match="Missing required database config fields"):
-            settings.get_connection_string('source')
+            settings.get_connection_string(DatabaseType.SOURCE)
 
 @pytest.mark.unit
 def test_get_connection_string_postgres_no_schema():
@@ -405,7 +409,7 @@ def test_get_connection_string_postgres_no_schema():
     with patch.dict(os.environ, env_vars), \
          patch('etl_pipeline.config.settings.Settings.load_environment'):
         settings = Settings()
-        pg_conn_str = settings.get_connection_string('analytics')
+        pg_conn_str = settings.get_connection_string(DatabaseType.ANALYTICS)
         assert 'options=-csearch_path' not in pg_conn_str
 
 # ============================================================================
@@ -635,7 +639,8 @@ def test_settings_initialization(mock_env_vars):
 @pytest.mark.unit
 def test_global_settings_instance():
     """Test that global settings instance is created."""
-    from etl_pipeline.config.settings import settings
+    from etl_pipeline.config import get_settings
+    settings = get_settings()
     assert isinstance(settings, Settings)
     assert hasattr(settings, 'get_database_config')
     assert hasattr(settings, 'validate_configs')
