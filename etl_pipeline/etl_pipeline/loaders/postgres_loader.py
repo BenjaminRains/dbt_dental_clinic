@@ -112,7 +112,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
 import os
 
-from etl_pipeline.config.settings import settings
+from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.postgres_schema import PostgresSchema
 from etl_pipeline.config.logging import get_logger
 
@@ -147,8 +147,9 @@ class PostgresLoader:
         )
         
         # Get PostgreSQL-specific settings from config
-        analytics_config = settings.get_database_config('analytics')
-        replication_config = settings.get_database_config('replication')
+        settings_instance = get_settings()
+        analytics_config = settings_instance.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
+        replication_config = settings_instance.get_database_config(DatabaseType.REPLICATION)
         
         self.target_schema = analytics_config.get('schema', 'raw')
         self.staging_schema = replication_config.get('schema', 'raw')
