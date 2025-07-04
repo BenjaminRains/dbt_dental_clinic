@@ -11,7 +11,7 @@ import logging
 import os
 
 from etl_pipeline.config.logging import get_logger
-from etl_pipeline.config.settings import settings
+from etl_pipeline.config import get_settings
 
 logger = logging.getLogger(__name__)
 
