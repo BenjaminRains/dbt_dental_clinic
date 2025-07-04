@@ -3,6 +3,12 @@ Shared test fixtures for ETL pipeline tests.
 
 This module provides common fixtures used across all test modules,
 including database mocks, test data generators, and configuration fixtures.
+
+Updated for Configuration System Refactoring:
+- Proper test isolation with reset_global_settings fixture
+- Support for new enum-based DatabaseType and PostgresSchema
+- Environment-aware configuration fixtures
+- Factory pattern for test settings creation
 """
 
 import os
@@ -16,7 +22,13 @@ from sqlalchemy.engine import Engine
 from sqlalchemy import create_engine, text
 
 # Import ETL pipeline components for testing
-from etl_pipeline.config.settings import Settings
+try:
+    from etl_pipeline.config.settings import Settings
+except ImportError:
+    # Fallback for new configuration system
+    from etl_pipeline.config import create_settings
+    Settings = None
+
 from etl_pipeline.core.connections import ConnectionFactory
 
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
@@ -24,11 +36,219 @@ from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
 from etl_pipeline.config.logging import get_logger
 
+# Import new configuration system components
+try:
+    from etl_pipeline.config import reset_settings, create_test_settings, DatabaseType, PostgresSchema
+    NEW_CONFIG_AVAILABLE = True
+except ImportError:
+    # Fallback for backward compatibility
+    NEW_CONFIG_AVAILABLE = False
+    DatabaseType = None
+    PostgresSchema = None
+
 # Set up logger for this module using the project's logging configuration
 logger = get_logger(__name__)
 
 # =============================================================================
-# DATABASE MOCKS AND CONNECTIONS
+# CONFIGURATION SYSTEM FIXTURES (NEW)
+# =============================================================================
+
+@pytest.fixture(autouse=True)
+def reset_global_settings():
+    """Reset global settings before and after each test for proper isolation."""
+    if NEW_CONFIG_AVAILABLE:
+        reset_settings()
+        yield
+        reset_settings()
+    else:
+        # Fallback for old configuration system
+        yield
+
+
+@pytest.fixture
+def test_env_vars():
+    """Standard test environment variables."""
+    return {
+        'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
+        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+        'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+        'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+        'TEST_MYSQL_REPLICATION_HOST': 'localhost',
+        'TEST_MYSQL_REPLICATION_PORT': '3306',
+        'TEST_MYSQL_REPLICATION_DB': 'test_replication',
+        'TEST_MYSQL_REPLICATION_USER': 'test_user',
+        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_pass',
+        'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
+        'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+        'TEST_POSTGRES_ANALYTICS_DB': 'test_analytics',
+        'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+        'TEST_POSTGRES_ANALYTICS_USER': 'test_user',
+        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_pass',
+        'ETL_ENVIRONMENT': 'test'
+    }
+
+
+@pytest.fixture
+def test_pipeline_config():
+    """Standard test pipeline configuration."""
+    return {
+        'general': {
+            'pipeline_name': 'test_pipeline',
+            'environment': 'test',
+            'batch_size': 1000,
+            'parallel_jobs': 2
+        },
+        'connections': {
+            'source': {
+                'pool_size': 2,
+                'connect_timeout': 30
+            },
+            'replication': {
+                'pool_size': 2,
+                'connect_timeout': 30
+            },
+            'analytics': {
+                'pool_size': 2,
+                'connect_timeout': 30
+            }
+        }
+    }
+
+
+@pytest.fixture
+def test_tables_config():
+    """Standard test tables configuration."""
+    return {
+        'tables': {
+            'patient': {
+                'primary_key': 'PatNum',
+                'incremental_column': 'DateTStamp',
+                'extraction_strategy': 'incremental',
+                'table_importance': 'critical',
+                'batch_size': 100
+            },
+            'appointment': {
+                'primary_key': 'AptNum',
+                'incremental_column': 'AptDateTime',
+                'extraction_strategy': 'incremental',
+                'table_importance': 'important',
+                'batch_size': 50
+            },
+            'procedurelog': {
+                'primary_key': 'ProcNum',
+                'incremental_column': 'ProcDate',
+                'extraction_strategy': 'incremental',
+                'table_importance': 'important',
+                'batch_size': 200
+            }
+        }
+    }
+
+
+@pytest.fixture
+def test_settings(test_env_vars, test_pipeline_config, test_tables_config):
+    """Create isolated test settings using new configuration system."""
+    if NEW_CONFIG_AVAILABLE:
+        return create_test_settings(
+            pipeline_config=test_pipeline_config,
+            tables_config=test_tables_config,
+            env_vars=test_env_vars
+        )
+    else:
+        # Fallback to old settings pattern
+        with patch.dict(os.environ, test_env_vars):
+            if Settings is not None:
+                return Settings(environment='test')
+            else:
+                return create_settings(environment='test')
+
+
+@pytest.fixture
+def mock_env_test_settings(test_env_vars):
+    """Create test settings with mocked environment variables."""
+    if NEW_CONFIG_AVAILABLE:
+        with patch.dict(os.environ, test_env_vars):
+            from etl_pipeline.config import create_settings
+            yield create_settings(environment='test')
+    else:
+        # Fallback to old settings pattern
+        with patch.dict(os.environ, test_env_vars):
+            if Settings is not None:
+                yield Settings(environment='test')
+            else:
+                yield create_settings(environment='test')
+
+
+@pytest.fixture
+def production_env_vars():
+    """Production environment variables for integration tests."""
+    return {
+        'OPENDENTAL_SOURCE_HOST': os.getenv('OPENDENTAL_SOURCE_HOST', 'localhost'),
+        'OPENDENTAL_SOURCE_PORT': os.getenv('OPENDENTAL_SOURCE_PORT', '3306'),
+        'OPENDENTAL_SOURCE_DB': os.getenv('OPENDENTAL_SOURCE_DB', 'opendental'),
+        'OPENDENTAL_SOURCE_USER': os.getenv('OPENDENTAL_SOURCE_USER', 'user'),
+        'OPENDENTAL_SOURCE_PASSWORD': os.getenv('OPENDENTAL_SOURCE_PASSWORD', 'password'),
+        'MYSQL_REPLICATION_HOST': os.getenv('MYSQL_REPLICATION_HOST', 'localhost'),
+        'MYSQL_REPLICATION_PORT': os.getenv('MYSQL_REPLICATION_PORT', '3306'),
+        'MYSQL_REPLICATION_DB': os.getenv('MYSQL_REPLICATION_DB', 'opendental_replication'),
+        'MYSQL_REPLICATION_USER': os.getenv('MYSQL_REPLICATION_USER', 'user'),
+        'MYSQL_REPLICATION_PASSWORD': os.getenv('MYSQL_REPLICATION_PASSWORD', 'password'),
+        'POSTGRES_ANALYTICS_HOST': os.getenv('POSTGRES_ANALYTICS_HOST', 'localhost'),
+        'POSTGRES_ANALYTICS_PORT': os.getenv('POSTGRES_ANALYTICS_PORT', '5432'),
+        'POSTGRES_ANALYTICS_DB': os.getenv('POSTGRES_ANALYTICS_DB', 'opendental_analytics'),
+        'POSTGRES_ANALYTICS_SCHEMA': os.getenv('POSTGRES_ANALYTICS_SCHEMA', 'raw'),
+        'POSTGRES_ANALYTICS_USER': os.getenv('POSTGRES_ANALYTICS_USER', 'user'),
+        'POSTGRES_ANALYTICS_PASSWORD': os.getenv('POSTGRES_ANALYTICS_PASSWORD', 'password'),
+        'ETL_ENVIRONMENT': 'production'
+    }
+
+
+@pytest.fixture
+def production_settings(production_env_vars):
+    """Create production settings for integration tests."""
+    if NEW_CONFIG_AVAILABLE:
+        with patch.dict(os.environ, production_env_vars):
+            from etl_pipeline.config import create_settings
+            yield create_settings(environment='production')
+    else:
+        # Fallback to old settings pattern
+        with patch.dict(os.environ, production_env_vars):
+            yield Settings(environment='production')
+
+
+# Database type fixtures for easy access
+@pytest.fixture
+def database_types():
+    """Provide DatabaseType enum for tests."""
+    if NEW_CONFIG_AVAILABLE:
+        return DatabaseType
+    else:
+        # Fallback: return string constants
+        class MockDatabaseType:
+            SOURCE = 'source'
+            REPLICATION = 'replication'
+            ANALYTICS = 'analytics'
+        return MockDatabaseType()
+
+
+@pytest.fixture
+def postgres_schemas():
+    """Provide PostgresSchema enum for tests."""
+    if NEW_CONFIG_AVAILABLE:
+        return PostgresSchema
+    else:
+        # Fallback: return string constants
+        class MockPostgresSchema:
+            RAW = 'raw'
+            STAGING = 'staging'
+            INTERMEDIATE = 'intermediate'
+            MARTS = 'marts'
+        return MockPostgresSchema()
+
+
+# =============================================================================
+# DATABASE MOCKS AND CONNECTIONS (UPDATED)
 # =============================================================================
 
 @pytest.fixture(scope="session")
@@ -81,14 +301,8 @@ def mock_connection_factory():
         yield mock
 
 
-
-
-
-
-
-
 # =============================================================================
-# CONFIGURATION FIXTURES
+# CONFIGURATION FIXTURES (UPDATED)
 # =============================================================================
 
 @pytest.fixture
@@ -125,9 +339,6 @@ def mock_settings():
         
         mock.return_value = settings_instance
         yield settings_instance
-
-
-
 
 
 # =============================================================================
@@ -171,11 +382,6 @@ def table_processor_medium_large_config():
         'batch_size': 2500,
         'priority': 'important'
     }
-
-
-
-
-
 
 
 # =============================================================================
@@ -227,11 +433,8 @@ def postgres_loader(mock_replication_engine, mock_analytics_engine):
             return loader
 
 
-
-
-
 # =============================================================================
-# TEST ENVIRONMENT SETUP
+# TEST ENVIRONMENT SETUP (UPDATED)
 # =============================================================================
 
 @pytest.fixture(autouse=True)
@@ -268,7 +471,7 @@ def setup_test_environment(monkeypatch, request):
 
 
 # =============================================================================
-# TEST CATEGORIES AND MARKERS
+# TEST CATEGORIES AND MARKERS (UPDATED)
 # =============================================================================
 
 def pytest_configure(config):
@@ -278,6 +481,9 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "integration: Integration tests (require databases)"
+    )
+    config.addinivalue_line(
+        "markers", "config: Configuration system tests"
     )
     config.addinivalue_line(
         "markers", "slow: Tests that take longer to run"
@@ -495,12 +701,6 @@ def orchestrator(mock_components):
                                 return orchestrator
 
 
-
-
-
- 
-
-
 # =============================================================================
 # UNIFIED METRICS FIXTURES
 # =============================================================================
@@ -524,7 +724,7 @@ def unified_metrics_collector_no_persistence():
 
 
 # =============================================================================
-# CONFIGURATION TEST FIXTURES
+# CONFIGURATION TEST FIXTURES (UPDATED)
 # =============================================================================
 
 @pytest.fixture
@@ -734,4 +934,36 @@ def mock_settings_environment():
 
 
 # =============================================================================
-# EXISTING UNIFIED METRICS FIXTURES (for backward compatibility) 
+# BACKWARD COMPATIBILITY FIXTURES
+# =============================================================================
+
+# These fixtures maintain backward compatibility with existing tests
+# that may not have been updated to use the new configuration system
+
+@pytest.fixture
+def legacy_settings():
+    """Legacy settings fixture for backward compatibility."""
+    if NEW_CONFIG_AVAILABLE:
+        # Use new system with fallback
+        return create_test_settings()
+    else:
+        # Use old system
+        return Settings(environment='test')
+
+
+@pytest.fixture
+def legacy_connection_factory():
+    """Legacy connection factory fixture for backward compatibility."""
+    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock:
+        # Mock both old and new connection methods
+        mock.get_opendental_source_connection.return_value = MagicMock(spec=Engine)
+        mock.get_mysql_replication_connection.return_value = MagicMock(spec=Engine)
+        mock.get_postgres_analytics_connection.return_value = MagicMock(spec=Engine)
+        
+        # Mock new enum-based methods if available
+        if NEW_CONFIG_AVAILABLE:
+            mock.get_source_connection.return_value = MagicMock(spec=Engine)
+            mock.get_replication_connection.return_value = MagicMock(spec=Engine)
+            mock.get_analytics_connection.return_value = MagicMock(spec=Engine)
+        
+        yield mock 
