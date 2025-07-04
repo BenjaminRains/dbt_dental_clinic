@@ -38,7 +38,7 @@ def opendental_source(
     table_configs = get_table_configs()
     
     # Get source engine from ConnectionFactory
-    source_engine = ConnectionFactory.get_opendental_source_connection()
+    source_engine = ConnectionFactory.get_source_connection()
     
     # Filter tables based on criteria
     filtered_tables = _filter_tables(table_configs, importance_filter, table_filter)
@@ -171,7 +171,7 @@ def patient_with_computed_fields():
     """
     
     # Get source engine from ConnectionFactory
-    source_engine = ConnectionFactory.get_opendental_source_connection()
+    source_engine = ConnectionFactory.get_source_connection()
     
     with source_engine.connect() as conn:
         # Custom query with business logic
