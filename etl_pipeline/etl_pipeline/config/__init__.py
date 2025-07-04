@@ -1,23 +1,35 @@
-# etl_pipeline/config/__init__.py
 """
-Configuration management for the ETL pipeline.
+Step 1.3: Replace etl_pipeline/config/__init__.py
 
-This module provides centralized configuration management through the Settings class,
-which handles database connections, pipeline settings, and table configurations.
-Configuration can be loaded from environment variables and YAML files.
+BACKUP YOUR EXISTING FILE FIRST!
+cp etl_pipeline/config/__init__.py etl_pipeline/config/__init__.py.backup
 
-Exports:
-    Settings: Main configuration class that manages all pipeline settings
-    settings: Global Settings instance for use throughout the pipeline
+Then replace with this clean implementation.
 """
-from typing import TYPE_CHECKING
 
-from .settings import Settings, settings
+from .settings import (
+    Settings,
+    DatabaseType,
+    PostgresSchema,
+    get_settings,
+    reset_settings,
+    set_settings,
+    create_settings,
+    create_test_settings
+)
 
-if TYPE_CHECKING:
-    pass
-
+# Export clean interface
 __all__ = [
     'Settings',
-    'settings'
+    'DatabaseType',
+    'PostgresSchema',
+    'get_settings',
+    'reset_settings', 
+    'set_settings',
+    'create_settings',
+    'create_test_settings',
+    'settings'  # For backward compatibility
 ]
+
+# Default settings instance (lazy-loaded)
+settings = get_settings()
