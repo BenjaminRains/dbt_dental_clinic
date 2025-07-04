@@ -23,8 +23,8 @@ def test_database_connection():
     """Test database connectivity and basic queries."""
     try:
         # Initialize connections
-        source_engine = ConnectionFactory.get_opendental_source_connection()
-        replication_engine = ConnectionFactory.get_mysql_replication_connection()
+        source_engine = ConnectionFactory.get_source_connection()
+        replication_engine = ConnectionFactory.get_replication_connection()
         
         # Test both connections
         with source_engine.connect() as conn:
@@ -51,8 +51,8 @@ def test_schema_discovery():
     
     try:
         # Test database connections
-        source_engine = ConnectionFactory.get_opendental_source_connection()
-        replication_engine = ConnectionFactory.get_mysql_replication_connection()
+        source_engine = ConnectionFactory.get_source_connection()
+        replication_engine = ConnectionFactory.get_replication_connection()
         
         print("Source database connection successful (readonly)")
         print("Replication database connection successful")

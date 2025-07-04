@@ -47,7 +47,7 @@ class OpenDentalSchemaAnalyzer:
     
     def __init__(self):
         """Initialize with source database connection only."""
-        self.source_engine = ConnectionFactory.get_opendental_source_connection()
+        self.source_engine = ConnectionFactory.get_source_connection()
         self.source_db = os.getenv('OPENDENTAL_SOURCE_DB')
         
         if not self.source_db:
