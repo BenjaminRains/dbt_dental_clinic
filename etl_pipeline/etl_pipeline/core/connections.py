@@ -1,36 +1,21 @@
 """
-Database connection factory for the ETL pipeline.
+Complete ConnectionFactory with ConnectionManager for ETL pipeline.
 Handles connections to source, replication, and analytics databases.
 """
+
 import os
 import time
+import logging
 from typing import Optional, Dict
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from dotenv import load_dotenv
-import logging
+from etl_pipeline.config import get_settings, Settings, DatabaseType, PostgresSchema
 
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-# Try to load from etl_pipeline/.env first, then fall back to parent directory
-env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-    logger.info(f"Loaded environment from: {env_path}")
-else:
-    # Try parent directory
-    parent_env_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '.env')
-    if os.path.exists(parent_env_path):
-        load_dotenv(parent_env_path)
-        logger.info(f"Loaded environment from: {parent_env_path}")
-    else:
-        # Fall back to default behavior
-        load_dotenv()
-        logger.info("Loaded environment using default load_dotenv() behavior")
 
 class ConnectionFactory:
-    """Factory class for creating database connections."""
+    """Factory for creating database connections with clean architecture."""
     
     # Default pool settings
     DEFAULT_POOL_SIZE = 5
@@ -46,40 +31,23 @@ class ConnectionFactory:
             raise ValueError(f"Missing required {connection_type} connection parameters: {', '.join(missing_params)}")
     
     @staticmethod
-    def create_mysql_connection(
+    def create_mysql_engine(
         host: str,
-        port: str,
+        port: int,
         database: str,
         user: str,
         password: str,
-        readonly: bool = False,  # Kept for API compatibility but not used
         pool_size: int = DEFAULT_POOL_SIZE,
         max_overflow: int = DEFAULT_MAX_OVERFLOW,
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
+        pool_recycle: int = DEFAULT_POOL_RECYCLE,
+        **kwargs
     ) -> Engine:
-        """
-        Create a MySQL connection with proper configuration.
-        
-        Args:
-            host: Database host
-            port: Database port
-            database: Database name
-            user: Database user
-            password: Database password
-            readonly: Whether to use read-only mode (handled at server level)
-            pool_size: Number of connections to keep in the pool
-            max_overflow: Maximum number of connections that can be created beyond pool_size
-            pool_timeout: Number of seconds to wait before giving up on getting a connection
-            pool_recycle: Number of seconds after which a connection is automatically recycled
-            
-        Returns:
-            SQLAlchemy Engine instance
-        """
+        """Create a MySQL engine with proper configuration."""
         # Validate required parameters
         params = {
             'host': host,
-            'port': port,
+            'port': str(port),
             'database': database,
             'user': user,
             'password': password
@@ -88,9 +56,7 @@ class ConnectionFactory:
         
         try:
             # Create connection string
-            connection_string = (
-                f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
-            )
+            connection_string = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
             
             # Create engine with connection pool settings
             engine = create_engine(
@@ -106,7 +72,7 @@ class ConnectionFactory:
             with engine.connect() as conn:
                 conn.execute(text("SET SESSION sql_mode = 'NO_AUTO_VALUE_ON_ZERO'"))
             
-            logger.info(f"Successfully created MySQL connection to {database}" + (" (read-only)" if readonly else ""))
+            logger.info(f"Successfully created MySQL connection to {database}")
             return engine
             
         except Exception as e:
@@ -115,40 +81,24 @@ class ConnectionFactory:
             raise Exception(error_msg) from e
     
     @staticmethod
-    def create_postgres_connection(
+    def create_postgres_engine(
         host: str,
-        port: str,
+        port: int,
         database: str,
-        schema: str = 'raw',  # Default to raw schema
-        user: str = None,
-        password: str = None,
+        user: str,
+        password: str,
+        schema: str = 'raw',
         pool_size: int = DEFAULT_POOL_SIZE,
         max_overflow: int = DEFAULT_MAX_OVERFLOW,
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
+        pool_recycle: int = DEFAULT_POOL_RECYCLE,
+        **kwargs
     ) -> Engine:
-        """
-        Create a PostgreSQL connection with proper configuration.
-        
-        Args:
-            host: Database host
-            port: Database port
-            database: Database name
-            schema: Schema name (defaults to 'raw')
-            user: Database user
-            password: Database password
-            pool_size: Number of connections to keep in the pool
-            max_overflow: Maximum number of connections that can be created beyond pool_size
-            pool_timeout: Number of seconds to wait before giving up on getting a connection
-            pool_recycle: Number of seconds after which a connection is automatically recycled
-            
-        Returns:
-            SQLAlchemy Engine instance
-        """
+        """Create a PostgreSQL engine with proper configuration."""
         # Validate required parameters
         params = {
             'host': host,
-            'port': port,
+            'port': str(port),
             'database': database,
             'user': user,
             'password': password
@@ -161,12 +111,10 @@ class ConnectionFactory:
                 schema = 'raw'
                 logger.warning(f"No schema specified for PostgreSQL connection to {database}, using default: raw")
             
-            # Create connection string with schema
-            connection_string = (
-                f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
-            )
+            # Create connection string
+            connection_string = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
             
-            # Create engine with connection pool settings
+            # Create engine with connection pool settings and schema
             engine = create_engine(
                 connection_string,
                 pool_pre_ping=True,
@@ -187,462 +135,128 @@ class ConnectionFactory:
             logger.error(error_msg)
             raise Exception(error_msg) from e
     
-    # ============================================================================
-    # PRODUCTION ENVIRONMENT CONNECTIONS
-    # ============================================================================
-    
-    @classmethod
-    def get_opendental_source_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to source OpenDental MySQL database (PRODUCTION - read-only)."""
-        # Get environment variables
-        host = os.getenv('OPENDENTAL_SOURCE_HOST')
-        port = os.getenv('OPENDENTAL_SOURCE_PORT')
-        database = os.getenv('OPENDENTAL_SOURCE_DB')
-        user = os.getenv('OPENDENTAL_SOURCE_USER')
-        password = os.getenv('OPENDENTAL_SOURCE_PASSWORD')
+    # New clean interface methods
+    @staticmethod
+    def get_source_connection(settings: Settings = None) -> Engine:
+        """Get OpenDental source database connection."""
+        if settings is None:
+            settings = get_settings()
         
-        # Log which environment variables were used
-        logger.debug(f"Using PRODUCTION source connection parameters: host={host}, port={port}, database={database}, user={user}")
+        config = settings.get_database_config(DatabaseType.SOURCE)
         
-        return cls.create_mysql_connection(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password,
-            readonly=True,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
+        return ConnectionFactory.create_mysql_engine(
+            host=config['host'],
+            port=config['port'],
+            database=config['database'],
+            user=config['user'],
+            password=config['password'],
+            pool_size=config.get('pool_size', ConnectionFactory.DEFAULT_POOL_SIZE),
+            max_overflow=config.get('max_overflow', ConnectionFactory.DEFAULT_MAX_OVERFLOW),
+            pool_timeout=config.get('pool_timeout', ConnectionFactory.DEFAULT_POOL_TIMEOUT),
+            pool_recycle=config.get('pool_recycle', ConnectionFactory.DEFAULT_POOL_RECYCLE)
         )
     
-    @classmethod
-    def get_mysql_replication_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to local MySQL replication database (PRODUCTION - full access)."""
-        # Get environment variables
-        host = os.getenv('MYSQL_REPLICATION_HOST')
-        port = os.getenv('MYSQL_REPLICATION_PORT')
-        database = os.getenv('MYSQL_REPLICATION_DB')
-        user = os.getenv('MYSQL_REPLICATION_USER')
-        password = os.getenv('MYSQL_REPLICATION_PASSWORD')
+    @staticmethod
+    def get_replication_connection(settings: Settings = None) -> Engine:
+        """Get MySQL replication database connection."""
+        if settings is None:
+            settings = get_settings()
         
-        # Log which environment variables were used
-        logger.debug(f"Using PRODUCTION replication connection parameters: host={host}, port={port}, database={database}, user={user}")
+        config = settings.get_database_config(DatabaseType.REPLICATION)
         
-        return cls.create_mysql_connection(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
+        return ConnectionFactory.create_mysql_engine(
+            host=config['host'],
+            port=config['port'],
+            database=config['database'],
+            user=config['user'],
+            password=config['password'],
+            pool_size=config.get('pool_size', ConnectionFactory.DEFAULT_POOL_SIZE),
+            max_overflow=config.get('max_overflow', ConnectionFactory.DEFAULT_MAX_OVERFLOW),
+            pool_timeout=config.get('pool_timeout', ConnectionFactory.DEFAULT_POOL_TIMEOUT),
+            pool_recycle=config.get('pool_recycle', ConnectionFactory.DEFAULT_POOL_RECYCLE)
         )
     
-    @classmethod
-    def get_postgres_analytics_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics database (PRODUCTION)."""
-        # Get environment variables
-        host = os.getenv('POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = os.getenv('POSTGRES_ANALYTICS_SCHEMA', 'raw')
-        user = os.getenv('POSTGRES_ANALYTICS_USER')
-        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
+    @staticmethod
+    def get_analytics_connection(settings: Settings = None, 
+                               schema: PostgresSchema = PostgresSchema.RAW) -> Engine:
+        """Get PostgreSQL analytics database connection."""
+        if settings is None:
+            settings = get_settings()
         
-        # Log which environment variables were used
-        logger.debug(f"Using PRODUCTION analytics connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
+        config = settings.get_database_config(DatabaseType.ANALYTICS, schema)
         
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
+        return ConnectionFactory.create_postgres_engine(
+            host=config['host'],
+            port=config['port'],
+            database=config['database'],
+            user=config['user'],
+            password=config['password'],
+            schema=config.get('schema', 'raw'),
+            pool_size=config.get('pool_size', ConnectionFactory.DEFAULT_POOL_SIZE),
+            max_overflow=config.get('max_overflow', ConnectionFactory.DEFAULT_MAX_OVERFLOW),
+            pool_timeout=config.get('pool_timeout', ConnectionFactory.DEFAULT_POOL_TIMEOUT),
+            pool_recycle=config.get('pool_recycle', ConnectionFactory.DEFAULT_POOL_RECYCLE)
         )
-
-    # Production-specific schema connection methods
-    @classmethod
-    def get_opendental_analytics_raw_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics database raw schema (PRODUCTION)."""
-        return cls.get_postgres_analytics_connection(
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_opendental_analytics_staging_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics database staging schema (PRODUCTION)."""
-        # Get environment variables
-        host = os.getenv('POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = 'staging'  # Use simplified staging schema
-        user = os.getenv('POSTGRES_ANALYTICS_USER')
-        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using PRODUCTION analytics staging connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_opendental_analytics_intermediate_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics database intermediate schema (PRODUCTION)."""
-        # Get environment variables
-        host = os.getenv('POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = 'intermediate'  # Use simplified intermediate schema
-        user = os.getenv('POSTGRES_ANALYTICS_USER')
-        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using PRODUCTION analytics intermediate connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_opendental_analytics_marts_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics database marts schema (PRODUCTION)."""
-        # Get environment variables
-        host = os.getenv('POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('POSTGRES_ANALYTICS_DB')
-        schema = 'marts'  # Use simplified marts schema
-        user = os.getenv('POSTGRES_ANALYTICS_USER')
-        password = os.getenv('POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using PRODUCTION analytics marts connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    # ============================================================================
-    # TEST ENVIRONMENT CONNECTIONS
-    # ============================================================================
     
-    @classmethod
-    def get_opendental_source_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to OpenDental test database on client server (TEST)."""
-        # Get environment variables
-        host = os.getenv('TEST_OPENDENTAL_SOURCE_HOST')
-        port = os.getenv('TEST_OPENDENTAL_SOURCE_PORT')
-        database = os.getenv('TEST_OPENDENTAL_SOURCE_DB')
-        user = os.getenv('TEST_OPENDENTAL_SOURCE_USER')
-        password = os.getenv('TEST_OPENDENTAL_SOURCE_PASSWORD')
-        
-        # Enhanced logging to debug the issue
-        logger.info(f"TEST_OPENDENTAL_SOURCE_HOST: {host}")
-        logger.info(f"TEST_OPENDENTAL_SOURCE_PORT: {port}")
-        logger.info(f"TEST_OPENDENTAL_SOURCE_DB: {database}")
-        logger.info(f"TEST_OPENDENTAL_SOURCE_USER: {user}")
-        logger.info(f"TEST_OPENDENTAL_SOURCE_PASSWORD: {'*' * len(password) if password else 'NOT SET'}")
-        
-        # Validate that we have all required parameters
-        if not all([host, port, database, user, password]):
-            missing = []
-            if not host: missing.append('TEST_OPENDENTAL_SOURCE_HOST')
-            if not port: missing.append('TEST_OPENDENTAL_SOURCE_PORT')
-            if not database: missing.append('TEST_OPENDENTAL_SOURCE_DB')
-            if not user: missing.append('TEST_OPENDENTAL_SOURCE_USER')
-            if not password: missing.append('TEST_OPENDENTAL_SOURCE_PASSWORD')
-            raise ValueError(f"Missing required test connection environment variables: {', '.join(missing)}")
-        
-        # Log which environment variables were used
-        logger.debug(f"Using TEST OpenDental source connection parameters: host={host}, port={port}, database={database}, user={user}")
-        
-        return cls.create_mysql_connection(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
+    # Convenience methods for specific PostgreSQL schemas
+    @staticmethod
+    def get_analytics_raw_connection(settings: Settings = None) -> Engine:
+        """Get PostgreSQL analytics raw schema connection."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+    
+    @staticmethod
+    def get_analytics_staging_connection(settings: Settings = None) -> Engine:
+        """Get PostgreSQL analytics staging schema connection."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.STAGING)
+    
+    @staticmethod
+    def get_analytics_intermediate_connection(settings: Settings = None) -> Engine:
+        """Get PostgreSQL analytics intermediate schema connection."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.INTERMEDIATE)
+    
+    @staticmethod
+    def get_analytics_marts_connection(settings: Settings = None) -> Engine:
+        """Get PostgreSQL analytics marts schema connection."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.MARTS)
+    
+    # Legacy method names for backward compatibility during transition
+    @staticmethod
+    def get_opendental_source_connection(settings: Settings = None) -> Engine:
+        """Legacy method name - use get_source_connection instead."""
+        logger.warning("get_opendental_source_connection is deprecated, use get_source_connection")
+        return ConnectionFactory.get_source_connection(settings)
+    
+    @staticmethod
+    def get_mysql_replication_connection(settings: Settings = None) -> Engine:
+        """Legacy method name - use get_replication_connection instead."""
+        logger.warning("get_mysql_replication_connection is deprecated, use get_replication_connection")
+        return ConnectionFactory.get_replication_connection(settings)
+    
+    @staticmethod
+    def get_postgres_analytics_connection(settings: Settings = None) -> Engine:
+        """Legacy method name - use get_analytics_connection instead."""
+        logger.warning("get_postgres_analytics_connection is deprecated, use get_analytics_connection")
+        return ConnectionFactory.get_analytics_connection(settings)
+    
+    # Legacy test connection methods for backward compatibility
+    @staticmethod
+    def get_opendental_source_test_connection(settings: Settings = None) -> Engine:
+        """Legacy test method - use get_source_connection with test settings."""
+        logger.warning("get_opendental_source_test_connection is deprecated, use get_source_connection with test settings")
+        return ConnectionFactory.get_source_connection(settings)
+    
+    @staticmethod
+    def get_mysql_replication_test_connection(settings: Settings = None) -> Engine:
+        """Legacy test method - use get_replication_connection with test settings."""
+        logger.warning("get_mysql_replication_test_connection is deprecated, use get_replication_connection with test settings")
+        return ConnectionFactory.get_replication_connection(settings)
+    
+    @staticmethod
+    def get_postgres_analytics_test_connection(settings: Settings = None) -> Engine:
+        """Legacy test method - use get_analytics_connection with test settings."""
+        logger.warning("get_postgres_analytics_test_connection is deprecated, use get_analytics_connection with test settings")
+        return ConnectionFactory.get_analytics_connection(settings)
 
-    @classmethod
-    def get_mysql_replication_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to MySQL replication test database (TEST)."""
-        # Get environment variables
-        host = os.getenv('TEST_MYSQL_REPLICATION_HOST')
-        port = os.getenv('TEST_MYSQL_REPLICATION_PORT')
-        database = os.getenv('TEST_MYSQL_REPLICATION_DB')
-        user = os.getenv('TEST_MYSQL_REPLICATION_USER')
-        password = os.getenv('TEST_MYSQL_REPLICATION_PASSWORD')
-        
-        # Enhanced logging to debug the issue
-        logger.info(f"TEST_MYSQL_REPLICATION_HOST: {host}")
-        logger.info(f"TEST_MYSQL_REPLICATION_PORT: {port}")
-        logger.info(f"TEST_MYSQL_REPLICATION_DB: {database}")
-        logger.info(f"TEST_MYSQL_REPLICATION_USER: {user}")
-        logger.info(f"TEST_MYSQL_REPLICATION_PASSWORD: {'*' * len(password) if password else 'NOT SET'}")
-        
-        # Validate that we have all required parameters
-        if not all([host, port, database, user, password]):
-            missing = []
-            if not host: missing.append('TEST_MYSQL_REPLICATION_HOST')
-            if not port: missing.append('TEST_MYSQL_REPLICATION_PORT')
-            if not database: missing.append('TEST_MYSQL_REPLICATION_DB')
-            if not user: missing.append('TEST_MYSQL_REPLICATION_USER')
-            if not password: missing.append('TEST_MYSQL_REPLICATION_PASSWORD')
-            raise ValueError(f"Missing required replication test connection environment variables: {', '.join(missing)}")
-        
-        # Log which environment variables were used
-        logger.debug(f"Using TEST replication connection parameters: host={host}, port={port}, database={database}, user={user}")
-        
-        return cls.create_mysql_connection(
-            host=host,
-            port=port,
-            database=database,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_postgres_analytics_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics test database (TEST)."""
-        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
-        schema = os.getenv('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw')
-        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
-        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using TEST analytics connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    # Test-specific schema connection methods
-    @classmethod
-    def get_opendental_analytics_raw_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics test database raw schema (TEST)."""
-        return cls.get_postgres_analytics_test_connection(
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_opendental_analytics_staging_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics test database staging schema (TEST)."""
-        # Get environment variables
-        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
-        schema = 'staging'  # Use simplified staging schema
-        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
-        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using TEST analytics staging connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_opendental_analytics_intermediate_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics test database intermediate schema (TEST)."""
-        # Get environment variables
-        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
-        schema = 'intermediate'  # Use simplified intermediate schema
-        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
-        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using TEST analytics intermediate connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
-
-    @classmethod
-    def get_opendental_analytics_marts_test_connection(
-        cls,
-        pool_size: int = DEFAULT_POOL_SIZE,
-        max_overflow: int = DEFAULT_MAX_OVERFLOW,
-        pool_timeout: int = DEFAULT_POOL_TIMEOUT,
-        pool_recycle: int = DEFAULT_POOL_RECYCLE
-    ) -> Engine:
-        """Get connection to PostgreSQL analytics test database marts schema (TEST)."""
-        # Get environment variables
-        host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST')
-        port = os.getenv('TEST_POSTGRES_ANALYTICS_PORT')
-        database = os.getenv('TEST_POSTGRES_ANALYTICS_DB')
-        schema = 'marts'  # Use simplified marts schema
-        user = os.getenv('TEST_POSTGRES_ANALYTICS_USER')
-        password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD')
-        
-        logger.debug(f"Using TEST analytics marts connection parameters: host={host}, port={port}, database={database}, schema={schema}, user={user}")
-        
-        return cls.create_postgres_connection(
-            host=host,
-            port=port,
-            database=database,
-            schema=schema,
-            user=user,
-            password=password,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle
-        )
 
 class ConnectionManager:
     """
@@ -724,3 +338,36 @@ class ConnectionManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - ensures connection cleanup."""
         self.close_connection()
+
+
+# Convenience function to create ConnectionManager
+def create_connection_manager(db_type: DatabaseType, 
+                            schema: Optional[PostgresSchema] = None,
+                            settings: Settings = None,
+                            max_retries: int = 3,
+                            retry_delay: float = 1.0) -> ConnectionManager:
+    """
+    Create a ConnectionManager for the specified database type.
+    
+    Args:
+        db_type: Database type (SOURCE, REPLICATION, ANALYTICS)
+        schema: PostgreSQL schema (only for ANALYTICS)
+        settings: Settings instance (uses global if None)
+        max_retries: Maximum number of retry attempts
+        retry_delay: Delay between retries in seconds
+        
+    Returns:
+        ConnectionManager instance
+    """
+    if db_type == DatabaseType.SOURCE:
+        engine = ConnectionFactory.get_source_connection(settings)
+    elif db_type == DatabaseType.REPLICATION:
+        engine = ConnectionFactory.get_replication_connection(settings)
+    elif db_type == DatabaseType.ANALYTICS:
+        if schema is None:
+            schema = PostgresSchema.RAW
+        engine = ConnectionFactory.get_analytics_connection(settings, schema)
+    else:
+        raise ValueError(f"Unknown database type: {db_type}")
+    
+    return ConnectionManager(engine, max_retries, retry_delay)
