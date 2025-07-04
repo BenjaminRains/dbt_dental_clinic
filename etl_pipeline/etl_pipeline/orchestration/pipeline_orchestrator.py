@@ -60,7 +60,7 @@ from ..core.connections import ConnectionFactory
 from ..monitoring.unified_metrics import UnifiedMetricsCollector
 from .table_processor import TableProcessor
 from .priority_processor import PriorityProcessor
-from ..config.settings import Settings
+from ..config import Settings, DatabaseType
 from ..core.schema_discovery import SchemaDiscovery
 
 logger = logging.getLogger(__name__)
@@ -107,11 +107,11 @@ class PipelineOrchestrator:
             
             # Create SchemaDiscovery with appropriate source database connection
             if self.settings.environment == 'test':
-                source_engine = ConnectionFactory.get_opendental_source_test_connection()
-                source_db = self.settings.get_database_config('test_opendental_source')['database']
+                source_engine = ConnectionFactory.get_source_connection(self.settings)
+                source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
             else:
-                source_engine = ConnectionFactory.get_opendental_source_connection()
-                source_db = self.settings.get_database_config('opendental_source')['database']
+                source_engine = ConnectionFactory.get_source_connection(self.settings)
+                source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
             
             self.schema_discovery = SchemaDiscovery(source_engine, source_db)
             
