@@ -52,7 +52,7 @@ import os.path
 
 # Use the new logger architecture
 from etl_pipeline.config.logging import get_logger
-from etl_pipeline.config.settings import settings
+from etl_pipeline.config import get_settings
 
 # Import ConnectionManager from connections.py
 from .connections import ConnectionManager
@@ -104,7 +104,7 @@ class SchemaDiscovery:
         self._analysis_cache = {}    # Relationship/usage analysis
         
         # Use the new settings system
-        self.settings = settings
+        self.settings = get_settings()
         
         # Analysis metadata
         self._analysis_timestamp = None
