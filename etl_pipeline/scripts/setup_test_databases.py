@@ -38,19 +38,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 # Load test environment the same way as the test fixtures
 def load_test_environment():
     """Load environment variables from .env file for testing."""
-    # Try to load from etl_pipeline/.env first
+    # Only load from etl_pipeline/.env - don't load from other directories
     etl_env_path = Path(__file__).parent.parent / '.env'
     if etl_env_path.exists():
-        load_dotenv(etl_env_path)
+        # Use override=True to ensure our .env takes precedence
+        load_dotenv(etl_env_path, override=True)
         print(f"Loaded environment from: {etl_env_path}")
     else:
-        # Fall back to parent directory .env
-        parent_env_path = Path(__file__).parent.parent.parent / '.env'
-        if parent_env_path.exists():
-            load_dotenv(parent_env_path)
-            print(f"Loaded environment from: {parent_env_path}")
-        else:
-            print("No .env file found")
+        print(f"No .env file found at: {etl_env_path}")
+        print("Please create etl_pipeline/.env from etl_pipeline/.env.template")
+        sys.exit(1)
 
 # Load environment at module import time
 load_test_environment()
@@ -59,8 +56,12 @@ load_test_environment()
 try:
     from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema, reset_settings
     from etl_pipeline.core.connections import ConnectionFactory
-    # Import standardized test data from fixtures
-    from etl_pipeline.tests.fixtures.test_data_definitions import get_test_patient_data, get_test_appointment_data
+    # Import standardized test data directly to avoid pytest dependencies
+    import sys
+    import os
+    fixtures_path = os.path.join(os.path.dirname(__file__), '..', 'tests', 'fixtures')
+    sys.path.insert(0, fixtures_path)
+    from test_data_definitions import get_test_patient_data, get_test_appointment_data
     NEW_CONFIG_AVAILABLE = True
 except ImportError as e:
     print(f"Import error: {e}")
@@ -358,7 +359,10 @@ def setup_mysql_test_database(settings, database_type):
             # Test the connection and show current user
             result = conn.execute(text("SELECT USER(), DATABASE()"))
             user_info = result.fetchone()
-            logger.info(f"Connected as user: {user_info[0]}, database: {user_info[1]}")
+            if user_info:
+                logger.info(f"Connected as user: {user_info[0]}, database: {user_info[1]}")
+            else:
+                logger.warning("Could not retrieve user/database info")
             
             # Drop existing patient table if it exists, then create with complete schema
             conn.execute(text("DROP TABLE IF EXISTS patient"))
