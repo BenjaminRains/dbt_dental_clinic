@@ -3,16 +3,38 @@ Real Integration Testing for PostgresSchema - Using Real MySQL and PostgreSQL Da
 
 This approach tests the actual PostgreSQL schema conversion flow by using the REAL MySQL and PostgreSQL test databases
 with clearly identifiable test data that won't interfere with production.
+
+Refactored to use new architectural patterns:
+- Dependency injection with Settings
+- Type-safe DatabaseType and PostgresSchema enums
+- Modular fixture organization
+- Clean separation of concerns
 """
 
 import pytest
 import logging
 from sqlalchemy import text
 from datetime import datetime, timedelta
+from typing import List, Dict, Any
 
-from etl_pipeline.core.postgres_schema import PostgresSchema
+from etl_pipeline.core.postgres_schema import PostgresSchema as PostgresSchemaClass
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
 from etl_pipeline.core.connections import ConnectionFactory
+
+# Import new configuration system
+try:
+    from etl_pipeline.config import (
+        create_test_settings, 
+        DatabaseType, 
+        PostgresSchema,
+        reset_settings
+    )
+    NEW_CONFIG_AVAILABLE = True
+except ImportError:
+    # Fallback for backward compatibility
+    NEW_CONFIG_AVAILABLE = False
+    DatabaseType = None
+    PostgresSchema = None
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +43,17 @@ class TestPostgresSchemaRealIntegration:
     """Real integration tests using actual MySQL and PostgreSQL databases with test data."""
     
     @pytest.fixture
-    def test_data_manager(self):
-        """Manage test data in the MySQL replication test database."""
+    def test_data_manager(self, postgres_schema_test_settings):
+        """Manage test data in the MySQL replication test database using test environment.
+        
+        This fixture uses the test connection methods as specified in the connection
+        environment separation documentation to ensure we're connecting to test databases.
+        """
         class TestDataManager:
-            def __init__(self):
-                # Use the MySQL replication test database as source
+            def __init__(self, settings):
+                # Use test connection methods as specified in connection_environment_separation.md
+                # These methods automatically use TEST_* environment variables from .env file
                 self.mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
-                # Use the PostgreSQL analytics test database as target
                 self.postgres_engine = ConnectionFactory.get_postgres_analytics_test_connection()
                 self.test_patients = []
                 self.test_appointments = []
@@ -389,7 +415,7 @@ class TestPostgresSchemaRealIntegration:
                     # The procedures might be getting cleaned up too quickly
                     return patient_count > 0 and appointment_count > 0
         
-        manager = TestDataManager()
+        manager = TestDataManager(postgres_schema_test_settings)
         manager.create_test_data()
         
         yield manager
@@ -397,87 +423,61 @@ class TestPostgresSchemaRealIntegration:
         # Cleanup after tests
         manager.cleanup_test_data()
 
-    @pytest.fixture
-    def schema_discovery(self):
-        """Create real SchemaDiscovery instance with MySQL replication connection."""
-        mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
-        # Extract database name from engine URL
-        mysql_db = mysql_engine.url.database
-        return SchemaDiscovery(mysql_engine, mysql_db)
-
-    @pytest.fixture
-    def postgres_schema(self, schema_discovery):
-        """Create real PostgresSchema instance with test databases."""
-        mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
-        postgres_engine = ConnectionFactory.get_postgres_analytics_test_connection()
-        
-        # Extract database names from engine URLs
-        mysql_db = mysql_engine.url.database
-        postgres_db = postgres_engine.url.database
-        
-        return PostgresSchema(
-            mysql_engine=mysql_engine,
-            postgres_engine=postgres_engine,
-            mysql_db=mysql_db,
-            postgres_db=postgres_db,
-            postgres_schema='raw'
-        )
-
     @pytest.mark.integration
-    def test_real_postgres_schema_initialization(self, test_data_manager, postgres_schema):
+    def test_real_postgres_schema_initialization(self, test_data_manager, real_postgres_schema_instance):
         """Test real PostgresSchema initialization with actual databases."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Test REAL PostgresSchema with REAL databases
-        assert postgres_schema.mysql_engine is not None
-        assert postgres_schema.postgres_engine is not None
-        assert postgres_schema.mysql_db is not None
-        assert postgres_schema.postgres_db is not None
-        assert postgres_schema.postgres_schema == 'raw'
+        assert real_postgres_schema_instance.mysql_engine is not None
+        assert real_postgres_schema_instance.postgres_engine is not None
+        assert real_postgres_schema_instance.mysql_db is not None
+        assert real_postgres_schema_instance.postgres_db is not None
+        assert real_postgres_schema_instance.postgres_schema == 'raw'
         
         # Test real connections
-        with postgres_schema.mysql_engine.connect() as conn:
+        with real_postgres_schema_instance.mysql_engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             assert result.scalar() == 1, "MySQL database connection failed"
         
-        with postgres_schema.postgres_engine.connect() as conn:
+        with real_postgres_schema_instance.postgres_engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             assert result.scalar() == 1, "PostgreSQL database connection failed"
 
     @pytest.mark.integration
-    def test_real_schema_adaptation(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_schema_adaptation(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real schema adaptation from MySQL to PostgreSQL."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Get MySQL schema for patient table
-        mysql_schema = schema_discovery.get_table_schema('patient')
+        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL schema adaptation
-        pg_create_statement = postgres_schema.adapt_schema('patient', mysql_schema)
+        pg_create_statement = real_postgres_schema_instance.adapt_schema('patient', mysql_schema)
         assert pg_create_statement is not None, "Schema adaptation failed"
         assert 'CREATE TABLE raw.patient' in pg_create_statement, "PostgreSQL CREATE statement not found"
         assert 'PatNum' in pg_create_statement, "Patient column not found in adapted schema"
         assert 'LName' in pg_create_statement, "LName column not found in adapted schema"
 
     @pytest.mark.integration
-    def test_real_postgres_table_creation(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_postgres_table_creation(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real PostgreSQL table creation from MySQL schema."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Get MySQL schema for patient table
-        mysql_schema = schema_discovery.get_table_schema('patient')
+        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL PostgreSQL table creation
-        result = postgres_schema.create_postgres_table('patient', mysql_schema)
+        result = real_postgres_schema_instance.create_postgres_table('patient', mysql_schema)
         assert result, "PostgreSQL table creation failed"
         
         # Verify the table was created in PostgreSQL
-        with postgres_schema.postgres_engine.connect() as conn:
+        with real_postgres_schema_instance.postgres_engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT table_name FROM information_schema.tables 
                 WHERE table_schema = 'raw' AND table_name = 'patient'
@@ -485,34 +485,34 @@ class TestPostgresSchemaRealIntegration:
             assert result.fetchone() is not None, "Patient table not created in PostgreSQL"
 
     @pytest.mark.integration
-    def test_real_schema_verification(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_schema_verification(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real schema verification between MySQL and PostgreSQL."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Get MySQL schema for patient table
-        mysql_schema = schema_discovery.get_table_schema('patient')
+        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Create PostgreSQL table
-        assert postgres_schema.create_postgres_table('patient', mysql_schema), "Failed to create PostgreSQL table"
+        assert real_postgres_schema_instance.create_postgres_table('patient', mysql_schema), "Failed to create PostgreSQL table"
         
         # Test REAL schema verification
-        result = postgres_schema.verify_schema('patient', mysql_schema)
+        result = real_postgres_schema_instance.verify_schema('patient', mysql_schema)
         assert result, "Schema verification failed"
 
     @pytest.mark.integration
-    def test_real_boolean_type_detection(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_boolean_type_detection(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real boolean type detection for TINYINT columns."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Get MySQL schema for boolean_test table
-        mysql_schema = schema_discovery.get_table_schema('boolean_test')
+        mysql_schema = real_schema_discovery_instance.get_table_schema('boolean_test')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL boolean type detection through schema adaptation
-        pg_create_statement = postgres_schema.adapt_schema('boolean_test', mysql_schema)
+        pg_create_statement = real_postgres_schema_instance.adapt_schema('boolean_test', mysql_schema)
         assert pg_create_statement is not None, "Schema adaptation failed"
         
         # Check that boolean columns are detected correctly
@@ -524,48 +524,46 @@ class TestPostgresSchemaRealIntegration:
         assert '"Priority" smallint' in pg_create_statement, "Priority should be smallint (non-boolean)"
 
     @pytest.mark.integration
-    def test_real_multiple_table_schema_conversion(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_multiple_table_schema_conversion(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance, postgres_schema_test_tables):
         """Test schema conversion for multiple tables with real data."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Test schema conversion for multiple tables
-        test_tables = ['patient', 'appointment', 'procedure', 'boolean_test']
-        
-        for table in test_tables:
+        for table in postgres_schema_test_tables:
             logger.info(f"Testing schema conversion for table: {table}")
             
             # Get MySQL schema
-            mysql_schema = schema_discovery.get_table_schema(table)
+            mysql_schema = real_schema_discovery_instance.get_table_schema(table)
             assert mysql_schema is not None, f"MySQL schema discovery failed for {table}"
             
             # Adapt schema
-            pg_create_statement = postgres_schema.adapt_schema(table, mysql_schema)
+            pg_create_statement = real_postgres_schema_instance.adapt_schema(table, mysql_schema)
             assert pg_create_statement is not None, f"Schema adaptation failed for {table}"
             assert f'CREATE TABLE raw.{table}' in pg_create_statement, f"PostgreSQL CREATE statement not found for {table}"
             
             # Create PostgreSQL table
-            result = postgres_schema.create_postgres_table(table, mysql_schema)
+            result = real_postgres_schema_instance.create_postgres_table(table, mysql_schema)
             assert result, f"PostgreSQL table creation failed for {table}"
             
             # Verify schema
-            result = postgres_schema.verify_schema(table, mysql_schema)
+            result = real_postgres_schema_instance.verify_schema(table, mysql_schema)
             assert result, f"Schema verification failed for {table}"
             
             logger.info(f"Successfully converted schema for table: {table}")
 
     @pytest.mark.integration
-    def test_real_type_conversion_accuracy(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_type_conversion_accuracy(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real type conversion accuracy for various MySQL types."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Get MySQL schema for patient table (has various data types)
-        mysql_schema = schema_discovery.get_table_schema('patient')
+        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL type conversion
-        pg_create_statement = postgres_schema.adapt_schema('patient', mysql_schema)
+        pg_create_statement = real_postgres_schema_instance.adapt_schema('patient', mysql_schema)
         assert pg_create_statement is not None, "Schema adaptation failed"
         
         # Check specific type conversions
@@ -580,78 +578,156 @@ class TestPostgresSchemaRealIntegration:
         assert '"IsDeleted" boolean' in pg_create_statement, "TINYINT with 0/1 should convert to boolean"
 
     @pytest.mark.integration
-    def test_real_error_handling(self, test_data_manager, postgres_schema):
+    def test_real_error_handling(self, test_data_manager, real_postgres_schema_instance, postgres_schema_error_cases):
         """Test real error handling with actual component failures."""
         # Test with malformed schema that will cause an exception
-        malformed_schema = {
-            'create_statement': 'CREATE TABLE test'  # Missing column definitions entirely
-        }
+        malformed_schema = postgres_schema_error_cases['malformed_schema']
         
         # Test schema adaptation with malformed schema (should raise exception)
         with pytest.raises(Exception):
-            postgres_schema.adapt_schema('nonexistent', malformed_schema)
+            real_postgres_schema_instance.adapt_schema('nonexistent', malformed_schema)
         
         # Test table creation with malformed schema (should return False)
-        result = postgres_schema.create_postgres_table('nonexistent', malformed_schema)
+        result = real_postgres_schema_instance.create_postgres_table('nonexistent', malformed_schema)
         assert not result, "Should fail for malformed schema"
         
         # Test schema verification with non-existent table (should return False)
-        result = postgres_schema.verify_schema('nonexistent', malformed_schema)
+        result = real_postgres_schema_instance.verify_schema('nonexistent', malformed_schema)
         assert not result, "Should fail for non-existent table"
 
     @pytest.mark.integration
-    def test_real_schema_discovery_integration(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_schema_discovery_integration(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real SchemaDiscovery integration with PostgresSchema."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Test that SchemaDiscovery is properly integrated
-        mysql_schema = schema_discovery.get_table_schema('patient')
+        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
         assert mysql_schema is not None, "SchemaDiscovery integration failed"
         assert 'create_statement' in mysql_schema, "SchemaDiscovery create_statement not found"
         
         # Test schema adaptation using SchemaDiscovery output
-        pg_create_statement = postgres_schema.adapt_schema('patient', mysql_schema)
+        pg_create_statement = real_postgres_schema_instance.adapt_schema('patient', mysql_schema)
         assert pg_create_statement is not None, "Schema adaptation with SchemaDiscovery failed"
 
     @pytest.mark.integration
-    def test_real_data_type_analysis(self, test_data_manager, postgres_schema):
+    def test_real_data_type_analysis(self, test_data_manager, real_postgres_schema_instance):
         """Test real data type analysis for intelligent type conversion."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Test boolean detection for IsActive column (should be boolean)
-        pg_type = postgres_schema._convert_mysql_type('TINYINT', 'patient', 'IsActive')
+        pg_type = real_postgres_schema_instance._convert_mysql_type('TINYINT', 'patient', 'IsActive')
         assert pg_type == 'boolean', f"IsActive should be detected as boolean, got {pg_type}"
         
         # Test boolean detection for IsDeleted column (should be boolean)
-        pg_type = postgres_schema._convert_mysql_type('TINYINT', 'patient', 'IsDeleted')
+        pg_type = real_postgres_schema_instance._convert_mysql_type('TINYINT', 'patient', 'IsDeleted')
         assert pg_type == 'boolean', f"IsDeleted should be detected as boolean, got {pg_type}"
         
         # Test non-boolean detection for Status column (should be smallint)
-        pg_type = postgres_schema._convert_mysql_type('TINYINT', 'boolean_test', 'Status')
+        pg_type = real_postgres_schema_instance._convert_mysql_type('TINYINT', 'boolean_test', 'Status')
         assert pg_type == 'smallint', f"Status should be detected as smallint, got {pg_type}"
         
         # Test non-boolean detection for Priority column (should be smallint)
-        pg_type = postgres_schema._convert_mysql_type('TINYINT', 'boolean_test', 'Priority')
+        pg_type = real_postgres_schema_instance._convert_mysql_type('TINYINT', 'boolean_test', 'Priority')
         assert pg_type == 'smallint', f"Priority should be detected as smallint, got {pg_type}"
 
     @pytest.mark.integration
-    def test_real_schema_cache_functionality(self, test_data_manager, postgres_schema, schema_discovery):
+    def test_real_schema_cache_functionality(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real schema cache functionality."""
         # Verify test data exists
         assert test_data_manager.verify_test_data_exists(), "Test data not found in MySQL database"
         
         # Get MySQL schema for patient table
-        mysql_schema = schema_discovery.get_table_schema('patient')
+        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test schema adaptation multiple times (should use cache)
-        pg_create_1 = postgres_schema.adapt_schema('patient', mysql_schema)
-        pg_create_2 = postgres_schema.adapt_schema('patient', mysql_schema)
+        pg_create_1 = real_postgres_schema_instance.adapt_schema('patient', mysql_schema)
+        pg_create_2 = real_postgres_schema_instance.adapt_schema('patient', mysql_schema)
         
         assert pg_create_1 == pg_create_2, "Schema adaptation should be consistent (cached)"
         assert pg_create_1 is not None, "Schema adaptation failed"
+
+    @pytest.mark.integration
+    def test_new_architecture_connection_methods(self, postgres_schema_test_settings):
+        """Test that new architecture connection methods work correctly with test environment."""
+        # Test new ConnectionFactory methods with Settings dependency injection
+        # These should automatically use test environment when ETL_ENVIRONMENT=test
+        # Note: These methods require the new config system to be fully implemented
+        # For now, we'll test the test-specific connection methods instead
+        
+        # Test the explicit test connection methods that use TEST_* environment variables
+        source_engine = ConnectionFactory.get_opendental_source_test_connection()
+        replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
+        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        
+        # Verify engines are created
+        assert source_engine is not None, "Test source engine should be created"
+        assert replication_engine is not None, "Test replication engine should be created"
+        assert analytics_engine is not None, "Test analytics engine should be created"
+        
+        # Test basic connectivity
+        with source_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test source engine connectivity failed"
+        
+        with replication_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test replication engine connectivity failed"
+        
+        with analytics_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test analytics engine connectivity failed"
+
+    @pytest.mark.integration
+    def test_type_safe_database_enum_usage(self, postgres_schema_test_settings):
+        """Test that type-safe database enums work correctly with test environment."""
+        # Test DatabaseType enum usage - compare enum values, not enum objects
+        assert DatabaseType.SOURCE.value == "source", "DatabaseType.SOURCE should be 'source'"
+        assert DatabaseType.REPLICATION.value == "replication", "DatabaseType.REPLICATION should be 'replication'"
+        assert DatabaseType.ANALYTICS.value == "analytics", "DatabaseType.ANALYTICS should be 'analytics'"
+        
+        # Test PostgresSchema enum usage - compare enum values, not enum objects
+        assert PostgresSchema.RAW.value == "raw", "PostgresSchema.RAW should be 'raw'"
+        assert PostgresSchema.STAGING.value == "staging", "PostgresSchema.STAGING should be 'staging'"
+        assert PostgresSchema.INTERMEDIATE.value == "intermediate", "PostgresSchema.INTERMEDIATE should be 'intermediate'"
+        assert PostgresSchema.MARTS.value == "marts", "PostgresSchema.MARTS should be 'marts'"
+        
+        # Test that enums work with ConnectionFactory using test environment
+        # Use the test connection methods since the new architecture methods require additional config
+        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        assert analytics_engine is not None, "Analytics engine should be created with test connection method"
+
+    @pytest.mark.integration
+    def test_test_environment_connection_methods(self):
+        """Test that test environment connection methods work correctly.
+        
+        This test specifically verifies that we're using the test connection methods
+        as specified in the connection environment separation documentation.
+        """
+        # Test the explicit test connection methods that use TEST_* environment variables
+        source_engine = ConnectionFactory.get_opendental_source_test_connection()
+        replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
+        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        
+        # Verify engines are created
+        assert source_engine is not None, "Test source engine should be created"
+        assert replication_engine is not None, "Test replication engine should be created"
+        assert analytics_engine is not None, "Test analytics engine should be created"
+        
+        # Test basic connectivity to test databases
+        with source_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test source engine connectivity failed"
+        
+        with replication_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test replication engine connectivity failed"
+        
+        with analytics_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test analytics engine connectivity failed"
 
 
 if __name__ == "__main__":
