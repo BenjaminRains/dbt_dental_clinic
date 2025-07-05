@@ -10,7 +10,7 @@ This module contains fixtures related to:
 
 import pytest
 import pandas as pd
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 from typing import Dict, List, Any
 from datetime import datetime, timedelta
 
@@ -20,16 +20,32 @@ def postgres_loader(mock_replication_engine, mock_analytics_engine):
     """PostgresLoader instance with mocked engines."""
     try:
         from etl_pipeline.loaders.postgres_loader import PostgresLoader
-        loader = PostgresLoader(
-            source_engine=mock_replication_engine,
-            target_engine=mock_analytics_engine
-        )
-        return loader
+        
+        # Mock the PostgresSchema to prevent inspection of mock engines
+        with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema') as mock_schema_class:
+            mock_schema_adapter = MagicMock()
+            mock_schema_class.return_value = mock_schema_adapter
+            
+            # Mock get_settings to return a mock settings object
+            with patch('etl_pipeline.loaders.postgres_loader.get_settings') as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.get_database_config.side_effect = lambda db_type, schema=None: {
+                    ('analytics', 'raw'): {'schema': 'raw'},
+                    ('replication', None): {'schema': 'raw'}
+                }.get((db_type, schema), {})
+                mock_get_settings.return_value = mock_settings
+                
+                loader = PostgresLoader(
+                    replication_engine=mock_replication_engine,
+                    analytics_engine=mock_analytics_engine
+                )
+                return loader
     except ImportError:
         # Fallback mock loader
         loader = MagicMock()
-        loader.source_engine = mock_replication_engine
-        loader.target_engine = mock_analytics_engine
+        loader.replication_engine = mock_replication_engine
+        loader.analytics_engine = mock_analytics_engine
+        loader.schema_adapter = MagicMock()
         return loader
 
 
