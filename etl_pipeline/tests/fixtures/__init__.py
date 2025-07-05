@@ -14,12 +14,9 @@ Modules:
 from .test_data_definitions import (
     get_test_patient_data,
     get_test_appointment_data,
-    get_incremental_test_patient_data,
     get_test_data_for_table,
     STANDARD_TEST_PATIENTS,
-    STANDARD_TEST_APPOINTMENTS,
-    MINIMAL_TEST_PATIENTS,
-    INCREMENTAL_TEST_PATIENTS
+    STANDARD_TEST_APPOINTMENTS
 )
 
 from .test_data_manager import IntegrationTestDataManager
@@ -27,8 +24,6 @@ from .test_data_manager import IntegrationTestDataManager
 from .integration_fixtures import (
     test_data_manager,
     populated_test_databases,
-    minimal_test_databases,
-    incremental_test_databases,
     test_database_engines,
     test_source_engine,
     test_replication_engine,
@@ -47,12 +42,9 @@ __all__ = [
     # Test data definitions
     'get_test_patient_data',
     'get_test_appointment_data',
-    'get_incremental_test_patient_data',
     'get_test_data_for_table',
     'STANDARD_TEST_PATIENTS',
     'STANDARD_TEST_APPOINTMENTS',
-    'MINIMAL_TEST_PATIENTS',
-    'INCREMENTAL_TEST_PATIENTS',
     
     # Test data manager
     'IntegrationTestDataManager',
@@ -60,8 +52,6 @@ __all__ = [
     # Integration fixtures
     'test_data_manager',
     'populated_test_databases',
-    'minimal_test_databases',
-    'incremental_test_databases',
     'test_database_engines',
     'test_source_engine',
     'test_replication_engine',

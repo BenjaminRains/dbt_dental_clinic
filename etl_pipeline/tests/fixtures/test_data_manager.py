@@ -22,7 +22,6 @@ from etl_pipeline.core.connections import ConnectionFactory
 from .test_data_definitions import (
     get_test_patient_data,
     get_test_appointment_data,
-    get_incremental_test_patient_data,
     get_test_data_for_table
 )
 
@@ -124,34 +123,7 @@ class IntegrationTestDataManager:
                 logger.error(f"❌ Failed to insert appointment data into {db_type.value}: {e}")
                 raise
     
-    def setup_incremental_patient_data(self, 
-                                      database_types: Optional[List[DatabaseType]] = None) -> None:
-        """
-        Set up incremental patient test data (with newer timestamps) for incremental loading tests.
-        
-        Args:
-            database_types: List of database types to insert data into.
-                           If None, inserts into all databases.
-        """
-        if database_types is None:
-            database_types = [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS]
-        
-        incremental_data = get_incremental_test_patient_data()
-        
-        for db_type in database_types:
-            try:
-                if db_type == DatabaseType.SOURCE:
-                    self._insert_patient_data_mysql(self.source_engine, incremental_data, "source")
-                elif db_type == DatabaseType.REPLICATION:
-                    self._insert_patient_data_mysql(self.replication_engine, incremental_data, "replication")
-                elif db_type == DatabaseType.ANALYTICS:
-                    self._insert_patient_data_postgres(self.raw_engine, incremental_data, "analytics")
-                
-                logger.info(f"✅ Inserted {len(incremental_data)} incremental patient records into {db_type.value} database")
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to insert incremental patient data into {db_type.value}: {e}")
-                raise
+
     
     def _get_table_columns(self, engine, table_name):
         """Return a set of column names for the given table in the connected MySQL database."""
