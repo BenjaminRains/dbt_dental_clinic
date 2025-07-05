@@ -199,15 +199,21 @@ class TestConfigurationLoading:
         
         # Test source database config
         source_config = settings.get_database_config(DatabaseType.SOURCE)
-        assert source_config['host'] == 'localhost'
+        assert source_config['host'] == '192.168.2.10'
         assert source_config['port'] == 3306
         assert source_config['database'] == 'test_opendental'
+        
+        # Test replication database config
+        replication_config = settings.get_database_config(DatabaseType.REPLICATION)
+        assert replication_config['host'] == 'localhost'
+        assert replication_config['port'] == 3306
+        assert replication_config['database'] == 'test_opendental_replication'
         
         # Test analytics database config with schema
         analytics_config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
         assert analytics_config['host'] == 'localhost'
         assert analytics_config['port'] == 5432
-        assert analytics_config['database'] == 'test_analytics'
+        assert analytics_config['database'] == 'test_opendental_analytics'
         assert analytics_config['schema'] == 'raw'
         
         print("✅ Database configuration access working correctly")
@@ -220,14 +226,14 @@ class TestConfigurationLoading:
         # Test MySQL connection string
         mysql_conn_str = settings.get_connection_string(DatabaseType.SOURCE)
         assert 'mysql+pymysql://' in mysql_conn_str
-        assert 'localhost' in mysql_conn_str
+        assert '192.168.2.10' in mysql_conn_str
         assert 'test_opendental' in mysql_conn_str
         
         # Test PostgreSQL connection string with schema
         postgres_conn_str = settings.get_connection_string(DatabaseType.ANALYTICS, PostgresSchema.RAW)
         assert 'postgresql+psycopg2://' in postgres_conn_str
         assert 'localhost' in postgres_conn_str
-        assert 'test_analytics' in postgres_conn_str
+        assert 'test_opendental_analytics' in postgres_conn_str
         assert 'search_path%3Draw' in postgres_conn_str
         
         print("✅ Connection string generation working correctly")
@@ -253,7 +259,7 @@ class TestConfigurationLoading:
         
         # Verify TEST_ prefixed variables are used
         source_config = settings.get_database_config(DatabaseType.SOURCE)
-        assert source_config['host'] == 'localhost'  # From TEST_OPENDENTAL_SOURCE_HOST
+        assert source_config['host'] == '192.168.2.10'  # From TEST_OPENDENTAL_SOURCE_HOST
         
         analytics_config = settings.get_database_config(DatabaseType.ANALYTICS)
         assert analytics_config['host'] == 'localhost'  # From TEST_POSTGRES_ANALYTICS_HOST
