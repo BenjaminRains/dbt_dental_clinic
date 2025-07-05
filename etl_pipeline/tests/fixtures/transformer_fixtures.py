@@ -57,7 +57,9 @@ def table_processor_large_config():
             'clean_amounts',
             'standardize_codes',
             'validate_amounts'
-        ]
+        ],
+        'estimated_rows': 1000001,  # > 1,000,000 to trigger chunked loading
+        'estimated_size_mb': 101    # > 100 to trigger chunked loading
     }
 
 
@@ -68,14 +70,16 @@ def table_processor_medium_large_config():
         'table_name': 'appointment',
         'primary_key': 'AptNum',
         'incremental_column': 'AptDateTime',
-        'batch_size': 2000,
+        'batch_size': 2500,
         'parallel_processing': True,
         'validation_enabled': True,
         'transformation_rules': [
             'clean_datetime',
             'timezone_convert',
             'validate_dates'
-        ]
+        ],
+        'estimated_rows': 1000001,  # > 1,000,000 to trigger chunked loading
+        'estimated_size_mb': 101    # > 100 to trigger chunked loading
     }
 
 
