@@ -28,13 +28,20 @@ def unified_metrics_collector_no_persistence():
     """Unified metrics collector without persistence for testing."""
     try:
         from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
-        collector = UnifiedMetricsCollector(persist_metrics=False)
+        collector = UnifiedMetricsCollector(enable_persistence=False)
         return collector
     except ImportError:
         # Fallback mock collector
         collector = MagicMock()
-        collector.persist_metrics = False
-        collector.collect_metrics.return_value = {}
+        collector.enable_persistence = False
+        collector.metrics = {
+            'status': 'idle',
+            'tables_processed': 0,
+            'total_rows_processed': 0,
+            'errors': [],
+            'table_metrics': {},
+            'pipeline_id': 'test_pipeline_001'
+        }
         return collector
 
 
@@ -240,4 +247,70 @@ def mock_metrics_error():
             self.metric_type = metric_type
             super().__init__(self.message)
     
-    return MockMetricsError 
+    return MockMetricsError
+
+
+@pytest.fixture
+def metrics_collector_with_settings():
+    """Metrics collector with settings dependency injection support."""
+    try:
+        from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
+        from tests.fixtures.config_fixtures import test_pipeline_config
+        from tests.fixtures.env_fixtures import test_env_vars
+        
+        # Create a mock settings object that would be injected
+        mock_settings = MagicMock()
+        mock_settings.get_database_config.return_value = {
+            'host': 'localhost',
+            'port': 5432,
+            'database': 'test_analytics',
+            'user': 'test_user',
+            'password': 'test_pass'
+        }
+        mock_settings.pipeline_config = test_pipeline_config
+        
+        # Create metrics collector (currently without settings injection, but ready for future)
+        collector = UnifiedMetricsCollector(enable_persistence=False)
+        
+        # Add settings as an attribute for testing purposes
+        collector.settings = mock_settings
+        
+        return collector
+    except ImportError:
+        # Fallback mock collector
+        collector = MagicMock()
+        collector.enable_persistence = False
+        collector.metrics = {
+            'status': 'idle',
+            'tables_processed': 0,
+            'total_rows_processed': 0,
+            'errors': [],
+            'table_metrics': {},
+            'pipeline_id': 'test_pipeline_001'
+        }
+        collector.settings = MagicMock()
+        return collector
+
+
+@pytest.fixture
+def mock_analytics_engine_for_metrics():
+    """Mock analytics engine specifically for metrics testing."""
+    engine = MagicMock()
+    engine.name = 'postgresql'
+    
+    # Create a mock URL object
+    mock_url = MagicMock()
+    mock_url.database = 'test_analytics'
+    mock_url.host = 'localhost'
+    mock_url.port = 5432
+    engine.url = mock_url
+    
+    # Mock connection behavior
+    mock_connection = MagicMock()
+    mock_connection.execute.return_value = MagicMock()
+    mock_connection.commit.return_value = None
+    mock_connection.close.return_value = None
+    
+    engine.connect.return_value = mock_connection
+    
+    return engine 
