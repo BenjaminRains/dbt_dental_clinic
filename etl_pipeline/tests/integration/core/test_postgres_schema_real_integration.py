@@ -102,10 +102,14 @@ class TestPostgresSchemaRealIntegration:
     @pytest.fixture
     def real_schema_discovery_instance(self, postgres_schema_test_settings):
         """Create a real SchemaDiscovery instance using test environment."""
+        import os
         # Use new ConnectionFactory with test methods
         mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
         
-        return SchemaDiscovery(mysql_engine)
+        # Get database name from environment variable
+        mysql_db = os.environ["TEST_MYSQL_REPLICATION_DB"]
+        
+        return SchemaDiscovery(mysql_engine, mysql_db)
 
     @pytest.fixture
     def postgres_schema_test_tables(self):
@@ -298,7 +302,7 @@ class TestPostgresSchemaRealIntegration:
         assert pg_create_statement is not None, "Schema adaptation failed"
         
         # Check specific type conversions
-        assert '"PatNum" integer' in pg_create_statement, "INT should convert to integer"
+        assert '"PatNum" bigint' in pg_create_statement, "INT should convert to bigint"
         assert '"LName" character varying' in pg_create_statement, "VARCHAR should convert to character varying"
         assert '"Birthdate" date' in pg_create_statement, "DATE should convert to date"
         # All these TINYINT columns are 0/1 in test data, so should be boolean
