@@ -37,8 +37,6 @@ from tests.fixtures.schema_discovery_fixtures import (
 from tests.fixtures.integration_fixtures import (
     test_data_manager,
     populated_test_databases,
-    minimal_test_databases,
-    incremental_test_databases,
     test_database_engines,
     test_source_engine,
     test_replication_engine,
