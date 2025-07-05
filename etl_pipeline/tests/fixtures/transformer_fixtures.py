@@ -18,11 +18,11 @@ from datetime import datetime, timedelta
 @pytest.fixture
 def mock_table_processor_engines():
     """Mock engines for table processor testing."""
-    return {
-        'source': MagicMock(),
-        'replication': MagicMock(),
-        'analytics': MagicMock()
-    }
+    return (
+        MagicMock(),  # source engine
+        MagicMock(),  # replication engine  
+        MagicMock()   # analytics engine
+    )
 
 
 @pytest.fixture
