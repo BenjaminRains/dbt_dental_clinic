@@ -21,4 +21,14 @@ from tests.fixtures.postgres_schema_fixtures import (
     expected_postgres_schemas,
     postgres_schema_test_data,
     mock_postgres_schema_instance
+)
+
+# Import schema discovery fixtures for integration tests
+from tests.fixtures.schema_discovery_fixtures import (
+    schema_discovery_test_settings,
+    schema_discovery_test_data_manager,
+    schema_discovery_instance,
+    mock_schema_discovery,
+    sample_table_schemas,
+    sample_table_size_info
 ) 
