@@ -1,11 +1,15 @@
 """
-Integration Testing Approach - Using MySQL test_opendental database
+Real Integration Testing for TableProcessor - Using Real MySQL and PostgreSQL Databases
 
-This approach tests the integration flow by using the MySQL test_opendental database
-with clearly identifiable test data that won't interfere with production.
+This approach tests the actual table processing flow by using the REAL MySQL and PostgreSQL databases
+with standardized test data that won't interfere with production.
 
-FOCUS: Test ETL pipeline functionality, not specific schema hash values.
-Different environments (production vs test) will have different schemas and hashes.
+Refactored to follow new architectural patterns:
+- Uses new ConnectionFactory methods with dependency injection
+- Uses modular fixtures from tests/fixtures/
+- Follows new configuration pattern with proper test isolation
+- Uses standardized test data instead of custom test data creation
+- Proper environment separation with .env loading
 """
 
 import pytest
@@ -15,166 +19,53 @@ from sqlalchemy import text
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
-from etl_pipeline.orchestration.table_processor import TableProcessor
-from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.core.schema_discovery import SchemaDiscovery
+# Load environment variables from .env file first
+from tests.fixtures.env_fixtures import load_test_environment
+load_test_environment()
 
-# Set test environment variable for this test module
-os.environ['ETL_ENVIRONMENT'] = 'test'
+# Import new configuration system
+try:
+    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
+    from etl_pipeline.core.connections import ConnectionFactory
+    from etl_pipeline.core.schema_discovery import SchemaDiscovery
+    from etl_pipeline.orchestration.table_processor import TableProcessor
+    NEW_CONFIG_AVAILABLE = True
+except ImportError:
+    # Fallback for backward compatibility
+    NEW_CONFIG_AVAILABLE = False
+    from etl_pipeline.core.connections import ConnectionFactory
+    from etl_pipeline.core.schema_discovery import SchemaDiscovery
+    from etl_pipeline.orchestration.table_processor import TableProcessor
+
+# Import standardized test fixtures
+from tests.fixtures import populated_test_databases, test_data_manager
+from tests.fixtures.test_data_definitions import get_test_patient_data, get_test_appointment_data
 
 logger = logging.getLogger(__name__)
 
 
 class TestTableProcessorRealIntegration:
-    """integration tests using test_opendental MySQL database with test data."""
+    """Real integration tests using actual MySQL and PostgreSQL databases with standardized test data.
     
-    @pytest.fixture
-    def test_data_manager(self):
-        """Manage test data in the real OpenDental database."""
-        from etl_pipeline.core.connections import ConnectionFactory
-        
-        class TestDataManager:
-            def __init__(self):
-                # Use source connection for creating test data (not replication)
-                self.source_engine = ConnectionFactory.get_opendental_source_test_connection()
-                # Use replication connection for cleanup
-                self.replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
-                self.test_patients = []
-                self.test_appointments = []
-                self.test_procedures = []
-            
-            def create_test_data(self):
-                """Create clearly identifiable test data in the test_opendental database."""
-                logger.info("Creating test data in test_opendental database...")
-                
-                # Create test patients with clearly identifiable names
-                test_patients_data = [
-                    {
-                        'PatNum': None,  # Will be auto-generated if using AUTO_INCREMENT, else set manually
-                        'LName': 'TEST_PATIENT_001',
-                        'FName': 'John',
-                        'MiddleI': 'M',
-                        'Preferred': 'Johnny',
-                        'PatStatus': True,
-                        'Gender': False,
-                        'Position': False,
-                        'Birthdate': '1980-01-01',
-                        'SSN': '123-45-6789'
-                    },
-                    {
-                        'PatNum': None,
-                        'LName': 'TEST_PATIENT_002',
-                        'FName': 'Jane',
-                        'MiddleI': 'A',
-                        'Preferred': 'Janey',
-                        'PatStatus': True,
-                        'Gender': True,
-                        'Position': False,
-                        'Birthdate': '1985-05-15',
-                        'SSN': '234-56-7890'
-                    }
-                ]
-                
-                # Insert test patients
-                with self.source_engine.begin() as conn:
-                    for patient_data in test_patients_data:
-                        result = conn.execute(text("""
-                            INSERT INTO patient (LName, FName, MiddleI, Preferred, PatStatus, Gender, Position, Birthdate, SSN)
-                            VALUES (:LName, :FName, :MiddleI, :Preferred, :PatStatus, :Gender, :Position, :Birthdate, :SSN)
-                        """), patient_data)
-                        # Get the auto-generated PatNum if available
-                        if hasattr(result, 'lastrowid'):
-                            patient_data['PatNum'] = result.lastrowid
-                        self.test_patients.append(patient_data)
-                
-                # Create test appointments
-                test_appointments_data = [
-                    {
-                        'AptNum': None,
-                        'PatNum': self.test_patients[0]['PatNum'],
-                        'AptDateTime': (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'),
-                        'AptStatus': 1,  # Scheduled
-                        'DateTStamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'Notes': 'TEST_APPOINTMENT_001 - Regular checkup'
-                    }
-                ]
-                
-                with self.source_engine.begin() as conn:
-                    for appointment_data in test_appointments_data:
-                        result = conn.execute(text("""
-                            INSERT INTO appointment (PatNum, AptDateTime, AptStatus, DateTStamp, Notes)
-                            VALUES (:PatNum, :AptDateTime, :AptStatus, :DateTStamp, :Notes)
-                        """), appointment_data)
-                        if hasattr(result, 'lastrowid'):
-                            appointment_data['AptNum'] = result.lastrowid
-                        self.test_appointments.append(appointment_data)
-                
-                logger.info(f"Created {len(self.test_patients)} test patients, {len(self.test_appointments)} appointments")
-            
-            def cleanup_test_data(self):
-                """Remove all test data from both source and replication databases."""
-                logger.info("Cleaning up test data from test_opendental database...")
-                
-                # Clean up source database
-                with self.source_engine.begin() as conn:
-                    # Delete in reverse order to respect foreign key constraints
-                    
-                    # Delete test appointments
-                    for appointment in self.test_appointments:
-                        if appointment['AptNum']:
-                            conn.execute(text("DELETE FROM appointment WHERE AptNum = :aptnum"), 
-                                       {'aptnum': appointment['AptNum']})
-                    
-                    # Delete test patients
-                    for patient in self.test_patients:
-                        if patient['PatNum']:
-                            conn.execute(text("DELETE FROM patient WHERE PatNum = :patnum"), 
-                                       {'patnum': patient['PatNum']})
-                
-                # Clean up replication database - remove all test data by pattern
-                with self.replication_engine.begin() as conn:
-                    # Delete test appointments by pattern
-                    conn.execute(text("DELETE FROM appointment WHERE Notes LIKE 'TEST_APPOINTMENT_%'"))
-                    
-                    # Delete test patients by pattern
-                    conn.execute(text("DELETE FROM patient WHERE LName LIKE 'TEST_PATIENT_%'"))
-                
-                logger.info("Test data cleanup completed")
-            
-            def verify_test_data_exists(self):
-                """Verify that test data exists in the database."""
-                with self.source_engine.connect() as conn:
-                    # Check test patients
-                    result = conn.execute(text("""
-                        SELECT COUNT(*) FROM patient 
-                        WHERE LName LIKE 'TEST_PATIENT_%'
-                    """))
-                    patient_count = result.scalar()
-                    
-                    # Check test appointments
-                    result = conn.execute(text("""
-                        SELECT COUNT(*) FROM appointment 
-                        WHERE Notes LIKE 'TEST_APPOINTMENT_%'
-                    """))
-                    appointment_count = result.scalar()
-                    
-                    logger.info(f"Found {patient_count} test patients, {appointment_count} test appointments")
-                    
-                    return patient_count > 0 and appointment_count > 0
-        
-        manager = TestDataManager()
-        manager.create_test_data()
-        
-        yield manager
-        
-        # Cleanup after tests
-        manager.cleanup_test_data()
-
+    Uses new architectural patterns:
+    - test_settings fixture loads TEST_* environment variables from .env
+    - ConnectionFactory methods use test_settings for environment-aware connections
+    - Standardized test data from fixtures
+    - Proper environment separation (no risk of production connections)
+    """
+    
     @pytest.mark.integration
-    def test_real_table_processor_initialization(self, test_data_manager):
-        """Test real TableProcessor initialization with test_opendental database."""
-        # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+    def test_real_table_processor_initialization(self, populated_test_databases, test_settings):
+        """Test real TableProcessor initialization with test databases."""
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        appointment_count = manager.get_appointment_count(DatabaseType.SOURCE)
+        
+        assert patient_count > 0, "Test patient data not found in source database"
+        assert appointment_count > 0, "Test appointment data not found in source database"
         
         # Test the REAL TableProcessor with REAL database (test environment)
         processor = TableProcessor(environment='test')
@@ -194,10 +85,14 @@ class TestTableProcessorRealIntegration:
         assert re.match(r'^[a-f0-9]{32}$', schema['schema_hash']), "Schema hash should be valid MD5"
 
     @pytest.mark.integration
-    def test_real_table_processing_flow(self, test_data_manager):
-        """Test real table processing flow with test_opendental data."""
-        # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+    def test_real_table_processing_flow(self, populated_test_databases, test_settings):
+        """Test real table processing flow with standardized test data."""
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        assert patient_count > 0, "Test patient data not found in source database"
         
         processor = TableProcessor(environment='test')
         
@@ -209,10 +104,14 @@ class TestTableProcessorRealIntegration:
         self._verify_test_data_processing()
 
     @pytest.mark.integration
-    def test_real_schema_discovery_integration(self, test_data_manager):
-        """Test real SchemaDiscovery integration with test_opendental MySQL database."""
-        # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+    def test_real_schema_discovery_integration(self, populated_test_databases, test_settings):
+        """Test real SchemaDiscovery integration with test databases."""
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        assert patient_count > 0, "Test patient data not found in source database"
         
         processor = TableProcessor(environment='test')
         
@@ -235,7 +134,7 @@ class TestTableProcessorRealIntegration:
         assert schema['schema_hash'] == schema2['schema_hash'], "Schema hash should be consistent for same table in same environment"
 
     @pytest.mark.integration
-    def test_real_schema_change_detection(self, test_data_manager):
+    def test_real_schema_change_detection(self, test_settings):
         """Test schema change detection functionality."""
         processor = TableProcessor(environment='test')
         
@@ -252,10 +151,14 @@ class TestTableProcessorRealIntegration:
             "Different hash should be detected as changed"
 
     @pytest.mark.integration
-    def test_real_mysql_replicator_integration(self, test_data_manager):
-        """Test real MySQL replicator integration with test_opendental database."""
-        # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+    def test_real_mysql_replicator_integration(self, populated_test_databases, test_settings):
+        """Test real MySQL replicator integration with test databases."""
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        assert patient_count > 0, "Test patient data not found in source database"
         
         processor = TableProcessor(environment='test')
         
@@ -268,10 +171,14 @@ class TestTableProcessorRealIntegration:
         logger.info("MySQL replication integration test completed successfully")
 
     @pytest.mark.integration
-    def test_real_postgres_loader_integration(self, test_data_manager):
-        """Test real PostgreSQL loader integration with test_opendental database."""
-        # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+    def test_real_postgres_loader_integration(self, populated_test_databases, test_settings):
+        """Test real PostgreSQL loader integration with test databases."""
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        assert patient_count > 0, "Test patient data not found in source database"
         
         processor = TableProcessor(environment='test')
         
@@ -284,8 +191,8 @@ class TestTableProcessorRealIntegration:
         logger.info("PostgreSQL loader integration test completed successfully")
 
     @pytest.mark.integration
-    def test_real_error_handling(self, test_data_manager):
-        """Test real error handling with test_opendental database component failures."""
+    def test_real_error_handling(self, test_settings):
+        """Test real error handling with test database component failures."""
         processor = TableProcessor(environment='test')
         
         # Test with invalid table name
@@ -298,8 +205,15 @@ class TestTableProcessorRealIntegration:
             assert not result, "Should handle schema discovery errors gracefully"
 
     @pytest.mark.integration
-    def test_real_incremental_vs_full_refresh(self, test_data_manager):
+    def test_real_incremental_vs_full_refresh(self, populated_test_databases, test_settings):
         """Test incremental vs full refresh logic."""
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        assert patient_count > 0, "Test patient data not found in source database"
+        
         processor = TableProcessor(environment='test')
         
         # Test full refresh
@@ -319,10 +233,16 @@ class TestTableProcessorRealIntegration:
         logger.info("Test data processing verification completed")
 
     @pytest.mark.integration
-    def test_real_multiple_table_processing(self, test_data_manager):
+    def test_real_multiple_table_processing(self, populated_test_databases, test_settings):
         """Test processing multiple tables with real data flow."""
-        # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        appointment_count = manager.get_appointment_count(DatabaseType.SOURCE)
+        assert patient_count > 0, "Test patient data not found in source database"
+        assert appointment_count > 0, "Test appointment data not found in source database"
         
         processor = TableProcessor(environment='test')
         
@@ -335,7 +255,7 @@ class TestTableProcessorRealIntegration:
             logger.info(f"Successfully processed test table: {table}")
 
     @pytest.mark.integration
-    def test_real_connection_management(self, test_data_manager):
+    def test_real_connection_management(self, test_settings):
         """Test connection management and cleanup."""
         processor = TableProcessor(environment='test')
         
@@ -352,8 +272,15 @@ class TestTableProcessorRealIntegration:
         logger.info("Connection management test completed successfully")
 
     @pytest.mark.integration
-    def test_real_schema_discovery_caching(self, test_data_manager):
+    def test_real_schema_discovery_caching(self, populated_test_databases, test_settings):
         """Test schema discovery caching functionality."""
+        # Use standardized test data manager
+        manager = populated_test_databases
+        
+        # Verify test data exists using standardized methods
+        patient_count = manager.get_patient_count(DatabaseType.SOURCE)
+        assert patient_count > 0, "Test patient data not found in source database"
+        
         processor = TableProcessor(environment='test')
         
         # Get schema first time
@@ -373,6 +300,53 @@ class TestTableProcessorRealIntegration:
         assert schema3 is not None, "Schema discovery after cache clear should succeed"
         
         logger.info("Schema discovery caching test completed successfully")
+
+    @pytest.mark.integration
+    def test_new_architecture_connection_methods(self, test_settings):
+        """Test that new architecture connection methods work correctly with test environment."""
+        # Test new ConnectionFactory methods with Settings dependency injection
+        # These should automatically use test environment when test_settings provided
+        
+        # Test the standard connection methods with test settings
+        source_engine = ConnectionFactory.get_source_connection(test_settings)
+        replication_engine = ConnectionFactory.get_replication_connection(test_settings)
+        analytics_engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
+        
+        # Verify engines are created
+        assert source_engine is not None, "Test source engine should be created"
+        assert replication_engine is not None, "Test replication engine should be created"
+        assert analytics_engine is not None, "Test analytics engine should be created"
+        
+        # Test basic connectivity
+        with source_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test source engine connectivity failed"
+        
+        with replication_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test replication engine connectivity failed"
+        
+        with analytics_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test analytics engine connectivity failed"
+
+    @pytest.mark.integration
+    def test_type_safe_database_enum_usage(self, test_settings):
+        """Test that type-safe database enums work correctly with test environment."""
+        # Test DatabaseType enum usage
+        assert DatabaseType.SOURCE.value == "source", "DatabaseType.SOURCE should be 'source'"
+        assert DatabaseType.REPLICATION.value == "replication", "DatabaseType.REPLICATION should be 'replication'"
+        assert DatabaseType.ANALYTICS.value == "analytics", "DatabaseType.ANALYTICS should be 'analytics'"
+        
+        # Test PostgresSchema enum usage
+        assert PostgresSchema.RAW.value == "raw", "PostgresSchema.RAW should be 'raw'"
+        assert PostgresSchema.STAGING.value == "staging", "PostgresSchema.STAGING should be 'staging'"
+        assert PostgresSchema.INTERMEDIATE.value == "intermediate", "PostgresSchema.INTERMEDIATE should be 'intermediate'"
+        assert PostgresSchema.MARTS.value == "marts", "PostgresSchema.MARTS should be 'marts'"
+        
+        # Test that enums work with ConnectionFactory using test environment
+        analytics_engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
+        assert analytics_engine is not None, "Analytics engine should be created with test settings"
 
 
 if __name__ == "__main__":

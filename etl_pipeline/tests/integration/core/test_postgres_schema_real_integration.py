@@ -38,8 +38,9 @@ try:
 except ImportError:
     # Fallback for backward compatibility
     NEW_CONFIG_AVAILABLE = False
-    DatabaseType = None
-    PostgresSchema = None
+    from enum import Enum
+    DatabaseType = Enum('DatabaseType', ['SOURCE', 'REPLICATION', 'ANALYTICS'])
+    PostgresSchema = Enum('PostgresSchema', ['RAW', 'STAGING', 'INTERMEDIATE', 'MARTS'])
 
 # Import standardized test fixtures
 from tests.fixtures import (

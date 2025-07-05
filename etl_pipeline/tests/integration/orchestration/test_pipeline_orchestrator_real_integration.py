@@ -3,7 +3,7 @@ Real integration tests for PipelineOrchestrator with actual database connections
 
 These tests require:
 - Real PostgreSQL analytics database
-- Test environment variables set
+- Test environment variables set in .env file
 - Database user with appropriate permissions
 
 STATUS: ACTIVE - Real Integration Tests
@@ -13,12 +13,17 @@ These tests validate that the PipelineOrchestrator works correctly with real dat
 connections and actual data operations. They test the complete ETL pipeline flow
 from source to analytics database.
 
+ENVIRONMENT SEPARATION:
+- Uses test_settings fixture which loads TEST_* environment variables from .env
+- ConnectionFactory methods automatically use test environment when test_settings provided
+- No risk of connecting to production databases during testing
+
 TEST REQUIREMENTS:
-- TEST_POSTGRES_ANALYTICS_HOST environment variable
-- TEST_POSTGRES_ANALYTICS_PORT environment variable  
-- TEST_POSTGRES_ANALYTICS_DB environment variable
-- TEST_POSTGRES_ANALYTICS_USER environment variable
-- TEST_POSTGRES_ANALYTICS_PASSWORD environment variable
+- TEST_POSTGRES_ANALYTICS_HOST environment variable in .env
+- TEST_POSTGRES_ANALYTICS_PORT environment variable in .env
+- TEST_POSTGRES_ANALYTICS_DB environment variable in .env
+- TEST_POSTGRES_ANALYTICS_USER environment variable in .env
+- TEST_POSTGRES_ANALYTICS_PASSWORD environment variable in .env
 - Database user with CREATE, INSERT, SELECT, UPDATE, DELETE permissions
 - Raw schema exists in analytics database
 
@@ -42,16 +47,32 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
-from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.core.schema_discovery import SchemaDiscovery
-from etl_pipeline.config import Settings, DatabaseType, PostgresSchema
+# Import new configuration system
+try:
+    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
+    from etl_pipeline.core.connections import ConnectionFactory
+    from etl_pipeline.core.schema_discovery import SchemaDiscovery
+    from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+    NEW_CONFIG_AVAILABLE = True
+except ImportError:
+    # Fallback for backward compatibility
+    NEW_CONFIG_AVAILABLE = False
+    from etl_pipeline.core.connections import ConnectionFactory
+    from etl_pipeline.core.schema_discovery import SchemaDiscovery
+    from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+
+# Load environment variables from .env file first
+from tests.fixtures.env_fixtures import load_test_environment
+load_test_environment()
+
+# Import standardized test data
+from tests.fixtures.test_data_definitions import get_test_patient_data
 
 logger = logging.getLogger(__name__)
 
 # Check if integration test environment is available
 def has_integration_environment():
-    """Check if integration test environment variables are set."""
+    """Check if integration test environment variables are set in .env file."""
     required_vars = [
         'TEST_POSTGRES_ANALYTICS_HOST',
         'TEST_POSTGRES_ANALYTICS_PORT',
@@ -63,89 +84,52 @@ def has_integration_environment():
 
 @pytest.mark.integration
 class TestPipelineOrchestratorRealIntegration:
-    """Real integration tests for PipelineOrchestrator with actual database."""
+    """Real integration tests for PipelineOrchestrator with actual database.
+    
+    Uses new architectural patterns:
+    - test_settings fixture loads TEST_* environment variables from .env
+    - ConnectionFactory methods use test_settings for environment-aware connections
+    - Standardized test data from fixtures
+    - Proper environment separation (no risk of production connections)
+    """
     
     @pytest.fixture(scope="class")
-    def analytics_engine(self):
-        """Create real analytics database engine for integration tests."""
-        if not has_integration_environment():
-            pytest.skip("Integration test environment not available")
-        
-        try:
-            # Create settings with test environment
-            settings = Settings(environment='test')
+    def test_data_setup(self, test_analytics_engine):
+        """Set up test data in the analytics database using standardized test data."""
+        with test_analytics_engine.connect() as conn:
+            # Use standardized test data from fixtures
+            test_patients = get_test_patient_data(include_all_fields=True)
             
-            # Create real analytics engine
-            engine = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
-            
-            # Test connection
-            with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            
-            logger.info("Successfully created real analytics engine for integration tests")
-            yield engine
-            
-        except Exception as e:
-            pytest.skip(f"Could not create analytics engine: {e}")
-        finally:
-            if 'engine' in locals():
-                engine.dispose()
-    
-    @pytest.fixture(scope="class")
-    def test_data_setup(self, analytics_engine):
-        """Set up test data in the analytics database."""
-        with analytics_engine.connect() as conn:
-            # Create test patient data
-            test_patients = [
-                {
-                    'patnum': 1, 'lname': 'Smith', 'fname': 'John',
-                    'middlei': 'A', 'preferred': 'John',
-                    'patstatus': True, 'gender': True, 'position': False,
-                    'birthdate': '1980-01-01', 'ssn': '123-45-6789',
-                    'isactive': True, 'isdeleted': False
-                },
-                {
-                    'patnum': 2, 'lname': 'Johnson', 'fname': 'Jane',
-                    'middlei': 'B', 'preferred': 'Jane',
-                    'patstatus': True, 'gender': False, 'position': False,
-                    'birthdate': '1985-05-15', 'ssn': '987-65-4321',
-                    'isactive': True, 'isdeleted': False
-                },
-                {
-                    'patnum': 3, 'lname': 'Williams', 'fname': 'Bob',
-                    'middlei': 'C', 'preferred': 'Bob',
-                    'patstatus': False, 'gender': True, 'position': False,
-                    'birthdate': '1975-12-25', 'ssn': '555-55-5555',
-                    'isactive': False, 'isdeleted': False
-                }
-            ]
-            
-            # Insert test data
+            # Insert standardized test data
             for patient in test_patients:
-                conn.execute(text("""
-                    INSERT INTO raw.patient VALUES (
-                        :patnum, :lname, :fname, :middlei, :preferred, :patstatus, :gender, :position,
-                        :birthdate, :ssn, :isactive, :isdeleted
-                    )
-                """), patient)
+                # Build dynamic INSERT statement based on available fields
+                fields = list(patient.keys())
+                placeholders = ', '.join([f':{field}' for field in fields])
+                field_names = ', '.join([f'"{field}"' for field in fields])
+                
+                insert_sql = f'INSERT INTO raw.patient ({field_names}) VALUES ({placeholders})'
+                conn.execute(text(insert_sql), patient)
             
             conn.commit()
-            logger.info(f"Set up {len(test_patients)} test patients in analytics database")
+            logger.info(f"Set up {len(test_patients)} standardized test patients in analytics database")
             
             yield
             
             # Cleanup test data
             try:
-                conn.execute(text("DELETE FROM raw.patient WHERE \"PatNum\" IN (1, 2, 3)"))
+                # Clean up using PatNum values from standardized test data
+                patient_ids = [patient['PatNum'] for patient in test_patients]
+                placeholders = ', '.join([str(pid) for pid in patient_ids])
+                conn.execute(text(f"DELETE FROM raw.patient WHERE \"PatNum\" IN ({placeholders})"))
                 conn.commit()
-                logger.info("Cleaned up test data")
+                logger.info("Cleaned up standardized test data")
             except Exception as e:
                 logger.warning(f"Could not clean up test data: {e}")
     
     @pytest.mark.order(5)
-    def test_real_database_connection(self, analytics_engine):
+    def test_real_database_connection(self, test_analytics_engine):
         """Test real database connection and basic operations."""
-        with analytics_engine.connect() as conn:
+        with test_analytics_engine.connect() as conn:
             # Test basic query
             result = conn.execute(text("SELECT version()"))
             version = result.scalar()
@@ -159,9 +143,9 @@ class TestPipelineOrchestratorRealIntegration:
             logger.info(f"Connected to PostgreSQL {version} in schema {schema}")
     
     @pytest.mark.order(5)
-    def test_user_permissions(self, analytics_engine):
+    def test_user_permissions(self, test_analytics_engine):
         """Test that the database user has required permissions."""
-        with analytics_engine.connect() as conn:
+        with test_analytics_engine.connect() as conn:
             # Test SELECT permission
             result = conn.execute(text("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'raw'"))
             table_count = result.scalar()
@@ -192,9 +176,9 @@ class TestPipelineOrchestratorRealIntegration:
                 pytest.fail(f"Database user missing required permissions: {e}")
     
     @pytest.mark.order(5)
-    def test_etl_schema_access(self, analytics_engine):
+    def test_etl_schema_access(self, test_analytics_engine):
         """Test access to ETL-specific schemas and tables."""
-        with analytics_engine.connect() as conn:
+        with test_analytics_engine.connect() as conn:
             # Test access to raw schema
             result = conn.execute(text("""
                 SELECT table_name 
@@ -216,47 +200,37 @@ class TestPipelineOrchestratorRealIntegration:
                 except Exception as e:
                     logger.warning(f"Could not check schema {schema}: {e}")
     
-    def test_schema_discovery_real_database(self, analytics_engine, test_data_setup):
+    def test_schema_discovery_real_database(self, test_source_engine, test_data_setup):
         """Test SchemaDiscovery with real database connection."""
         try:
-            # Create settings with test environment
-            settings = Settings(environment='test')
+            # Get source database name from engine URL
+            source_db = test_source_engine.url.database
             
-            # Create real source engine (if available)
-            try:
-                source_engine = ConnectionFactory.get_source_connection(settings)
-                source_db = settings.get_database_config(DatabaseType.SOURCE)['database']
-                
-                # Create SchemaDiscovery instance
-                schema_discovery = SchemaDiscovery(source_engine, source_db)
-                
-                # Test schema discovery
-                tables = schema_discovery.list_tables()
-                assert len(tables) > 0
-                
-                # Test table schema discovery
-                if 'patient' in tables:
-                    patient_schema = schema_discovery.get_table_schema('patient')
-                    assert patient_schema is not None
-                    assert 'columns' in patient_schema
-                
-                logger.info(f"SchemaDiscovery found {len(tables)} tables in source database")
-                
-            except Exception as e:
-                logger.warning(f"Could not test SchemaDiscovery with source database: {e}")
-                # This is acceptable if source database is not available for integration tests
+            # Create SchemaDiscovery instance
+            schema_discovery = SchemaDiscovery(test_source_engine, source_db)
+            
+            # Test schema discovery
+            tables = schema_discovery.discover_all_tables()
+            assert len(tables) > 0
+            
+            # Test table schema discovery
+            if 'patient' in tables:
+                patient_schema = schema_discovery.get_table_schema('patient')
+                assert patient_schema is not None
+                assert 'columns' in patient_schema
+            
+            logger.info(f"SchemaDiscovery found {len(tables)} tables in source database")
             
         except Exception as e:
-            pytest.skip(f"SchemaDiscovery integration test skipped: {e}")
+            logger.warning(f"Could not test SchemaDiscovery with source database: {e}")
+            # This is acceptable if source database is not available for integration tests
     
-    def test_connection_factory_real_database(self):
+    def test_connection_factory_real_database(self, test_settings):
         """Test ConnectionFactory with real database connections."""
         try:
-            # Create settings with test environment
-            settings = Settings(environment='test')
-            
-            # Test analytics connection
-            analytics_engine = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+            # Test analytics connection using standard method with test settings
+            # The test_settings fixture automatically uses TEST_* environment variables
+            analytics_engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
             with analytics_engine.connect() as conn:
                 result = conn.execute(text("SELECT 1"))
                 assert result.scalar() == 1
@@ -267,13 +241,10 @@ class TestPipelineOrchestratorRealIntegration:
         except Exception as e:
             pytest.skip(f"ConnectionFactory integration test skipped: {e}")
     
-    def test_settings_real_database_config(self):
+    def test_settings_real_database_config(self, test_settings):
         """Test Settings class with real test database configuration."""
-        # Create settings with test environment
-        settings = Settings(environment='test')
-        
         # Test that settings can load test database configuration using correct connection name
-        analytics_config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
+        analytics_config = test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
         assert analytics_config is not None
         expected_db = os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics')
         expected_user = os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'analytics_test_user')
@@ -283,24 +254,20 @@ class TestPipelineOrchestratorRealIntegration:
         
         logger.info(f"Settings loaded test database config: {analytics_config['database']}")
     
-    def test_data_loading_and_querying(self, analytics_engine, test_data_setup):
+    def test_data_loading_and_querying(self, test_analytics_engine, test_data_setup):
         """Test actual data loading and querying capabilities."""
-        with analytics_engine.connect() as conn:
-            # Test data insertion
-            new_patient = {
-                'patnum': 999, 'lname': 'Test', 'fname': 'Integration',
-                'middlei': 'T', 'preferred': 'TestUser',
-                'patstatus': True, 'gender': False, 'position': False,
-                'birthdate': '1990-01-01', 'ssn': '999-99-9999',
-                'isactive': True, 'isdeleted': False
-            }
+        with test_analytics_engine.connect() as conn:
+            # Test data insertion using standardized test data
+            new_patient = get_test_patient_data(include_all_fields=True)[0].copy()
+            new_patient['PatNum'] = 999  # Use a unique ID
             
-            conn.execute(text("""
-                INSERT INTO raw.patient VALUES (
-                    :patnum, :lname, :fname, :middlei, :preferred, :patstatus, :gender, :position,
-                    :birthdate, :ssn, :isactive, :isdeleted
-                )
-            """), new_patient)
+            # Build dynamic INSERT statement
+            fields = list(new_patient.keys())
+            placeholders = ', '.join([f':{field}' for field in fields])
+            field_names = ', '.join([f'"{field}"' for field in fields])
+            
+            insert_sql = f'INSERT INTO raw.patient ({field_names}) VALUES ({placeholders})'
+            conn.execute(text(insert_sql), new_patient)
             
             # Test data querying
             result = conn.execute(text("SELECT COUNT(*) FROM raw.patient"))
@@ -311,16 +278,16 @@ class TestPipelineOrchestratorRealIntegration:
             result = conn.execute(text("SELECT * FROM raw.patient WHERE \"PatNum\" = 999"))
             row = result.fetchone()
             assert row is not None
-            assert row[1] == 'Test'  # LName
-            assert row[2] == 'Integration'  # FName
+            assert row[1] == 'Doe'  # LName from standardized test data
+            assert row[2] == 'John'  # FName from standardized test data
             
             conn.commit()
             
             logger.info(f"Successfully loaded and queried data. Total patients: {count}")
     
-    def test_schema_creation_and_permissions(self, analytics_engine):
+    def test_schema_creation_and_permissions(self, test_analytics_engine):
         """Test schema creation and user permissions."""
-        with analytics_engine.connect() as conn:
+        with test_analytics_engine.connect() as conn:
             # Test creating a new schema
             test_schema = f"test_schema_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
@@ -357,7 +324,7 @@ class TestPipelineOrchestratorRealIntegration:
                 conn.execute(text(f"DROP SCHEMA IF EXISTS {test_schema} CASCADE"))
                 conn.commit()
     
-    def test_pipeline_orchestrator_real_initialization(self, analytics_engine):
+    def test_pipeline_orchestrator_real_initialization(self, test_settings):
         """Test PipelineOrchestrator initialization with real database."""
         try:
             # Test PipelineOrchestrator with test environment
@@ -379,11 +346,11 @@ class TestPipelineOrchestratorRealIntegration:
         except Exception as e:
             pytest.skip(f"PipelineOrchestrator initialization test skipped: {e}")
     
-    def test_performance_with_real_data(self, analytics_engine, test_data_setup):
+    def test_performance_with_real_data(self, test_analytics_engine, test_data_setup):
         """Test performance with real database operations."""
         import time
         
-        with analytics_engine.connect() as conn:
+        with test_analytics_engine.connect() as conn:
             # Test query performance
             start_time = time.time()
             
@@ -395,7 +362,7 @@ class TestPipelineOrchestratorRealIntegration:
                     "FName",
                     EXTRACT(YEAR FROM AGE("Birthdate"::date)) as age_years
                 FROM raw.patient 
-                WHERE "PatStatus" = true
+                WHERE "PatStatus" = 0
                 ORDER BY "LName", "FName"
             """))
             
@@ -407,15 +374,21 @@ class TestPipelineOrchestratorRealIntegration:
             
             logger.info(f"Query completed in {query_time:.3f} seconds, returned {len(rows)} rows")
     
-    def test_data_integrity_and_constraints(self, analytics_engine, test_data_setup):
+    def test_data_integrity_and_constraints(self, test_analytics_engine, test_data_setup):
         """Test data integrity and constraint enforcement."""
-        with analytics_engine.connect() as conn:
+        with test_analytics_engine.connect() as conn:
             # Test primary key constraint
             try:
-                conn.execute(text("""
-                    INSERT INTO raw.patient ("PatNum", "LName", "FName", "MiddleI", "Preferred", "PatStatus", "Gender", "Position", "Birthdate", "SSN", "IsActive", "IsDeleted") 
-                    VALUES (1, 'Duplicate', 'Key', 'D', 'Duplicate', true, false, false, '1990-01-01', '123-45-6789', true, false)
-                """))
+                # Try to insert a duplicate PatNum (should fail)
+                duplicate_patient = get_test_patient_data(include_all_fields=True)[0].copy()
+                duplicate_patient['PatNum'] = 1  # This should already exist
+                
+                fields = list(duplicate_patient.keys())
+                placeholders = ', '.join([f':{field}' for field in fields])
+                field_names = ', '.join([f'"{field}"' for field in fields])
+                
+                insert_sql = f'INSERT INTO raw.patient ({field_names}) VALUES ({placeholders})'
+                conn.execute(text(insert_sql), duplicate_patient)
                 assert False, "Should have raised primary key violation"
             except SQLAlchemyError:
                 # Expected - primary key violation
@@ -424,8 +397,8 @@ class TestPipelineOrchestratorRealIntegration:
             # Test data type constraints
             try:
                 conn.execute(text("""
-                    INSERT INTO raw.patient ("PatNum", "LName", "FName", "MiddleI", "Preferred", "PatStatus", "Gender", "Position", "Birthdate", "SSN", "IsActive", "IsDeleted") 
-                    VALUES (9999, 'Test', 'Type', 'T', 'Test', 'invalid_string', false, false, '1990-01-01', '123-45-6789', true, false)
+                    INSERT INTO raw.patient ("PatNum", "LName", "FName", "MiddleI", "Preferred", "PatStatus", "Gender", "Position", "Birthdate", "SSN") 
+                    VALUES (9999, 'Test', 'Type', 'T', 'Test', 'invalid_string', false, false, '1990-01-01', '123-45-6789')
                 """))
                 assert False, "Should have raised data type violation"
             except SQLAlchemyError:
@@ -435,18 +408,25 @@ class TestPipelineOrchestratorRealIntegration:
             conn.rollback()
             logger.info("Data integrity constraints working correctly")
     
-    def test_transaction_handling(self, analytics_engine, test_data_setup):
+    def test_transaction_handling(self, test_analytics_engine, test_data_setup):
         """Test transaction handling and rollback capabilities."""
-        with analytics_engine.connect() as conn:
+        with test_analytics_engine.connect() as conn:
             # Start transaction
             trans = conn.begin()
             
             try:
-                # Insert test data
-                conn.execute(text("""
-                    INSERT INTO raw.patient ("PatNum", "LName", "FName", "MiddleI", "Preferred", "PatStatus", "Gender", "Position", "Birthdate", "SSN", "IsActive", "IsDeleted") 
-                    VALUES (8888, 'Transaction', 'Test', 'T', 'Trans', true, false, false, '1990-01-01', '123-45-6789', true, false)
-                """))
+                # Insert test data using standardized test data
+                new_patient = get_test_patient_data(include_all_fields=True)[0].copy()
+                new_patient['PatNum'] = 8888
+                new_patient['LName'] = 'Transaction'
+                new_patient['FName'] = 'Test'
+                
+                fields = list(new_patient.keys())
+                placeholders = ', '.join([f':{field}' for field in fields])
+                field_names = ', '.join([f'"{field}"' for field in fields])
+                
+                insert_sql = f'INSERT INTO raw.patient ({field_names}) VALUES ({placeholders})'
+                conn.execute(text(insert_sql), new_patient)
                 
                 # Verify data exists in transaction
                 result = conn.execute(text("SELECT COUNT(*) FROM raw.patient WHERE \"PatNum\" = 8888"))
@@ -467,7 +447,7 @@ class TestPipelineOrchestratorRealIntegration:
                 trans.rollback()
                 raise e
     
-    def test_concurrent_connections(self, analytics_engine):
+    def test_concurrent_connections(self, test_analytics_engine):
         """Test handling of multiple concurrent connections."""
         import threading
         import queue
@@ -476,7 +456,7 @@ class TestPipelineOrchestratorRealIntegration:
         
         def worker(worker_id):
             try:
-                with analytics_engine.connect() as conn:
+                with test_analytics_engine.connect() as conn:
                     result = conn.execute(text("SELECT current_user, current_database()"))
                     user, db = result.fetchone()
                     results.put((worker_id, user, db))
@@ -508,7 +488,7 @@ class TestPipelineOrchestratorRealIntegration:
         assert successful_connections == 5
         logger.info(f"All {successful_connections} concurrent connections successful")
     
-    def test_pipeline_orchestrator_test_environment_initialization(self):
+    def test_pipeline_orchestrator_test_environment_initialization(self, test_settings):
         """Test PipelineOrchestrator initialization with test environment."""
         try:
             # Create orchestrator with test environment
