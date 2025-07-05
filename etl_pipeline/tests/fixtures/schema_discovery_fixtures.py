@@ -60,8 +60,13 @@ def schema_discovery_test_data_manager(test_env_vars):
         def __init__(self, env_vars):
             # Use the test MySQL replication connection for integration tests
             # Create test settings with proper environment and connection parameters
-            self.settings = create_test_settings(env_vars=env_vars)
-            self.source_engine = ConnectionFactory.get_replication_connection(self.settings)
+            # Ensure we're using test environment variables
+            test_env_vars_with_environment = env_vars.copy()
+            test_env_vars_with_environment['ETL_ENVIRONMENT'] = 'test'
+            
+            self.settings = create_test_settings(env_vars=test_env_vars_with_environment)
+            # Use the explicit test connection method as specified in connection_environment_separation.md
+            self.source_engine = ConnectionFactory.get_mysql_replication_test_connection()
             self.test_patients = []
             self.test_appointments = []
             self.test_procedures = []
@@ -266,10 +271,15 @@ def schema_discovery_test_data_manager(test_env_vars):
 def schema_discovery_instance(test_env_vars):
     """Create real SchemaDiscovery instance with real MySQL connection using new configuration system."""
     # Create test settings with proper environment and connection parameters
-    settings = create_test_settings(env_vars=test_env_vars)
+    # Ensure we're using test environment variables
+    test_env_vars_with_environment = test_env_vars.copy()
+    test_env_vars_with_environment['ETL_ENVIRONMENT'] = 'test'
     
-    # Use the new ConnectionFactory with Settings dependency injection
-    source_engine = ConnectionFactory.get_replication_connection(settings)
+    settings = create_test_settings(env_vars=test_env_vars_with_environment)
+    
+    # Use the explicit test connection method as specified in connection_environment_separation.md
+    # For integration tests, we use the replication database (test_opendental_replication)
+    source_engine = ConnectionFactory.get_mysql_replication_test_connection()
     
     # Extract database name from engine URL
     source_db = source_engine.url.database
