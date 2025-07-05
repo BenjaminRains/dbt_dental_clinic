@@ -31,6 +31,10 @@ except ImportError:
     from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
     from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
+# Load environment variables from .env file first
+from tests.fixtures.env_fixtures import load_test_environment
+load_test_environment()
+
 # Import standardized test fixtures
 from tests.fixtures import populated_test_databases
 
@@ -45,6 +49,8 @@ class TestMySQLReplicatorRealIntegration:
         """Create real SchemaDiscovery instance with source MySQL connection using new configuration."""
         source_engine = ConnectionFactory.get_source_connection(test_settings)
         source_db = source_engine.url.database
+        if source_db is None:
+            raise ValueError("Source database name is None - check connection configuration")
         return SchemaDiscovery(source_engine, source_db)
 
     @pytest.fixture
@@ -54,6 +60,12 @@ class TestMySQLReplicatorRealIntegration:
         target_engine = ConnectionFactory.get_replication_connection(test_settings)
         source_db = source_engine.url.database
         target_db = target_engine.url.database
+        
+        if source_db is None:
+            raise ValueError("Source database name is None - check connection configuration")
+        if target_db is None:
+            raise ValueError("Target database name is None - check connection configuration")
+            
         return ExactMySQLReplicator(
             source_engine=source_engine,
             target_engine=target_engine,
