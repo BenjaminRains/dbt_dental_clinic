@@ -13,6 +13,28 @@ import pytest
 import logging
 from unittest.mock import patch
 from typing import Dict, Any
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+def load_test_environment():
+    """Load environment variables from .env file for testing."""
+    # Try to load from etl_pipeline/.env first
+    etl_env_path = Path(__file__).parent.parent.parent / '.env'
+    if etl_env_path.exists():
+        load_dotenv(etl_env_path)
+        print(f"Loaded environment from: {etl_env_path}")
+    else:
+        # Fall back to parent directory .env
+        parent_env_path = Path(__file__).parent.parent.parent.parent / '.env'
+        if parent_env_path.exists():
+            load_dotenv(parent_env_path)
+            print(f"Loaded environment from: {parent_env_path}")
+        else:
+            print("No .env file found")
+
+# Load environment at module import time
+load_test_environment()
 
 # Import ETL pipeline components for testing
 try:
@@ -47,24 +69,24 @@ def reset_global_settings():
 
 @pytest.fixture
 def test_env_vars():
-    """Standard test environment variables."""
+    """Standard test environment variables loaded from actual .env file."""
     return {
-        'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
-        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
-        'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
-        'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-        'TEST_MYSQL_REPLICATION_HOST': 'localhost',
-        'TEST_MYSQL_REPLICATION_PORT': '3306',
-        'TEST_MYSQL_REPLICATION_DB': 'test_replication',
-        'TEST_MYSQL_REPLICATION_USER': 'test_user',
-        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_pass',
-        'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
-        'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-        'TEST_POSTGRES_ANALYTICS_DB': 'test_analytics',
-        'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
-        'TEST_POSTGRES_ANALYTICS_USER': 'test_user',
-        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_pass',
+        'TEST_OPENDENTAL_SOURCE_HOST': os.getenv('TEST_OPENDENTAL_SOURCE_HOST', 'localhost'),
+        'TEST_OPENDENTAL_SOURCE_PORT': os.getenv('TEST_OPENDENTAL_SOURCE_PORT', '3306'),
+        'TEST_OPENDENTAL_SOURCE_DB': os.getenv('TEST_OPENDENTAL_SOURCE_DB', 'test_opendental'),
+        'TEST_OPENDENTAL_SOURCE_USER': os.getenv('TEST_OPENDENTAL_SOURCE_USER', 'test_user'),
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': os.getenv('TEST_OPENDENTAL_SOURCE_PASSWORD', 'test_pass'),
+        'TEST_MYSQL_REPLICATION_HOST': os.getenv('TEST_MYSQL_REPLICATION_HOST', 'localhost'),
+        'TEST_MYSQL_REPLICATION_PORT': os.getenv('TEST_MYSQL_REPLICATION_PORT', '3306'),
+        'TEST_MYSQL_REPLICATION_DB': os.getenv('TEST_MYSQL_REPLICATION_DB', 'test_opendental_replication'),
+        'TEST_MYSQL_REPLICATION_USER': os.getenv('TEST_MYSQL_REPLICATION_USER', 'test_user'),
+        'TEST_MYSQL_REPLICATION_PASSWORD': os.getenv('TEST_MYSQL_REPLICATION_PASSWORD', 'test_pass'),
+        'TEST_POSTGRES_ANALYTICS_HOST': os.getenv('TEST_POSTGRES_ANALYTICS_HOST', 'localhost'),
+        'TEST_POSTGRES_ANALYTICS_PORT': os.getenv('TEST_POSTGRES_ANALYTICS_PORT', '5432'),
+        'TEST_POSTGRES_ANALYTICS_DB': os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics'),
+        'TEST_POSTGRES_ANALYTICS_SCHEMA': os.getenv('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw'),
+        'TEST_POSTGRES_ANALYTICS_USER': os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'test_user'),
+        'TEST_POSTGRES_ANALYTICS_PASSWORD': os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_pass'),
         'ETL_ENVIRONMENT': 'test'
     }
 
