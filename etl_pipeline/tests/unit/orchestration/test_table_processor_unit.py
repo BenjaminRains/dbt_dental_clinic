@@ -18,11 +18,14 @@ Updated for Configuration System Refactoring:
 import pytest
 import time
 import logging
+import os
 from unittest.mock import MagicMock, patch, Mock
 from sqlalchemy.engine import Engine
+import os
 
 from etl_pipeline.orchestration.table_processor import TableProcessor
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
+from etl_pipeline.config.settings import Settings
 
 # Import new configuration system components
 try:
@@ -84,6 +87,38 @@ class TestTableProcessorUnit:
         assert processor.config_path == "/path/to/config"
         assert processor.settings is not None
         assert processor.schema_discovery == mock_schema_discovery
+
+    @pytest.mark.unit
+    def test_initialization_without_schema_discovery_test_env(self):
+        """Test TableProcessor initialization without schema_discovery in test environment."""
+        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+             patch('etl_pipeline.orchestration.table_processor.SchemaDiscovery') as mock_schema_discovery_class, \
+             patch.object(Settings, 'get_database_config') as mock_get_config:
+            
+            mock_engine = MagicMock(spec=Engine)
+            mock_factory.get_source_connection.return_value = mock_engine
+            mock_get_config.return_value = {'database': 'test_db'}
+            
+            processor = TableProcessor(environment='test')
+            
+            assert processor.schema_discovery is not None
+            mock_schema_discovery_class.assert_called_once_with(mock_engine, 'test_db')
+
+    @pytest.mark.unit
+    def test_initialization_without_schema_discovery_production_env(self):
+        """Test TableProcessor initialization without schema_discovery in production environment."""
+        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+             patch('etl_pipeline.orchestration.table_processor.SchemaDiscovery') as mock_schema_discovery_class, \
+             patch.object(Settings, 'get_database_config') as mock_get_config:
+            
+            mock_engine = MagicMock(spec=Engine)
+            mock_factory.get_source_connection.return_value = mock_engine
+            mock_get_config.return_value = {'database': 'prod_db'}
+            
+            processor = TableProcessor(environment='production')
+            
+            assert processor.schema_discovery is not None
+            mock_schema_discovery_class.assert_called_once_with(mock_engine, 'prod_db')
 
     @pytest.mark.unit
     def test_connections_available_all_none(self):
@@ -210,6 +245,134 @@ class TestTableProcessorUnit:
                 assert processor.postgres_analytics_engine == mock_analytics
 
     @pytest.mark.unit
+    def test_initialize_connections_test_environment_no_provided_engines(self):
+        """Test initialize_connections in test environment without provided engines."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery, environment='test')
+        
+        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+             patch.object(processor.settings, 'get_database_config') as mock_get_config:
+            
+            mock_source = MagicMock(spec=Engine)
+            mock_replication = MagicMock(spec=Engine)
+            mock_analytics = MagicMock(spec=Engine)
+            
+            mock_factory.get_source_connection.return_value = mock_source
+            mock_factory.get_replication_connection.return_value = mock_replication
+            mock_factory.get_analytics_connection.return_value = mock_analytics
+            mock_get_config.side_effect = lambda db_type, schema=None, **kwargs: {'database': f'{db_type.value}_db'}
+            
+            result = processor.initialize_connections()
+            
+            assert result is True
+            assert processor.opendental_source_engine == mock_source
+            assert processor.mysql_replication_engine == mock_replication
+            assert processor.postgres_analytics_engine == mock_analytics
+            assert processor._source_db == 'source_db'
+            assert processor._replication_db == 'replication_db'
+            assert processor._analytics_db == 'analytics_db'
+
+    @pytest.mark.unit
+    def test_initialize_connections_production_environment_no_provided_engines(self):
+        """Test initialize_connections in production environment without provided engines."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery, environment='production')
+        
+        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+             patch.object(processor.settings, 'get_database_config') as mock_get_config:
+            
+            mock_source = MagicMock(spec=Engine)
+            mock_replication = MagicMock(spec=Engine)
+            mock_analytics = MagicMock(spec=Engine)
+            
+            mock_factory.get_source_connection.return_value = mock_source
+            mock_factory.get_replication_connection.return_value = mock_replication
+            mock_factory.get_analytics_connection.return_value = mock_analytics
+            mock_get_config.side_effect = lambda db_type, schema=None, **kwargs: {'database': f'{db_type.value}_db'}
+            
+            result = processor.initialize_connections()
+            
+            assert result is True
+            assert processor.opendental_source_engine == mock_source
+            assert processor.mysql_replication_engine == mock_replication
+            assert processor.postgres_analytics_engine == mock_analytics
+            assert processor._source_db == 'source_db'
+            assert processor._replication_db == 'replication_db'
+            assert processor._analytics_db == 'analytics_db'
+
+    @pytest.mark.unit
+    def test_initialize_connections_with_provided_source_engine_only(self):
+        """Test initialize_connections with only source engine provided."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery, environment='test')
+        
+        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+             patch.object(processor.settings, 'get_database_config') as mock_get_config:
+            
+            mock_provided_source = MagicMock(spec=Engine)
+            mock_replication = MagicMock(spec=Engine)
+            mock_analytics = MagicMock(spec=Engine)
+            
+            mock_factory.get_replication_connection.return_value = mock_replication
+            mock_factory.get_analytics_connection.return_value = mock_analytics
+            mock_get_config.side_effect = lambda db_type, schema=None, **kwargs: {'database': f'{db_type.value}_db'}
+            
+            result = processor.initialize_connections(source_engine=mock_provided_source)
+            
+            assert result is True
+            assert processor.opendental_source_engine == mock_provided_source
+            assert processor.mysql_replication_engine == mock_replication
+            assert processor.postgres_analytics_engine == mock_analytics
+
+    @pytest.mark.unit
+    def test_initialize_connections_with_provided_replication_engine_only(self):
+        """Test initialize_connections with only replication engine provided."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery, environment='test')
+        
+        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+             patch.object(processor.settings, 'get_database_config') as mock_get_config:
+            
+            mock_source = MagicMock(spec=Engine)
+            mock_provided_replication = MagicMock(spec=Engine)
+            mock_analytics = MagicMock(spec=Engine)
+            
+            mock_factory.get_source_connection.return_value = mock_source
+            mock_factory.get_analytics_connection.return_value = mock_analytics
+            mock_get_config.side_effect = lambda db_type, schema=None, **kwargs: {'database': f'{db_type.value}_db'}
+            
+            result = processor.initialize_connections(replication_engine=mock_provided_replication)
+            
+            assert result is True
+            assert processor.opendental_source_engine == mock_source
+            assert processor.mysql_replication_engine == mock_provided_replication
+            assert processor.postgres_analytics_engine == mock_analytics
+
+    @pytest.mark.unit
+    def test_initialize_connections_with_provided_analytics_engine_only(self):
+        """Test initialize_connections with only analytics engine provided."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery, environment='test')
+        
+        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+             patch.object(processor.settings, 'get_database_config') as mock_get_config:
+            
+            mock_source = MagicMock(spec=Engine)
+            mock_replication = MagicMock(spec=Engine)
+            mock_provided_analytics = MagicMock(spec=Engine)
+            
+            mock_factory.get_source_connection.return_value = mock_source
+            mock_factory.get_replication_connection.return_value = mock_replication
+            mock_get_config.side_effect = lambda db_type, schema=None, **kwargs: {'database': f'{db_type.value}_db'}
+            
+            result = processor.initialize_connections(analytics_engine=mock_provided_analytics)
+            
+            assert result is True
+            assert processor.opendental_source_engine == mock_source
+            assert processor.mysql_replication_engine == mock_replication
+            assert processor.postgres_analytics_engine == mock_provided_analytics
+
+    @pytest.mark.unit
     def test_initialize_connections_failure(self):
         """Test initialize_connections when ConnectionFactory fails."""
         # Create mock schema discovery
@@ -280,6 +443,48 @@ class TestTableProcessorUnit:
         assert processor.opendental_source_engine is None
 
     @pytest.mark.unit
+    def test_cleanup_with_cleanup_exception(self):
+        """Test cleanup when the main cleanup method raises an exception."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        # Set up engines
+        processor.opendental_source_engine = MagicMock(spec=Engine)
+        processor.mysql_replication_engine = MagicMock(spec=Engine)
+        processor.postgres_analytics_engine = MagicMock(spec=Engine)
+        
+        # Mock the cleanup method to raise an exception
+        with patch.object(processor, '_initialized', True):
+            # This should not raise an exception
+            processor.cleanup()
+            
+            # Verify that _initialized is set to False even if cleanup fails
+            assert processor._initialized is False
+
+    @pytest.mark.unit
+    def test_cleanup_with_general_exception(self):
+        """Test cleanup when a general exception occurs during cleanup."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        # Set up engines
+        processor.opendental_source_engine = MagicMock(spec=Engine)
+        processor.mysql_replication_engine = MagicMock(spec=Engine)
+        processor.postgres_analytics_engine = MagicMock(spec=Engine)
+        
+        # Mock the cleanup method to raise a general exception
+        with patch.object(processor, '_initialized', True):
+            # Mock the cleanup method to raise an exception
+            with patch.object(processor, 'opendental_source_engine') as mock_source:
+                mock_source.dispose.side_effect = Exception("General cleanup error")
+                
+                # This should not raise an exception
+                processor.cleanup()
+                
+                # Verify that _initialized is set to False even if cleanup fails
+                assert processor._initialized is False
+
+    @pytest.mark.unit
     def test_context_manager(self):
         """Test TableProcessor as context manager."""
         # Create mock schema discovery
@@ -304,7 +509,18 @@ class TestTableProcessorUnit:
             mock_cleanup.assert_called_once()
 
     @pytest.mark.unit
-    def test_process_table_connections_not_available(self):
+    def test_context_manager_exit_with_exception(self):
+        """Test context manager exit with exception still calls cleanup."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        processor.opendental_source_engine = MagicMock(spec=Engine)
+        
+        with patch.object(processor, 'cleanup') as mock_cleanup:
+            processor.__exit__(Exception("Test error"), Exception("Test error"), None)
+            mock_cleanup.assert_called_once()
+
+    @pytest.mark.unit
+    def test_process_table_connections_not_available(self, mock_table_processor_engines):
         """Test process_table when connections are not available."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
@@ -700,3 +916,415 @@ class TestTableProcessorUnit:
                 force_full=False,
                 chunk_size=2500
             ) 
+
+    @pytest.mark.unit
+    def test_load_to_analytics_chunked_loading_large_table(self, mock_table_processor_engines):
+        """Test chunked loading for large table (> 1M rows)."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.mysql_replication_engine = mock_replication
+        processor.postgres_analytics_engine = mock_analytics
+        
+        # Mock schema discovery
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'primary_key': {},
+            'incremental_columns': []
+        }
+        processor.schema_discovery = mock_schema_discovery
+        
+        # Large table config (> 1M rows)
+        large_table_config = {
+            'estimated_rows': 1500000,  # > 1M rows
+            'estimated_size_mb': 50,
+            'batch_size': 5000
+        }
+        
+        mock_loader = MagicMock()
+        mock_loader.load_table_chunked.return_value = True
+        
+        with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader', return_value=mock_loader):
+            result = processor._load_to_analytics('test_table', True, large_table_config)
+            
+            assert result is True
+            mock_loader.load_table_chunked.assert_called_once_with(
+                table_name='test_table',
+                mysql_schema={'columns': [], 'primary_key': {}, 'incremental_columns': []},
+                force_full=False,
+                chunk_size=5000
+            )
+
+    @pytest.mark.unit
+    def test_load_to_analytics_chunked_loading_large_size(self, mock_table_processor_engines):
+        """Test chunked loading for large table (> 100MB)."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.mysql_replication_engine = mock_replication
+        processor.postgres_analytics_engine = mock_analytics
+        
+        # Mock schema discovery
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'primary_key': {},
+            'incremental_columns': []
+        }
+        processor.schema_discovery = mock_schema_discovery
+        
+        # Large table config (> 100MB)
+        large_table_config = {
+            'estimated_rows': 50000,  # Not > 1M rows
+            'estimated_size_mb': 150,  # > 100MB
+            'batch_size': 3000
+        }
+        
+        mock_loader = MagicMock()
+        mock_loader.load_table_chunked.return_value = True
+        
+        with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader', return_value=mock_loader):
+            result = processor._load_to_analytics('test_table', True, large_table_config)
+            
+            assert result is True
+            mock_loader.load_table_chunked.assert_called_once_with(
+                table_name='test_table',
+                mysql_schema={'columns': [], 'primary_key': {}, 'incremental_columns': []},
+                force_full=False,
+                chunk_size=3000
+            )
+
+    @pytest.mark.unit
+    def test_load_to_analytics_standard_loading_small_table(self, mock_table_processor_engines):
+        """Test standard loading for small table."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.mysql_replication_engine = mock_replication
+        processor.postgres_analytics_engine = mock_analytics
+        
+        # Mock schema discovery
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'primary_key': {},
+            'incremental_columns': []
+        }
+        processor.schema_discovery = mock_schema_discovery
+        
+        # Small table config
+        small_table_config = {
+            'estimated_rows': 5000,  # < 1M rows
+            'estimated_size_mb': 25,  # < 100MB
+            'batch_size': 1000
+        }
+        
+        mock_loader = MagicMock()
+        mock_loader.load_table.return_value = True
+        
+        with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader', return_value=mock_loader):
+            result = processor._load_to_analytics('test_table', True, small_table_config)
+            
+            assert result is True
+            mock_loader.load_table.assert_called_once_with(
+                table_name='test_table',
+                mysql_schema={'columns': [], 'primary_key': {}, 'incremental_columns': []},
+                force_full=False
+            )
+
+    @pytest.mark.unit
+    def test_load_to_analytics_default_config_values(self, mock_table_processor_engines):
+        """Test loading with default config values."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.mysql_replication_engine = mock_replication
+        processor.postgres_analytics_engine = mock_analytics
+        
+        # Mock schema discovery
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'primary_key': {},
+            'incremental_columns': []
+        }
+        processor.schema_discovery = mock_schema_discovery
+        
+        # Empty config (should use defaults)
+        empty_config = {}
+        
+        mock_loader = MagicMock()
+        mock_loader.load_table.return_value = True
+        
+        with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader', return_value=mock_loader):
+            result = processor._load_to_analytics('test_table', True, empty_config)
+            
+            assert result is True
+            mock_loader.load_table.assert_called_once_with(
+                table_name='test_table',
+                mysql_schema={'columns': [], 'primary_key': {}, 'incremental_columns': []},
+                force_full=False
+            )
+
+    @pytest.mark.unit
+    def test_load_to_analytics_schema_not_found(self, mock_table_processor_engines, table_processor_standard_config):
+        """Test loading when schema is not found."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.mysql_replication_engine = mock_replication
+        processor.postgres_analytics_engine = mock_analytics
+        
+        # Mock schema discovery to return None (schema not found)
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = None
+        processor.schema_discovery = mock_schema_discovery
+        
+        result = processor._load_to_analytics('test_table', True, table_processor_standard_config)
+        
+        assert result is False
+
+    @pytest.mark.unit
+    def test_process_table_connections_available_but_not_initialized(self, mock_table_processor_engines):
+        """Test process_table when connections are available but not initialized."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.opendental_source_engine = mock_source
+        processor.mysql_replication_engine = mock_replication
+        processor.postgres_analytics_engine = mock_analytics
+        processor._initialized = False  # Connections available but not initialized
+        
+        with patch.object(processor, '_extract_to_replication', return_value=True), \
+             patch.object(processor, '_load_to_analytics', return_value=True), \
+             patch.object(processor.settings, 'get_table_config', return_value={}), \
+             patch.object(processor.settings, 'should_use_incremental', return_value=True):
+            
+            result = processor.process_table('test_table')
+            
+            assert result is True
+            assert processor._initialized is True  # Should be set to True
+
+    @pytest.mark.unit
+    def test_process_table_connections_not_available_initialized_false(self, mock_table_processor_engines):
+        """Test process_table when connections not available and not initialized."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        processor._initialized = False
+        
+        with patch.object(processor, 'initialize_connections', return_value=False):
+            result = processor.process_table('test_table')
+            
+            assert result is False
+
+    @pytest.mark.unit
+    def test_process_table_connections_not_available_initialized_true(self):
+        """Test process_table when connections not available but initialized flag is True."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        processor._initialized = True
+        
+        result = processor.process_table('test_table')
+        
+        assert result is False
+
+    @pytest.mark.unit
+    def test_extract_to_replication_schema_change_detection_production(self, mock_table_processor_engines):
+        """Test schema change detection in production environment."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery, environment='production')
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.opendental_source_engine = mock_source
+        processor.mysql_replication_engine = mock_replication
+        processor._source_db = 'source_db'
+        processor._replication_db = 'replication_db'
+        
+        # Mock schema discovery to return different schemas
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'schema_hash': 'source_hash_123'
+        }
+        processor.schema_discovery = mock_schema_discovery
+        
+        mock_replicator = MagicMock()
+        mock_replicator.create_exact_replica.return_value = True
+        mock_replicator.copy_table_data.return_value = True
+        
+        with patch('etl_pipeline.orchestration.table_processor.ExactMySQLReplicator', return_value=mock_replicator), \
+             patch('etl_pipeline.orchestration.table_processor.SchemaDiscovery') as mock_schema_discovery_class, \
+             patch.dict(os.environ, {'ENVIRONMENT': 'production'}):
+            
+            mock_target_discovery = MagicMock()
+            mock_target_discovery.get_table_schema.return_value = {
+                'columns': [],
+                'schema_hash': 'target_hash_456'  # Different hash
+            }
+            mock_schema_discovery_class.return_value = mock_target_discovery
+            
+            result = processor._extract_to_replication('test_table', False)
+            
+            assert result is True
+            # Should force full extraction due to schema change
+            mock_replicator.create_exact_replica.assert_called_once_with('test_table')
+
+    @pytest.mark.unit
+    def test_extract_to_replication_schema_change_detection_test_env(self, mock_table_processor_engines):
+        """Test schema change detection in test environment (should skip comparison)."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery, environment='test')
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.opendental_source_engine = mock_source
+        processor.mysql_replication_engine = mock_replication
+        processor._source_db = 'source_db'
+        processor._replication_db = 'replication_db'
+        
+        # Mock schema discovery to return different schemas
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'schema_hash': 'source_hash_123'
+        }
+        processor.schema_discovery = mock_schema_discovery
+        
+        mock_replicator = MagicMock()
+        mock_replicator.create_exact_replica.return_value = True
+        mock_replicator.copy_table_data.return_value = True
+        
+        with patch('etl_pipeline.orchestration.table_processor.ExactMySQLReplicator', return_value=mock_replicator), \
+             patch('etl_pipeline.orchestration.table_processor.SchemaDiscovery') as mock_schema_discovery_class, \
+             patch.dict(os.environ, {'ETL_ENVIRONMENT': 'test'}):
+            
+            mock_target_discovery = MagicMock()
+            mock_target_discovery.get_table_schema.return_value = {
+                'columns': [],
+                'schema_hash': 'target_hash_456'  # Different hash, but should be ignored in test
+            }
+            mock_schema_discovery_class.return_value = mock_target_discovery
+            
+            result = processor._extract_to_replication('test_table', False)
+            
+            assert result is True
+            # Should not force full extraction in test environment
+            mock_replicator.create_exact_replica.assert_not_called()
+
+    @pytest.mark.unit
+    def test_extract_to_replication_target_table_does_not_exist(self, mock_table_processor_engines):
+        """Test extraction when target table doesn't exist."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.opendental_source_engine = mock_source
+        processor.mysql_replication_engine = mock_replication
+        processor._source_db = 'source_db'
+        processor._replication_db = 'replication_db'
+        
+        # Mock schema discovery to return source table exists
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'schema_hash': 'source_hash_123'
+        }
+        processor.schema_discovery = mock_schema_discovery
+        
+        mock_replicator = MagicMock()
+        mock_replicator.create_exact_replica.return_value = True
+        mock_replicator.copy_table_data.return_value = True
+        
+        with patch('etl_pipeline.orchestration.table_processor.ExactMySQLReplicator', return_value=mock_replicator), \
+             patch('etl_pipeline.orchestration.table_processor.SchemaDiscovery') as mock_schema_discovery_class:
+            
+            mock_target_discovery = MagicMock()
+            mock_target_discovery.get_table_schema.return_value = None  # Target table doesn't exist
+            mock_schema_discovery_class.return_value = mock_target_discovery
+            
+            result = processor._extract_to_replication('test_table', False)
+            
+            assert result is True
+            # Should create table since target doesn't exist
+            mock_replicator.create_exact_replica.assert_called_once_with('test_table')
+
+    @pytest.mark.unit
+    def test_extract_to_replication_source_table_does_not_exist(self, mock_table_processor_engines):
+        """Test extraction when source table doesn't exist."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.opendental_source_engine = mock_source
+        processor.mysql_replication_engine = mock_replication
+        processor._source_db = 'source_db'
+        processor._replication_db = 'replication_db'
+        
+        # Mock schema discovery to return source table doesn't exist
+        mock_schema_discovery = MagicMock()
+        mock_schema_discovery.get_table_schema.return_value = None
+        processor.schema_discovery = mock_schema_discovery
+        
+        mock_replicator = MagicMock()
+        mock_replicator.create_exact_replica.return_value = True
+        mock_replicator.copy_table_data.return_value = True
+        
+        with patch('etl_pipeline.orchestration.table_processor.ExactMySQLReplicator', return_value=mock_replicator):
+            result = processor._extract_to_replication('test_table', False)
+            
+            assert result is True
+            # Should create table since source doesn't exist
+            mock_replicator.create_exact_replica.assert_called_once_with('test_table') 
+
+    @pytest.mark.unit
+    def test_extract_to_replication_with_replicator_exception(self, mock_table_processor_engines):
+        """Test extraction when ExactMySQLReplicator constructor raises an exception."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.opendental_source_engine = mock_source
+        processor.mysql_replication_engine = mock_replication
+        processor._source_db = 'source_db'
+        processor._replication_db = 'replication_db'
+        
+        # Mock SchemaDiscovery to return a table that exists
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'schema_hash': 'test_hash'
+        }
+        
+        # Mock ExactMySQLReplicator to raise an exception during construction
+        with patch('etl_pipeline.orchestration.table_processor.ExactMySQLReplicator', side_effect=Exception("Replicator construction failed")):
+            result = processor._extract_to_replication('test_table', False)
+            
+            assert result is False
+
+    @pytest.mark.unit
+    def test_load_to_analytics_with_loader_exception(self, mock_table_processor_engines):
+        """Test loading when PostgresLoader constructor raises an exception."""
+        mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        processor = TableProcessor(schema_discovery=mock_schema_discovery)
+        
+        mock_source, mock_replication, mock_analytics = mock_table_processor_engines
+        processor.mysql_replication_engine = mock_replication
+        processor.postgres_analytics_engine = mock_analytics
+        
+        # Mock schema discovery to return a valid schema
+        mock_schema_discovery.get_table_schema.return_value = {
+            'columns': [],
+            'primary_key': {},
+            'incremental_columns': []
+        }
+        
+        # Mock PostgresLoader to raise an exception during construction
+        with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader', side_effect=Exception("Loader construction failed")):
+            result = processor._load_to_analytics('test_table', True, {})
+            
+            assert result is False 
