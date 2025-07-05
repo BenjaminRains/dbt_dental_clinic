@@ -13,7 +13,6 @@ import glob
 sys.path.insert(0, str(Path(__file__).parent / "etl_pipeline"))
 
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
-from etl_pipeline.config.settings import settings
 
 def test_dbt_model_discovery_logic():
     """Test the dbt model discovery logic directly without SchemaDiscovery initialization."""
