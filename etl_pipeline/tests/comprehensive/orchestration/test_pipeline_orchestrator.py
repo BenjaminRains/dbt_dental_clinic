@@ -28,10 +28,6 @@ logger = logging.getLogger(__name__)
 
 class TestPipelineOrchestrator:
     """Comprehensive tests for PipelineOrchestrator class."""
-    
-    # Fixtures moved to conftest.py:
-    # - mock_components
-    # - orchestrator
 
 
 class TestInitialization(TestPipelineOrchestrator):

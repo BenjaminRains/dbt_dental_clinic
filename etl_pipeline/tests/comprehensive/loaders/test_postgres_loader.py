@@ -30,15 +30,6 @@ logger = logging.getLogger(__name__)
 
 class TestPostgresLoader:
     """Comprehensive tests for PostgresLoader class."""
-    
-    # Engine fixtures moved to conftest.py:
-    # - mock_replication_engine
-    # - mock_analytics_engine
-    
-    # PostgresLoader-specific fixtures moved to conftest.py:
-    # - postgres_loader
-    # - sample_mysql_schema  
-    # - sample_table_data
 
 
 class TestInitialization(TestPostgresLoader):

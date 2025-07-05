@@ -28,11 +28,6 @@ from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
 class TestPriorityProcessor:
     """Comprehensive tests for PriorityProcessor class."""
-    
-    # Fixtures are now provided by conftest.py:
-    # - mock_priority_processor_settings (renamed from mock_settings)
-    # - mock_priority_processor_table_processor (renamed from mock_table_processor)
-    # - priority_processor
 
 
 class TestInitialization(TestPriorityProcessor):
