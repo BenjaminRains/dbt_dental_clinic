@@ -10,6 +10,12 @@ Testing Strategy:
 - Core logic and edge cases
 - Comprehensive mocking
 - Marker: @pytest.mark.unit
+
+Refactored for new architecture:
+- Uses new configuration system with enum-based types
+- Imports fixtures from modular fixture files
+- Uses dependency injection pattern
+- Supports actual PostgresLoader constructor signature
 """
 
 import pytest
@@ -21,6 +27,17 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
 from datetime import datetime, timedelta
 import logging
 
+# Import fixtures from modular fixture files
+from tests.fixtures.config_fixtures import test_pipeline_config, test_tables_config
+from tests.fixtures.env_fixtures import test_env_vars, test_settings
+from tests.fixtures.connection_fixtures import (
+    mock_source_engine, mock_replication_engine, mock_analytics_engine,
+    database_types, postgres_schemas
+)
+from tests.fixtures.loader_fixtures import (
+    postgres_loader, sample_mysql_schema, sample_table_data
+)
+
 # Import the component under test
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
@@ -29,12 +46,12 @@ from etl_pipeline.loaders.postgres_loader import PostgresLoader
 class TestPostgresLoaderUnit:
     """Unit tests for PostgresLoader class with comprehensive mocking."""
     
-    # All fixtures moved to conftest.py:
-    # - mock_replication_engine
-    # - mock_analytics_engine
-    # - postgres_loader
-    # - sample_mysql_schema
-    # - sample_table_data
+    # All fixtures moved to modular fixture files:
+    # - mock_replication_engine (from connection_fixtures)
+    # - mock_analytics_engine (from connection_fixtures)
+    # - postgres_loader (from loader_fixtures)
+    # - sample_mysql_schema (from loader_fixtures)
+    # - sample_table_data (from loader_fixtures)
 
 
 @pytest.mark.unit
@@ -43,16 +60,19 @@ class TestInitializationUnit:
     
     def test_initialization_with_valid_engines(self, mock_replication_engine, mock_analytics_engine):
         """Test successful initialization with valid database engines."""
-        with patch('etl_pipeline.loaders.postgres_loader.settings') as mock_settings:
-            mock_settings.get_database_config.side_effect = lambda db: {
-                'analytics': {'schema': 'raw'},
-                'replication': {'schema': 'raw'}
-            }.get(db, {})
+        with patch('etl_pipeline.loaders.postgres_loader.get_settings') as mock_get_settings:
+            mock_settings = MagicMock()
+            mock_settings.get_database_config.side_effect = lambda db_type, schema=None: {
+                ('analytics', 'raw'): {'schema': 'raw'},
+                ('replication', None): {'schema': 'raw'}
+            }.get((db_type, schema), {})
+            mock_get_settings.return_value = mock_settings
             
             with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema') as mock_schema_class:
                 mock_schema_adapter = MagicMock()
                 mock_schema_class.return_value = mock_schema_adapter
                 
+                # Use actual constructor signature: replication_engine and analytics_engine
                 loader = PostgresLoader(
                     replication_engine=mock_replication_engine,
                     analytics_engine=mock_analytics_engine
@@ -69,13 +89,24 @@ class TestInitializationUnit:
     
     def test_initialization_with_custom_schemas(self, mock_replication_engine, mock_analytics_engine):
         """Test initialization with custom schema configurations."""
-        with patch('etl_pipeline.loaders.postgres_loader.settings') as mock_settings:
-            mock_settings.get_database_config.side_effect = lambda db: {
-                'analytics': {'schema': 'custom_analytics'},
-                'replication': {'schema': 'custom_replication'}
-            }.get(db, {})
+        with patch('etl_pipeline.loaders.postgres_loader.get_settings') as mock_get_settings:
+            mock_settings = MagicMock()
+            # Fix the side effect to return custom schemas using enum objects
+            def get_config_side_effect(db_type, schema=None):
+                # Import the actual enums for comparison
+                from etl_pipeline.config import DatabaseType, PostgresSchema as ConfigPostgresSchema
+                
+                if db_type == DatabaseType.ANALYTICS and schema == ConfigPostgresSchema.RAW:
+                    return {'schema': 'custom_analytics'}
+                elif db_type == DatabaseType.REPLICATION:
+                    return {'schema': 'custom_replication'}
+                return {}
+            
+            mock_settings.get_database_config.side_effect = get_config_side_effect
+            mock_get_settings.return_value = mock_settings
             
             with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema'):
+                # Use actual constructor signature
                 loader = PostgresLoader(
                     replication_engine=mock_replication_engine,
                     analytics_engine=mock_analytics_engine
@@ -697,6 +728,85 @@ class TestSchemaIntegrationUnit:
             result = postgres_loader._ensure_postgres_table('test_table', sample_mysql_schema)
             
             assert result is False
+
+
+@pytest.mark.unit
+class TestNewConfigurationSystemUnit:
+    """Unit tests for new configuration system integration."""
+    
+    def test_initialization_with_new_config_system(self, test_settings, database_types, postgres_schemas):
+        """Test PostgresLoader initialization with new configuration system."""
+        # Mock engines using new configuration system
+        mock_replication_engine = MagicMock(spec=Engine)
+        mock_analytics_engine = MagicMock(spec=Engine)
+        
+        with patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_get_repl:
+            mock_get_repl.return_value = mock_replication_engine
+            
+            with patch('etl_pipeline.core.connections.ConnectionFactory.get_analytics_connection') as mock_get_analytics:
+                mock_get_analytics.return_value = mock_analytics_engine
+                
+                # Mock PostgresSchema to prevent inspection of mock engines
+                with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema') as mock_schema_class:
+                    mock_schema_adapter = MagicMock()
+                    mock_schema_class.return_value = mock_schema_adapter
+                    
+                    # Mock get_settings to return a mock settings object
+                    with patch('etl_pipeline.loaders.postgres_loader.get_settings') as mock_get_settings:
+                        mock_settings = MagicMock()
+                        mock_settings.get_database_config.side_effect = lambda db_type, schema=None: {
+                            ('analytics', 'raw'): {'schema': 'raw'},
+                            ('replication', None): {'schema': 'raw'}
+                        }.get((db_type, schema), {})
+                        mock_get_settings.return_value = mock_settings
+                        
+                        # Test with actual constructor signature
+                        loader = PostgresLoader(
+                            replication_engine=mock_replication_engine,
+                            analytics_engine=mock_analytics_engine
+                        )
+                        
+                        assert loader.replication_engine == mock_replication_engine
+                        assert loader.analytics_engine == mock_analytics_engine
+    
+    def test_load_table_with_enum_types(self, postgres_loader, sample_mysql_schema, database_types, postgres_schemas):
+        """Test table loading using enum-based database types."""
+        # Mock schema adapter
+        postgres_loader.schema_adapter.create_postgres_table.return_value = True
+        postgres_loader.schema_adapter.verify_schema.return_value = True
+        
+        # Mock source connection and result
+        mock_source_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.keys.return_value = ['id', 'name', 'created_at']
+        mock_result.fetchall.return_value = [
+            (1, 'John Doe', datetime(2023, 1, 1, 10, 0, 0))
+        ]
+        mock_source_conn.execute.return_value = mock_result
+        
+        # Mock target connection
+        mock_target_conn = MagicMock()
+        
+        # Set up engine mocks
+        mock_source_context = MagicMock()
+        mock_source_context.__enter__ = MagicMock(return_value=mock_source_conn)
+        mock_source_context.__exit__ = MagicMock(return_value=None)
+        postgres_loader.replication_engine.connect.return_value = mock_source_context
+        
+        mock_target_context = MagicMock()
+        mock_target_context.__enter__ = MagicMock(return_value=mock_target_conn)
+        mock_target_context.__exit__ = MagicMock(return_value=None)
+        postgres_loader.analytics_engine.begin.return_value = mock_target_context
+        
+        # Mock table existence check
+        with patch('etl_pipeline.loaders.postgres_loader.inspect') as mock_inspect:
+            mock_inspector = MagicMock()
+            mock_inspector.has_table.return_value = True
+            mock_inspect.return_value = mock_inspector
+            
+            result = postgres_loader.load_table('test_table', sample_mysql_schema, force_full=False)
+            
+            assert result is True
 
 
 if __name__ == "__main__":
