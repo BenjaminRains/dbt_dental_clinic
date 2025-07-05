@@ -152,6 +152,9 @@ class IntegrationTestDataManager:
                     conn.execute(text(insert_sql), filtered_patient)
                 except Exception as e:
                     self.logger.error(f"Failed to insert patient data into {db_name}: {e}")
+            
+            # Commit the transaction
+            conn.commit()
     
     def _get_table_columns_postgres(self, engine, table_name, schema):
         """Return a set of column names for the given table in the connected Postgres database."""
@@ -196,6 +199,9 @@ class IntegrationTestDataManager:
                     conn.execute(text(insert_sql), filtered_patient)
                 except Exception as e:
                     self.logger.error(f"Failed to insert patient data into {db_name}: {e}")
+            
+            # Commit the transaction
+            conn.commit()
     
     def _insert_appointment_data_mysql(self, engine: Engine, appointment_data: List[Dict[str, Any]], db_name: str) -> None:
         """Insert appointment data into MySQL database."""
