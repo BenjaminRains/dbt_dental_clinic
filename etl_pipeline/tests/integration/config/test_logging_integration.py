@@ -37,6 +37,9 @@ from tests.fixtures.env_fixtures import (
     setup_test_environment
 )
 
+# Load environment variables from .env file first
+from tests.fixtures.env_fixtures import load_test_environment
+load_test_environment()
 
 @pytest.fixture
 def temp_log_dir():

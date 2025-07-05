@@ -27,6 +27,10 @@ from etl_pipeline.config import (
 )
 from etl_pipeline.core.connections import ConnectionFactory
 
+# Load environment variables from .env file first
+from tests.fixtures.env_fixtures import load_test_environment
+load_test_environment()
+
 # Import fixtures from modular fixtures directory
 from tests.fixtures.config_fixtures import test_pipeline_config, test_tables_config
 from tests.fixtures.env_fixtures import test_env_vars, production_env_vars
