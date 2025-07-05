@@ -44,6 +44,10 @@ from etl_pipeline.config import (
 # Import connection factory for test database connections
 from etl_pipeline.core.connections import ConnectionFactory
 
+# Load environment variables from .env file first
+from tests.fixtures.env_fixtures import load_test_environment
+load_test_environment()
+
 # Import fixtures from modular fixtures directory
 from tests.fixtures.loader_fixtures import sample_mysql_schema
 from tests.fixtures.env_fixtures import test_env_vars
@@ -82,7 +86,7 @@ class TestPostgresLoaderIntegration:
         try:
             # Use the new connection methods with test settings
             replication_engine = ConnectionFactory.get_replication_connection(test_settings)
-            analytics_engine = ConnectionFactory.get_analytics_connection(test_settings)
+            analytics_engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
             
             # Test connections are working
             with replication_engine.connect() as conn:
@@ -512,7 +516,7 @@ class TestUtilityMethodsIntegration(TestPostgresLoaderIntegration):
     
     def test_get_last_load_no_timestamp_integration(self, postgres_loader_integration, setup_etl_tracking):
         """Test last load timestamp retrieval when no timestamp exists in real test database."""
-        setup_etl_tracking  # Just set up empty table
+        # setup_etl_tracking fixture is used to ensure ETL tracking table exists
         
         # Test retrieval for non-existent table
         result = postgres_loader_integration._get_last_load('non_existent_table')
@@ -522,7 +526,7 @@ class TestUtilityMethodsIntegration(TestPostgresLoaderIntegration):
     
     def test_build_load_query_integration(self, postgres_loader_integration, setup_etl_tracking):
         """Test query building with real test database."""
-        setup_etl_tracking  # Set up ETL tracking
+        # setup_etl_tracking fixture is used to ensure ETL tracking table exists
         
         # Test incremental query building
         query = postgres_loader_integration._build_load_query('patient', ['DateTStamp'], force_full=False)
@@ -537,7 +541,7 @@ class TestUtilityMethodsIntegration(TestPostgresLoaderIntegration):
     
     def test_build_count_query_integration(self, postgres_loader_integration, setup_etl_tracking):
         """Test count query building with real test database."""
-        setup_etl_tracking  # Set up ETL tracking
+        # setup_etl_tracking fixture is used to ensure ETL tracking table exists
         
         # Test incremental count query building
         query = postgres_loader_integration._build_count_query('patient', ['DateTStamp'], force_full=False)
