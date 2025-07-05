@@ -7,6 +7,12 @@ mocked for fast execution and isolated component behavior testing.
 Coverage: Core logic, edge cases, error handling
 Execution: < 1 second per component
 Markers: @pytest.mark.unit
+
+Updated for Configuration System Refactoring:
+- Uses new enum-based DatabaseType and PostgresSchema
+- Implements dependency injection patterns
+- Uses modular fixtures from tests.fixtures.*
+- Follows new ConnectionFactory interface
 """
 
 import pytest
@@ -17,6 +23,30 @@ from sqlalchemy.engine import Engine
 
 from etl_pipeline.orchestration.table_processor import TableProcessor
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
+
+# Import new configuration system components
+try:
+    from etl_pipeline.config import DatabaseType, PostgresSchema, create_test_settings
+    NEW_CONFIG_AVAILABLE = True
+except ImportError:
+    # Fallback for backward compatibility
+    NEW_CONFIG_AVAILABLE = False
+    DatabaseType = None
+    PostgresSchema = None
+
+# Import modular fixtures
+from tests.fixtures.transformer_fixtures import (
+    mock_table_processor_engines,
+    table_processor_standard_config,
+    table_processor_large_config,
+    table_processor_medium_large_config
+)
+from tests.fixtures.connection_fixtures import (
+    mock_source_engine,
+    mock_replication_engine,
+    mock_analytics_engine
+)
+from tests.fixtures.env_fixtures import test_settings
 
 logger = logging.getLogger(__name__)
 
@@ -99,23 +129,42 @@ class TestTableProcessorUnit:
         
         mock_source, mock_replication, mock_analytics = mock_table_processor_engines
         
-        # Use **kwargs in side effects (Section 12 from debugging notes)
-        with patch.object(processor.settings, 'get_database_config') as mock_get_config:
-            mock_get_config.side_effect = lambda db, **kwargs: {'database': f'{db}_db'}
-            
-            result = processor.initialize_connections(
-                source_engine=mock_source,
-                replication_engine=mock_replication,
-                analytics_engine=mock_analytics
-            )
-            
-            assert result is True
-            assert processor.opendental_source_engine == mock_source
-            assert processor.mysql_replication_engine == mock_replication
-            assert processor.postgres_analytics_engine == mock_analytics
-            assert processor._source_db == 'opendental_source_db'
-            assert processor._replication_db == 'opendental_replication_db'
-            assert processor._analytics_db == 'opendental_analytics_raw_db'
+        # Use new enum-based database config calls
+        if NEW_CONFIG_AVAILABLE:
+            with patch.object(processor.settings, 'get_database_config') as mock_get_config:
+                mock_get_config.side_effect = lambda db_type, schema=None, **kwargs: {'database': f'{db_type.value}_db'}
+                
+                result = processor.initialize_connections(
+                    source_engine=mock_source,
+                    replication_engine=mock_replication,
+                    analytics_engine=mock_analytics
+                )
+                
+                assert result is True
+                assert processor.opendental_source_engine == mock_source
+                assert processor.mysql_replication_engine == mock_replication
+                assert processor.postgres_analytics_engine == mock_analytics
+                assert processor._source_db == 'source_db'
+                assert processor._replication_db == 'replication_db'
+                assert processor._analytics_db == 'analytics_db'
+        else:
+            # Fallback for old configuration system
+            with patch.object(processor.settings, 'get_database_config') as mock_get_config:
+                mock_get_config.side_effect = lambda db, **kwargs: {'database': f'{db}_db'}
+                
+                result = processor.initialize_connections(
+                    source_engine=mock_source,
+                    replication_engine=mock_replication,
+                    analytics_engine=mock_analytics
+                )
+                
+                assert result is True
+                assert processor.opendental_source_engine == mock_source
+                assert processor.mysql_replication_engine == mock_replication
+                assert processor.postgres_analytics_engine == mock_analytics
+                assert processor._source_db == 'opendental_source_db'
+                assert processor._replication_db == 'opendental_replication_db'
+                assert processor._analytics_db == 'opendental_analytics_raw_db'
 
     @pytest.mark.unit
     def test_initialize_connections_with_connection_factory(self, mock_table_processor_engines):
@@ -127,21 +176,38 @@ class TestTableProcessorUnit:
         
         mock_source, mock_replication, mock_analytics = mock_table_processor_engines
         
-        # Patch where used, not where defined (Section 4.1 from debugging notes)
-        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
-             patch.object(processor.settings, 'get_database_config') as mock_get_config:
-            
-            mock_factory.get_opendental_source_connection.return_value = mock_source
-            mock_factory.get_mysql_replication_connection.return_value = mock_replication
-            mock_factory.get_postgres_analytics_connection.return_value = mock_analytics
-            mock_get_config.side_effect = lambda db, **kwargs: {'database': f'{db}_db'}
-            
-            result = processor.initialize_connections()
-            
-            assert result is True
-            assert processor.opendental_source_engine == mock_source
-            assert processor.mysql_replication_engine == mock_replication
-            assert processor.postgres_analytics_engine == mock_analytics
+        # Use new ConnectionFactory interface
+        if NEW_CONFIG_AVAILABLE:
+            with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+                 patch.object(processor.settings, 'get_database_config') as mock_get_config:
+                
+                mock_factory.get_source_connection.return_value = mock_source
+                mock_factory.get_replication_connection.return_value = mock_replication
+                mock_factory.get_analytics_connection.return_value = mock_analytics
+                mock_get_config.side_effect = lambda db_type, schema=None, **kwargs: {'database': f'{db_type.value}_db'}
+                
+                result = processor.initialize_connections()
+                
+                assert result is True
+                assert processor.opendental_source_engine == mock_source
+                assert processor.mysql_replication_engine == mock_replication
+                assert processor.postgres_analytics_engine == mock_analytics
+        else:
+            # Fallback for old ConnectionFactory interface
+            with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
+                 patch.object(processor.settings, 'get_database_config') as mock_get_config:
+                
+                mock_factory.get_opendental_source_connection.return_value = mock_source
+                mock_factory.get_mysql_replication_connection.return_value = mock_replication
+                mock_factory.get_postgres_analytics_connection.return_value = mock_analytics
+                mock_get_config.side_effect = lambda db, **kwargs: {'database': f'{db}_db'}
+                
+                result = processor.initialize_connections()
+                
+                assert result is True
+                assert processor.opendental_source_engine == mock_source
+                assert processor.mysql_replication_engine == mock_replication
+                assert processor.postgres_analytics_engine == mock_analytics
 
     @pytest.mark.unit
     def test_initialize_connections_failure(self):
@@ -151,11 +217,19 @@ class TestTableProcessorUnit:
         
         processor = TableProcessor(schema_discovery=mock_schema_discovery)
         
-        with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory:
-            mock_factory.get_opendental_source_connection.side_effect = Exception("Connection failed")
-            
-            with pytest.raises(Exception, match="Connection failed"):
-                processor.initialize_connections()
+        if NEW_CONFIG_AVAILABLE:
+            with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory:
+                mock_factory.get_source_connection.side_effect = Exception("Connection failed")
+                
+                with pytest.raises(Exception, match="Connection failed"):
+                    processor.initialize_connections()
+        else:
+            # Fallback for old ConnectionFactory interface
+            with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory:
+                mock_factory.get_opendental_source_connection.side_effect = Exception("Connection failed")
+                
+                with pytest.raises(Exception, match="Connection failed"):
+                    processor.initialize_connections()
 
     @pytest.mark.unit
     def test_cleanup_all_engines(self):
