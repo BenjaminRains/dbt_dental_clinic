@@ -301,91 +301,20 @@ STANDARD_TEST_APPOINTMENTS = [
     }
 ]
 
-# Minimal test data for quick setup (only required fields)
-MINIMAL_TEST_PATIENTS = [
-    {
-        'PatNum': 1,
-        'LName': 'Doe',
-        'FName': 'John',
-        'MiddleI': 'M',
-        'Preferred': 'Johnny',
-        'PatStatus': 0,
-        'Gender': 0,
-        'Position': 0,
-        'Birthdate': date(1980, 1, 1),
-        'SSN': '123-45-6789'
-    },
-    {
-        'PatNum': 2,
-        'LName': 'Smith',
-        'FName': 'Jane',
-        'MiddleI': 'A',
-        'Preferred': 'Janey',
-        'PatStatus': 0,
-        'Gender': 1,
-        'Position': 0,
-        'Birthdate': date(1985, 5, 15),
-        'SSN': '234-56-7890'
-    },
-    {
-        'PatNum': 3,
-        'LName': 'Johnson',
-        'FName': 'Bob',
-        'MiddleI': 'R',
-        'Preferred': 'Bobby',
-        'PatStatus': 0,
-        'Gender': 0,
-        'Position': 0,
-        'Birthdate': date(1975, 12, 10),
-        'SSN': '345-67-8901'
-    }
-]
 
-# Test data for incremental loading tests (with different timestamps)
-INCREMENTAL_TEST_PATIENTS = [
-    {
-        'PatNum': 4,
-        'LName': 'Wilson',
-        'FName': 'Alice',
-        'MiddleI': 'B',
-        'Preferred': 'Al',
-        'PatStatus': 0,
-        'Gender': 1,
-        'Position': 0,
-        'Birthdate': date(1990, 3, 20),
-        'SSN': '456-78-9012',
-        'DateTStamp': datetime(2023, 1, 4, 13, 0, 0)  # Newer timestamp
-    },
-    {
-        'PatNum': 5,
-        'LName': 'Brown',
-        'FName': 'Charlie',
-        'MiddleI': 'C',
-        'Preferred': 'Chuck',
-        'PatStatus': 0,
-        'Gender': 0,
-        'Position': 0,
-        'Birthdate': date(1988, 7, 4),
-        'SSN': '567-89-0123',
-        'DateTStamp': datetime(2023, 1, 5, 14, 0, 0)  # Even newer timestamp
-    }
-]
 
 def get_test_patient_data(include_all_fields: bool = True) -> List[Dict[str, Any]]:
     """
     Get standardized test patient data.
     
     Args:
-        include_all_fields: If True, return complete patient records with all fields.
-                           If False, return minimal records with only required fields.
+        include_all_fields: Ignored - always returns complete patient records.
+                           Kept for backward compatibility.
     
     Returns:
         List of patient data dictionaries
     """
-    if include_all_fields:
-        return STANDARD_TEST_PATIENTS.copy()
-    else:
-        return MINIMAL_TEST_PATIENTS.copy()
+    return STANDARD_TEST_PATIENTS.copy()
 
 def get_test_appointment_data() -> List[Dict[str, Any]]:
     """
@@ -395,16 +324,6 @@ def get_test_appointment_data() -> List[Dict[str, Any]]:
         List of appointment data dictionaries
     """
     return STANDARD_TEST_APPOINTMENTS.copy()
-
-def get_incremental_test_patient_data() -> List[Dict[str, Any]]:
-    """
-    Get test patient data for incremental loading tests.
-    These records have newer timestamps than the standard test data.
-    
-    Returns:
-        List of patient data dictionaries with newer timestamps
-    """
-    return INCREMENTAL_TEST_PATIENTS.copy()
 
 def get_test_data_for_table(table_name: str, include_all_fields: bool = True) -> List[Dict[str, Any]]:
     """
