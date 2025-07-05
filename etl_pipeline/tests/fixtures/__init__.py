@@ -14,6 +14,7 @@ This package contains modular test fixtures organized by responsibility:
 - test_data_fixtures: Static test data
 - mock_utils: Common mock utilities
 - priority_processor_fixtures: Priority processing fixtures
+- logging_fixtures: Logging and logger fixtures
 """
 
 __version__ = "1.0.0" 
