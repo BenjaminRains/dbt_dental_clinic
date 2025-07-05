@@ -30,12 +30,17 @@ from sqlalchemy import create_engine, text
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Add the project root to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Add the etl_pipeline directory to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'etl_pipeline'))
 
 # Import new architectural components
-from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
-from etl_pipeline.core.connections import ConnectionFactory
+try:
+    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
+    from etl_pipeline.core.connections import ConnectionFactory
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Make sure you're running this script from the project root directory")
+    sys.exit(1)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -67,7 +72,7 @@ def validate_test_environment():
     is_test_env = environment == 'test'
     
     if not is_test_env:
-        logger.error("❌ SAFETY CHECK FAILED: This script can only run in test environments!")
+        logger.error("SAFETY CHECK FAILED: This script can only run in test environments!")
         logger.error(f"Current environment: '{environment}'")
         logger.error("Environment variables checked:")
         logger.error(f"  ETL_ENVIRONMENT='{os.environ.get('ETL_ENVIRONMENT', '')}'")
@@ -79,7 +84,7 @@ def validate_test_environment():
         logger.error("  export APP_ENV=test")
         return False
     
-    logger.info(f"✅ Environment validation passed - running in test mode (detected: {environment})")
+    logger.info(f"Environment validation passed - running in test mode (detected: {environment})")
     return True
 
 def validate_database_names():
@@ -98,12 +103,12 @@ def validate_database_names():
     unsafe_dbs = [db for db in test_db_names if db and 'test' not in db.lower()]
     
     if unsafe_dbs:
-        logger.error("❌ SAFETY CHECK FAILED: Database names must contain 'test'!")
+        logger.error("SAFETY CHECK FAILED: Database names must contain 'test'!")
         logger.error(f"Unsafe database names: {unsafe_dbs}")
         logger.error("This prevents accidental modification of production databases.")
         return False
     
-    logger.info("✅ Database name validation passed - all names contain 'test'")
+    logger.info("Database name validation passed - all names contain 'test'")
     return True
 
 def confirm_database_creation():
@@ -114,7 +119,7 @@ def confirm_database_creation():
         bool: True if user confirms, False otherwise
     """
     print("\n" + "="*60)
-    print("⚠️  DATABASE SETUP CONFIRMATION REQUIRED ⚠️")
+    print("DATABASE SETUP CONFIRMATION REQUIRED")
     print("="*60)
     print("This script will:")
     print("  • Create/modify test databases")
@@ -130,10 +135,10 @@ def confirm_database_creation():
     while True:
         response = input("Do you want to continue? (yes/no): ").lower().strip()
         if response in ['yes', 'y']:
-            logger.info("✅ User confirmed database setup")
+            logger.info("User confirmed database setup")
             return True
         elif response in ['no', 'n']:
-            logger.info("❌ User cancelled database setup")
+            logger.info("User cancelled database setup")
             return False
         else:
             print("Please enter 'yes' or 'no'")
@@ -144,20 +149,16 @@ def setup_postgresql_test_database(settings):
     
     try:
         # Use new ConnectionFactory with test methods
-        analytics_engine = ConnectionFactory.get_analytics_test_connection(settings)
+        analytics_engine = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
         
         with analytics_engine.connect() as conn:
-            # Create all required schemas if they don't exist
-            schemas = ['public', 'public_staging', 'public_intermediate', 'public_marts', 'raw']
-            for schema in schemas:
-                conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-                logger.info(f"Ensured schema '{schema}' exists")
+            # Create only the raw schema if it doesn't exist
+            conn.execute(text("CREATE SCHEMA IF NOT EXISTS raw"))
+            logger.info("Ensured schema 'raw' exists")
             
-            # Drop existing tables if they exist
+            # Drop existing tables if they exist (only raw schema)
             conn.execute(text("DROP TABLE IF EXISTS raw.appointment CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS raw.patient CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS public.appointment CASCADE"))
-            conn.execute(text("DROP TABLE IF EXISTS public.patient CASCADE"))
             
             # Create sequences first (before tables that reference them)
             conn.execute(text("""
@@ -282,110 +283,8 @@ def setup_postgresql_test_database(settings):
                 )
             """))
             
-            # Create patient table in public schema with lowercase column names (as expected by raw_to_public transformer)
-            conn.execute(text(f"""
-                CREATE TABLE public.patient (
-                    patnum integer,
-                    lname character varying(255),
-                    fname character varying(255),
-                    middlei character varying(255),
-                    preferred character varying(255),
-                    patstatus smallint,
-                    gender character varying(10),
-                    position smallint,
-                    birthdate date,
-                    ssn character varying(20),
-                    address character varying(500),
-                    address2 character varying(500),
-                    city character varying(100),
-                    state character varying(50),
-                    zip character varying(20),
-                    hmphone character varying(50),
-                    wkphone character varying(50),
-                    wirelessphone character varying(50),
-                    guarantor bigint,
-                    credittype character varying(10),
-                    email character varying(255),
-                    salutation character varying(255),
-                    estbalance decimal(10,2),
-                    priprov bigint,
-                    secprov bigint,
-                    feesched bigint,
-                    billingtype bigint,
-                    imagefolder character varying(255),
-                    addrnote text,
-                    famfinurgnote text,
-                    medurgnote character varying(255),
-                    apptmodnote character varying(255),
-                    studentstatus character varying(10),
-                    schoolname character varying(255),
-                    chartnumber character varying(255),
-                    medicaidid character varying(20),
-                    bal_0_30 decimal(10,2),
-                    bal_31_60 decimal(10,2),
-                    bal_61_90 decimal(10,2),
-                    balover90 decimal(10,2),
-                    insest decimal(10,2),
-                    baltotal decimal(10,2),
-                    employernum bigint,
-                    employmentnote character varying(255),
-                    county character varying(255),
-                    gradelevel smallint,
-                    urgency smallint,
-                    datefirstvisit date,
-                    clinicnum bigint,
-                    hasins character varying(255),
-                    trophyfolder character varying(255),
-                    plannedisdone smallint,
-                    premed smallint,
-                    ward character varying(255),
-                    preferconfirmmethod smallint,
-                    prefercontactmethod smallint,
-                    preferrecallmethod smallint,
-                    schedbeforetime time without time zone,
-                    schedaftertime time without time zone,
-                    scheddayofweek smallint,
-                    language character varying(100),
-                    admitdate date,
-                    title character varying(15),
-                    payplandue decimal(10,2),
-                    sitenum bigint,
-                    datestamp timestamp without time zone,
-                    responsparty bigint,
-                    canadianeligibilitycode smallint,
-                    asktoarriveearly integer,
-                    prefercontactconfidential smallint,
-                    superfamily bigint,
-                    txtmsgok smallint,
-                    smokingsnomed character varying(32),
-                    country character varying(255),
-                    datetimedeceased timestamp without time zone,
-                    billingcycleday integer,
-                    secusernumentry bigint,
-                    secdateentry date,
-                    hassuperbilling smallint,
-                    patnumclonefrom bigint,
-                    discountplannum bigint,
-                    hassignedtil smallint,
-                    shortcodeoptin smallint,
-                    securityhash character varying(255)
-                )
-            """))
-            
-            # Create appointment table in public schema
-            conn.execute(text(f"""
-                CREATE TABLE public.appointment (
-                    aptnum integer,
-                    patnum integer,
-                    aptdatetime timestamp without time zone,
-                    aptstatus character varying(50),
-                    datestamp timestamp without time zone,
-                    notes text
-                )
-            """))
-            
             # Import standardized test data
-            from etl_pipeline.tests.fixtures.test_data_definitions import get_test_patient_data
+            from tests.fixtures.test_data_definitions import get_test_patient_data
             
             # Insert standardized test data
             # Clear any existing test data first
@@ -413,7 +312,6 @@ def setup_postgresql_test_database(settings):
             
             conn.commit()
             logger.info(f"Successfully created complete patient table in raw schema")
-            logger.info(f"Successfully created public schema tables")
         
         analytics_engine.dispose()
         
@@ -426,15 +324,34 @@ def setup_mysql_test_database(settings, database_type):
     """Set up MySQL test database using new ConnectionFactory."""
     if database_type == DatabaseType.REPLICATION:
         logger.info("Setting up MySQL test replication database...")
-        engine = ConnectionFactory.get_replication_test_connection(settings)
+        engine = ConnectionFactory.get_replication_connection(settings)
     elif database_type == DatabaseType.SOURCE:
         logger.info("Setting up MySQL test source database...")
-        engine = ConnectionFactory.get_source_test_connection(settings)
+        
+        # Debug: Check what settings is returning for source config
+        source_config = settings.get_database_config(DatabaseType.SOURCE)
+        logger.info(f"Settings source config: {source_config}")
+        logger.info(f"Settings source user: {source_config.get('user')}")
+        logger.info(f"Settings source host: {source_config.get('host')}")
+        logger.info(f"Settings source database: {source_config.get('database')}")
+        
+        # Use the non-deprecated method with settings
+        engine = ConnectionFactory.get_source_connection(settings)
+        
+        # Debug: Print connection info
+        logger.info(f"Source connection user: {os.environ.get('TEST_OPENDENTAL_SOURCE_USER')}")
+        logger.info(f"Source connection host: {os.environ.get('TEST_OPENDENTAL_SOURCE_HOST')}")
+        logger.info(f"Source connection database: {os.environ.get('TEST_OPENDENTAL_SOURCE_DB')}")
     else:
         raise ValueError(f"Unsupported database type: {database_type}")
     
     try:
         with engine.connect() as conn:
+            # Test the connection and show current user
+            result = conn.execute(text("SELECT USER(), DATABASE()"))
+            user_info = result.fetchone()
+            logger.info(f"Connected as user: {user_info[0]}, database: {user_info[1]}")
+            
             # Drop existing patient table if it exists, then create with complete schema
             conn.execute(text("DROP TABLE IF EXISTS patient"))
             
@@ -572,7 +489,7 @@ def setup_mysql_test_database(settings, database_type):
             conn.execute(text(create_appointment_sql))
             
             # Import standardized test data
-            from etl_pipeline.tests.fixtures.test_data_definitions import get_test_patient_data
+            from tests.fixtures.test_data_definitions import get_test_patient_data
             
             # Insert standardized test data
             # Clear any existing test data first
@@ -610,11 +527,11 @@ def setup_mysql_test_database(settings, database_type):
 
 def main():
     """Main function to set up all test databases."""
-    logger.info("🔒 Starting test database setup with safety checks...")
+    logger.info("Starting test database setup with safety checks...")
     
     # Set test environment explicitly
     os.environ['ETL_ENVIRONMENT'] = 'test'
-    logger.info("✅ Set ETL_ENVIRONMENT=test for test database setup")
+    logger.info("Set ETL_ENVIRONMENT=test for test database setup")
     
     # Load environment variables
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -639,13 +556,13 @@ def main():
     # Create test settings using new architecture
     try:
         settings = create_test_settings()
-        logger.info("✅ Created test settings using new architecture")
+        logger.info("Created test settings using new architecture")
     except Exception as e:
-        logger.error(f"❌ Failed to create test settings: {e}")
+        logger.error(f"Failed to create test settings: {e}")
         sys.exit(1)
     
     # Debug: Print relevant environment variables
-    logger.info("📋 Environment Configuration:")
+    logger.info("Environment Configuration:")
     logger.info(f"  TEST_POSTGRES_ANALYTICS_DB: {os.environ.get('TEST_POSTGRES_ANALYTICS_DB')}")
     logger.info(f"  TEST_POSTGRES_ANALYTICS_USER: {os.environ.get('TEST_POSTGRES_ANALYTICS_USER')}")
     logger.info(f"  TEST_POSTGRES_ANALYTICS_HOST: {os.environ.get('TEST_POSTGRES_ANALYTICS_HOST')}")
@@ -661,7 +578,7 @@ def main():
     logger.info(f"  TEST_OPENDENTAL_SOURCE_PORT: {os.environ.get('TEST_OPENDENTAL_SOURCE_PORT')}")
     
     try:
-        logger.info("🚀 Starting database setup...")
+        logger.info("Starting database setup...")
         
         # Set up MySQL test source database using new ConnectionFactory
         setup_mysql_test_database(settings, DatabaseType.SOURCE)
@@ -672,11 +589,11 @@ def main():
         # Set up MySQL test replication database using new ConnectionFactory
         setup_mysql_test_database(settings, DatabaseType.REPLICATION)
         
-        logger.info("✅ Test database setup completed successfully!")
-        logger.info("🎯 You can now run integration tests with: pytest -m integration")
+        logger.info("Test database setup completed successfully!")
+        logger.info("You can now run integration tests with: pytest -m integration")
         
     except Exception as e:
-        logger.error(f"❌ Test database setup failed: {e}")
+        logger.error(f"Test database setup failed: {e}")
         sys.exit(1)
 
 
