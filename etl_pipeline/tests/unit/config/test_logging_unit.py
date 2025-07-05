@@ -16,123 +16,111 @@ from etl_pipeline.config.logging import (
     ETLLogger
 )
 
+# Import fixtures from the new modular structure
+from tests.fixtures.logging_fixtures import (
+    mock_logger,
+    mock_logging_config,
+    mock_sql_logging_config,
+    mock_logging_handlers,
+    mock_logging_formatters,
+    mock_os_operations,
+    sample_log_messages,
+    mock_logging_environment,
+    mock_logging_get_logger,
+    mock_logging_basic_config,
+    mock_logging_setup,
+    mock_sql_loggers,
+    mock_etl_logger,
+    sample_log_records,
+    mock_logging_context
+)
+
 
 @pytest.mark.unit
 class TestSetupLoggingUnit:
     """Unit tests for logging setup functionality."""
 
-    def test_setup_logging_basic_configuration(self):
+    def test_setup_logging_basic_configuration(self, mock_logging_setup):
         """Test basic logging configuration with mocks."""
-        with patch('logging.getLogger') as mock_get_logger, \
-             patch('logging.StreamHandler') as mock_stream_handler, \
-             patch('logging.FileHandler') as mock_file_handler, \
-             patch('os.makedirs') as mock_makedirs:
-            
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            mock_stream_handler.return_value = MagicMock()
-            mock_file_handler.return_value = MagicMock()
-            
-            setup_logging(log_level="INFO", log_file="test.log", log_dir="logs", format_type="detailed")
-            
-            # Verify logger configuration
-            mock_logger.setLevel.assert_called_with(logging.INFO)
-            mock_logger.addHandler.assert_called()
-            mock_makedirs.assert_called_once_with("logs", exist_ok=True)
+        mocks = mock_logging_setup
+        
+        setup_logging(log_level="INFO", log_file="test.log", log_dir="logs", format_type="detailed")
+        
+        # Verify logger configuration
+        mocks['logger'].setLevel.assert_called_with(logging.INFO)
+        mocks['logger'].addHandler.assert_called()
+        mocks['makedirs'].assert_called_once_with("logs", exist_ok=True)
 
-    def test_setup_logging_without_file_handler(self):
+    def test_setup_logging_without_file_handler(self, mock_logging_setup):
         """Test setup_logging when no log file is specified."""
-        with patch('logging.getLogger') as mock_get_logger, \
-             patch('logging.StreamHandler') as mock_stream_handler, \
-             patch('logging.FileHandler') as mock_file_handler:
-            
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            mock_stream_handler.return_value = MagicMock()
-            
-            setup_logging(log_level="DEBUG", format_type="simple")
-            
-            # Should only add console handler, not file handler
-            mock_logger.setLevel.assert_called_with(logging.DEBUG)
-            mock_file_handler.assert_not_called()
+        mocks = mock_logging_setup
+        
+        setup_logging(log_level="DEBUG", format_type="simple")
+        
+        # Should only add console handler, not file handler
+        mocks['logger'].setLevel.assert_called_with(logging.DEBUG)
+        mocks['file_handler_class'].assert_not_called()
 
-    def test_setup_logging_format_types(self):
+    def test_setup_logging_format_types(self, mock_logging_setup):
         """Test different format types for logging."""
-        with patch('logging.getLogger') as mock_get_logger, \
-             patch('logging.StreamHandler') as mock_stream_handler:
-            
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            mock_stream_handler.return_value = MagicMock()
-            
-            # Test simple format
-            setup_logging(format_type="simple")
-            mock_logger.addHandler.assert_called()
-            
-            # Test json format
-            mock_logger.reset_mock()
-            setup_logging(format_type="json")
-            mock_logger.addHandler.assert_called()
-            
-            # Test invalid format (should default to detailed)
-            mock_logger.reset_mock()
-            setup_logging(format_type="invalid")
-            mock_logger.addHandler.assert_called()
+        mocks = mock_logging_setup
+        
+        # Test simple format
+        setup_logging(format_type="simple")
+        mocks['logger'].addHandler.assert_called()
+        
+        # Test json format
+        mocks['logger'].reset_mock()
+        setup_logging(format_type="json")
+        mocks['logger'].addHandler.assert_called()
+        
+        # Test invalid format (should default to detailed)
+        mocks['logger'].reset_mock()
+        setup_logging(format_type="invalid")
+        mocks['logger'].addHandler.assert_called()
 
-    def test_setup_logging_log_levels(self):
+    def test_setup_logging_log_levels(self, mock_logging_setup):
         """Test different log levels."""
-        with patch('logging.getLogger') as mock_get_logger, \
-             patch('logging.StreamHandler') as mock_stream_handler:
-            
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            mock_stream_handler.return_value = MagicMock()
-            
-            # Test different log levels
-            for level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-                mock_logger.reset_mock()
-                setup_logging(log_level=level)
-                mock_logger.setLevel.assert_called_with(getattr(logging, level))
+        mocks = mock_logging_setup
+        
+        # Test different log levels
+        for level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+            mocks['logger'].reset_mock()
+            setup_logging(log_level=level)
+            mocks['logger'].setLevel.assert_called_with(getattr(logging, level))
 
 
 @pytest.mark.unit
 class TestSQLLoggingUnit:
     """Unit tests for SQL logging configuration."""
 
-    def test_configure_sql_logging_enabled(self):
+    def test_configure_sql_logging_enabled(self, mock_sql_loggers):
         """Test SQL logging configuration when enabled."""
-        with patch('logging.getLogger') as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            
-            configure_sql_logging(enabled=True, level="DEBUG")
-            
-            # Should be called 4 times (one for each SQL logger)
-            assert mock_logger.setLevel.call_count == 4
+        configure_sql_logging(enabled=True, level="DEBUG")
+        
+        # Should be called 4 times (one for each SQL logger)
+        for logger_name, mock_logger in mock_sql_loggers.items():
             mock_logger.setLevel.assert_called_with(logging.DEBUG)
 
-    def test_configure_sql_logging_disabled(self):
+    def test_configure_sql_logging_disabled(self, mock_sql_loggers):
         """Test SQL logging configuration when disabled."""
-        with patch('logging.getLogger') as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            
-            configure_sql_logging(enabled=False)
-            
-            # Should be called 4 times with WARNING level
-            assert mock_logger.setLevel.call_count == 4
+        configure_sql_logging(enabled=False)
+        
+        # Should be called 4 times with WARNING level
+        for logger_name, mock_logger in mock_sql_loggers.items():
             mock_logger.setLevel.assert_called_with(logging.WARNING)
 
-    def test_configure_sql_logging_different_levels(self):
+    def test_configure_sql_logging_different_levels(self, mock_sql_loggers):
         """Test SQL logging with different levels."""
-        with patch('logging.getLogger') as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            
-            # Test different levels
-            for level in ["DEBUG", "INFO", "WARNING", "ERROR"]:
+        # Test different levels
+        for level in ["DEBUG", "INFO", "WARNING", "ERROR"]:
+            # Reset all loggers
+            for mock_logger in mock_sql_loggers.values():
                 mock_logger.reset_mock()
-                configure_sql_logging(enabled=True, level=level)
+            
+            configure_sql_logging(enabled=True, level=level)
+            
+            for logger_name, mock_logger in mock_sql_loggers.items():
                 mock_logger.setLevel.assert_called_with(getattr(logging, level))
 
 
@@ -142,18 +130,21 @@ class TestGetLoggerUnit:
 
     def test_get_logger_default_name(self):
         """Test get_logger with default name."""
+        # Don't mock this test - it should test the actual functionality
         logger = get_logger()
         assert isinstance(logger, logging.Logger)
         assert logger.name == "etl_pipeline"
 
     def test_get_logger_custom_name(self):
         """Test get_logger with custom name."""
+        # Don't mock this test - it should test the actual functionality
         logger = get_logger("test_module")
         assert isinstance(logger, logging.Logger)
         assert logger.name == "test_module"
 
     def test_get_logger_multiple_calls(self):
         """Test that multiple calls return the same logger instance."""
+        # Don't mock this test - it should test the actual functionality
         logger1 = get_logger("test_module")
         logger2 = get_logger("test_module")
         assert logger1 is logger2  # Same instance
@@ -162,14 +153,6 @@ class TestGetLoggerUnit:
 @pytest.mark.unit
 class TestETLLoggerUnit:
     """Unit tests for ETLLogger class."""
-
-    @pytest.fixture
-    def mock_logger(self):
-        """Mock logger for testing."""
-        with patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
-            mock_logger = MagicMock()
-            mock_get_logger.return_value = mock_logger
-            yield mock_logger
 
     def test_etl_logger_initialization_default(self, mock_logger):
         """Test ETLLogger initialization with default parameters."""
@@ -298,14 +281,43 @@ class TestETLLoggerUnit:
         etl_logger.log_performance("slow_operation", 3600.0, 1000000)
         mock_logger.info.assert_called_with("[PERF] slow_operation completed in 3600.00s | 1000000 records | 278 records/sec")
 
+    def test_etl_logger_with_sample_messages(self, mock_logger, sample_log_messages):
+        """Test ETL logger with sample log messages."""
+        etl_logger = ETLLogger()
+        
+        # Test with sample messages
+        etl_logger.info(sample_log_messages['info'])
+        etl_logger.debug(sample_log_messages['debug'])
+        etl_logger.warning(sample_log_messages['warning'])
+        etl_logger.error(sample_log_messages['error'])
+        etl_logger.critical(sample_log_messages['critical'])
+        
+        # Verify calls
+        mock_logger.info.assert_called_with(sample_log_messages['info'])
+        mock_logger.debug.assert_called_with(sample_log_messages['debug'])
+        mock_logger.warning.assert_called_with(sample_log_messages['warning'])
+        mock_logger.error.assert_called_with(sample_log_messages['error'])
+        mock_logger.critical.assert_called_with(sample_log_messages['critical'])
+
+    def test_etl_logger_sql_query_with_sample_data(self, mock_logger, sample_log_messages):
+        """Test ETL logger SQL query logging with sample data."""
+        etl_logger = ETLLogger()
+        etl_logger.log_sql_query(sample_log_messages['sql_query'], sample_log_messages['sql_params'])
+        
+        mock_logger.debug.assert_called_once()
+        call_args = mock_logger.debug.call_args[0]
+        assert sample_log_messages['sql_query'] in call_args[0]
+        assert 'id' in call_args[0]
+        assert '123' in call_args[0]
+
 
 @pytest.mark.unit
 class TestInitDefaultLoggerUnit:
     """Unit tests for default logger initialization."""
 
-    def test_init_default_logger_success(self):
+    def test_init_default_logger_success(self, mock_logging_environment):
         """Test successful default logger initialization."""
-        with patch('os.getenv', side_effect=lambda key, default: "logs" if key == "ETL_LOG_PATH" else "INFO"), \
+        with patch('os.getenv', side_effect=lambda key, default: mock_logging_environment.get(key, default)), \
              patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
             
             init_default_logger()
@@ -317,9 +329,27 @@ class TestInitDefaultLoggerUnit:
                 format_type="detailed"
             )
 
+    def test_init_default_logger_with_context_manager(self, mock_logging_context):
+        """Test default logger initialization using context manager fixture."""
+        with mock_logging_context as mocks:
+            # Mock the setup_logging function
+            with patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
+                init_default_logger()
+                
+                # Verify that setup_logging was called
+                mock_setup_logging.assert_called_once()
+                
+                # Verify that the logger was created
+                assert mocks['logger'] is not None
+
     def test_init_default_logger_with_custom_env_vars(self):
         """Test default logger initialization with custom environment variables."""
-        with patch('os.getenv', side_effect=lambda key, default: "custom_logs" if key == "ETL_LOG_PATH" else "DEBUG"), \
+        custom_env = {
+            'ETL_LOG_LEVEL': 'DEBUG',
+            'ETL_LOG_PATH': 'custom_logs',
+            'ETL_LOG_FORMAT': 'detailed'
+        }
+        with patch('os.getenv', side_effect=lambda key, default: custom_env.get(key, default)), \
              patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
             
             init_default_logger()
@@ -331,17 +361,16 @@ class TestInitDefaultLoggerUnit:
                 format_type="detailed"
             )
 
-    def test_init_default_logger_exception_handling(self):
+    def test_init_default_logger_exception_handling(self, mock_logging_environment, mock_logging_basic_config):
         """Test default logger initialization when setup fails."""
-        with patch('os.getenv', side_effect=lambda key, default: "logs" if key == "ETL_LOG_PATH" else "INFO"), \
+        with patch('os.getenv', side_effect=lambda key, default: mock_logging_environment.get(key, default)), \
              patch('etl_pipeline.config.logging.setup_logging', side_effect=Exception("Test error")), \
-             patch('logging.basicConfig') as mock_basic_config, \
              patch('builtins.print') as mock_print:
             
             init_default_logger()
             
             # Should fall back to basic config
-            mock_basic_config.assert_called_once()
+            mock_logging_basic_config.assert_called_once()
             mock_print.assert_called_once()
             assert "Warning: Could not set up advanced logging" in mock_print.call_args[0][0]
 
@@ -349,7 +378,7 @@ class TestInitDefaultLoggerUnit:
         """Test environment variable handling in init_default_logger."""
         # Test with None values (should use defaults)
         # os.getenv returns the default value when key doesn't exist
-        with patch('os.getenv', side_effect=lambda key, default=None: default), \
+        with patch('os.getenv', side_effect=lambda key, default: default), \
              patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
             
             init_default_logger()
