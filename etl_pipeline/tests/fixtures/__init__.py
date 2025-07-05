@@ -15,6 +15,7 @@ This package contains modular test fixtures organized by responsibility:
 - mock_utils: Common mock utilities
 - priority_processor_fixtures: Priority processing fixtures
 - logging_fixtures: Logging and logger fixtures
+- schema_discovery_fixtures: Schema discovery and database schema testing fixtures
 """
 
 __version__ = "1.0.0" 
