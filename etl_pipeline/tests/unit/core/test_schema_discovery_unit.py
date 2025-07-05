@@ -747,3 +747,919 @@ def test_analyze_complete_schema(mock_database_engines, test_settings):
             assert 'importance_scores' in analysis
             assert 'summary_statistics' in analysis
             assert analysis['tables'] == ['patient', 'appointment'] 
+
+
+@pytest.mark.unit
+def test_dbt_model_discovery_with_project_root(mock_database_engines, test_settings):
+    """Test DBT model discovery when dbt project root is provided."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch('etl_pipeline.core.schema_discovery.os.path.join') as mock_join, \
+         patch('etl_pipeline.core.schema_discovery.glob.glob') as mock_glob, \
+         patch('etl_pipeline.core.schema_discovery.os.path.basename') as mock_basename:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental',
+            dbt_project_root='/path/to/dbt'
+        )
+        
+        # Mock file discovery
+        mock_join.side_effect = lambda *args: '/'.join(args)
+        mock_glob.return_value = [
+            '/path/to/dbt/models/staging/opendental/stg_opendental__patient.sql',
+            '/path/to/dbt/models/staging/opendental/stg_opendental__appointment.sql'
+        ]
+        mock_basename.side_effect = lambda x: x.split('/')[-1]
+        
+        modeled_tables = schema_discovery._discover_dbt_models()
+        
+        assert 'patient' in modeled_tables
+        assert 'appointment' in modeled_tables
+        assert modeled_tables['patient'] == ['staging']
+        assert modeled_tables['appointment'] == ['staging']
+
+
+@pytest.mark.unit
+def test_dbt_model_discovery_without_project_root(mock_database_engines, test_settings):
+    """Test DBT model discovery when no dbt project root is provided."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        modeled_tables = schema_discovery._discover_dbt_models()
+        
+        assert modeled_tables == {}
+
+
+@pytest.mark.unit
+def test_dbt_model_discovery_exception_handling(mock_database_engines, test_settings):
+    """Test DBT model discovery when exceptions occur."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch('etl_pipeline.core.schema_discovery.os.path.join', side_effect=Exception("Test error")):
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental',
+            dbt_project_root='/path/to/dbt'
+        )
+        
+        modeled_tables = schema_discovery._discover_dbt_models()
+        
+        assert modeled_tables == {}
+
+
+@pytest.mark.unit
+def test_is_table_modeled_by_dbt(mock_database_engines, test_settings):
+    """Test checking if a table is modeled by DBT."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental',
+            dbt_project_root='/path/to/dbt'
+        )
+        
+        # Mock the _discover_dbt_models method
+        schema_discovery._modeled_tables_cache = {
+            'patient': ['staging'],
+            'appointment': ['staging', 'mart']
+        }
+        
+        assert schema_discovery.is_table_modeled_by_dbt('patient') is True
+        assert schema_discovery.is_table_modeled_by_dbt('appointment') is True
+        assert schema_discovery.is_table_modeled_by_dbt('non_existent') is False
+
+
+@pytest.mark.unit
+def test_get_dbt_model_types(mock_database_engines, test_settings):
+    """Test getting DBT model types for a table."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental',
+            dbt_project_root='/path/to/dbt'
+        )
+        
+        # Mock the _discover_dbt_models method
+        schema_discovery._modeled_tables_cache = {
+            'patient': ['staging'],
+            'appointment': ['staging', 'mart']
+        }
+        
+        assert schema_discovery.get_dbt_model_types('patient') == ['staging']
+        assert schema_discovery.get_dbt_model_types('appointment') == ['staging', 'mart']
+        assert schema_discovery.get_dbt_model_types('non_existent') == []
+
+
+@pytest.mark.unit
+def test_generate_complete_configuration_success(mock_database_engines, test_settings):
+    """Test successful complete configuration generation."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, 'analyze_complete_schema') as mock_analyze, \
+         patch.object(SchemaDiscovery, 'get_table_schema') as mock_get_schema, \
+         patch.object(SchemaDiscovery, '_save_complete_configuration') as mock_save:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock analysis results
+        mock_analyze.return_value = {
+            'tables': ['patient', 'appointment'],
+            'pipeline_configs': {
+                'patient': {'batch_size': 1000},
+                'appointment': {'batch_size': 2000}
+            },
+            'metadata': {'timestamp': '2024-01-01', 'analysis_version': '1.0'}
+        }
+        
+        # Mock schema info
+        mock_get_schema.return_value = {'schema_hash': 'abc123'}
+        
+        config = schema_discovery.generate_complete_configuration()
+        
+        assert 'tables' in config
+        assert 'patient' in config['tables']
+        assert 'appointment' in config['tables']
+        assert config['tables']['patient']['batch_size'] == 1000
+        assert config['tables']['patient']['schema_hash'] == 'abc123'
+
+
+@pytest.mark.unit
+def test_generate_complete_configuration_with_output_dir(mock_database_engines, test_settings):
+    """Test complete configuration generation with output directory."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, 'analyze_complete_schema') as mock_analyze, \
+         patch.object(SchemaDiscovery, 'get_table_schema') as mock_get_schema, \
+         patch.object(SchemaDiscovery, '_save_complete_configuration') as mock_save:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock analysis results
+        mock_analyze.return_value = {
+            'tables': ['patient'],
+            'pipeline_configs': {'patient': {'batch_size': 1000}},
+            'metadata': {'timestamp': '2024-01-01', 'analysis_version': '1.0'}
+        }
+        
+        mock_get_schema.return_value = {'schema_hash': 'abc123'}
+        
+        config = schema_discovery.generate_complete_configuration('/tmp/output')
+        
+        mock_save.assert_called_once()
+        assert 'tables' in config
+
+
+@pytest.mark.unit
+def test_generate_complete_configuration_exception(mock_database_engines, test_settings):
+    """Test complete configuration generation with exception."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, 'analyze_complete_schema', side_effect=Exception("Test error")):
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        with pytest.raises(Exception, match="Configuration generation failed"):
+            schema_discovery.generate_complete_configuration()
+
+
+@pytest.mark.unit
+def test_filter_excluded_tables(mock_database_engines, test_settings):
+    """Test filtering of excluded tables."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        tables = ['patient', 'temp_backup', 'tmp_old', 'appointment', 'data_backup']
+        filtered = schema_discovery._filter_excluded_tables(tables)
+        
+        assert 'patient' in filtered
+        assert 'appointment' in filtered
+        assert 'temp_backup' not in filtered
+        assert 'tmp_old' not in filtered
+        # Note: 'data_backup' is not excluded by the current regex pattern
+        # The pattern is r'_backup$' which only matches tables ending with _backup
+        # 'data_backup' would be excluded, but 'backup_data' would not be
+
+
+@pytest.mark.unit
+def test_get_best_incremental_column(mock_database_engines, test_settings):
+    """Test getting the best incremental column."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Test with timestamp columns
+        timestamp_cols = [
+            {'column_name': 'created_at', 'data_type': 'timestamp'},
+            {'column_name': 'updated_at', 'data_type': 'datetime'}
+        ]
+        best = schema_discovery._get_best_incremental_column(timestamp_cols)
+        assert best == 'created_at'
+        
+        # Test with non-timestamp columns
+        regular_cols = [
+            {'column_name': 'id', 'data_type': 'int'},
+            {'column_name': 'name', 'data_type': 'varchar'}
+        ]
+        best = schema_discovery._get_best_incremental_column(regular_cols)
+        assert best == 'id'
+        
+        # Test with empty list
+        best = schema_discovery._get_best_incremental_column([])
+        assert best is None
+
+
+@pytest.mark.unit
+def test_determine_update_frequency(mock_database_engines, test_settings):
+    """Test determining update frequency based on table characteristics."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        schema_info = {'columns': []}
+        size_info = {'row_count': 1000}
+        
+        # Test high frequency tables
+        assert schema_discovery._determine_update_frequency('audit_log', schema_info, size_info) == 'high'
+        assert schema_discovery._determine_update_frequency('event_history', schema_info, size_info) == 'high'
+        
+        # Test medium frequency tables
+        assert schema_discovery._determine_update_frequency('patient', schema_info, size_info) == 'medium'
+        assert schema_discovery._determine_update_frequency('appointment', schema_info, size_info) == 'medium'
+        
+        # Test low frequency tables
+        assert schema_discovery._determine_update_frequency('definition', schema_info, size_info) == 'low'
+
+
+@pytest.mark.unit
+def test_determine_table_type(mock_database_engines, test_settings):
+    """Test determining table type based on characteristics."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        schema_info = {'columns': []}
+        
+        # Test audit tables
+        size_info = {'row_count': 10000}
+        assert schema_discovery._determine_table_type('audit_log', schema_info, size_info) == 'audit'
+        assert schema_discovery._determine_table_type('event_history', schema_info, size_info) == 'audit'
+        
+        # Test transaction tables
+        assert schema_discovery._determine_table_type('patient', schema_info, size_info) == 'transaction'
+        assert schema_discovery._determine_table_type('appointment', schema_info, size_info) == 'transaction'
+        
+        # Test lookup tables (small row count)
+        size_info = {'row_count': 500}
+        assert schema_discovery._determine_table_type('definition', schema_info, size_info) == 'lookup'
+        
+        # Test master tables (large row count)
+        size_info = {'row_count': 50000}
+        assert schema_discovery._determine_table_type('definition', schema_info, size_info) == 'master'
+
+
+@pytest.mark.unit
+def test_get_recommended_batch_size(mock_database_engines, test_settings):
+    """Test getting recommended batch size based on table characteristics."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Test small tables
+        usage_metrics = {'size_mb': 0.5, 'update_frequency': 'low'}
+        assert schema_discovery._get_recommended_batch_size(usage_metrics) == 5000
+        
+        # Test medium tables with high frequency
+        usage_metrics = {'size_mb': 50, 'update_frequency': 'high'}
+        assert schema_discovery._get_recommended_batch_size(usage_metrics) == 2000
+        
+        # Test medium tables with low frequency
+        usage_metrics = {'size_mb': 50, 'update_frequency': 'low'}
+        assert schema_discovery._get_recommended_batch_size(usage_metrics) == 3000
+        
+        # Test large tables with high frequency
+        usage_metrics = {'size_mb': 500, 'update_frequency': 'high'}
+        assert schema_discovery._get_recommended_batch_size(usage_metrics) == 1000
+        
+        # Test very large tables
+        usage_metrics = {'size_mb': 2000, 'update_frequency': 'low'}
+        assert schema_discovery._get_recommended_batch_size(usage_metrics) == 1000
+
+
+@pytest.mark.unit
+def test_get_extraction_strategy(mock_database_engines, test_settings):
+    """Test getting extraction strategy based on usage metrics and importance."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Test small tables (< 1MB)
+        usage_metrics = {'size_mb': 0.5, 'update_frequency': 'high'}
+        assert schema_discovery._get_extraction_strategy(usage_metrics, 'critical') == 'full_table'
+        
+        # Test medium tables (1-100MB)
+        usage_metrics = {'size_mb': 50, 'update_frequency': 'high'}
+        assert schema_discovery._get_extraction_strategy(usage_metrics, 'critical') == 'incremental'
+        
+        # Test large tables (100-1000MB) with high frequency
+        usage_metrics = {'size_mb': 500, 'update_frequency': 'high'}
+        assert schema_discovery._get_extraction_strategy(usage_metrics, 'critical') == 'chunked_incremental'
+        
+        # Test large tables (100-1000MB) with low frequency
+        usage_metrics = {'size_mb': 500, 'update_frequency': 'low'}
+        assert schema_discovery._get_extraction_strategy(usage_metrics, 'critical') == 'incremental'
+        
+        # Test very large tables (> 1000MB)
+        usage_metrics = {'size_mb': 1500, 'update_frequency': 'high'}
+        assert schema_discovery._get_extraction_strategy(usage_metrics, 'critical') == 'streaming_incremental'
+
+
+@pytest.mark.unit
+def test_get_column_overrides(mock_database_engines, test_settings):
+    """Test getting column overrides from schema info."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        schema_info = {
+            'columns': [
+                {'name': 'id', 'type': 'int', 'is_nullable': False},
+                {'name': 'is_active', 'type': 'tinyint(1)', 'is_nullable': False},
+                {'name': 'amount', 'type': 'decimal(10,2)', 'is_nullable': True},
+                {'name': 'created_at', 'type': 'timestamp', 'is_nullable': False}
+            ]
+        }
+        
+        overrides = schema_discovery._get_column_overrides(schema_info)
+        
+        # Check that boolean and decimal columns have overrides
+        assert 'is_active' in overrides
+        assert 'amount' in overrides
+        assert overrides['is_active']['conversion_rule'] == 'tinyint_to_boolean'
+        assert overrides['amount']['conversion_rule'] == 'decimal_round'
+        assert overrides['amount']['precision'] == 2
+        
+        # Regular columns should not have overrides
+        assert 'id' not in overrides
+        assert 'created_at' not in overrides
+
+
+@pytest.mark.unit
+def test_get_monitoring_config(mock_database_engines, test_settings):
+    """Test getting monitoring configuration."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        size_info = {'row_count': 10000, 'total_size_mb': 100}
+        
+        # Test critical tables
+        config = schema_discovery._get_monitoring_config('critical', size_info)
+        assert config['alert_on_failure'] is True
+        assert config['data_quality_threshold'] == 0.99
+        assert config['max_extraction_time_minutes'] == 10  # 100/10
+        
+        # Test important tables
+        config = schema_discovery._get_monitoring_config('important', size_info)
+        assert config['alert_on_failure'] is True
+        assert config['data_quality_threshold'] == 0.95
+        
+        # Test standard tables
+        config = schema_discovery._get_monitoring_config('standard', size_info)
+        assert config['alert_on_failure'] is False
+        assert config['data_quality_threshold'] == 0.95
+        
+        # Test low priority tables
+        config = schema_discovery._get_monitoring_config('low', size_info)
+        assert config['alert_on_failure'] is False
+
+
+@pytest.mark.unit
+def test_get_default_pipeline_configuration(mock_database_engines, test_settings):
+    """Test getting default pipeline configuration."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        config = schema_discovery._get_default_pipeline_configuration('test_table')
+        
+        assert config['incremental_column'] is None
+        assert config['batch_size'] == 5000
+        assert config['extraction_strategy'] == 'full_table'
+        assert config['table_importance'] == 'standard'
+        assert config['estimated_size_mb'] == 0
+        assert config['estimated_rows'] == 0
+        assert config['dependencies'] == []
+        assert config['is_modeled'] is False
+        assert config['dbt_model_types'] == []
+        assert 'monitoring' in config
+
+
+@pytest.mark.unit
+def test_analyze_table_relationships(mock_database_engines, test_settings):
+    """Test analyzing table relationships."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, '_get_table_schema_with_conn') as mock_get_schema:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock connection manager
+        mock_conn_mgr = Mock()
+        mock_conn = Mock()
+        mock_conn_mgr.__enter__ = Mock(return_value=mock_conn_mgr)
+        mock_conn_mgr.__exit__ = Mock(return_value=None)
+        mock_conn_mgr.get_connection.return_value = mock_conn
+        schema_discovery.connection_manager = mock_conn_mgr
+        
+        # Mock schema data
+        mock_get_schema.side_effect = [
+            {
+                'foreign_keys': [
+                    {'column': 'patient_id', 'referenced_table': 'patient', 'referenced_column': 'id'}
+                ],
+                'columns': []
+            },
+            {
+                'foreign_keys': [],
+                'columns': []
+            }
+        ]
+        
+        relationships = schema_discovery.analyze_table_relationships(['appointment', 'patient'])
+        
+        assert 'appointment' in relationships
+        assert 'patient' in relationships
+        assert relationships['appointment']['dependency_count'] == 1
+        assert relationships['patient']['dependency_count'] == 0
+
+
+@pytest.mark.unit
+def test_analyze_table_usage_patterns(mock_database_engines, test_settings):
+    """Test analyzing table usage patterns."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, '_get_table_schema_with_conn') as mock_get_schema, \
+         patch.object(SchemaDiscovery, '_get_table_size_info_with_conn') as mock_get_size:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock connection manager
+        mock_conn_mgr = Mock()
+        mock_conn = Mock()
+        mock_conn_mgr.__enter__ = Mock(return_value=mock_conn_mgr)
+        mock_conn_mgr.__exit__ = Mock(return_value=None)
+        mock_conn_mgr.get_connection.return_value = mock_conn
+        schema_discovery.connection_manager = mock_conn_mgr
+        
+        # Mock schema and size data
+        mock_get_schema.return_value = {
+            'columns': [{'name': 'id', 'type': 'int'}],
+            'indexes': [{'name': 'PRIMARY', 'columns': ['id']}]
+        }
+        mock_get_size.return_value = {
+            'row_count': 1000,
+            'total_size_mb': 50
+        }
+        
+        patterns = schema_discovery.analyze_table_usage_patterns(['patient'])
+        
+        assert 'patient' in patterns
+        assert patterns['patient']['row_count'] == 1000
+        assert patterns['patient']['size_mb'] == 50
+        assert patterns['patient']['column_count'] == 1
+
+
+@pytest.mark.unit
+def test_determine_table_importance(mock_database_engines, test_settings):
+    """Test determining table importance."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, '_get_table_schema_with_conn') as mock_get_schema, \
+         patch.object(SchemaDiscovery, '_get_table_size_info_with_conn') as mock_get_size:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock connection manager
+        mock_conn_mgr = Mock()
+        mock_conn = Mock()
+        mock_conn_mgr.__enter__ = Mock(return_value=mock_conn_mgr)
+        mock_conn_mgr.__exit__ = Mock(return_value=None)
+        mock_conn_mgr.get_connection.return_value = mock_conn
+        schema_discovery.connection_manager = mock_conn_mgr
+        
+        # Mock schema and size data
+        mock_get_schema.return_value = {
+            'columns': [{'name': 'id', 'type': 'int'}],
+            'foreign_keys': []
+        }
+        mock_get_size.return_value = {
+            'row_count': 10000,
+            'total_size_mb': 100
+        }
+        
+        importance = schema_discovery.determine_table_importance(['patient'])
+        
+        assert 'patient' in importance
+        assert importance['patient'] in ['critical', 'important', 'standard', 'low']
+
+
+@pytest.mark.unit
+def test_replicate_schema_success(mock_database_engines, test_settings):
+    """Test successful schema replication."""
+    source_engine = mock_database_engines['source']
+    target_engine = mock_database_engines['analytics']  # Use 'analytics' instead of 'target'
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, 'get_table_schema') as mock_get_schema:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock schema data
+        mock_get_schema.return_value = {
+            'create_statement': 'CREATE TABLE patient (id INT PRIMARY KEY, name VARCHAR(255))'
+        }
+        
+        # Mock target engine connection
+        mock_conn = Mock()
+        mock_conn.execute.return_value = Mock()
+        target_engine.begin.return_value.__enter__.return_value = mock_conn
+        target_engine.begin.return_value.__exit__.return_value = None
+        
+        result = schema_discovery.replicate_schema(
+            source_table='patient',
+            target_engine=target_engine,
+            target_db='analytics',
+            target_table='patient_raw'
+        )
+        
+        assert result is True
+
+
+@pytest.mark.unit
+def test_replicate_schema_failure(mock_database_engines, test_settings):
+    """Test schema replication failure."""
+    source_engine = mock_database_engines['source']
+    target_engine = mock_database_engines['analytics']  # Use 'analytics' instead of 'target'
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, 'get_table_schema', side_effect=Exception("Schema error")):
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        result = schema_discovery.replicate_schema(
+            source_table='patient',
+            target_engine=target_engine,
+            target_db='analytics'
+        )
+        
+        assert result is False
+
+
+@pytest.mark.unit
+def test_get_table_schema_with_conn_success(mock_database_engines, test_settings):
+    """Test getting table schema with provided connection."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
+         patch.object(SchemaDiscovery, '_get_table_metadata_with_conn') as mock_metadata, \
+         patch.object(SchemaDiscovery, '_get_table_indexes_with_conn') as mock_indexes, \
+         patch.object(SchemaDiscovery, '_get_foreign_keys_with_conn') as mock_fks, \
+         patch.object(SchemaDiscovery, '_get_detailed_columns_with_conn') as mock_columns, \
+         patch.object(SchemaDiscovery, '_calculate_schema_hash') as mock_hash:
+        
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock connection and result
+        mock_conn = Mock()
+        mock_result = Mock()
+        mock_row = Mock()
+        mock_row.__getitem__ = lambda self, key: 'CREATE TABLE definition...' if key == 1 else 'definition'
+        mock_result.fetchone.return_value = mock_row
+        mock_conn.execute.return_value = mock_result
+        
+        # Mock private methods
+        mock_metadata.return_value = {'engine': 'InnoDB'}
+        mock_indexes.return_value = [{'name': 'PRIMARY', 'columns': ['id']}]
+        mock_fks.return_value = []
+        mock_columns.return_value = [{'name': 'id', 'type': 'int'}]
+        mock_hash.return_value = 'abc123'
+        
+        schema = schema_discovery._get_table_schema_with_conn(mock_conn, 'test_table')
+        
+        assert schema['table_name'] == 'test_table'
+        assert schema['schema_hash'] == 'abc123'
+
+
+@pytest.mark.unit
+def test_get_table_schema_with_conn_table_not_found(mock_database_engines, test_settings):
+    """Test getting table schema when table doesn't exist."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock connection that returns no results
+        mock_conn = Mock()
+        mock_result = Mock()
+        mock_result.fetchone.return_value = None
+        mock_conn.execute.return_value = mock_result
+        
+        with pytest.raises(Exception, match="Table non_existent not found"):
+            schema_discovery._get_table_schema_with_conn(mock_conn, 'non_existent')
+
+
+@pytest.mark.unit
+def test_get_table_schema_with_conn_exception_handling(mock_database_engines, test_settings):
+    """Test exception handling in get_table_schema_with_conn."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Mock connection that raises an exception
+        mock_conn = Mock()
+        mock_conn.execute.side_effect = Exception("Database error")
+        
+        with pytest.raises(Exception, match="Schema analysis failed"):
+            schema_discovery._get_table_schema_with_conn(mock_conn, 'test_table')
+
+
+@pytest.mark.unit
+def test_clear_cache_specific_type(mock_database_engines, test_settings):
+    """Test clearing specific cache types."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Populate caches
+        schema_discovery._schema_cache = {'table1': 'data1'}
+        schema_discovery._config_cache = {'table1': 'config1'}
+        schema_discovery._analysis_cache = {'analysis1': 'data1'}
+        
+        # Clear only schema cache
+        schema_discovery.clear_cache('schema')
+        assert schema_discovery._schema_cache == {}
+        assert schema_discovery._config_cache == {'table1': 'config1'}
+        assert schema_discovery._analysis_cache == {'analysis1': 'data1'}
+        
+        # Clear only config cache
+        schema_discovery.clear_cache('config')
+        assert schema_discovery._schema_cache == {}
+        assert schema_discovery._config_cache == {}
+        assert schema_discovery._analysis_cache == {'analysis1': 'data1'}
+        
+        # Clear only analysis cache
+        schema_discovery.clear_cache('analysis')
+        assert schema_discovery._schema_cache == {}
+        assert schema_discovery._config_cache == {}
+        assert schema_discovery._analysis_cache == {}
+
+
+@pytest.mark.unit
+def test_clear_cache_all(mock_database_engines, test_settings):
+    """Test clearing all caches."""
+    source_engine = mock_database_engines['source']
+    
+    # Mock the inspect function
+    mock_source_inspector = Mock()
+    
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
+        mock_inspect.return_value = mock_source_inspector
+        
+        schema_discovery = SchemaDiscovery(
+            source_engine=source_engine,
+            source_db='opendental'
+        )
+        
+        # Populate caches
+        schema_discovery._schema_cache = {'table1': 'data1'}
+        schema_discovery._config_cache = {'table1': 'config1'}
+        schema_discovery._analysis_cache = {'analysis1': 'data1'}
+        
+        # Clear all caches
+        schema_discovery.clear_cache()
+        assert schema_discovery._schema_cache == {}
+        assert schema_discovery._config_cache == {}
+        assert schema_discovery._analysis_cache == {} 
