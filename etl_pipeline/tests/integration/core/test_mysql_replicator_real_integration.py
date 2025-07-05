@@ -18,18 +18,15 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any
 
 # Import new configuration system
-try:
-    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
-    from etl_pipeline.core.connections import ConnectionFactory
-    from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
-    from etl_pipeline.core.schema_discovery import SchemaDiscovery
-    NEW_CONFIG_AVAILABLE = True
-except ImportError:
-    # Fallback for backward compatibility
-    NEW_CONFIG_AVAILABLE = False
-    from etl_pipeline.core.connections import ConnectionFactory
-    from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
-    from etl_pipeline.core.schema_discovery import SchemaDiscovery
+from etl_pipeline.config import (
+    create_test_settings, 
+    DatabaseType, 
+    PostgresSchema,
+    reset_settings
+)
+from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
 
 # Load environment variables from .env file first
 from tests.fixtures.env_fixtures import load_test_environment
