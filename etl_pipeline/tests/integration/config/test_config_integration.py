@@ -36,6 +36,7 @@ class TestRealDatabaseConnections:
     """Test actual database connections using clean configuration."""
 
     @pytest.mark.integration
+    @pytest.mark.order(0)
     def test_source_database_connection(self, test_env_vars):
         """Test actual connection to OpenDental source database."""
         settings = create_test_settings(env_vars=test_env_vars)
@@ -52,6 +53,7 @@ class TestRealDatabaseConnections:
                 source_engine.dispose()
 
     @pytest.mark.integration
+    @pytest.mark.order(0)
     def test_replication_database_connection(self, test_env_vars):
         """Test actual connection to MySQL replication database."""
         settings = create_test_settings(env_vars=test_env_vars)
@@ -68,6 +70,7 @@ class TestRealDatabaseConnections:
                 repl_engine.dispose()
 
     @pytest.mark.integration
+    @pytest.mark.order(0)
     def test_analytics_database_connection(self, test_env_vars):
         """Test actual connection to PostgreSQL analytics database."""
         settings = create_test_settings(env_vars=test_env_vars)
@@ -84,6 +87,7 @@ class TestRealDatabaseConnections:
                 analytics_engine.dispose()
 
     @pytest.mark.integration
+    @pytest.mark.order(0)
     def test_all_database_connections_simultaneously(self, test_env_vars):
         """Test all database connections can be established simultaneously."""
         settings = create_test_settings(env_vars=test_env_vars)
@@ -113,6 +117,7 @@ class TestRealDatabaseConnections:
                     engine.dispose()
 
     @pytest.mark.integration
+    @pytest.mark.order(0)
     def test_postgresql_schema_connections(self, test_env_vars):
         """Test PostgreSQL connections to different schemas."""
         settings = create_test_settings(env_vars=test_env_vars)

@@ -142,6 +142,7 @@ class TestPipelineOrchestratorRealIntegration:
             except Exception as e:
                 logger.warning(f"Could not clean up test data: {e}")
     
+    @pytest.mark.order(5)
     def test_real_database_connection(self, analytics_engine):
         """Test real database connection and basic operations."""
         with analytics_engine.connect() as conn:
@@ -157,6 +158,7 @@ class TestPipelineOrchestratorRealIntegration:
             
             logger.info(f"Connected to PostgreSQL {version} in schema {schema}")
     
+    @pytest.mark.order(5)
     def test_user_permissions(self, analytics_engine):
         """Test that the database user has required permissions."""
         with analytics_engine.connect() as conn:
@@ -189,6 +191,7 @@ class TestPipelineOrchestratorRealIntegration:
             except Exception as e:
                 pytest.fail(f"Database user missing required permissions: {e}")
     
+    @pytest.mark.order(5)
     def test_etl_schema_access(self, analytics_engine):
         """Test access to ETL-specific schemas and tables."""
         with analytics_engine.connect() as conn:

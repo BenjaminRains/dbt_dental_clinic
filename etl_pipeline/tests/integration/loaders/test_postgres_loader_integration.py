@@ -226,6 +226,7 @@ class TestPostgresLoaderIntegration:
 class TestLoadTableIntegration(TestPostgresLoaderIntegration):
     """Integration tests for load_table functionality."""
     
+    @pytest.mark.order(4)
     def test_load_table_full_integration(self, postgres_loader_integration, setup_patient_table, test_mysql_schema):
         """Test complete table loading workflow with real test databases."""
         replication_engine, analytics_engine = setup_patient_table
@@ -244,6 +245,7 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
             result = conn.execute(text("SELECT * FROM patient ORDER BY PatNum")).fetchall()
             assert len(result) == 3
     
+    @pytest.mark.order(4)
     def test_load_table_incremental_integration(self, postgres_loader_integration, setup_patient_table, setup_etl_tracking, test_mysql_schema):
         """Test incremental table loading workflow with real test databases."""
         replication_engine, analytics_engine = setup_patient_table
@@ -275,6 +277,7 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
             assert len(result) == 1
             assert result[0][1] == 'New User'  # LName column
     
+    @pytest.mark.order(4)
     def test_load_table_no_data_integration(self, postgres_loader_integration, test_database_engines, test_mysql_schema):
         """Test table loading with no data in real test database."""
         replication_engine, analytics_engine = test_database_engines
@@ -316,6 +319,7 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
         
         logger.debug("Successfully handled empty table loading")
     
+    @pytest.mark.order(4)
     def test_load_table_schema_creation_integration(self, postgres_loader_integration, test_database_engines, test_mysql_schema):
         """Test table loading with automatic schema creation."""
         replication_engine, analytics_engine = test_database_engines

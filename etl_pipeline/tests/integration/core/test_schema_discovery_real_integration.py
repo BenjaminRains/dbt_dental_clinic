@@ -63,6 +63,7 @@ class TestSchemaDiscoveryRealIntegration:
         yield
     
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_schema_discovery_initialization(self, populated_test_databases, schema_discovery_instance):
         """Test real SchemaDiscovery initialization with actual MySQL database."""
         # Verify test data exists using standardized data manager
@@ -82,6 +83,7 @@ class TestSchemaDiscoveryRealIntegration:
             assert result.scalar() == 1, "Real database connection failed"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_table_schema_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test real table schema discovery with actual MySQL database."""
         # Verify test data exists using standardized data manager
@@ -112,6 +114,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert appointment_schema['table_name'] == 'appointment'
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_table_size_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test real table size discovery with actual MySQL database."""
         # Verify test data exists using standardized data manager
@@ -131,6 +134,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert appointment_size_info['row_count'] >= len(STANDARD_TEST_APPOINTMENTS), f"Expected at least {len(STANDARD_TEST_APPOINTMENTS)} appointments"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_database_schema_overview(self, populated_test_databases, schema_discovery_instance):
         """Test real database schema overview with actual MySQL database."""
         # Verify test data exists using standardized data manager
@@ -149,6 +153,7 @@ class TestSchemaDiscoveryRealIntegration:
             assert expected_table in tables, f"Table {expected_table} not found in overview"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_schema_hash_consistency(self, populated_test_databases, schema_discovery_instance):
         """Test real schema hash consistency with actual MySQL database."""
         # Verify test data exists using standardized data manager
@@ -168,6 +173,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert patient_schema['schema_hash'] != appointment_schema['schema_hash'], "Different tables should have different hashes"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_error_handling(self, test_data_manager, schema_discovery_instance):
         """Test real error handling with actual component failures."""
         # Test with non-existent table - should raise SchemaNotFoundError
@@ -179,6 +185,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert size_info['row_count'] == 0, "Should return 0 for non-existent table"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_column_details_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test real column details discovery with actual MySQL database."""
         # Verify test data exists using standardized data manager
@@ -201,6 +208,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert 'type' in lname_col, "Column type not discovered"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_real_multiple_table_schema_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test schema discovery for multiple tables with real data."""
         # Verify test data exists using standardized data manager
@@ -225,6 +233,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert len(set(schema_hashes)) == len(schema_hashes), "All tables should have different schema hashes"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_type_safe_database_enum_usage(self, test_data_manager, schema_discovery_instance, test_env_vars):
         """Test that type-safe database enums work correctly with test environment."""
         # Test DatabaseType enum usage - compare enum values, not enum objects
@@ -250,6 +259,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert analytics_engine is not None, "Analytics engine should be created with test connection method"
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_schema_discovery_with_tables_yml_validation(self, populated_test_databases, schema_discovery_instance):
         """Test that schema discovery finds tables that match tables.yml configuration."""
         # Verify test data exists using standardized data manager
@@ -269,6 +279,7 @@ class TestSchemaDiscoveryRealIntegration:
         logger.info(f"Discovered {len(discovered_tables)} tables: {discovered_tables[:10]}...")  # Show first 10
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_schema_discovery_against_configured_tables(self, populated_test_databases, schema_discovery_instance):
         """Test that schema discovery can find and validate tables that are configured in tables.yml."""
         # Verify test data exists using standardized data manager
@@ -342,6 +353,7 @@ class TestSchemaDiscoveryRealIntegration:
         logger.info(f"Schema discovery integration test passed - found {len(available_configured_tables)} configured tables")
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_standardized_test_data_integration(self, populated_test_databases, schema_discovery_instance):
         """Test that the standardized test data is properly integrated and discoverable."""
         # Verify test data exists using standardized data manager
@@ -372,6 +384,7 @@ class TestSchemaDiscoveryRealIntegration:
         logger.info("Standardized test data integration test passed")
 
     @pytest.mark.integration
+    @pytest.mark.order(1)
     def test_test_environment_connection_methods(self):
         """Test that test environment connection methods work correctly.
         

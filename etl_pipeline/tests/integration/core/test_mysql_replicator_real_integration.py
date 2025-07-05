@@ -63,6 +63,7 @@ class TestMySQLReplicatorRealIntegration:
         )
 
     @pytest.mark.integration
+    @pytest.mark.order(2)
     def test_real_replicator_initialization(self, populated_test_databases, mysql_replicator):
         """Test real ExactMySQLReplicator initialization with actual MySQL databases."""
         # Verify test data exists using standardized approach
@@ -89,6 +90,7 @@ class TestMySQLReplicatorRealIntegration:
             assert result.scalar() == 1, "Target database connection failed"
 
     @pytest.mark.integration
+    @pytest.mark.order(2)
     def test_real_exact_replica_creation(self, populated_test_databases, mysql_replicator):
         """Test real exact replica creation with actual MySQL databases."""
         # Verify test data exists using standardized approach
@@ -105,6 +107,7 @@ class TestMySQLReplicatorRealIntegration:
             assert result.fetchone() is not None, "Patient table not created in target database"
 
     @pytest.mark.integration
+    @pytest.mark.order(2)
     def test_real_table_data_copying(self, populated_test_databases, mysql_replicator):
         """Test real table data copying with actual MySQL databases."""
         # Verify test data exists using standardized approach
@@ -125,6 +128,7 @@ class TestMySQLReplicatorRealIntegration:
         assert source_count == target_count, f"Data copy verification failed: source={source_count}, target={target_count}"
 
     @pytest.mark.integration
+    @pytest.mark.order(2)
     def test_real_exact_replica_verification(self, populated_test_databases, mysql_replicator):
         """Test real exact replica verification with actual MySQL databases."""
         # Verify test data exists using standardized approach
@@ -140,6 +144,7 @@ class TestMySQLReplicatorRealIntegration:
         assert result, "Real exact replica verification failed"
 
     @pytest.mark.integration
+    @pytest.mark.order(2)
     def test_real_multiple_table_replication(self, populated_test_databases, mysql_replicator):
         """Test replication of multiple tables with real data."""
         # Verify test data exists using standardized approach
@@ -166,6 +171,7 @@ class TestMySQLReplicatorRealIntegration:
             logger.info(f"Successfully replicated table: {table}")
 
     @pytest.mark.integration
+    @pytest.mark.order(2)
     def test_real_error_handling(self, populated_test_databases, mysql_replicator):
         """Test real error handling with actual component failures."""
         # Test with non-existent table
@@ -181,6 +187,7 @@ class TestMySQLReplicatorRealIntegration:
         assert not result, "Should fail for non-existent table"
 
     @pytest.mark.integration
+    @pytest.mark.order(2)
     def test_real_schema_discovery_integration(self, populated_test_databases, mysql_replicator):
         """Test real SchemaDiscovery integration with MySQL replicator."""
         # Verify test data exists using standardized approach

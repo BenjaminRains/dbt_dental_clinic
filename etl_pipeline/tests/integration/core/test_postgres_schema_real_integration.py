@@ -127,6 +127,7 @@ class TestPostgresSchemaRealIntegration:
         }
 
     @pytest.mark.integration
+    @pytest.mark.order(3)
     def test_real_postgres_schema_initialization(self, populated_test_databases, real_postgres_schema_instance):
         """Test real PostgresSchema initialization with actual databases."""
         # Use standardized test data manager
@@ -156,6 +157,7 @@ class TestPostgresSchemaRealIntegration:
             assert result.scalar() == 1, "PostgreSQL database connection failed"
 
     @pytest.mark.integration
+    @pytest.mark.order(3)
     def test_real_schema_adaptation(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real schema adaptation from MySQL to PostgreSQL."""
         # Use standardized test data manager
@@ -177,6 +179,7 @@ class TestPostgresSchemaRealIntegration:
         assert 'LName' in pg_create_statement, "LName column not found in adapted schema"
 
     @pytest.mark.integration
+    @pytest.mark.order(3)
     def test_real_postgres_table_creation(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
         """Test real PostgreSQL table creation from MySQL schema."""
         # Use standardized test data manager

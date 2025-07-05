@@ -47,6 +47,7 @@ class TestUnifiedMetricsCollectorIntegration:
         collector = UnifiedMetricsCollector(sqlite_engine, enable_persistence=True)
         return collector
 
+    @pytest.mark.order(6)
     def test_initialization_with_real_database(self, sqlite_engine):
         """Test initialization with real SQLite database."""
         collector = UnifiedMetricsCollector(sqlite_engine, enable_persistence=True)
@@ -56,6 +57,7 @@ class TestUnifiedMetricsCollectorIntegration:
         assert collector.metrics['status'] == 'idle'
         assert collector.metrics['tables_processed'] == 0
 
+    @pytest.mark.order(6)
     def test_initialization_without_database(self):
         """Test initialization without database."""
         collector = UnifiedMetricsCollector(enable_persistence=False)
@@ -64,6 +66,7 @@ class TestUnifiedMetricsCollectorIntegration:
         assert collector.enable_persistence is False
         assert collector.metrics['status'] == 'idle'
 
+    @pytest.mark.order(6)
     def test_metrics_table_creation(self, sqlite_engine):
         """Test that metrics tables are created in real database."""
         collector = UnifiedMetricsCollector(sqlite_engine, enable_persistence=True)
