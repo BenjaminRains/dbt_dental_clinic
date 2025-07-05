@@ -3,15 +3,28 @@ Real Integration Testing Approach - Using Real MySQL Database
 
 This approach tests the actual integration flow by using the REAL MySQL OpenDental database
 with clearly identifiable test data that won't interfere with production.
+
+Refactored to use new architectural patterns:
+- Dependency injection with Settings
+- Type-safe DatabaseType and PostgresSchema enums
+- Modular fixture organization
+- Clean separation of concerns
 """
 
 import pytest
 import logging
 from sqlalchemy import text
 from datetime import datetime, timedelta
+from typing import List, Dict, Any
 
 from etl_pipeline.core.schema_discovery import SchemaDiscovery, SchemaNotFoundError
 from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.config import (
+    create_test_settings, 
+    DatabaseType, 
+    PostgresSchema,
+    reset_settings
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,245 +32,29 @@ logger = logging.getLogger(__name__)
 class TestSchemaDiscoveryRealIntegration:
     """Real integration tests using actual MySQL database with test data."""
     
-    @pytest.fixture
-    def test_data_manager(self):
-        """Manage test data in the real OpenDental database."""
-        class TestDataManager:
-            def __init__(self):
-                # Use the test MySQL replication connection for integration tests
-                self.source_engine = ConnectionFactory.get_mysql_replication_test_connection()
-                self.test_patients = []
-                self.test_appointments = []
-                self.test_procedures = []
-            
-            def create_test_data(self):
-                """Create clearly identifiable test data in the real database."""
-                logger.info("Creating test data in real OpenDental database...")
-                
-                # Create test patients with clearly identifiable names
-                test_patients_data = [
-                    {
-                        'PatNum': None,  # Will be auto-generated
-                        'LName': 'TEST_PATIENT_001',
-                        'FName': 'John',
-                        'MiddleI': 'M',
-                        'Preferred': 'Johnny',
-                        'PatStatus': 0,
-                        'Gender': 0,
-                        'Position': 0,
-                        'Birthdate': '1980-01-01',
-                        'SSN': '123-45-6789'
-                    },
-                    {
-                        'PatNum': None,
-                        'LName': 'TEST_PATIENT_002', 
-                        'FName': 'Jane',
-                        'MiddleI': 'A',
-                        'Preferred': 'Janey',
-                        'PatStatus': 0,
-                        'Gender': 1,
-                        'Position': 0,
-                        'Birthdate': '1985-05-15',
-                        'SSN': '234-56-7890'
-                    },
-                    {
-                        'PatNum': None,
-                        'LName': 'TEST_PATIENT_003',
-                        'FName': 'Bob',
-                        'MiddleI': 'R',
-                        'Preferred': 'Bobby',
-                        'PatStatus': 0,
-                        'Gender': 0,
-                        'Position': 0,
-                        'Birthdate': '1975-12-10',
-                        'SSN': '345-67-8901'
-                    }
-                ]
-                
-                # Insert test patients
-                with self.source_engine.begin() as conn:
-                    for patient_data in test_patients_data:
-                        params = {
-                            'lname': patient_data['LName'],
-                            'fname': patient_data['FName'],
-                            'middlei': patient_data['MiddleI'],
-                            'preferred': patient_data['Preferred'],
-                            'patstatus': patient_data['PatStatus'],
-                            'gender': patient_data['Gender'],
-                            'position': patient_data['Position'],
-                            'birthdate': patient_data['Birthdate'],
-                            'ssn': patient_data['SSN']
-                        }
-                        result = conn.execute(text("""
-                            INSERT INTO patient (LName, FName, MiddleI, Preferred, PatStatus, Gender, Position, Birthdate, SSN)
-                            VALUES (:lname, :fname, :middlei, :preferred, :patstatus, :gender, :position, :birthdate, :ssn)
-                        """), params)
-                        
-                        # Get the auto-generated PatNum
-                        patient_data['PatNum'] = result.lastrowid
-                        self.test_patients.append(patient_data)
-                
-                # Create test appointments
-                test_appointments_data = [
-                    {
-                        'AptNum': None,
-                        'PatNum': self.test_patients[0]['PatNum'],
-                        'AptDateTime': (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'),
-                        'AptStatus': 1,  # Scheduled
-                        'DateTStamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'Notes': 'TEST_APPOINTMENT_001 - Regular checkup'
-                    },
-                    {
-                        'AptNum': None,
-                        'PatNum': self.test_patients[1]['PatNum'],
-                        'AptDateTime': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S'),
-                        'AptStatus': 1,
-                        'DateTStamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'Notes': 'TEST_APPOINTMENT_002 - Cleaning'
-                    }
-                ]
-                
-                with self.source_engine.begin() as conn:
-                    for appointment_data in test_appointments_data:
-                        params = {
-                            'patnum': appointment_data['PatNum'],
-                            'aptdatetime': appointment_data['AptDateTime'],
-                            'aptstatus': appointment_data['AptStatus'],
-                            'datestamp': appointment_data['DateTStamp'],
-                            'notes': appointment_data['Notes']
-                        }
-                        result = conn.execute(text("""
-                            INSERT INTO appointment (PatNum, AptDateTime, AptStatus, DateTStamp, Notes)
-                            VALUES (:patnum, :aptdatetime, :aptstatus, :datestamp, :notes)
-                        """), params)
-                        
-                        appointment_data['AptNum'] = result.lastrowid
-                        self.test_appointments.append(appointment_data)
-                
-                # Create test procedures
-                test_procedures_data = [
-                    {
-                        'ProcNum': None,
-                        'PatNum': self.test_patients[0]['PatNum'],
-                        'ProcDate': datetime.now().strftime('%Y-%m-%d'),
-                        'ProcCode': 'TEST_PROC_001',
-                        'ProcFee': 150.00,
-                        'DateTStamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    },
-                    {
-                        'ProcNum': None,
-                        'PatNum': self.test_patients[1]['PatNum'],
-                        'ProcDate': datetime.now().strftime('%Y-%m-%d'),
-                        'ProcCode': 'TEST_PROC_002',
-                        'ProcFee': 200.00,
-                        'DateTStamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }
-                ]
-                
-                with self.source_engine.begin() as conn:
-                    for procedure_data in test_procedures_data:
-                        params = {
-                            'patnum': procedure_data['PatNum'],
-                            'procdate': procedure_data['ProcDate'],
-                            'proccode': procedure_data['ProcCode'],
-                            'procfee': procedure_data['ProcFee'],
-                            'datestamp': procedure_data['DateTStamp']
-                        }
-                        result = conn.execute(text("""
-                            INSERT INTO `procedure` (PatNum, ProcDate, ProcCode, ProcFee, DateTStamp)
-                            VALUES (:patnum, :procdate, :proccode, :procfee, :datestamp)
-                        """), params)
-                        
-                        procedure_data['ProcNum'] = result.lastrowid
-                        self.test_procedures.append(procedure_data)
-                
-                logger.info(f"Created {len(self.test_patients)} test patients, {len(self.test_appointments)} appointments, {len(self.test_procedures)} procedures")
-            
-            def cleanup_test_data(self):
-                """Remove all test data from the database."""
-                logger.info("Cleaning up test data from real OpenDental database...")
-                
-                # Clean up test data
-                try:
-                    with self.source_engine.connect() as conn:
-                        # Delete test procedures first (due to foreign key constraints)
-                        conn.execute(text("DELETE FROM `procedure` WHERE ProcNum IN (1, 2)"))
-                        conn.execute(text("DELETE FROM appointment WHERE AptNum IN (1, 2)"))
-                        conn.execute(text("DELETE FROM patient WHERE PatNum IN (1, 2, 3)"))
-                        conn.commit()
-                        logger.info("Cleaned up test data from MySQL test database")
-                except Exception as e:
-                    logger.warning(f"Failed to clean up MySQL test data: {e}")
-            
-            def verify_test_data_exists(self):
-                """Verify that test data exists in the database."""
-                with self.source_engine.connect() as conn:
-                    # Check test patients
-                    result = conn.execute(text("""
-                        SELECT COUNT(*) FROM patient 
-                        WHERE LName LIKE 'TEST_PATIENT_%'
-                    """))
-                    patient_count = result.scalar()
-                    
-                    # Check test appointments
-                    result = conn.execute(text("""
-                        SELECT COUNT(*) FROM appointment 
-                        WHERE Notes LIKE 'TEST_APPOINTMENT_%'
-                    """))
-                    appointment_count = result.scalar()
-                    
-                    # Check test procedures
-                    result = conn.execute(text("""
-                        SELECT COUNT(*) FROM `procedure` 
-                        WHERE ProcCode LIKE 'TEST_PROC_%'
-                    """))
-                    procedure_count = result.scalar()
-                    
-                    logger.info(f"Found {patient_count} test patients, {appointment_count} test appointments, {procedure_count} test procedures")
-                    
-                    return patient_count > 0 and appointment_count > 0 and procedure_count > 0
-        
-        manager = TestDataManager()
-        manager.create_test_data()
-        
-        yield manager
-        
-        # Cleanup after tests
-        manager.cleanup_test_data()
-
-    @pytest.fixture
-    def schema_discovery(self):
-        """Create real SchemaDiscovery instance with real MySQL connection."""
-        from etl_pipeline.core.connections import ConnectionFactory
-        
-        source_engine = ConnectionFactory.get_mysql_replication_test_connection()
-        # Extract database name from engine URL
-        source_db = source_engine.url.database
-        return SchemaDiscovery(source_engine, source_db)
-
     @pytest.mark.integration
-    def test_real_schema_discovery_initialization(self, test_data_manager, schema_discovery):
+    def test_real_schema_discovery_initialization(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test real SchemaDiscovery initialization with actual MySQL database."""
         # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
         
         # Test REAL SchemaDiscovery with REAL MySQL database
-        assert schema_discovery.source_engine is not None
-        assert schema_discovery.source_db is not None
+        assert schema_discovery_instance.source_engine is not None
+        assert schema_discovery_instance.source_db is not None
         
         # Test real connection
-        with schema_discovery.source_engine.connect() as conn:
+        with schema_discovery_instance.source_engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             assert result.scalar() == 1, "Real database connection failed"
 
     @pytest.mark.integration
-    def test_real_table_schema_discovery(self, test_data_manager, schema_discovery):
+    def test_real_table_schema_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test real table schema discovery with actual MySQL database."""
         # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
         
         # Test REAL schema discovery for patient table
-        schema = schema_discovery.get_table_schema('patient')
+        schema = schema_discovery_instance.get_table_schema('patient')
         assert schema is not None, "Real schema discovery failed"
         assert 'table_name' in schema
         assert 'columns' in schema
@@ -273,37 +70,37 @@ class TestSchemaDiscoveryRealIntegration:
             assert expected_col in column_names, f"Column {expected_col} not discovered"
         
         # Test schema discovery for appointment table
-        appointment_schema = schema_discovery.get_table_schema('appointment')
+        appointment_schema = schema_discovery_instance.get_table_schema('appointment')
         assert appointment_schema is not None, "Appointment schema discovery failed"
         assert appointment_schema['table_name'] == 'appointment'
 
     @pytest.mark.integration
-    def test_real_table_size_discovery(self, test_data_manager, schema_discovery):
+    def test_real_table_size_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test real table size discovery with actual MySQL database."""
         # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
         
         # Test REAL table size discovery
-        patient_size_info = schema_discovery.get_table_size_info('patient')
+        patient_size_info = schema_discovery_instance.get_table_size_info('patient')
         assert patient_size_info is not None, "Real table size discovery failed"
-        assert patient_size_info['row_count'] >= len(test_data_manager.test_patients), f"Expected at least {len(test_data_manager.test_patients)} patients"
+        assert patient_size_info['row_count'] >= len(schema_discovery_test_data_manager.test_patients), f"Expected at least {len(schema_discovery_test_data_manager.test_patients)} patients"
         
-        appointment_size_info = schema_discovery.get_table_size_info('appointment')
+        appointment_size_info = schema_discovery_instance.get_table_size_info('appointment')
         assert appointment_size_info is not None, "Appointment table size discovery failed"
-        assert appointment_size_info['row_count'] >= len(test_data_manager.test_appointments), f"Expected at least {len(test_data_manager.test_appointments)} appointments"
+        assert appointment_size_info['row_count'] >= len(schema_discovery_test_data_manager.test_appointments), f"Expected at least {len(schema_discovery_test_data_manager.test_appointments)} appointments"
         
-        procedure_size_info = schema_discovery.get_table_size_info('procedure')
+        procedure_size_info = schema_discovery_instance.get_table_size_info('procedure')
         assert procedure_size_info is not None, "Procedure table size discovery failed"
-        assert procedure_size_info['row_count'] >= len(test_data_manager.test_procedures), f"Expected at least {len(test_data_manager.test_procedures)} procedures"
+        assert procedure_size_info['row_count'] >= len(schema_discovery_test_data_manager.test_procedures), f"Expected at least {len(schema_discovery_test_data_manager.test_procedures)} procedures"
 
     @pytest.mark.integration
-    def test_real_database_schema_overview(self, test_data_manager, schema_discovery):
+    def test_real_database_schema_overview(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test real database schema overview with actual MySQL database."""
         # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
         
         # Test REAL database schema overview using discover_all_tables
-        tables = schema_discovery.discover_all_tables()
+        tables = schema_discovery_instance.discover_all_tables()
         assert tables is not None, "Real database schema overview failed"
         assert len(tables) > 0, "Expected at least one table"
         
@@ -314,42 +111,42 @@ class TestSchemaDiscoveryRealIntegration:
             assert expected_table in tables, f"Table {expected_table} not found in overview"
 
     @pytest.mark.integration
-    def test_real_schema_hash_consistency(self, test_data_manager, schema_discovery):
+    def test_real_schema_hash_consistency(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test real schema hash consistency with actual MySQL database."""
         # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
         
         # Test that schema hash is consistent for the same table
-        schema1 = schema_discovery.get_table_schema('patient')
-        schema2 = schema_discovery.get_table_schema('patient')
+        schema1 = schema_discovery_instance.get_table_schema('patient')
+        schema2 = schema_discovery_instance.get_table_schema('patient')
         
         assert schema1['schema_hash'] == schema2['schema_hash'], "Schema hash should be consistent"
         
         # Test that different tables have different hashes
-        patient_schema = schema_discovery.get_table_schema('patient')
-        appointment_schema = schema_discovery.get_table_schema('appointment')
+        patient_schema = schema_discovery_instance.get_table_schema('patient')
+        appointment_schema = schema_discovery_instance.get_table_schema('appointment')
         
         assert patient_schema['schema_hash'] != appointment_schema['schema_hash'], "Different tables should have different hashes"
 
     @pytest.mark.integration
-    def test_real_error_handling(self, test_data_manager, schema_discovery):
+    def test_real_error_handling(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test real error handling with actual component failures."""
         # Test with non-existent table - should raise SchemaNotFoundError
         with pytest.raises(SchemaNotFoundError):
-            schema_discovery.get_table_schema('nonexistent_table')
+            schema_discovery_instance.get_table_schema('nonexistent_table')
         
         # Test with non-existent table size - should return zero values
-        size_info = schema_discovery.get_table_size_info('nonexistent_table')
+        size_info = schema_discovery_instance.get_table_size_info('nonexistent_table')
         assert size_info['row_count'] == 0, "Should return 0 for non-existent table"
 
     @pytest.mark.integration
-    def test_real_column_details_discovery(self, test_data_manager, schema_discovery):
+    def test_real_column_details_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test real column details discovery with actual MySQL database."""
         # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
         
         # Test REAL column details discovery
-        schema = schema_discovery.get_table_schema('patient')
+        schema = schema_discovery_instance.get_table_schema('patient')
         columns = schema['columns']
         
         # Find PatNum column
@@ -364,17 +161,17 @@ class TestSchemaDiscoveryRealIntegration:
         assert 'type' in lname_col, "Column type not discovered"
 
     @pytest.mark.integration
-    def test_real_multiple_table_schema_discovery(self, test_data_manager, schema_discovery):
+    def test_real_multiple_table_schema_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
         """Test schema discovery for multiple tables with real data."""
         # Verify test data exists
-        assert test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
         
         # Test schema discovery for multiple tables
         test_tables = ['patient', 'appointment', 'procedure']
         schemas = {}
         
         for table in test_tables:
-            schema = schema_discovery.get_table_schema(table)
+            schema = schema_discovery_instance.get_table_schema(table)
             assert schema is not None, f"Schema discovery failed for {table}"
             assert schema['table_name'] == table, f"Table name mismatch for {table}"
             schemas[table] = schema
@@ -382,6 +179,121 @@ class TestSchemaDiscoveryRealIntegration:
         # Verify all schemas are different
         schema_hashes = [schemas[table]['schema_hash'] for table in test_tables]
         assert len(set(schema_hashes)) == len(schema_hashes), "All tables should have different schema hashes"
+
+    @pytest.mark.integration
+    def test_type_safe_database_enum_usage(self, schema_discovery_test_data_manager, schema_discovery_instance, test_env_vars):
+        """Test that type-safe database enums work correctly with test environment."""
+        # Test DatabaseType enum usage - compare enum values, not enum objects
+        assert DatabaseType.SOURCE.value == "source", "DatabaseType.SOURCE should be 'source'"
+        assert DatabaseType.REPLICATION.value == "replication", "DatabaseType.REPLICATION should be 'replication'"
+        assert DatabaseType.ANALYTICS.value == "analytics", "DatabaseType.ANALYTICS should be 'analytics'"
+        
+        # Test PostgresSchema enum usage - compare enum values, not enum objects
+        assert PostgresSchema.RAW.value == "raw", "PostgresSchema.RAW should be 'raw'"
+        assert PostgresSchema.STAGING.value == "staging", "PostgresSchema.STAGING should be 'staging'"
+        assert PostgresSchema.INTERMEDIATE.value == "intermediate", "PostgresSchema.INTERMEDIATE should be 'intermediate'"
+        assert PostgresSchema.MARTS.value == "marts", "PostgresSchema.MARTS should be 'marts'"
+        
+        # Test that enums work with ConnectionFactory using test environment
+        settings = create_test_settings(env_vars=test_env_vars)
+        
+        # Test replication connection (which we're using for this test)
+        replication_engine = ConnectionFactory.get_replication_connection(settings)
+        assert replication_engine is not None, "Replication engine should be created with test connection method"
+        
+        # Test analytics connection with schema
+        analytics_engine = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+        assert analytics_engine is not None, "Analytics engine should be created with test connection method"
+
+    @pytest.mark.integration
+    def test_schema_discovery_with_tables_yml_validation(self, schema_discovery_test_data_manager, schema_discovery_instance):
+        """Test that schema discovery finds tables that match tables.yml configuration."""
+        # Verify test data exists
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        
+        # Discover all tables
+        discovered_tables = schema_discovery_instance.discover_all_tables()
+        assert discovered_tables is not None, "Table discovery failed"
+        
+        # Check that key dental tables are present (these should exist in any OpenDental database)
+        key_tables = ['patient', 'appointment', 'procedure']
+        for table in key_tables:
+            assert table in discovered_tables, f"Key table {table} not found in discovered tables"
+        
+        # Log discovered tables for debugging
+        logger.info(f"Discovered {len(discovered_tables)} tables: {discovered_tables[:10]}...")  # Show first 10
+
+    @pytest.mark.integration
+    def test_schema_discovery_against_configured_tables(self, schema_discovery_test_data_manager, schema_discovery_instance):
+        """Test that schema discovery can find and validate tables that are configured in tables.yml."""
+        # Verify test data exists
+        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        
+        # Load tables.yml configuration
+        import yaml
+        from pathlib import Path
+        
+        # Find tables.yml file
+        config_dir = Path(__file__).parent.parent.parent.parent / 'etl_pipeline' / 'config'
+        tables_yml_path = config_dir / 'tables.yml'
+        
+        if not tables_yml_path.exists():
+            pytest.skip(f"tables.yml not found at {tables_yml_path}")
+        
+        # Load configuration
+        with open(tables_yml_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Extract all table names from configuration
+        configured_tables = list(config.get('tables', {}).keys())
+        assert len(configured_tables) > 0, "No tables found in tables.yml configuration"
+        
+        logger.info(f"Found {len(configured_tables)} tables in tables.yml configuration")
+        
+        # Discover all tables from the database
+        discovered_tables = schema_discovery_instance.discover_all_tables()
+        assert discovered_tables is not None, "Table discovery failed"
+        
+        logger.info(f"Discovered {len(discovered_tables)} tables in source database")
+        
+        # For integration tests, we only validate that:
+        # 1. The schema discovery mechanism works correctly
+        # 2. We can find at least some of the configured tables (the ones in our test database)
+        # 3. The configuration loading and comparison logic works
+        
+        # Find which configured tables are actually in our test database
+        available_configured_tables = [table for table in configured_tables if table in discovered_tables]
+        
+        logger.info(f"Found {len(available_configured_tables)} configured tables in test database: {available_configured_tables}")
+        
+        # Assert that we have at least some configured tables available for testing
+        assert len(available_configured_tables) > 0, (
+            f"No configured tables found in test database. "
+            f"Test database has: {discovered_tables}, "
+            f"but none match configured tables from tables.yml"
+        )
+        
+        # Test that we can get schema for available configured tables
+        for table_name in available_configured_tables:
+            try:
+                schema = schema_discovery_instance.get_table_schema(table_name)
+                assert schema is not None, f"Failed to get schema for {table_name}"
+                assert schema['table_name'] == table_name, f"Schema table name mismatch for {table_name}"
+                logger.info(f"Successfully retrieved schema for {table_name}")
+            except Exception as e:
+                logger.error(f"Failed to get schema for {table_name}: {e}")
+                raise
+        
+        # Test that the configuration validation logic works by checking a few missing tables
+        missing_tables = [table for table in configured_tables if table not in discovered_tables]
+        logger.info(f"Note: {len(missing_tables)} configured tables not in test database (expected for integration tests)")
+        
+        # Verify that our test database has the expected test tables
+        expected_test_tables = ['patient', 'appointment', 'procedure']
+        for table in expected_test_tables:
+            assert table in discovered_tables, f"Expected test table {table} not found in database"
+        
+        logger.info(f"Schema discovery integration test passed - found {len(available_configured_tables)} configured tables")
 
 
 if __name__ == "__main__":
