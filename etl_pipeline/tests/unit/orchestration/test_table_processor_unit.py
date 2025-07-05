@@ -565,6 +565,8 @@ class TestTableProcessorUnit:
         """Test standard loading to analytics."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        mock_schema = {'columns': [], 'primary_key': {}, 'incremental_columns': []}
+        mock_schema_discovery.get_table_schema.return_value = mock_schema
         
         processor = TableProcessor(schema_discovery=mock_schema_discovery)
         
@@ -579,13 +581,15 @@ class TestTableProcessorUnit:
             result = processor._load_to_analytics('test_table', True, table_processor_standard_config)
             
             assert result is True
-            mock_loader.load_table.assert_called_once_with(table_name='test_table', mysql_schema=mock_schema_discovery.get_table_schema.return_value, force_full=False)
+            mock_loader.load_table.assert_called_once_with(table_name='test_table', mysql_schema=mock_schema, force_full=False)
 
     @pytest.mark.unit
     def test_load_to_analytics_chunked_loading(self, mock_table_processor_engines, table_processor_large_config):
         """Test chunked loading for large tables."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        mock_schema = {'columns': [], 'primary_key': {}, 'incremental_columns': []}
+        mock_schema_discovery.get_table_schema.return_value = mock_schema
         
         processor = TableProcessor(schema_discovery=mock_schema_discovery)
         
@@ -602,7 +606,7 @@ class TestTableProcessorUnit:
             assert result is True
             mock_loader.load_table_chunked.assert_called_once_with(
                 table_name='test_table',
-                mysql_schema=mock_schema_discovery.get_table_schema.return_value,
+                mysql_schema=mock_schema,
                 force_full=False,
                 chunk_size=5000
             )
@@ -649,6 +653,8 @@ class TestTableProcessorUnit:
         """Test loading with default table configuration."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        mock_schema = {'columns': [], 'primary_key': {}, 'incremental_columns': []}
+        mock_schema_discovery.get_table_schema.return_value = mock_schema
         
         processor = TableProcessor(schema_discovery=mock_schema_discovery)
         
@@ -665,13 +671,15 @@ class TestTableProcessorUnit:
             result = processor._load_to_analytics('test_table', True, table_config)
             
             assert result is True
-            mock_loader.load_table.assert_called_once_with(table_name='test_table', mysql_schema=mock_schema_discovery.get_table_schema.return_value, force_full=False)
+            mock_loader.load_table.assert_called_once_with(table_name='test_table', mysql_schema=mock_schema, force_full=False)
 
     @pytest.mark.unit
     def test_load_to_analytics_size_based_chunking(self, mock_table_processor_engines, table_processor_medium_large_config):
         """Test chunked loading based on size rather than row count."""
         # Create mock schema discovery
         mock_schema_discovery = MagicMock(spec=SchemaDiscovery)
+        mock_schema = {'columns': [], 'primary_key': {}, 'incremental_columns': []}
+        mock_schema_discovery.get_table_schema.return_value = mock_schema
         
         processor = TableProcessor(schema_discovery=mock_schema_discovery)
         
@@ -688,7 +696,7 @@ class TestTableProcessorUnit:
             assert result is True
             mock_loader.load_table_chunked.assert_called_once_with(
                 table_name='test_table',
-                mysql_schema=mock_schema_discovery.get_table_schema.return_value,
+                mysql_schema=mock_schema,
                 force_full=False,
                 chunk_size=2500
             ) 
