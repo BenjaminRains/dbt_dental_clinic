@@ -36,57 +36,45 @@ def load_test_environment():
 # Load environment at module import time
 load_test_environment()
 
-# Import ETL pipeline components for testing
-try:
-    from etl_pipeline.config.settings import Settings
-except ImportError:
-    # Fallback for new configuration system
-    from etl_pipeline.config import create_settings
-    Settings = None
-
 # Import new configuration system components
-try:
-    from etl_pipeline.config import reset_settings, create_test_settings, DatabaseType, PostgresSchema
-    NEW_CONFIG_AVAILABLE = True
-except ImportError:
-    # Fallback for backward compatibility
-    NEW_CONFIG_AVAILABLE = False
-    DatabaseType = None
-    PostgresSchema = None
+from etl_pipeline.config import reset_settings, create_test_settings, DatabaseType, PostgresSchema
 
 
 @pytest.fixture(autouse=True)
 def reset_global_settings():
     """Reset global settings before and after each test for proper isolation."""
-    if NEW_CONFIG_AVAILABLE:
-        reset_settings()
-        yield
-        reset_settings()
-    else:
-        # Fallback for old configuration system
-        yield
+    reset_settings()
+    yield
+    reset_settings()
 
 
 @pytest.fixture
 def test_env_vars():
-    """Standard test environment variables loaded from actual .env file."""
+    """Standard test environment variables for integration tests."""
     return {
+        # OpenDental Source (Test) - Read from .env file
         'TEST_OPENDENTAL_SOURCE_HOST': os.getenv('TEST_OPENDENTAL_SOURCE_HOST', 'localhost'),
         'TEST_OPENDENTAL_SOURCE_PORT': os.getenv('TEST_OPENDENTAL_SOURCE_PORT', '3306'),
         'TEST_OPENDENTAL_SOURCE_DB': os.getenv('TEST_OPENDENTAL_SOURCE_DB', 'test_opendental'),
         'TEST_OPENDENTAL_SOURCE_USER': os.getenv('TEST_OPENDENTAL_SOURCE_USER', 'test_user'),
         'TEST_OPENDENTAL_SOURCE_PASSWORD': os.getenv('TEST_OPENDENTAL_SOURCE_PASSWORD', 'test_pass'),
+        
+        # MySQL Replication (Test) - Read from .env file
         'TEST_MYSQL_REPLICATION_HOST': os.getenv('TEST_MYSQL_REPLICATION_HOST', 'localhost'),
         'TEST_MYSQL_REPLICATION_PORT': os.getenv('TEST_MYSQL_REPLICATION_PORT', '3306'),
         'TEST_MYSQL_REPLICATION_DB': os.getenv('TEST_MYSQL_REPLICATION_DB', 'test_opendental_replication'),
         'TEST_MYSQL_REPLICATION_USER': os.getenv('TEST_MYSQL_REPLICATION_USER', 'test_user'),
         'TEST_MYSQL_REPLICATION_PASSWORD': os.getenv('TEST_MYSQL_REPLICATION_PASSWORD', 'test_pass'),
+        
+        # PostgreSQL Analytics (Test) - Read from .env file
         'TEST_POSTGRES_ANALYTICS_HOST': os.getenv('TEST_POSTGRES_ANALYTICS_HOST', 'localhost'),
         'TEST_POSTGRES_ANALYTICS_PORT': os.getenv('TEST_POSTGRES_ANALYTICS_PORT', '5432'),
         'TEST_POSTGRES_ANALYTICS_DB': os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics'),
         'TEST_POSTGRES_ANALYTICS_SCHEMA': os.getenv('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw'),
         'TEST_POSTGRES_ANALYTICS_USER': os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'test_user'),
         'TEST_POSTGRES_ANALYTICS_PASSWORD': os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_pass'),
+        
+        # Environment
         'ETL_ENVIRONMENT': 'test'
     }
 
@@ -118,52 +106,27 @@ def production_env_vars():
 @pytest.fixture
 def test_settings(test_env_vars, test_pipeline_config, test_tables_config):
     """Create isolated test settings using new configuration system."""
-    if NEW_CONFIG_AVAILABLE:
-        return create_test_settings(
-            pipeline_config=test_pipeline_config,
-            tables_config=test_tables_config,
-            env_vars=test_env_vars
-        )
-    else:
-        # Fallback to old settings pattern
-        with patch.dict(os.environ, test_env_vars):
-            if Settings is not None:
-                return Settings(environment='test')
-            else:
-                return create_settings(environment='test')
+    return create_test_settings(
+        pipeline_config=test_pipeline_config,
+        tables_config=test_tables_config,
+        env_vars=test_env_vars
+    )
 
 
 @pytest.fixture
 def mock_env_test_settings(test_env_vars):
     """Create test settings with mocked environment variables."""
-    if NEW_CONFIG_AVAILABLE:
-        with patch.dict(os.environ, test_env_vars):
-            from etl_pipeline.config import create_settings
-            yield create_settings(environment='test')
-    else:
-        # Fallback to old settings pattern
-        with patch.dict(os.environ, test_env_vars):
-            if Settings is not None:
-                yield Settings(environment='test')
-            else:
-                yield create_settings(environment='test')
+    with patch.dict(os.environ, test_env_vars):
+        from etl_pipeline.config import create_settings
+        yield create_settings(environment='test')
 
 
 @pytest.fixture
 def production_settings(production_env_vars):
     """Create production settings for integration tests."""
-    if NEW_CONFIG_AVAILABLE:
-        return create_test_settings(
-            env_vars=production_env_vars,
-            environment='production'
-        )
-    else:
-        # Fallback to old settings pattern
-        with patch.dict(os.environ, production_env_vars):
-            if Settings is not None:
-                return Settings(environment='production')
-            else:
-                return create_settings(environment='production')
+    return create_test_settings(
+        env_vars=production_env_vars
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -187,14 +150,12 @@ def setup_test_environment(monkeypatch, request):
     )
     
     # Reset any global state
-    if NEW_CONFIG_AVAILABLE:
-        reset_settings()
+    reset_settings()
     
     yield
     
     # Cleanup after test
-    if NEW_CONFIG_AVAILABLE:
-        reset_settings()
+    reset_settings()
 
 
 @pytest.fixture(scope="session")
@@ -261,5 +222,11 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.integration)
         elif "e2e" in str(item.fspath):
             item.add_marker(pytest.mark.e2e)
-        elif "performance" in str(item.fspath):
-            item.add_marker(pytest.mark.slow) 
+        
+        # Auto-mark tests based on test name
+        if "slow" in item.name.lower():
+            item.add_marker(pytest.mark.slow)
+        if "database" in item.name.lower():
+            item.add_marker(pytest.mark.database)
+        if "external" in item.name.lower():
+            item.add_marker(pytest.mark.external) 
