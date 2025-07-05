@@ -16,9 +16,30 @@ real external dependencies like databases or files.
 import pytest
 import os
 from unittest.mock import patch, mock_open, MagicMock
+
+# Import ETL pipeline configuration components
 from etl_pipeline.config import Settings, DatabaseType, PostgresSchema
 from etl_pipeline.config.providers import DictConfigProvider
 from etl_pipeline.config import logging
+
+# Import fixtures from the new modular structure
+from tests.fixtures.config_fixtures import (
+    complete_config_environment,
+    valid_pipeline_config,
+    complete_tables_config,
+    minimal_pipeline_config,
+    invalid_pipeline_config,
+    mock_settings_environment
+)
+from tests.fixtures.env_fixtures import (
+    reset_global_settings,
+    test_env_vars,
+    production_env_vars,
+    test_settings,
+    mock_env_test_settings,
+    production_settings,
+    setup_test_environment
+)
 
 
 class TestConfigIntegration:
