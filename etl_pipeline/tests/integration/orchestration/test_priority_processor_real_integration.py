@@ -105,6 +105,7 @@ class TestPriorityProcessorRealIntegration:
             yield test_settings
     
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_priority_processor_initialization(self, priority_processor, test_settings):
         """Test real PriorityProcessor initialization with test databases."""
         # Verify PriorityProcessor was created correctly
@@ -121,6 +122,7 @@ class TestPriorityProcessorRealIntegration:
         logger.info(f"PriorityProcessor initialized successfully with {len(tables)} discovered tables")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_sequential_processing_single_table(self, priority_processor, test_tables_config):
         """Test sequential processing of a single table."""
         # Test processing a single critical table sequentially
@@ -146,6 +148,7 @@ class TestPriorityProcessorRealIntegration:
         logger.info(f"Sequential processing completed: {critical_result}")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_parallel_processing_multiple_tables(self, priority_processor, test_tables_config):
         """Test parallel processing of multiple tables."""
         # Create a test configuration with multiple critical tables
@@ -186,6 +189,7 @@ class TestPriorityProcessorRealIntegration:
             # due to database connection limits and test data size, but the structure should work
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_mixed_priority_processing(self, priority_processor, test_tables_config):
         """Test processing tables with different priority levels."""
         # Test processing multiple priority levels
@@ -210,6 +214,7 @@ class TestPriorityProcessorRealIntegration:
         logger.info(f"Mixed priority processing completed: {results}")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_error_handling_single_table_failure(self, priority_processor, test_tables_config):
         """Test error handling when a single table fails."""
         # Test with a non-existent table to simulate failure
@@ -243,6 +248,7 @@ class TestPriorityProcessorRealIntegration:
             logger.info(f"Error handling test completed: {results}")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_resource_management_thread_pool(self, priority_processor, test_tables_config):
         """Test thread pool resource management."""
         # Test with different worker counts to verify resource management
@@ -279,6 +285,7 @@ class TestPriorityProcessorRealIntegration:
                 logger.info(f"Processing with {max_workers} workers completed in {processing_time:.2f}s: {critical_result}")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_force_full_vs_incremental_processing(self, priority_processor, test_tables_config):
         """Test force_full parameter behavior."""
         # Test both force_full=True and force_full=False
@@ -315,6 +322,7 @@ class TestPriorityProcessorRealIntegration:
             logger.info(f"Incremental processing: {results_incremental}")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_empty_tables_handling(self, priority_processor, test_tables_config):
         """Test handling of empty table lists."""
         # Test with empty table lists
@@ -358,6 +366,7 @@ class TestPriorityProcessorRealIntegration:
             logger.info(f"Empty tables handling completed: {results}")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_connection_management_integration(self, priority_processor, test_tables_config):
         """Test that PriorityProcessor properly manages database connections."""
         # Test that connections are properly initialized and cleaned up
@@ -388,6 +397,7 @@ class TestPriorityProcessorRealIntegration:
             logger.info("Connection management test completed successfully")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_schema_discovery_integration(self, priority_processor, test_settings):
         """Test that PriorityProcessor properly integrates with SchemaDiscovery."""
         # Test that SchemaDiscovery is working correctly within PriorityProcessor
@@ -408,6 +418,7 @@ class TestPriorityProcessorRealIntegration:
         logger.info(f"SchemaDiscovery integration test completed with {len(tables)} tables discovered")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_settings_integration(self, priority_processor, test_settings):
         """Test that PriorityProcessor properly integrates with Settings."""
         # Test that Settings integration works correctly
@@ -438,6 +449,7 @@ class TestPriorityProcessorRealIntegration:
             # This is acceptable if the method doesn't exist in the current settings implementation
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_new_architecture_connection_methods(self, test_settings):
         """Test that new architecture connection methods work correctly with PriorityProcessor."""
         # Test that PriorityProcessor can work with new ConnectionFactory methods
@@ -468,6 +480,7 @@ class TestPriorityProcessorRealIntegration:
         source_engine.dispose()
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_type_safe_database_enum_usage(self, test_settings):
         """Test that type-safe database enums work correctly with PriorityProcessor."""
         # Test DatabaseType enum usage

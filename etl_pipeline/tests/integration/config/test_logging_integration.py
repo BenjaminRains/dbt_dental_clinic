@@ -88,6 +88,7 @@ def logging_test_settings(test_env_vars):
 
 
 @pytest.mark.integration
+@pytest.mark.order(0)
 class TestLoggingIntegration:
     """Integration tests for real logging behavior with improved architecture."""
 
@@ -623,6 +624,7 @@ class TestLoggingIntegration:
 
 
 @pytest.mark.integration
+@pytest.mark.order(0)
 class TestEnvironmentVariableIntegration:
     """Integration tests for environment variable handling with improved architecture."""
 
@@ -724,6 +726,7 @@ class TestEnvironmentVariableIntegration:
 
 
 @pytest.mark.integration
+@pytest.mark.order(0)
 class TestLoggingErrorRecovery:
     """Integration tests for logging error recovery with improved architecture."""
 

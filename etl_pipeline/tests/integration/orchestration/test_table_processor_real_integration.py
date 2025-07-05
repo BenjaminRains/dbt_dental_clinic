@@ -52,6 +52,7 @@ class TestTableProcessorRealIntegration:
     """
     
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_table_processor_initialization(self, populated_test_databases, test_settings):
         """Test real TableProcessor initialization with test databases."""
         # Use standardized test data manager
@@ -82,6 +83,7 @@ class TestTableProcessorRealIntegration:
         assert re.match(r'^[a-f0-9]{32}$', schema['schema_hash']), "Schema hash should be valid MD5"
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_table_processing_flow(self, populated_test_databases, test_settings):
         """Test real table processing flow with standardized test data."""
         # Use standardized test data manager
@@ -101,6 +103,7 @@ class TestTableProcessorRealIntegration:
         self._verify_test_data_processing()
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_schema_discovery_integration(self, populated_test_databases, test_settings):
         """Test real SchemaDiscovery integration with test databases."""
         # Use standardized test data manager
@@ -131,6 +134,7 @@ class TestTableProcessorRealIntegration:
         assert schema['schema_hash'] == schema2['schema_hash'], "Schema hash should be consistent for same table in same environment"
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_schema_change_detection(self, test_settings):
         """Test schema change detection functionality."""
         processor = TableProcessor(environment='test')
@@ -148,6 +152,7 @@ class TestTableProcessorRealIntegration:
             "Different hash should be detected as changed"
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_mysql_replicator_integration(self, populated_test_databases, test_settings):
         """Test real MySQL replicator integration with test databases."""
         # Use standardized test data manager
@@ -168,6 +173,7 @@ class TestTableProcessorRealIntegration:
         logger.info("MySQL replication integration test completed successfully")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_postgres_loader_integration(self, populated_test_databases, test_settings):
         """Test real PostgreSQL loader integration with test databases."""
         # Use standardized test data manager
@@ -188,6 +194,7 @@ class TestTableProcessorRealIntegration:
         logger.info("PostgreSQL loader integration test completed successfully")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_error_handling(self, test_settings):
         """Test real error handling with test database component failures."""
         processor = TableProcessor(environment='test')
@@ -202,6 +209,7 @@ class TestTableProcessorRealIntegration:
             assert not result, "Should handle schema discovery errors gracefully"
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_incremental_vs_full_refresh(self, populated_test_databases, test_settings):
         """Test incremental vs full refresh logic."""
         # Use standardized test data manager
@@ -230,6 +238,7 @@ class TestTableProcessorRealIntegration:
         logger.info("Test data processing verification completed")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_multiple_table_processing(self, populated_test_databases, test_settings):
         """Test processing multiple tables with real data flow."""
         # Use standardized test data manager
@@ -252,6 +261,7 @@ class TestTableProcessorRealIntegration:
             logger.info(f"Successfully processed test table: {table}")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_connection_management(self, test_settings):
         """Test connection management and cleanup."""
         processor = TableProcessor(environment='test')
@@ -269,6 +279,7 @@ class TestTableProcessorRealIntegration:
         logger.info("Connection management test completed successfully")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_real_schema_discovery_caching(self, populated_test_databases, test_settings):
         """Test schema discovery caching functionality."""
         # Use standardized test data manager
@@ -299,6 +310,7 @@ class TestTableProcessorRealIntegration:
         logger.info("Schema discovery caching test completed successfully")
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_new_architecture_connection_methods(self, test_settings):
         """Test that new architecture connection methods work correctly with test environment."""
         # Test new ConnectionFactory methods with Settings dependency injection
@@ -328,6 +340,7 @@ class TestTableProcessorRealIntegration:
             assert result.scalar() == 1, "Test analytics engine connectivity failed"
 
     @pytest.mark.integration
+    @pytest.mark.order(5)
     def test_type_safe_database_enum_usage(self, test_settings):
         """Test that type-safe database enums work correctly with test environment."""
         # Test DatabaseType enum usage
