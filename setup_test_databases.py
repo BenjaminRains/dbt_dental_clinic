@@ -290,7 +290,7 @@ def setup_postgresql_test_database(settings):
             # Clear any existing test data first
             conn.execute(text("DELETE FROM raw.patient WHERE \"PatNum\" IN (1, 2, 3)"))
             
-            test_patients = get_test_patient_data(include_all_fields=False)
+            test_patients = get_test_patient_data()
             
             for patient in test_patients:
                 # Build dynamic INSERT statement based on available fields
@@ -495,7 +495,7 @@ def setup_mysql_test_database(settings, database_type):
             # Clear any existing test data first
             conn.execute(text("DELETE FROM patient WHERE PatNum IN (1, 2, 3)"))
             
-            test_patients = get_test_patient_data(include_all_fields=False)
+            test_patients = get_test_patient_data()
             
             for patient in test_patients:
                 # Build dynamic INSERT statement based on available fields
