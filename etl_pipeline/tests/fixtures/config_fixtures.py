@@ -10,7 +10,7 @@ This module contains fixtures related to:
 
 import os
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
 from typing import Dict, Any
 
 # Import ETL pipeline components for testing
@@ -91,164 +91,131 @@ def test_tables_config():
 
 @pytest.fixture
 def complete_config_environment():
-    """Complete configuration environment with all required settings."""
-    return {
-        'pipeline_config': {
-            'general': {
-                'pipeline_name': 'complete_test_pipeline',
-                'environment': 'test',
-                'batch_size': 2000,
-                'parallel_jobs': 4,
-                'max_retries': 3,
-                'retry_delay': 5
-            },
-            'connections': {
-                'source': {
-                    'pool_size': 5,
-                    'connect_timeout': 60,
-                    'read_timeout': 300
-                },
-                'replication': {
-                    'pool_size': 3,
-                    'connect_timeout': 45,
-                    'read_timeout': 180
-                },
-                'analytics': {
-                    'pool_size': 4,
-                    'connect_timeout': 30,
-                    'read_timeout': 120
-                }
-            },
-            'logging': {
-                'level': 'INFO',
-                'format': 'detailed',
-                'file_rotation': True
-            }
-        },
-        'tables_config': {
-            'tables': {
-                'patient': {
-                    'primary_key': 'PatNum',
-                    'incremental_column': 'DateTStamp',
-                    'extraction_strategy': 'incremental',
-                    'table_importance': 'critical',
-                    'batch_size': 500,
-                    'parallel_processing': True
-                },
-                'appointment': {
-                    'primary_key': 'AptNum',
-                    'incremental_column': 'AptDateTime',
-                    'extraction_strategy': 'incremental',
-                    'table_importance': 'important',
-                    'batch_size': 200,
-                    'parallel_processing': True
-                },
-                'procedurelog': {
-                    'primary_key': 'ProcNum',
-                    'incremental_column': 'ProcDate',
-                    'extraction_strategy': 'incremental',
-                    'table_importance': 'important',
-                    'batch_size': 300,
-                    'parallel_processing': False
-                },
-                'claim': {
-                    'primary_key': 'ClaimNum',
-                    'incremental_column': 'DateSent',
-                    'extraction_strategy': 'incremental',
-                    'table_importance': 'standard',
-                    'batch_size': 150
-                }
-            }
-        }
+    """Fixture providing a complete configuration environment."""
+    env_vars = {
+        'OPENDENTAL_SOURCE_HOST': 'source_host',
+        'OPENDENTAL_SOURCE_PORT': '3306',
+        'OPENDENTAL_SOURCE_DB': 'source_db',
+        'OPENDENTAL_SOURCE_USER': 'source_user',
+        'OPENDENTAL_SOURCE_PASSWORD': 'source_pass',
+        'MYSQL_REPLICATION_HOST': 'repl_host',
+        'MYSQL_REPLICATION_PORT': '3306',
+        'MYSQL_REPLICATION_DB': 'repl_db',
+        'MYSQL_REPLICATION_USER': 'repl_user',
+        'MYSQL_REPLICATION_PASSWORD': 'repl_pass',
+        'POSTGRES_ANALYTICS_HOST': 'analytics_host',
+        'POSTGRES_ANALYTICS_PORT': '5432',
+        'POSTGRES_ANALYTICS_DB': 'analytics_db',
+        'POSTGRES_ANALYTICS_SCHEMA': 'raw',
+        'POSTGRES_ANALYTICS_USER': 'analytics_user',
+        'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
     }
+    return env_vars
 
 
 @pytest.fixture
 def valid_pipeline_config():
-    """Valid pipeline configuration for testing."""
+    """Fixture providing a valid pipeline configuration."""
     return {
         'general': {
-            'pipeline_name': 'valid_test_pipeline',
-            'environment': 'test',
-            'batch_size': 1000,
-            'parallel_jobs': 2,
+            'pipeline_name': 'dental_clinic_etl',
+            'environment': 'production',
+            'timezone': 'UTC',
             'max_retries': 3,
-            'retry_delay': 5,
-            'enable_monitoring': True,
-            'enable_metrics': True
+            'retry_delay_seconds': 300,
+            'batch_size': 25000,
+            'parallel_jobs': 6
         },
         'connections': {
             'source': {
-                'pool_size': 3,
-                'connect_timeout': 30,
-                'read_timeout': 120,
-                'max_overflow': 5
+                'pool_size': 6,
+                'pool_timeout': 30,
+                'pool_recycle': 3600,
+                'connect_timeout': 60,
+                'read_timeout': 300,
+                'write_timeout': 300
             },
             'replication': {
-                'pool_size': 2,
-                'connect_timeout': 30,
-                'read_timeout': 90,
-                'max_overflow': 3
+                'pool_size': 6,
+                'pool_timeout': 30,
+                'pool_recycle': 3600,
+                'connect_timeout': 60,
+                'read_timeout': 300,
+                'write_timeout': 300
             },
             'analytics': {
-                'pool_size': 4,
-                'connect_timeout': 30,
-                'read_timeout': 60,
-                'max_overflow': 6
+                'pool_size': 6,
+                'pool_timeout': 30,
+                'pool_recycle': 3600,
+                'connect_timeout': 60,
+                'application_name': 'dental_clinic_etl'
+            }
+        },
+        'stages': {
+            'extract': {
+                'enabled': True,
+                'timeout_minutes': 30,
+                'error_threshold': 0.01
+            },
+            'load': {
+                'enabled': True,
+                'timeout_minutes': 45,
+                'error_threshold': 0.01
+            },
+            'transform': {
+                'enabled': True,
+                'timeout_minutes': 60,
+                'error_threshold': 0.01
             }
         },
         'logging': {
             'level': 'INFO',
-            'format': 'standard',
-            'file_rotation': False,
-            'console_output': True
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            'file': {
+                'enabled': True,
+                'path': 'logs/pipeline.log',
+                'max_size_mb': 100,
+                'backup_count': 10
+            },
+            'console': {
+                'enabled': True,
+                'level': 'INFO'
+            }
         },
-        'monitoring': {
-            'enabled': True,
-            'metrics_interval': 60,
-            'health_check_interval': 30,
-            'alert_threshold': 0.9
+        'error_handling': {
+            'max_consecutive_failures': 3,
+            'failure_notification_threshold': 2,
+            'auto_retry': {
+                'enabled': True,
+                'max_attempts': 3,
+                'delay_minutes': 5
+            }
         }
     }
 
 
 @pytest.fixture
 def minimal_pipeline_config():
-    """Minimal pipeline configuration for testing."""
+    """Fixture providing a minimal pipeline configuration."""
     return {
         'general': {
-            'pipeline_name': 'minimal_test_pipeline',
-            'environment': 'test',
-            'batch_size': 100
-        },
-        'connections': {
-            'source': {
-                'pool_size': 1
-            },
-            'replication': {
-                'pool_size': 1
-            },
-            'analytics': {
-                'pool_size': 1
-            }
+            'pipeline_name': 'test_pipeline',
+            'batch_size': 1000
         }
     }
 
 
 @pytest.fixture
 def invalid_pipeline_config():
-    """Invalid pipeline configuration for testing error handling."""
+    """Fixture providing an invalid pipeline configuration."""
     return {
         'general': {
-            'pipeline_name': '',  # Invalid: empty name
-            'environment': 'invalid_env',  # Invalid: unknown environment
-            'batch_size': -1,  # Invalid: negative batch size
-            'parallel_jobs': 0  # Invalid: zero parallel jobs
+            'pipeline_name': 'test_pipeline',
+            'batch_size': 'invalid_string'  # Should be int
         },
         'connections': {
             'source': {
-                'pool_size': -5,  # Invalid: negative pool size
-                'connect_timeout': 0  # Invalid: zero timeout
+                'pool_size': -1  # Invalid negative value
             }
         }
     }
@@ -256,58 +223,39 @@ def invalid_pipeline_config():
 
 @pytest.fixture
 def complete_tables_config():
-    """Complete tables configuration for testing."""
+    """Fixture providing complete tables configuration."""
     return {
         'tables': {
             'patient': {
                 'primary_key': 'PatNum',
-                'incremental_column': 'DateTStamp',
-                'extraction_strategy': 'incremental',
+                'incremental_key': 'DateTStamp',
+                'incremental': True,
                 'table_importance': 'critical',
-                'batch_size': 500,
-                'parallel_processing': True,
-                'validation_rules': ['not_null', 'unique'],
-                'transformation_rules': ['clean_dates', 'standardize_names']
+                'batch_size': 1000,
+                'extraction_strategy': 'incremental'
             },
             'appointment': {
                 'primary_key': 'AptNum',
-                'incremental_column': 'AptDateTime',
-                'extraction_strategy': 'incremental',
+                'incremental_key': 'AptDateTime',
+                'incremental': True,
                 'table_importance': 'important',
-                'batch_size': 200,
-                'parallel_processing': True,
-                'validation_rules': ['not_null', 'valid_date'],
-                'transformation_rules': ['clean_datetime', 'timezone_convert']
+                'batch_size': 500,
+                'extraction_strategy': 'incremental'
             },
             'procedurelog': {
                 'primary_key': 'ProcNum',
-                'incremental_column': 'ProcDate',
-                'extraction_strategy': 'incremental',
+                'incremental_key': 'ProcDate',
+                'incremental': True,
                 'table_importance': 'important',
-                'batch_size': 300,
-                'parallel_processing': False,
-                'validation_rules': ['not_null', 'valid_amount'],
-                'transformation_rules': ['clean_amounts', 'standardize_codes']
+                'batch_size': 2000,
+                'extraction_strategy': 'incremental'
             },
-            'claim': {
-                'primary_key': 'ClaimNum',
-                'incremental_column': 'DateSent',
-                'extraction_strategy': 'incremental',
-                'table_importance': 'standard',
-                'batch_size': 150,
-                'parallel_processing': True,
-                'validation_rules': ['not_null'],
-                'transformation_rules': ['clean_dates']
-            },
-            'payment': {
-                'primary_key': 'PayNum',
-                'incremental_column': 'DatePay',
-                'extraction_strategy': 'incremental',
-                'table_importance': 'standard',
-                'batch_size': 100,
-                'parallel_processing': False,
-                'validation_rules': ['not_null', 'valid_amount'],
-                'transformation_rules': ['clean_amounts']
+            'securitylog': {
+                'primary_key': 'SecurityLogNum',
+                'incremental': False,
+                'table_importance': 'reference',
+                'batch_size': 5000,
+                'extraction_strategy': 'full'
             }
         }
     }
@@ -315,58 +263,33 @@ def complete_tables_config():
 
 @pytest.fixture
 def mock_settings_environment():
-    """Mock settings environment for testing configuration loading."""
+    """Fixture providing a context manager for mocking Settings environment."""
     def _mock_settings_environment(env_vars=None, pipeline_config=None, tables_config=None):
-        """Create a mock settings environment with optional overrides."""
-        base_env_vars = {
-            'ETL_ENVIRONMENT': 'test',
-            'OPENDENTAL_SOURCE_HOST': 'localhost',
-            'OPENDENTAL_SOURCE_PORT': '3306',
-            'OPENDENTAL_SOURCE_DB': 'test_opendental',
-            'OPENDENTAL_SOURCE_USER': 'test_user',
-            'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
-        }
+        """Create a context manager for mocking Settings environment."""
+        patches = []
         
-        if env_vars:
-            base_env_vars.update(env_vars)
+        # Mock environment variables
+        if env_vars is not None:
+            patches.append(patch.dict(os.environ, env_vars))
         
-        base_pipeline_config = {
-            'general': {
-                'pipeline_name': 'mock_test_pipeline',
-                'environment': 'test',
-                'batch_size': 1000
-            }
-        }
-        
-        if pipeline_config:
-            base_pipeline_config.update(pipeline_config)
-        
-        base_tables_config = {
-            'tables': {
-                'patient': {
-                    'primary_key': 'PatNum',
-                    'extraction_strategy': 'incremental'
-                }
-            }
-        }
-        
-        if tables_config:
-            base_tables_config.update(tables_config)
-        
-        def yaml_side_effect(data):
-            """Mock YAML loading behavior."""
-            if 'pipeline_config' in str(data):
-                return base_pipeline_config
-            elif 'tables_config' in str(data):
-                return base_tables_config
-            else:
+        # Mock file existence and loading
+        if pipeline_config is not None or tables_config is not None:
+            patches.append(patch('pathlib.Path.exists', return_value=True))
+            
+            # Configure YAML loading
+            def yaml_side_effect(data):
+                if 'pipeline' in str(data) and pipeline_config is not None:
+                    return pipeline_config
+                elif 'tables' in str(data) and tables_config is not None:
+                    return tables_config
                 return {}
+            
+            patches.append(patch('yaml.safe_load', side_effect=yaml_side_effect))
+            patches.append(patch('builtins.open', mock_open(read_data='test: value')))
         
-        return {
-            'env_vars': base_env_vars,
-            'pipeline_config': base_pipeline_config,
-            'tables_config': base_tables_config,
-            'yaml_side_effect': yaml_side_effect
-        }
+        # Always mock load_environment to avoid actual environment loading
+        patches.append(patch('etl_pipeline.config.settings.Settings.load_environment'))
+        
+        return patches
     
     return _mock_settings_environment 
