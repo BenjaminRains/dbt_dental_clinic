@@ -3,6 +3,8 @@ Unit tests for pipeline.yml configuration file operations.
 
 This module tests the pipeline.yml configuration file specifically,
 including file loading, YAML parsing, file extensions, and file-specific edge cases.
+
+Fixtures are now imported from modular files in tests/fixtures/ per the refactor plan.
 """
 
 import pytest
@@ -11,6 +13,9 @@ from unittest.mock import patch, mock_open, MagicMock
 from etl_pipeline.config.settings import Settings
 from etl_pipeline.config.providers import FileConfigProvider, DictConfigProvider
 from pathlib import Path
+
+# Import modular fixtures
+from tests.fixtures.config_fixtures import valid_pipeline_config, minimal_pipeline_config, invalid_pipeline_config
 
 
 class TestPipelineConfigFileLoading:
