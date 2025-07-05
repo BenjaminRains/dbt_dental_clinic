@@ -58,4 +58,23 @@ from tests.fixtures.config_fixtures import (
     invalid_pipeline_config,
     complete_tables_config,
     mock_settings_environment
+)
+
+# Import metrics fixtures for monitoring tests
+from tests.fixtures.metrics_fixtures import (
+    mock_unified_metrics_connection,
+    unified_metrics_collector_no_persistence,
+    mock_metrics_data,
+    mock_performance_metrics,
+    mock_pipeline_metrics,
+    mock_database_metrics,
+    mock_metrics_collector,
+    mock_metrics_storage,
+    mock_metrics_aggregator,
+    mock_metrics_alert,
+    mock_metrics_dashboard,
+    sample_metrics_query,
+    mock_metrics_error,
+    metrics_collector_with_settings,
+    mock_analytics_engine_for_metrics
 ) 
