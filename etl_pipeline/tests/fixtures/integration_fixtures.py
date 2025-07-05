@@ -52,11 +52,13 @@ def test_data_manager(test_settings) -> Generator[IntegrationTestDataManager, No
 @pytest.fixture
 def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
     """
-    Provides databases with all standard test data pre-populated.
+    Provides databases with comprehensive test data.
     
     This fixture:
-    - Sets up patient and appointment data in all test databases
-    - Provides a ready-to-use test environment
+    - Sets up patient and appointment data in SOURCE and REPLICATION databases
+    - SOURCE database contains original data (test_opendental)
+    - REPLICATION database contains replicated data (test_opendental_replication) - what PostgresSchema reads from
+    - ANALYTICS database starts empty - what PostgresSchema writes to
     - Automatically cleans up after tests
     
     Usage:
@@ -64,58 +66,21 @@ def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
             # Databases already have test data
             # ... test logic ...
     """
-    # Set up standard test data
-    test_data_manager.setup_patient_data(include_all_fields=True)
-    test_data_manager.setup_appointment_data()
+    # Set up standard test data in SOURCE and REPLICATION databases only
+    # ANALYTICS database starts empty (PostgresSchema will populate it)
+    test_data_manager.setup_patient_data(
+        include_all_fields=True, 
+        database_types=[DatabaseType.SOURCE, DatabaseType.REPLICATION]
+    )
+    test_data_manager.setup_appointment_data(
+        database_types=[DatabaseType.SOURCE, DatabaseType.REPLICATION]
+    )
     
-    logger.info("✅ Set up populated test databases with standard test data")
-    
-    return test_data_manager
-
-@pytest.fixture
-def minimal_test_databases(test_data_manager) -> IntegrationTestDataManager:
-    """
-    Provides databases with minimal test data (only required fields).
-    
-    This fixture:
-    - Sets up minimal patient data (faster setup)
-    - Useful for tests that don't need all fields
-    - Automatically cleans up after tests
-    
-    Usage:
-        def test_minimal_data(minimal_test_databases):
-            # Databases have minimal test data
-            # ... test logic ...
-    """
-    # Set up minimal test data
-    test_data_manager.setup_patient_data(include_all_fields=False)
-    
-    logger.info("✅ Set up minimal test databases with required fields only")
+    logger.info("✅ Set up populated test databases with standard test data (SOURCE and REPLICATION only)")
     
     return test_data_manager
 
-@pytest.fixture
-def incremental_test_databases(test_data_manager) -> IntegrationTestDataManager:
-    """
-    Provides databases with incremental test data for incremental loading tests.
-    
-    This fixture:
-    - Sets up patient data with newer timestamps
-    - Useful for testing incremental loading functionality
-    - Automatically cleans up after tests
-    
-    Usage:
-        def test_incremental_loading(incremental_test_databases):
-            # Databases have incremental test data
-            # ... test logic ...
-    """
-    # Set up incremental test data
-    test_data_manager.setup_patient_data(include_all_fields=True)
-    test_data_manager.setup_incremental_patient_data()
-    
-    logger.info("✅ Set up incremental test databases with newer timestamps")
-    
-    return test_data_manager
+
 
 @pytest.fixture
 def test_database_engines(test_settings) -> Tuple:
