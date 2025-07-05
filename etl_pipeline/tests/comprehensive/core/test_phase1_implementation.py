@@ -69,9 +69,9 @@ def mock_connections():
         mock_analytics = MagicMock()
         mock_analytics.connect.return_value.__enter__.return_value.execute.return_value.scalar.return_value = 1
         
-        mock_factory.get_opendental_source_connection.return_value = mock_source
-        mock_factory.get_mysql_replication_connection.return_value = mock_replication
-        mock_factory.get_postgres_analytics_connection.return_value = mock_analytics
+        mock_factory.get_source_connection.return_value = mock_source
+        mock_factory.get_replication_connection.return_value = mock_replication
+        mock_factory.get_analytics_connection.return_value = mock_analytics
         
         yield mock_factory
 

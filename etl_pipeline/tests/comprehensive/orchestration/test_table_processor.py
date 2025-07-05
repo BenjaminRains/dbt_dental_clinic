@@ -97,9 +97,9 @@ class TestTableProcessor:
         with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory, \
              patch.object(processor.settings, 'get_database_config') as mock_get_config:
             
-            mock_factory.get_opendental_source_connection.return_value = mock_source
-            mock_factory.get_mysql_replication_connection.return_value = mock_replication
-            mock_factory.get_postgres_analytics_connection.return_value = mock_analytics
+            mock_factory.get_source_connection.return_value = mock_source
+            mock_factory.get_replication_connection.return_value = mock_replication
+            mock_factory.get_analytics_connection.return_value = mock_analytics
             mock_get_config.side_effect = lambda db, **kwargs: {'database': f'{db}_database'}
             
             result = processor.initialize_connections()
@@ -114,7 +114,7 @@ class TestTableProcessor:
         processor = TableProcessor()
         
         with patch('etl_pipeline.orchestration.table_processor.ConnectionFactory') as mock_factory:
-            mock_factory.get_opendental_source_connection.side_effect = Exception("Connection failed")
+            mock_factory.get_source_connection.side_effect = Exception("Connection failed")
             
             with pytest.raises(Exception, match="Connection failed"):
                 processor.initialize_connections()
