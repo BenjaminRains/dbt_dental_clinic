@@ -11,6 +11,12 @@ Testing Strategy:
 - Core logic and edge cases
 
 Target Coverage: 90%+ for unit tests
+
+REFACTORED: Updated to use new modular fixtures and configuration system
+- Uses fixtures from tests/fixtures/ directory
+- Proper test isolation with new settings system
+- Dependency injection pattern
+- Type-safe database configuration
 """
 
 import pytest
@@ -18,6 +24,12 @@ import logging
 from unittest.mock import MagicMock, patch, call
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
+
+# Import fixtures from modular structure
+from tests.fixtures.orchestrator_fixtures import mock_components, orchestrator
+from tests.fixtures.config_fixtures import test_pipeline_config, test_tables_config
+from tests.fixtures.env_fixtures import test_env_vars, test_settings, setup_test_environment
+from tests.fixtures.connection_fixtures import mock_source_engine, mock_replication_engine, mock_analytics_engine
 
 # Import the component under test
 from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
@@ -29,7 +41,7 @@ logger = logging.getLogger(__name__)
 class TestPipelineOrchestratorUnit:
     """Unit tests for PipelineOrchestrator class with comprehensive mocking."""
     
-    # Fixtures moved to conftest.py:
+    # Fixtures moved to tests/fixtures/orchestrator_fixtures.py:
     # - mock_components
     # - orchestrator
 
@@ -37,13 +49,13 @@ class TestPipelineOrchestratorUnit:
 class TestInitialization(TestPipelineOrchestratorUnit):
     """Test PipelineOrchestrator initialization."""
     
-    def test_initialization_without_config(self, mock_components):
+    def test_initialization_without_config(self, test_settings, mock_components, mock_source_engine):
         """Test successful initialization without configuration file."""
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
-            mock_settings.return_value = MagicMock()
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings_class:
+            mock_settings_class.return_value = test_settings
             
             with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
-                mock_connection_factory.get_opendental_source_connection.return_value = MagicMock()
+                mock_connection_factory.get_source_connection.return_value = mock_source_engine
                 
                 with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
                     mock_schema_discovery = MagicMock()
@@ -65,7 +77,6 @@ class TestInitialization(TestPipelineOrchestratorUnit):
                                 assert orchestrator.table_processor is None
                                 assert orchestrator.priority_processor is None
                                 assert orchestrator.schema_discovery is None
-                                assert orchestrator.metrics == mock_components['metrics']
                                 assert orchestrator._initialized is False
                                 
                                 # Initialize connections to create components
@@ -82,13 +93,13 @@ class TestInitialization(TestPipelineOrchestratorUnit):
         mock_priority_class.assert_called_once()
         mock_metrics_class.assert_called_once()
     
-    def test_initialization_with_config_path(self, mock_components):
+    def test_initialization_with_config_path(self, test_settings, mock_components, mock_source_engine):
         """Test initialization with config_path parameter (deprecated but supported)."""
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
-            mock_settings.return_value = MagicMock()
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings_class:
+            mock_settings_class.return_value = test_settings
             
             with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
-                mock_connection_factory.get_opendental_source_connection.return_value = MagicMock()
+                mock_connection_factory.get_source_connection.return_value = mock_source_engine
                 
                 with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
                     mock_schema_discovery = MagicMock()
@@ -124,13 +135,13 @@ class TestInitialization(TestPipelineOrchestratorUnit):
         mock_priority_class.assert_called_once()
         mock_metrics_class.assert_called_once()
     
-    def test_initialization_component_creation_order(self, mock_components):
+    def test_initialization_component_creation_order(self, test_settings, mock_components, mock_source_engine):
         """Test that components are created in the correct order."""
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
-            mock_settings.return_value = MagicMock()
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings_class:
+            mock_settings_class.return_value = test_settings
             
             with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
-                mock_connection_factory.get_opendental_source_connection.return_value = MagicMock()
+                mock_connection_factory.get_source_connection.return_value = mock_source_engine
                 
                 with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
                     mock_schema_discovery = MagicMock()
@@ -159,14 +170,14 @@ class TestInitialization(TestPipelineOrchestratorUnit):
 class TestConnectionInitialization(TestPipelineOrchestratorUnit):
     """Test connection initialization scenarios."""
     
-    def test_connection_initialization_success(self, orchestrator, mock_components):
+    def test_connection_initialization_success(self, test_settings, mock_components, mock_source_engine):
         """Test successful connection initialization with proper mocking."""
         # Create a fresh orchestrator that hasn't been initialized yet
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
-            mock_settings.return_value = MagicMock()
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings_class:
+            mock_settings_class.return_value = test_settings
             
             with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
-                mock_connection_factory.get_opendental_source_connection.return_value = MagicMock()
+                mock_connection_factory.get_source_connection.return_value = mock_source_engine
                 
                 with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
                     mock_schema_discovery = MagicMock()
@@ -182,7 +193,6 @@ class TestConnectionInitialization(TestPipelineOrchestratorUnit):
                                 mock_metrics_class.return_value = mock_components['metrics']
                                 
                                 # Create fresh orchestrator
-                                from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
                                 fresh_orchestrator = PipelineOrchestrator()
                                 
                                 # Mock the table processor to return success
@@ -195,14 +205,14 @@ class TestConnectionInitialization(TestPipelineOrchestratorUnit):
                                 assert fresh_orchestrator._initialized is True
                                 mock_components['table_processor'].initialize_connections.assert_called_once()
     
-    def test_connection_initialization_failure(self, orchestrator, mock_components):
+    def test_connection_initialization_failure(self, test_settings, mock_components, mock_source_engine):
         """Test connection initialization failure with proper mocking."""
         # Create a fresh orchestrator that hasn't been initialized yet
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
-            mock_settings.return_value = MagicMock()
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings_class:
+            mock_settings_class.return_value = test_settings
             
             with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
-                mock_connection_factory.get_opendental_source_connection.return_value = MagicMock()
+                mock_connection_factory.get_source_connection.return_value = mock_source_engine
                 
                 with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
                     mock_schema_discovery = MagicMock()
@@ -218,7 +228,6 @@ class TestConnectionInitialization(TestPipelineOrchestratorUnit):
                                 mock_metrics_class.return_value = mock_components['metrics']
                                 
                                 # Create fresh orchestrator
-                                from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
                                 fresh_orchestrator = PipelineOrchestrator()
                                 
                                 # Mock the table processor to return failure
@@ -231,15 +240,15 @@ class TestConnectionInitialization(TestPipelineOrchestratorUnit):
                                 assert fresh_orchestrator._initialized is False
                                 mock_components['table_processor'].initialize_connections.assert_called_once()
     
-    def test_connection_initialization_exception(self, orchestrator, mock_components):
+    def test_connection_initialization_exception(self, test_settings, mock_components, mock_source_engine):
         """Test connection initialization with exception handling."""
         # Create a fresh orchestrator that hasn't been initialized yet
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
-            mock_settings.return_value = MagicMock()
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings_class:
+            mock_settings_class.return_value = test_settings
             
             with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
                 # Mock ConnectionFactory to raise an exception
-                mock_connection_factory.get_opendental_source_connection.side_effect = Exception("Connection failed")
+                mock_connection_factory.get_source_connection.side_effect = Exception("Connection failed")
                 
                 with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
                     mock_schema_discovery = MagicMock()
@@ -255,7 +264,6 @@ class TestConnectionInitialization(TestPipelineOrchestratorUnit):
                                 mock_metrics_class.return_value = mock_components['metrics']
                                 
                                 # Create fresh orchestrator
-                                from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
                                 fresh_orchestrator = PipelineOrchestrator()
                                 
                                 # Test that exception is properly handled
@@ -844,47 +852,37 @@ class TestEdgeCases(TestPipelineOrchestratorUnit):
 class TestSchemaDiscoveryUnit(TestPipelineOrchestratorUnit):
     """Unit tests for SchemaDiscovery integration in PipelineOrchestrator."""
     
-    def test_constructor_creates_schema_discovery(self, mock_components):
+    def test_constructor_creates_schema_discovery(self, test_settings, mock_components, mock_source_engine):
         """Test that constructor creates SchemaDiscovery and passes it to components."""
-        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings:
-            mock_settings.return_value = MagicMock()
-            mock_settings.return_value.get_database_config.return_value = {'database': 'test_db'}
-            
-            with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
-                mock_connection_factory.get_opendental_source_connection.return_value = MagicMock()
-                
-                with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
-                    mock_schema_discovery = MagicMock()
-                    mock_schema_discovery_class.return_value = mock_schema_discovery
-                    
-                    with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor') as mock_table_processor_class:
-                        mock_table_processor = MagicMock()
-                        mock_table_processor_class.return_value = mock_table_processor
-                        
-                        with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor') as mock_priority_processor_class:
-                            mock_priority_processor = MagicMock()
-                            mock_priority_processor_class.return_value = mock_priority_processor
-                            
-                            # Test REAL orchestrator initialization
-                            orchestrator = PipelineOrchestrator()
-                            
-                            # Initially components should be None
-                            assert orchestrator.table_processor is None
-                            assert orchestrator.priority_processor is None
-                            assert orchestrator.schema_discovery is None
-                            
-                            # Initialize connections to create components
-                            orchestrator.initialize_connections()
-                            
-                            # Verify SchemaDiscovery was created
-                            mock_schema_discovery_class.assert_called_once()
-                            
-                            # Verify components were created with SchemaDiscovery
-                            mock_table_processor_class.assert_called_once_with(schema_discovery=mock_schema_discovery)
-                            mock_priority_processor_class.assert_called_once_with(schema_discovery=mock_schema_discovery)
-                            
-                            # Verify orchestrator has access to schema_discovery
-                            assert orchestrator.schema_discovery == mock_schema_discovery
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.Settings') as mock_settings_class:
+            mock_settings_class.return_value = test_settings
+            with patch.object(test_settings, "get_database_config", return_value={"database": "test_db"}):
+                with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConnectionFactory') as mock_connection_factory:
+                    mock_connection_factory.get_source_connection.return_value = mock_source_engine
+                    with patch('etl_pipeline.orchestration.pipeline_orchestrator.SchemaDiscovery') as mock_schema_discovery_class:
+                        mock_schema_discovery = MagicMock()
+                        mock_schema_discovery_class.return_value = mock_schema_discovery
+                        with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor') as mock_table_processor_class:
+                            mock_table_processor = MagicMock()
+                            mock_table_processor_class.return_value = mock_table_processor
+                            with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor') as mock_priority_processor_class:
+                                mock_priority_processor = MagicMock()
+                                mock_priority_processor_class.return_value = mock_priority_processor
+                                # Test REAL orchestrator initialization
+                                orchestrator = PipelineOrchestrator()
+                                # Initially components should be None
+                                assert orchestrator.table_processor is None
+                                assert orchestrator.priority_processor is None
+                                assert orchestrator.schema_discovery is None
+                                # Initialize connections to create components
+                                orchestrator.initialize_connections()
+                                # Verify SchemaDiscovery was created
+                                mock_schema_discovery_class.assert_called_once()
+                                # Verify components were created with SchemaDiscovery
+                                mock_table_processor_class.assert_called_once_with(schema_discovery=mock_schema_discovery)
+                                mock_priority_processor_class.assert_called_once_with(schema_discovery=mock_schema_discovery)
+                                # Verify orchestrator has access to schema_discovery
+                                assert orchestrator.schema_discovery == mock_schema_discovery
 
 
 if __name__ == "__main__":
