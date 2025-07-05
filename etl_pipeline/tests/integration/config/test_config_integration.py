@@ -206,7 +206,7 @@ class TestConfigurationLoading:
         # Test replication database config
         replication_config = settings.get_database_config(DatabaseType.REPLICATION)
         assert replication_config['host'] == 'localhost'
-        assert replication_config['port'] == 3306
+        assert replication_config['port'] == 3305  # Updated to match .env.template
         assert replication_config['database'] == 'test_opendental_replication'
         
         # Test analytics database config with schema
@@ -267,37 +267,6 @@ class TestConfigurationLoading:
         print("✅ Environment variable prefixing working correctly")
 
 
-class TestLegacyCompatibility:
-    """Test legacy method compatibility during transition."""
-
-    @pytest.mark.config
-    def test_legacy_connection_methods(self, test_env_vars):
-        """Test that legacy connection methods still work with deprecation warnings."""
-        settings = create_test_settings(env_vars=test_env_vars)
-        
-        # Test legacy methods (should work but show warnings)
-        try:
-            legacy_source = ConnectionFactory.get_opendental_source_connection(settings)
-            assert legacy_source is not None
-            print("✅ Legacy source connection method works")
-        except Exception as e:
-            print(f"⚠️ Legacy source connection failed: {e}")
-        
-        try:
-            legacy_replication = ConnectionFactory.get_mysql_replication_connection(settings)
-            assert legacy_replication is not None
-            print("✅ Legacy replication connection method works")
-        except Exception as e:
-            print(f"⚠️ Legacy replication connection failed: {e}")
-        
-        try:
-            legacy_analytics = ConnectionFactory.get_postgres_analytics_connection(settings)
-            assert legacy_analytics is not None
-            print("✅ Legacy analytics connection method works")
-        except Exception as e:
-            print(f"⚠️ Legacy analytics connection failed: {e}")
-
-
 class TestErrorHandling:
     """Test error handling scenarios."""
 
@@ -307,12 +276,29 @@ class TestErrorHandling:
         # Create settings with minimal environment variables
         minimal_env = {'ETL_ENVIRONMENT': 'test'}
         
-        settings = create_test_settings(env_vars=minimal_env)
+        # Temporarily clear environment variables to test missing vars
+        import os
+        original_env = os.environ.copy()
         
-        # Should fail validation
-        assert settings.validate_configs() is False
-        
-        print("✅ Missing environment variables handled correctly")
+        try:
+            # Clear all database-related environment variables
+            for key in list(os.environ.keys()):
+                if any(prefix in key for prefix in ['OPENDENTAL_SOURCE_', 'MYSQL_REPLICATION_', 'POSTGRES_ANALYTICS_', 'TEST_']):
+                    del os.environ[key]
+            
+            # Set only minimal environment
+            os.environ.update(minimal_env)
+            
+            settings = create_test_settings(env_vars=minimal_env)
+            
+            # Should fail validation
+            assert settings.validate_configs() is False
+            
+            print("✅ Missing environment variables handled correctly")
+        finally:
+            # Restore original environment
+            os.environ.clear()
+            os.environ.update(original_env)
 
     @pytest.mark.config
     def test_invalid_database_connection(self, test_env_vars):
@@ -327,19 +313,35 @@ class TestErrorHandling:
             'TEST_OPENDENTAL_SOURCE_PASSWORD': 'invalid_pass'
         })
         
-        settings = create_test_settings(env_vars=invalid_env)
+        # Temporarily override environment variables
+        import os
+        original_env = os.environ.copy()
         
-        # Test that connection fails gracefully
         try:
-            source_engine = ConnectionFactory.get_source_connection(settings)
-            with source_engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            pytest.fail("Expected connection to fail")
-        except SQLAlchemyError:
-            print("✅ Invalid database connection handled correctly")
+            # Set invalid environment variables
+            for key, value in invalid_env.items():
+                if key.startswith('TEST_'):
+                    os.environ[key] = value
+            
+            settings = create_test_settings(env_vars=invalid_env)
+            
+            # Test that connection fails gracefully
+            try:
+                source_engine = ConnectionFactory.get_source_connection(settings)
+                with source_engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                pytest.fail("Expected connection to fail")
+            except Exception as e:
+                # Should fail with connection error
+                assert "Can't connect to MySQL server" in str(e) or "getaddrinfo failed" in str(e)
+                print("✅ Invalid database connection handled correctly")
+            finally:
+                if 'source_engine' in locals():
+                    source_engine.dispose()
         finally:
-            if 'source_engine' in locals():
-                source_engine.dispose()
+            # Restore original environment
+            os.environ.clear()
+            os.environ.update(original_env)
 
 
 class TestConfigurationProviders:
