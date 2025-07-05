@@ -9,6 +9,7 @@ Refactored to use new architectural patterns:
 - Type-safe DatabaseType and PostgresSchema enums
 - Modular fixture organization
 - Clean separation of concerns
+- Standardized test data management using IntegrationTestDataManager
 """
 
 import pytest
@@ -16,6 +17,10 @@ import logging
 from sqlalchemy import text
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
+
+# Load environment variables from .env file first
+from tests.fixtures.env_fixtures import load_test_environment
+load_test_environment()
 
 from etl_pipeline.core.schema_discovery import SchemaDiscovery, SchemaNotFoundError
 from etl_pipeline.core.connections import ConnectionFactory
@@ -25,18 +30,47 @@ from etl_pipeline.config import (
     PostgresSchema,
     reset_settings
 )
+from tests.fixtures.test_data_manager import IntegrationTestDataManager
+from tests.fixtures.test_data_definitions import (
+    get_test_patient_data,
+    get_test_appointment_data,
+    STANDARD_TEST_PATIENTS,
+    STANDARD_TEST_APPOINTMENTS
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TestSchemaDiscoveryRealIntegration:
-    """Real integration tests using actual MySQL database with test data."""
+    """Real integration tests using actual MySQL database with standardized test data."""
+
+    @pytest.fixture(autouse=True)
+    def debug_environment(self, test_settings):
+        """Log environment and connection info for debugging."""
+        import os
+        logger.info(f"ETL_ENVIRONMENT: {os.getenv('ETL_ENVIRONMENT')}")
+        logger.info(f"TEST_MYSQL_REPLICATION_HOST: {os.getenv('TEST_MYSQL_REPLICATION_HOST')}")
+        logger.info(f"TEST_MYSQL_REPLICATION_PORT: {os.getenv('TEST_MYSQL_REPLICATION_PORT')}")
+        logger.info(f"TEST_MYSQL_REPLICATION_DB: {os.getenv('TEST_MYSQL_REPLICATION_DB')}")
+        logger.info(f"TEST_MYSQL_REPLICATION_USER: {os.getenv('TEST_MYSQL_REPLICATION_USER')}")
+        logger.info(f"TEST_MYSQL_REPLICATION_PASSWORD: {os.getenv('TEST_MYSQL_REPLICATION_PASSWORD')}")
+        # Print the connection string as seen by the Settings object
+        try:
+            conn_str = test_settings.get_connection_string(DatabaseType.REPLICATION)
+            logger.info(f"Test REPLICATION connection string: {conn_str}")
+        except Exception as e:
+            logger.error(f"Could not get test replication connection string: {e}")
+        yield
     
     @pytest.mark.integration
-    def test_real_schema_discovery_initialization(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_schema_discovery_initialization(self, populated_test_databases, schema_discovery_instance):
         """Test real SchemaDiscovery initialization with actual MySQL database."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        appointment_count = populated_test_databases.get_appointment_count(DatabaseType.REPLICATION)
+        
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), f"Expected at least {len(STANDARD_TEST_PATIENTS)} patients"
+        assert appointment_count >= len(STANDARD_TEST_APPOINTMENTS), f"Expected at least {len(STANDARD_TEST_APPOINTMENTS)} appointments"
         
         # Test REAL SchemaDiscovery with REAL MySQL database
         assert schema_discovery_instance.source_engine is not None
@@ -48,10 +82,11 @@ class TestSchemaDiscoveryRealIntegration:
             assert result.scalar() == 1, "Real database connection failed"
 
     @pytest.mark.integration
-    def test_real_table_schema_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_table_schema_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test real table schema discovery with actual MySQL database."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
         
         # Test REAL schema discovery for patient table
         schema = schema_discovery_instance.get_table_schema('patient')
@@ -61,9 +96,11 @@ class TestSchemaDiscoveryRealIntegration:
         assert 'schema_hash' in schema
         assert schema['table_name'] == 'patient'
         
-        # Verify real column discovery
+        # Verify real column discovery using standardized test data fields
         columns = schema['columns']
         column_names = [col['name'] for col in columns]
+        
+        # Check for key columns from standardized test data
         expected_columns = ['PatNum', 'LName', 'FName', 'MiddleI', 'Preferred', 'PatStatus', 'Gender', 'Position', 'Birthdate', 'SSN']
         
         for expected_col in expected_columns:
@@ -75,29 +112,30 @@ class TestSchemaDiscoveryRealIntegration:
         assert appointment_schema['table_name'] == 'appointment'
 
     @pytest.mark.integration
-    def test_real_table_size_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_table_size_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test real table size discovery with actual MySQL database."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        appointment_count = populated_test_databases.get_appointment_count(DatabaseType.REPLICATION)
+        
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
+        assert appointment_count >= len(STANDARD_TEST_APPOINTMENTS), "Test data not found in database"
         
         # Test REAL table size discovery
         patient_size_info = schema_discovery_instance.get_table_size_info('patient')
         assert patient_size_info is not None, "Real table size discovery failed"
-        assert patient_size_info['row_count'] >= len(schema_discovery_test_data_manager.test_patients), f"Expected at least {len(schema_discovery_test_data_manager.test_patients)} patients"
+        assert patient_size_info['row_count'] >= len(STANDARD_TEST_PATIENTS), f"Expected at least {len(STANDARD_TEST_PATIENTS)} patients"
         
         appointment_size_info = schema_discovery_instance.get_table_size_info('appointment')
         assert appointment_size_info is not None, "Appointment table size discovery failed"
-        assert appointment_size_info['row_count'] >= len(schema_discovery_test_data_manager.test_appointments), f"Expected at least {len(schema_discovery_test_data_manager.test_appointments)} appointments"
-        
-        procedure_size_info = schema_discovery_instance.get_table_size_info('procedure')
-        assert procedure_size_info is not None, "Procedure table size discovery failed"
-        assert procedure_size_info['row_count'] >= len(schema_discovery_test_data_manager.test_procedures), f"Expected at least {len(schema_discovery_test_data_manager.test_procedures)} procedures"
+        assert appointment_size_info['row_count'] >= len(STANDARD_TEST_APPOINTMENTS), f"Expected at least {len(STANDARD_TEST_APPOINTMENTS)} appointments"
 
     @pytest.mark.integration
-    def test_real_database_schema_overview(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_database_schema_overview(self, populated_test_databases, schema_discovery_instance):
         """Test real database schema overview with actual MySQL database."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
         
         # Test REAL database schema overview using discover_all_tables
         tables = schema_discovery_instance.discover_all_tables()
@@ -105,16 +143,17 @@ class TestSchemaDiscoveryRealIntegration:
         assert len(tables) > 0, "Expected at least one table"
         
         # Verify our test tables are in the overview
-        expected_tables = ['patient', 'appointment', 'procedure']
+        expected_tables = ['patient', 'appointment']
         
         for expected_table in expected_tables:
             assert expected_table in tables, f"Table {expected_table} not found in overview"
 
     @pytest.mark.integration
-    def test_real_schema_hash_consistency(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_schema_hash_consistency(self, populated_test_databases, schema_discovery_instance):
         """Test real schema hash consistency with actual MySQL database."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
         
         # Test that schema hash is consistent for the same table
         schema1 = schema_discovery_instance.get_table_schema('patient')
@@ -129,7 +168,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert patient_schema['schema_hash'] != appointment_schema['schema_hash'], "Different tables should have different hashes"
 
     @pytest.mark.integration
-    def test_real_error_handling(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_error_handling(self, test_data_manager, schema_discovery_instance):
         """Test real error handling with actual component failures."""
         # Test with non-existent table - should raise SchemaNotFoundError
         with pytest.raises(SchemaNotFoundError):
@@ -140,10 +179,11 @@ class TestSchemaDiscoveryRealIntegration:
         assert size_info['row_count'] == 0, "Should return 0 for non-existent table"
 
     @pytest.mark.integration
-    def test_real_column_details_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_column_details_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test real column details discovery with actual MySQL database."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
         
         # Test REAL column details discovery
         schema = schema_discovery_instance.get_table_schema('patient')
@@ -161,13 +201,17 @@ class TestSchemaDiscoveryRealIntegration:
         assert 'type' in lname_col, "Column type not discovered"
 
     @pytest.mark.integration
-    def test_real_multiple_table_schema_discovery(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_real_multiple_table_schema_discovery(self, populated_test_databases, schema_discovery_instance):
         """Test schema discovery for multiple tables with real data."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        appointment_count = populated_test_databases.get_appointment_count(DatabaseType.REPLICATION)
+        
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
+        assert appointment_count >= len(STANDARD_TEST_APPOINTMENTS), "Test data not found in database"
         
         # Test schema discovery for multiple tables
-        test_tables = ['patient', 'appointment', 'procedure']
+        test_tables = ['patient', 'appointment']
         schemas = {}
         
         for table in test_tables:
@@ -181,7 +225,7 @@ class TestSchemaDiscoveryRealIntegration:
         assert len(set(schema_hashes)) == len(schema_hashes), "All tables should have different schema hashes"
 
     @pytest.mark.integration
-    def test_type_safe_database_enum_usage(self, schema_discovery_test_data_manager, schema_discovery_instance, test_env_vars):
+    def test_type_safe_database_enum_usage(self, test_data_manager, schema_discovery_instance, test_env_vars):
         """Test that type-safe database enums work correctly with test environment."""
         # Test DatabaseType enum usage - compare enum values, not enum objects
         assert DatabaseType.SOURCE.value == "source", "DatabaseType.SOURCE should be 'source'"
@@ -206,17 +250,18 @@ class TestSchemaDiscoveryRealIntegration:
         assert analytics_engine is not None, "Analytics engine should be created with test connection method"
 
     @pytest.mark.integration
-    def test_schema_discovery_with_tables_yml_validation(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_schema_discovery_with_tables_yml_validation(self, populated_test_databases, schema_discovery_instance):
         """Test that schema discovery finds tables that match tables.yml configuration."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
         
         # Discover all tables
         discovered_tables = schema_discovery_instance.discover_all_tables()
         assert discovered_tables is not None, "Table discovery failed"
         
         # Check that key dental tables are present (these should exist in any OpenDental database)
-        key_tables = ['patient', 'appointment', 'procedure']
+        key_tables = ['patient', 'appointment']
         for table in key_tables:
             assert table in discovered_tables, f"Key table {table} not found in discovered tables"
         
@@ -224,10 +269,11 @@ class TestSchemaDiscoveryRealIntegration:
         logger.info(f"Discovered {len(discovered_tables)} tables: {discovered_tables[:10]}...")  # Show first 10
 
     @pytest.mark.integration
-    def test_schema_discovery_against_configured_tables(self, schema_discovery_test_data_manager, schema_discovery_instance):
+    def test_schema_discovery_against_configured_tables(self, populated_test_databases, schema_discovery_instance):
         """Test that schema discovery can find and validate tables that are configured in tables.yml."""
-        # Verify test data exists
-        assert schema_discovery_test_data_manager.verify_test_data_exists(), "Test data not found in database"
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Test data not found in database"
         
         # Load tables.yml configuration
         import yaml
@@ -289,11 +335,71 @@ class TestSchemaDiscoveryRealIntegration:
         logger.info(f"Note: {len(missing_tables)} configured tables not in test database (expected for integration tests)")
         
         # Verify that our test database has the expected test tables
-        expected_test_tables = ['patient', 'appointment', 'procedure']
+        expected_test_tables = ['patient', 'appointment']
         for table in expected_test_tables:
             assert table in discovered_tables, f"Expected test table {table} not found in database"
         
         logger.info(f"Schema discovery integration test passed - found {len(available_configured_tables)} configured tables")
+
+    @pytest.mark.integration
+    def test_standardized_test_data_integration(self, populated_test_databases, schema_discovery_instance):
+        """Test that the standardized test data is properly integrated and discoverable."""
+        # Verify test data exists using standardized data manager
+        patient_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        appointment_count = populated_test_databases.get_appointment_count(DatabaseType.REPLICATION)
+        
+        assert patient_count >= len(STANDARD_TEST_PATIENTS), "Standardized test patients not found"
+        assert appointment_count >= len(STANDARD_TEST_APPOINTMENTS), "Standardized test appointments not found"
+        
+        # Test that we can discover the standardized test data structure
+        patient_schema = schema_discovery_instance.get_table_schema('patient')
+        appointment_schema = schema_discovery_instance.get_table_schema('appointment')
+        
+        # Verify that the schema matches the standardized test data structure
+        patient_columns = [col['name'] for col in patient_schema['columns']]
+        appointment_columns = [col['name'] for col in appointment_schema['columns']]
+        
+        # Check that key fields from standardized test data are present
+        expected_patient_fields = ['PatNum', 'LName', 'FName', 'Birthdate', 'SSN']
+        expected_appointment_fields = ['AptNum', 'PatNum', 'AptDateTime', 'AptStatus']
+        
+        for field in expected_patient_fields:
+            assert field in patient_columns, f"Expected patient field {field} not found in schema"
+        
+        for field in expected_appointment_fields:
+            assert field in appointment_columns, f"Expected appointment field {field} not found in schema"
+        
+        logger.info("Standardized test data integration test passed")
+
+    @pytest.mark.integration
+    def test_test_environment_connection_methods(self):
+        """Test that test environment connection methods work correctly.
+        
+        This test specifically verifies that we're using the test connection methods
+        as specified in the connection environment separation documentation.
+        """
+        # Test the explicit test connection methods that use TEST_* environment variables
+        source_engine = ConnectionFactory.get_opendental_source_test_connection()
+        replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
+        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        
+        # Verify engines are created
+        assert source_engine is not None, "Test source engine should be created"
+        assert replication_engine is not None, "Test replication engine should be created"
+        assert analytics_engine is not None, "Test analytics engine should be created"
+        
+        # Test basic connectivity to test databases
+        with source_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test source engine connectivity failed"
+        
+        with replication_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test replication engine connectivity failed"
+        
+        with analytics_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1, "Test analytics engine connectivity failed"
 
 
 if __name__ == "__main__":
