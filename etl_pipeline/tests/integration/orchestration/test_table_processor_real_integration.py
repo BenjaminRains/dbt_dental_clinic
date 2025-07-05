@@ -24,18 +24,15 @@ from tests.fixtures.env_fixtures import load_test_environment
 load_test_environment()
 
 # Import new configuration system
-try:
-    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
-    from etl_pipeline.core.connections import ConnectionFactory
-    from etl_pipeline.core.schema_discovery import SchemaDiscovery
-    from etl_pipeline.orchestration.table_processor import TableProcessor
-    NEW_CONFIG_AVAILABLE = True
-except ImportError:
-    # Fallback for backward compatibility
-    NEW_CONFIG_AVAILABLE = False
-    from etl_pipeline.core.connections import ConnectionFactory
-    from etl_pipeline.core.schema_discovery import SchemaDiscovery
-    from etl_pipeline.orchestration.table_processor import TableProcessor
+from etl_pipeline.config import (
+    create_test_settings, 
+    DatabaseType, 
+    PostgresSchema,
+    reset_settings
+)
+from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
+from etl_pipeline.orchestration.table_processor import TableProcessor
 
 # Import standardized test fixtures
 from tests.fixtures import populated_test_databases, test_data_manager
