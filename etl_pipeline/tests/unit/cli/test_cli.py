@@ -8,6 +8,12 @@ This module provides comprehensive testing for the ETL Pipeline CLI interface,
 covering all major commands, edge cases, and integration scenarios. It's actively
 used to validate CLI functionality and ensure reliable command-line operations.
 
+MIGRATION STATUS: ✅ UPDATED TO USE NEW MODULAR FIXTURE STRUCTURE
+- Uses fixtures from tests/fixtures/ modules
+- Leverages config_fixtures, env_fixtures, connection_fixtures, etc.
+- Maintains backward compatibility with existing test logic
+- Improved test data consistency and reusability
+
 CURRENT STATE:
 - ✅ COMPREHENSIVE COVERAGE: Tests all major CLI commands and scenarios
 - ✅ MOCKED INTEGRATIONS: Uses mocks for database connections and pipeline components
@@ -15,6 +21,7 @@ CURRENT STATE:
 - ✅ SUBPROCESS TESTING: Tests CLI as it would be used in real environments
 - ✅ TEMPORARY FILES: Uses temporary config files for testing
 - ✅ DEBUG LOGGING: Includes debug output for troubleshooting
+- ✅ MODULAR FIXTURES: Uses new fixture structure for better maintainability
 
 TEST STRUCTURE:
 1. TestCLI: Core CLI command testing (help, run, status)
@@ -51,6 +58,13 @@ MOCKED COMPONENTS:
 - Settings: Configuration management
 - PipelineMetrics: Status and metrics reporting
 
+FIXTURES USED:
+- config_fixtures: test_pipeline_config, test_tables_config
+- env_fixtures: test_env_vars, test_settings
+- connection_fixtures: mock_source_engine, mock_analytics_engine, etc.
+- test_data_fixtures: sample_patient_data, sample_appointment_data
+- mock_utils: create_mock_settings, create_mock_engine, etc.
+
 This test suite ensures the CLI is reliable and user-friendly for
 ETL pipeline operations.
 """
@@ -68,6 +82,78 @@ import tempfile
 import yaml
 import json
 import time
+
+# Import fixtures from the new modular structure
+from tests.fixtures.config_fixtures import (
+    test_pipeline_config,
+    test_tables_config,
+    complete_config_environment,
+    valid_pipeline_config,
+    minimal_pipeline_config,
+    invalid_pipeline_config
+)
+from tests.fixtures.env_fixtures import (
+    test_env_vars,
+    production_env_vars,
+    test_settings,
+    production_settings
+)
+from tests.fixtures.connection_fixtures import (
+    mock_source_engine,
+    mock_replication_engine,
+    mock_analytics_engine,
+    mock_connection_factory,
+    mock_postgres_connection,
+    mock_mysql_connection
+)
+from tests.fixtures.loader_fixtures import (
+    postgres_loader,
+    sample_table_data,
+    sample_mysql_schema
+)
+from tests.fixtures.transformer_fixtures import (
+    mock_table_processor_engines,
+    table_processor_standard_config,
+    table_processor_large_config,
+    table_processor_medium_large_config
+)
+from tests.fixtures.replicator_fixtures import (
+    sample_mysql_replicator_table_data,
+    sample_create_statement,
+    mock_target_engine,
+    mock_schema_discovery,
+    replicator
+)
+from tests.fixtures.orchestrator_fixtures import (
+    mock_components,
+    orchestrator
+)
+from tests.fixtures.metrics_fixtures import (
+    mock_unified_metrics_connection,
+    unified_metrics_collector_no_persistence
+)
+from tests.fixtures.legacy_fixtures import (
+    legacy_settings,
+    legacy_connection_factory
+)
+from tests.fixtures.test_data_fixtures import (
+    sample_patient_data,
+    sample_appointment_data,
+    sample_procedure_data,
+    sample_claim_data,
+    sample_payment_data
+)
+from tests.fixtures.mock_utils import (
+    create_mock_engine,
+    create_mock_connection,
+    create_mock_settings,
+    create_mock_config,
+    mock_database_connection,
+    mock_file_operations,
+    mock_config_loading,
+    mock_logging,
+    mock_environment_variables
+)
 
 # Configure logging for debugging
 logging.basicConfig(level=logging.DEBUG)
@@ -102,49 +188,21 @@ class TestCLI:
         
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
     @patch('etl_pipeline.cli.commands.get_settings')
-    def test_run_command(self, mock_get_settings, mock_orchestrator):
+    def test_run_command(self, mock_get_settings, mock_orchestrator, test_pipeline_config, test_tables_config):
         """Test the run command."""
-        # Create a temporary config file
+        # Create a temporary config file using fixture data
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("""
-            source:
-              host: localhost
-              port: 3306
-              database: opendental
-              user: test_user
-              password: test_pass
-            replication:
-              host: localhost
-              port: 3306
-              database: opendental_replication
-              user: test_user
-              password: test_pass
-            analytics:
-              host: localhost
-              port: 5432
-              database: opendental_analytics
-              user: test_user
-              password: test_pass
-            """)
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
-            # Setup mock settings
-            mock_settings_instance = MagicMock()
+            # Setup mock settings using fixture
+            mock_settings_instance = create_mock_settings()
             mock_get_settings.return_value = mock_settings_instance
-            mock_settings_instance.get_database_config.return_value = {
-                'host': 'localhost',
-                'port': 3306,
-                'database': 'test_db',
-                'user': 'test_user',
-                'password': 'test_pass'
-            }
-            mock_settings_instance.get_table_config.return_value = {
-                'incremental': True,
-                'primary_key': 'id',
-                'batch_size': 1000
-            }
-            mock_settings_instance.should_use_incremental.return_value = True
 
             # Setup mock orchestrator
             mock_orchestrator_instance = mock_orchestrator.return_value
@@ -176,30 +234,15 @@ class TestCLI:
             os.unlink(config_path)
         
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
-    def test_run_with_tables(self, mock_orchestrator_class):
+    def test_run_with_tables(self, mock_orchestrator_class, test_pipeline_config, test_tables_config, sample_patient_data, sample_appointment_data):
         """Test run command with specific tables."""
-        # Create a temporary config file
+        # Create a temporary config file using fixture data
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("""
-            source:
-              host: localhost
-              port: 3306
-              database: opendental
-              user: test_user
-              password: test_pass
-            replication:
-              host: localhost
-              port: 3306
-              database: opendental_replication
-              user: test_user
-              password: test_pass
-            analytics:
-              host: localhost
-              port: 5432
-              database: opendental_analytics
-              user: test_user
-              password: test_pass
-            """)
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
@@ -237,35 +280,19 @@ class TestCLI:
         
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    def test_status_command(self, mock_conn_factory, mock_metrics_class):
+    def test_status_command(self, mock_conn_factory, mock_metrics_class, test_pipeline_config, test_tables_config, mock_analytics_engine, sample_patient_data):
         """Test the status command."""
-        # Create a temporary config file
+        # Create a temporary config file using fixture data
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("""
-            source:
-              host: localhost
-              port: 3306
-              database: opendental
-              user: test_user
-              password: test_pass
-            replication:
-              host: localhost
-              port: 3306
-              database: opendental_replication
-              user: test_user
-              password: test_pass
-            analytics:
-              host: localhost
-              port: 5432
-              database: opendental_analytics
-              user: test_user
-              password: test_pass
-            """)
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
-            # Setup mock connection factory - use NEW method names
-            mock_analytics_engine = MagicMock()
+            # Setup mock connection factory using fixture
             mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             # Setup mock metrics collector
@@ -294,7 +321,7 @@ class TestCLI:
             assert "Pipeline Status" in result.output
             assert "patient" in result.output
 
-            # Verify mocks were called correctly - use NEW method names
+            # Verify mocks were called correctly
             mock_conn_factory.get_analytics_connection.assert_called_once()
             mock_metrics_class.assert_called_once_with(analytics_engine=mock_analytics_engine)
             mock_metrics.get_pipeline_status.assert_called_once_with(table=None)
@@ -312,10 +339,14 @@ class TestCLICommandOptions:
         self.runner = CliRunner()
     
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
-    def test_run_with_full_flag(self, mock_orchestrator_class):
+    def test_run_with_full_flag(self, mock_orchestrator_class, test_pipeline_config, test_tables_config):
         """Test run command with --full flag."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
@@ -340,10 +371,14 @@ class TestCLICommandOptions:
             os.unlink(config_path)
     
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
-    def test_run_with_force_flag(self, mock_orchestrator_class):
+    def test_run_with_force_flag(self, mock_orchestrator_class, test_pipeline_config, test_tables_config):
         """Test run command with --force flag."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
@@ -501,15 +536,18 @@ class TestCLICommandOptions:
     
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    def test_status_with_json_format(self, mock_conn_factory, mock_metrics_class):
+    def test_status_with_json_format(self, mock_conn_factory, mock_metrics_class, test_pipeline_config, test_tables_config, mock_analytics_engine):
         """Test status command with JSON format."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
-            # Use NEW method names
-            mock_analytics_engine = MagicMock()
+            # Setup connection factory using fixture
             mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
 
             mock_metrics = MagicMock()
@@ -637,10 +675,14 @@ class TestCLIErrorHandling:
         self.runner = CliRunner()
     
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
-    def test_run_with_connection_failure(self, mock_orchestrator_class):
+    def test_run_with_connection_failure(self, mock_orchestrator_class, test_pipeline_config, test_tables_config):
         """Test run command when connection initialization fails."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
@@ -657,10 +699,14 @@ class TestCLIErrorHandling:
             os.unlink(config_path)
     
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
-    def test_run_with_table_failure(self, mock_orchestrator_class):
+    def test_run_with_table_failure(self, mock_orchestrator_class, test_pipeline_config, test_tables_config, sample_patient_data):
         """Test run command when table processing fails."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            f.write("source: {}\nreplication: {}\nanalytics: {}")
+            config_data = {
+                'pipeline': test_pipeline_config,
+                'tables': test_tables_config
+            }
+            yaml.dump(config_data, f)
             config_path = f.name
 
         try:
@@ -753,13 +799,8 @@ class TestConnectionTesting:
         self.runner = CliRunner()
     
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    def test_test_connections_success(self, mock_conn_factory):
+    def test_test_connections_success(self, mock_conn_factory, mock_source_engine, mock_replication_engine, mock_analytics_engine):
         """Test successful connection testing."""
-        # Mock engines
-        mock_source_engine = MagicMock()
-        mock_repl_engine = MagicMock()
-        mock_analytics_engine = MagicMock()
-        
         # Mock connection context managers
         mock_source_conn = MagicMock()
         mock_repl_conn = MagicMock()
@@ -767,14 +808,14 @@ class TestConnectionTesting:
         
         mock_source_engine.connect.return_value.__enter__.return_value = mock_source_conn
         mock_source_engine.connect.return_value.__exit__.return_value = None
-        mock_repl_engine.connect.return_value.__enter__.return_value = mock_repl_conn
-        mock_repl_engine.connect.return_value.__exit__.return_value = None
+        mock_replication_engine.connect.return_value.__enter__.return_value = mock_repl_conn
+        mock_replication_engine.connect.return_value.__exit__.return_value = None
         mock_analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
         mock_analytics_engine.connect.return_value.__exit__.return_value = None
         
-        # Setup connection factory - use NEW method names
+        # Setup connection factory using fixtures
         mock_conn_factory.get_source_connection.return_value = mock_source_engine
-        mock_conn_factory.get_replication_connection.return_value = mock_repl_engine
+        mock_conn_factory.get_replication_connection.return_value = mock_replication_engine
         mock_conn_factory.get_analytics_connection.return_value = mock_analytics_engine
         
         result = self.runner.invoke(cli, ['test-connections'])
@@ -786,7 +827,7 @@ class TestConnectionTesting:
         
         # Verify engines were disposed
         mock_source_engine.dispose.assert_called_once()
-        mock_repl_engine.dispose.assert_called_once()
+        mock_replication_engine.dispose.assert_called_once()
         mock_analytics_engine.dispose.assert_called_once()
     
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
