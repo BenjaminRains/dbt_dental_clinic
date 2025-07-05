@@ -1,8 +1,27 @@
 """
 Shared test fixtures for ETL pipeline tests.
 
-This module provides common fixtures used across all test modules,
-including database mocks, test data generators, and configuration fixtures.
+⚠️  DEPRECATION NOTICE ⚠️
+==========================
+
+This module is DEPRECATED and will be removed in a future version.
+The fixtures have been refactored into modular, maintainable components.
+
+NEW STRUCTURE:
+- Use `tests/fixtures/` directory for organized, modular fixtures
+- Import specific fixtures from their respective modules:
+  * `from tests.fixtures.config_fixtures import test_pipeline_config`
+  * `from tests.fixtures.env_fixtures import test_env_vars`
+  * `from tests.fixtures.connection_fixtures import mock_source_engine`
+  * etc.
+
+MIGRATION GUIDE:
+1. Replace direct fixture usage with imports from specific modules
+2. Update test files to import from `tests.fixtures.*` modules
+3. Remove dependency on this monolithic conftest.py
+
+This module will be maintained for backward compatibility only.
+New tests should use the modular fixture structure.
 
 Updated for Configuration System Refactoring:
 - Proper test isolation with reset_global_settings fixture
