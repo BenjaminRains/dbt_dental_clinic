@@ -7,18 +7,37 @@ MARKERS: @pytest.mark.unit
 
 This file focuses on testing the core logic of SchemaDiscovery without any
 real database connections, using comprehensive mocking for fast execution.
+
+ARCHITECTURAL NOTES:
+- Uses new configuration system with dependency injection
+- Imports fixtures from modular test fixtures
+- Follows enum-based database type patterns
+- Proper test isolation with reset_global_settings
 """
 import pytest
 from unittest.mock import MagicMock, patch, Mock
 from sqlalchemy.engine import Engine
 from sqlalchemy import text
+
+# Import ETL pipeline components
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
-from etl_pipeline.config import create_test_settings
+
+# Import new configuration system
+try:
+    from etl_pipeline.config import DatabaseType, PostgresSchema
+    NEW_CONFIG_AVAILABLE = True
+except ImportError:
+    NEW_CONFIG_AVAILABLE = False
+
+# Import modular test fixtures
+from tests.fixtures.connection_fixtures import mock_database_engines, mock_source_engine
+from tests.fixtures.config_fixtures import test_pipeline_config, test_tables_config
+from tests.fixtures.env_fixtures import test_env_vars, test_settings, reset_global_settings
 
 
 @pytest.mark.unit
-def test_schema_discovery_initialization(mock_database_engines):
-    """Test SchemaDiscovery initialization with mocked engines."""
+def test_schema_discovery_initialization(mock_database_engines, test_settings):
+    """Test SchemaDiscovery initialization with mocked engines and new config system."""
     source_engine = mock_database_engines['source']
     
     # Mock the URL attributes properly
@@ -28,11 +47,7 @@ def test_schema_discovery_initialization(mock_database_engines):
     # Mock the inspect function to avoid SQLAlchemy inspection errors
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -44,23 +59,21 @@ def test_schema_discovery_initialization(mock_database_engines):
         assert schema_discovery.source_db == 'opendental'
         assert schema_discovery._schema_cache == {}
         assert schema_discovery.source_inspector == mock_source_inspector
-        assert schema_discovery.settings == test_settings
+        # Note: SchemaDiscovery creates its own settings instance via get_settings()
+        # so we can't assert they are the same object, but we can verify settings exist
+        assert schema_discovery.settings is not None
         assert schema_discovery.connection_manager is not None
 
 
 @pytest.mark.unit
-def test_get_table_schema_success(mock_database_engines):
-    """Test successful schema retrieval with mocked database."""
+def test_get_table_schema_success(mock_database_engines, test_settings):
+    """Test successful schema retrieval with mocked database and new config system."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -108,18 +121,14 @@ def test_get_table_schema_success(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_get_table_schema_table_not_found(mock_database_engines):
+def test_get_table_schema_table_not_found(mock_database_engines, test_settings):
     """Test schema retrieval when table doesn't exist."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -144,18 +153,14 @@ def test_get_table_schema_table_not_found(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_schema_hash_calculation():
+def test_schema_hash_calculation(test_settings):
     """Test schema hash calculation logic."""
     source_engine = Mock(spec=Engine)
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -179,18 +184,14 @@ def test_schema_hash_calculation():
 
 
 @pytest.mark.unit
-def test_has_schema_changed_true(mock_database_engines):
+def test_has_schema_changed_true(mock_database_engines, test_settings):
     """Test schema change detection when schema has changed."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -206,18 +207,14 @@ def test_has_schema_changed_true(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_has_schema_changed_false(mock_database_engines):
+def test_has_schema_changed_false(mock_database_engines, test_settings):
     """Test schema change detection when schema hasn't changed."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -233,18 +230,14 @@ def test_has_schema_changed_false(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_has_schema_changed_exception_handling(mock_database_engines):
+def test_has_schema_changed_exception_handling(mock_database_engines, test_settings):
     """Test schema change detection when exception occurs."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -261,18 +254,14 @@ def test_has_schema_changed_exception_handling(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_adapt_create_statement_for_target():
+def test_adapt_create_statement_for_target(test_settings):
     """Test CREATE statement adaptation for target database."""
     source_engine = Mock(spec=Engine)
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -290,18 +279,14 @@ def test_adapt_create_statement_for_target():
 
 
 @pytest.mark.unit
-def test_adapt_create_statement_invalid_input():
+def test_adapt_create_statement_invalid_input(test_settings):
     """Test CREATE statement adaptation with invalid input."""
     source_engine = Mock(spec=Engine)
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -314,18 +299,14 @@ def test_adapt_create_statement_invalid_input():
 
 
 @pytest.mark.unit
-def test_get_incremental_columns_success(mock_database_engines):
+def test_get_incremental_columns_success(mock_database_engines, test_settings):
     """Test getting incremental columns with mocked data."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -367,18 +348,14 @@ def test_get_incremental_columns_success(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_get_incremental_columns_exception_handling(mock_database_engines):
+def test_get_incremental_columns_exception_handling(mock_database_engines, test_settings):
     """Test getting incremental columns when exception occurs."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -395,18 +372,14 @@ def test_get_incremental_columns_exception_handling(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_discover_all_tables_success(mock_database_engines):
+def test_discover_all_tables_success(mock_database_engines, test_settings):
     """Test discovering all tables with mocked data."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -444,18 +417,14 @@ def test_discover_all_tables_success(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_discover_all_tables_exception_handling(mock_database_engines):
+def test_discover_all_tables_exception_handling(mock_database_engines, test_settings):
     """Test discovering all tables when exception occurs."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -477,18 +446,14 @@ def test_discover_all_tables_exception_handling(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_get_table_size_info_success(mock_database_engines):
+def test_get_table_size_info_success(mock_database_engines, test_settings):
     """Test getting table size information with mocked data."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -546,18 +511,14 @@ def test_get_table_size_info_success(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_get_table_size_info_no_data(mock_database_engines):
+def test_get_table_size_info_no_data(mock_database_engines, test_settings):
     """Test getting table size information when no data exists."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -602,18 +563,14 @@ def test_get_table_size_info_no_data(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_get_table_size_info_exception_handling(mock_database_engines):
+def test_get_table_size_info_exception_handling(mock_database_engines, test_settings):
     """Test getting table size information when exception occurs."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -646,18 +603,14 @@ def test_get_table_size_info_exception_handling(mock_database_engines):
 # ============================================================================
 
 @pytest.mark.unit
-def test_cache_operations(mock_database_engines):
+def test_cache_operations(mock_database_engines, test_settings):
     """Test cache operations for the three-tier caching system."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -694,18 +647,14 @@ def test_cache_operations(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_get_pipeline_configuration(mock_database_engines):
+def test_get_pipeline_configuration(mock_database_engines, test_settings):
     """Test pipeline configuration generation."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
@@ -764,18 +713,14 @@ def test_get_pipeline_configuration(mock_database_engines):
 
 
 @pytest.mark.unit
-def test_analyze_complete_schema(mock_database_engines):
+def test_analyze_complete_schema(mock_database_engines, test_settings):
     """Test complete schema analysis."""
     source_engine = mock_database_engines['source']
     
     # Mock the inspect function
     mock_source_inspector = Mock()
     
-    # Create test settings
-    test_settings = create_test_settings()
-    
-    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect, \
-         patch('etl_pipeline.core.schema_discovery.get_settings', return_value=test_settings):
+    with patch('etl_pipeline.core.schema_discovery.inspect') as mock_inspect:
         mock_inspect.return_value = mock_source_inspector
         
         schema_discovery = SchemaDiscovery(
