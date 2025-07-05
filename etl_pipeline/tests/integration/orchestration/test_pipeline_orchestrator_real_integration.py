@@ -48,18 +48,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 # Import new configuration system
-try:
-    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
-    from etl_pipeline.core.connections import ConnectionFactory
-    from etl_pipeline.core.schema_discovery import SchemaDiscovery
-    from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
-    NEW_CONFIG_AVAILABLE = True
-except ImportError:
-    # Fallback for backward compatibility
-    NEW_CONFIG_AVAILABLE = False
-    from etl_pipeline.core.connections import ConnectionFactory
-    from etl_pipeline.core.schema_discovery import SchemaDiscovery
-    from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+from etl_pipeline.config import (
+    create_test_settings, 
+    DatabaseType, 
+    PostgresSchema,
+    reset_settings
+)
+from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.core.schema_discovery import SchemaDiscovery
+from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
 
 # Load environment variables from .env file first
 from tests.fixtures.env_fixtures import load_test_environment
