@@ -14,6 +14,7 @@ All fixtures follow the new architectural guidelines:
 import pytest
 import logging
 from typing import Generator, Tuple
+from sqlalchemy import text
 
 from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
 from etl_pipeline.core.connections import ConnectionFactory
@@ -83,9 +84,9 @@ def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
 
 
 @pytest.fixture
-def test_database_engines(test_settings) -> Tuple:
+def test_database_engines(test_settings) -> Generator[Tuple, None, None]:
     """
-    Provides test database engines using new ConnectionFactory.
+    Provides test database engines using explicit test connection methods.
     
     Returns:
         Tuple of (replication_engine, analytics_engine) for backward compatibility
@@ -96,11 +97,11 @@ def test_database_engines(test_settings) -> Tuple:
             # ... test logic ...
     """
     try:
-        # Use new ConnectionFactory with test methods
-        replication_engine = ConnectionFactory.get_replication_test_connection(test_settings)
-        analytics_engine = ConnectionFactory.get_analytics_test_connection(test_settings)
+        # Use explicit test connection methods as per connection_environment_separation.md
+        replication_engine = ConnectionFactory.get_mysql_replication_test_connection(test_settings)
+        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
         
-        logger.info("✅ Created test database engines using new ConnectionFactory")
+        logger.info("✅ Created test database engines using explicit test connection methods")
         
         yield (replication_engine, analytics_engine)
         
@@ -115,216 +116,214 @@ def test_database_engines(test_settings) -> Tuple:
 @pytest.fixture
 def test_source_engine(test_settings):
     """
-    Provides test source database engine using new ConnectionFactory.
+    Provides test source database engine using explicit test connection method.
     
     Usage:
         def test_source_connection(test_source_engine):
             # ... test logic with source database ...
     """
     try:
-        engine = ConnectionFactory.get_source_test_connection(test_settings)
+        engine = ConnectionFactory.get_opendental_source_test_connection(test_settings)
         
-        logger.info("✅ Created test source engine using new ConnectionFactory")
+        logger.info("✅ Created test source engine using explicit test connection method")
         
         yield engine
         
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test source engine: {e}")
+        logger.error(f"FAILED: Failed to create test source engine: {e}")
         raise
 
 @pytest.fixture
 def test_replication_engine(test_settings):
     """
-    Provides test replication database engine using new ConnectionFactory.
+    Provides test replication database engine using explicit test connection method.
     
     Usage:
         def test_replication_connection(test_replication_engine):
             # ... test logic with replication database ...
     """
     try:
-        engine = ConnectionFactory.get_replication_test_connection(test_settings)
+        engine = ConnectionFactory.get_mysql_replication_test_connection(test_settings)
         
-        logger.info("✅ Created test replication engine using new ConnectionFactory")
+        logger.info("SUCCESS: Created test replication engine using explicit test connection method")
         
         yield engine
         
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test replication engine: {e}")
+        logger.error(f"FAILED: Failed to create test replication engine: {e}")
         raise
 
 @pytest.fixture
 def test_analytics_engine(test_settings):
     """
-    Provides test analytics database engine using new ConnectionFactory.
+    Provides test analytics database engine using explicit test connection method.
     
     Usage:
         def test_analytics_connection(test_analytics_engine):
             # ... test logic with analytics database ...
     """
     try:
-        engine = ConnectionFactory.get_analytics_test_connection(test_settings)
+        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
         
-        logger.info("✅ Created test analytics engine using new ConnectionFactory")
+        logger.info("SUCCESS: Created test analytics engine using explicit test connection method")
         
         yield engine
         
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test analytics engine: {e}")
+        logger.error(f"FAILED: Failed to create test analytics engine: {e}")
         raise
 
 @pytest.fixture
 def test_raw_engine(test_settings):
     """
-    Provides test raw schema engine using new ConnectionFactory.
+    Provides test raw schema engine using explicit test connection method.
     
     Usage:
         def test_raw_schema(test_raw_engine):
             # ... test logic with raw schema ...
     """
     try:
-        engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
+        # Use the basic test analytics connection and specify raw schema
+        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
         
-        logger.info("✅ Created test raw schema engine using new ConnectionFactory")
+        logger.info("SUCCESS: Created test raw schema engine using explicit test connection method")
         
         yield engine
         
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test raw schema engine: {e}")
+        logger.error(f"FAILED: Failed to create test raw schema engine: {e}")
         raise
 
 @pytest.fixture
 def test_staging_engine(test_settings):
     """
-    Provides test staging schema engine using new ConnectionFactory.
+    Provides test staging schema engine using explicit test connection method.
     
     Usage:
         def test_staging_schema(test_staging_engine):
             # ... test logic with staging schema ...
     """
     try:
-        engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.STAGING)
+        # Use the basic test analytics connection and specify staging schema
+        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
         
-        logger.info("✅ Created test staging schema engine using new ConnectionFactory")
+        logger.info("SUCCESS: Created test staging schema engine using explicit test connection method")
         
         yield engine
         
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test staging schema engine: {e}")
+        logger.error(f"FAILED: Failed to create test staging schema engine: {e}")
         raise
 
 @pytest.fixture
 def test_intermediate_engine(test_settings):
     """
-    Provides test intermediate schema engine using new ConnectionFactory.
+    Provides test intermediate schema engine using explicit test connection method.
     
     Usage:
         def test_intermediate_schema(test_intermediate_engine):
             # ... test logic with intermediate schema ...
     """
     try:
-        engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.INTERMEDIATE)
+        # Use the basic test analytics connection and specify intermediate schema
+        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
         
-        logger.info("✅ Created test intermediate schema engine using new ConnectionFactory")
+        logger.info("SUCCESS: Created test intermediate schema engine using explicit test connection method")
         
         yield engine
         
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test intermediate schema engine: {e}")
+        logger.error(f"FAILED: Failed to create test intermediate schema engine: {e}")
         raise
 
 @pytest.fixture
 def test_marts_engine(test_settings):
     """
-    Provides test marts schema engine using new ConnectionFactory.
+    Provides test marts schema engine using explicit test connection method.
     
     Usage:
         def test_marts_schema(test_marts_engine):
             # ... test logic with marts schema ...
     """
     try:
-        engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.MARTS)
+        # Use the basic test analytics connection and specify marts schema
+        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
         
-        logger.info("✅ Created test marts schema engine using new ConnectionFactory")
+        logger.info("SUCCESS: Created test marts schema engine using explicit test connection method")
         
         yield engine
         
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test marts schema engine: {e}")
+        logger.error(f"FAILED: Failed to create test marts schema engine: {e}")
         raise
 
-# Legacy compatibility fixtures (for existing tests during migration)
 @pytest.fixture
 def setup_patient_table(test_data_manager) -> Tuple:
     """
-    Legacy fixture for backward compatibility.
+    Sets up patient table with test data for integration tests.
     
     Returns:
-        Tuple of (replication_engine, analytics_engine) with patient data set up
+        Tuple of (patient_count, appointment_count) for verification
     
     Usage:
-        def test_something(setup_patient_table):
-            replication_engine, analytics_engine = setup_patient_table
+        def test_patient_data(setup_patient_table):
+            patient_count, appointment_count = setup_patient_table
             # ... test logic ...
     """
-    # Set up patient data
-    test_data_manager.setup_patient_data(include_all_fields=True)
+    # Set up patient data in SOURCE and REPLICATION databases
+    test_data_manager.setup_patient_data(
+        include_all_fields=True,
+        database_types=[DatabaseType.SOURCE, DatabaseType.REPLICATION]
+    )
     
-    # Return engines for backward compatibility
-    return (test_data_manager.replication_engine, test_data_manager.analytics_engine)
+    # Get counts for verification
+    patient_count = test_data_manager.get_patient_count(DatabaseType.SOURCE)
+    appointment_count = test_data_manager.get_appointment_count(DatabaseType.SOURCE)
+    
+    return (patient_count, appointment_count)
 
 @pytest.fixture
 def setup_etl_tracking(test_analytics_engine):
     """
-    Legacy fixture for ETL tracking setup.
-    
-    Sets up ETL tracking tables in the analytics database.
+    Sets up ETL tracking tables in analytics database.
     
     Usage:
         def test_etl_tracking(setup_etl_tracking):
             # ... test logic with ETL tracking ...
     """
-    try:
-        with test_analytics_engine.connect() as conn:
-            # Create ETL tracking table if it doesn't exist
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS etl_load_status (
-                    id SERIAL PRIMARY KEY,
-                    table_name VARCHAR(255) NOT NULL,
-                    load_status VARCHAR(50) NOT NULL,
-                    last_loaded TIMESTAMP,
-                    records_processed INTEGER,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            
-            # Insert test tracking data
-            conn.execute(text("""
-                INSERT INTO etl_load_status (table_name, load_status, last_loaded, records_processed)
-                VALUES ('patient', 'success', '2023-01-01 10:00:00', 3)
-                ON CONFLICT DO NOTHING
-            """))
-            
-            conn.commit()
-            
-        logger.info("✅ Set up ETL tracking tables")
-        
-        return test_analytics_engine
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to set up ETL tracking: {e}")
-        raise 
+    # Create ETL tracking tables if they don't exist
+    with test_analytics_engine.connect() as conn:
+        # Create etl_tracking table if it doesn't exist
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS etl_tracking (
+                id SERIAL PRIMARY KEY,
+                table_name VARCHAR(255) NOT NULL,
+                last_processed_at TIMESTAMP,
+                rows_processed INTEGER DEFAULT 0,
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.commit()
+    
+    yield
+    
+    # Clean up ETL tracking data
+    with test_analytics_engine.connect() as conn:
+        conn.execute(text("DELETE FROM etl_tracking"))
+        conn.commit() 
