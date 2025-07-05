@@ -1,21 +1,78 @@
 """
-Test fixtures package for ETL pipeline tests.
+Test Fixtures Package
 
-This package contains modular test fixtures organized by responsibility:
-- config_fixtures: Configuration and settings fixtures
-- env_fixtures: Environment and test setup fixtures  
-- connection_fixtures: Database connection mocks
-- loader_fixtures: Data loader fixtures
-- transformer_fixtures: Data transformation fixtures
-- replicator_fixtures: MySQL replication fixtures
-- orchestrator_fixtures: Pipeline orchestration fixtures
-- metrics_fixtures: Monitoring and metrics fixtures
-- legacy_fixtures: Backward compatibility fixtures
-- test_data_fixtures: Static test data
-- mock_utils: Common mock utilities
-- priority_processor_fixtures: Priority processing fixtures
-- logging_fixtures: Logging and logger fixtures
-- schema_discovery_fixtures: Schema discovery and database schema testing fixtures
+This package contains all test fixtures organized by responsibility.
+The fixtures follow the new architectural patterns and provide standardized
+test data management for integration tests.
+
+Modules:
+- test_data_definitions: Standardized test data that matches real schemas
+- test_data_manager: Manager class for test data operations
+- integration_fixtures: Pytest fixtures for integration tests
 """
 
-__version__ = "1.0.0" 
+from .test_data_definitions import (
+    get_test_patient_data,
+    get_test_appointment_data,
+    get_incremental_test_patient_data,
+    get_test_data_for_table,
+    STANDARD_TEST_PATIENTS,
+    STANDARD_TEST_APPOINTMENTS,
+    MINIMAL_TEST_PATIENTS,
+    INCREMENTAL_TEST_PATIENTS
+)
+
+from .test_data_manager import IntegrationTestDataManager
+
+from .integration_fixtures import (
+    test_data_manager,
+    populated_test_databases,
+    minimal_test_databases,
+    incremental_test_databases,
+    test_database_engines,
+    test_source_engine,
+    test_replication_engine,
+    test_analytics_engine,
+    test_raw_engine,
+    test_staging_engine,
+    test_intermediate_engine,
+    test_marts_engine,
+    setup_patient_table,  # Legacy compatibility
+    setup_etl_tracking    # Legacy compatibility
+)
+
+from .env_fixtures import test_settings
+
+__all__ = [
+    # Test data definitions
+    'get_test_patient_data',
+    'get_test_appointment_data',
+    'get_incremental_test_patient_data',
+    'get_test_data_for_table',
+    'STANDARD_TEST_PATIENTS',
+    'STANDARD_TEST_APPOINTMENTS',
+    'MINIMAL_TEST_PATIENTS',
+    'INCREMENTAL_TEST_PATIENTS',
+    
+    # Test data manager
+    'IntegrationTestDataManager',
+    
+    # Integration fixtures
+    'test_data_manager',
+    'populated_test_databases',
+    'minimal_test_databases',
+    'incremental_test_databases',
+    'test_database_engines',
+    'test_source_engine',
+    'test_replication_engine',
+    'test_analytics_engine',
+    'test_raw_engine',
+    'test_staging_engine',
+    'test_intermediate_engine',
+    'test_marts_engine',
+    'setup_patient_table',
+    'setup_etl_tracking',
+    
+    # Environment fixtures
+    'test_settings'
+] 
