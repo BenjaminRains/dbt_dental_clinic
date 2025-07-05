@@ -137,7 +137,7 @@ class ConnectionFactory:
     
     # New clean interface methods
     @staticmethod
-    def get_source_connection(settings: Settings = None) -> Engine:
+    def get_source_connection(settings: Optional[Settings] = None) -> Engine:
         """Get OpenDental source database connection."""
         if settings is None:
             settings = get_settings()
@@ -157,7 +157,7 @@ class ConnectionFactory:
         )
     
     @staticmethod
-    def get_replication_connection(settings: Settings = None) -> Engine:
+    def get_replication_connection(settings: Optional[Settings] = None) -> Engine:
         """Get MySQL replication database connection."""
         if settings is None:
             settings = get_settings()
@@ -177,7 +177,7 @@ class ConnectionFactory:
         )
     
     @staticmethod
-    def get_analytics_connection(settings: Settings = None, 
+    def get_analytics_connection(settings: Optional[Settings] = None, 
                                schema: PostgresSchema = PostgresSchema.RAW) -> Engine:
         """Get PostgreSQL analytics database connection."""
         if settings is None:
@@ -200,62 +200,26 @@ class ConnectionFactory:
     
     # Convenience methods for specific PostgreSQL schemas
     @staticmethod
-    def get_analytics_raw_connection(settings: Settings = None) -> Engine:
+    def get_analytics_raw_connection(settings: Optional[Settings] = None) -> Engine:
         """Get PostgreSQL analytics raw schema connection."""
         return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
     
     @staticmethod
-    def get_analytics_staging_connection(settings: Settings = None) -> Engine:
+    def get_analytics_staging_connection(settings: Optional[Settings] = None) -> Engine:
         """Get PostgreSQL analytics staging schema connection."""
         return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.STAGING)
     
     @staticmethod
-    def get_analytics_intermediate_connection(settings: Settings = None) -> Engine:
+    def get_analytics_intermediate_connection(settings: Optional[Settings] = None) -> Engine:
         """Get PostgreSQL analytics intermediate schema connection."""
         return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.INTERMEDIATE)
     
     @staticmethod
-    def get_analytics_marts_connection(settings: Settings = None) -> Engine:
+    def get_analytics_marts_connection(settings: Optional[Settings] = None) -> Engine:
         """Get PostgreSQL analytics marts schema connection."""
         return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.MARTS)
     
-    # Legacy method names for backward compatibility during transition
-    @staticmethod
-    def get_opendental_source_connection(settings: Settings = None) -> Engine:
-        """Legacy method name - use get_source_connection instead."""
-        logger.warning("get_opendental_source_connection is deprecated, use get_source_connection")
-        return ConnectionFactory.get_source_connection(settings)
-    
-    @staticmethod
-    def get_mysql_replication_connection(settings: Settings = None) -> Engine:
-        """Legacy method name - use get_replication_connection instead."""
-        logger.warning("get_mysql_replication_connection is deprecated, use get_replication_connection")
-        return ConnectionFactory.get_replication_connection(settings)
-    
-    @staticmethod
-    def get_postgres_analytics_connection(settings: Settings = None) -> Engine:
-        """Legacy method name - use get_analytics_connection instead."""
-        logger.warning("get_postgres_analytics_connection is deprecated, use get_analytics_connection")
-        return ConnectionFactory.get_analytics_connection(settings)
-    
-    # Legacy test connection methods for backward compatibility
-    @staticmethod
-    def get_opendental_source_test_connection(settings: Settings = None) -> Engine:
-        """Legacy test method - use get_source_connection with test settings."""
-        logger.warning("get_opendental_source_test_connection is deprecated, use get_source_connection with test settings")
-        return ConnectionFactory.get_source_connection(settings)
-    
-    @staticmethod
-    def get_mysql_replication_test_connection(settings: Settings = None) -> Engine:
-        """Legacy test method - use get_replication_connection with test settings."""
-        logger.warning("get_mysql_replication_test_connection is deprecated, use get_replication_connection with test settings")
-        return ConnectionFactory.get_replication_connection(settings)
-    
-    @staticmethod
-    def get_postgres_analytics_test_connection(settings: Settings = None) -> Engine:
-        """Legacy test method - use get_analytics_connection with test settings."""
-        logger.warning("get_postgres_analytics_test_connection is deprecated, use get_analytics_connection with test settings")
-        return ConnectionFactory.get_analytics_connection(settings)
+
 
 
 class ConnectionManager:
@@ -343,7 +307,7 @@ class ConnectionManager:
 # Convenience function to create ConnectionManager
 def create_connection_manager(db_type: DatabaseType, 
                             schema: Optional[PostgresSchema] = None,
-                            settings: Settings = None,
+                            settings: Optional[Settings] = None,
                             max_retries: int = 3,
                             retry_delay: float = 1.0) -> ConnectionManager:
     """
