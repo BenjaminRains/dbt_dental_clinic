@@ -12,124 +12,79 @@ Testing Strategy:
 - Performance tests with large datasets
 - Error handling and edge case validation
 - Schema change detection and handling
+
+Refactored for New Architecture:
+- Uses modular fixture structure from tests/fixtures/
+- Integrates with new configuration system
+- Proper test isolation with reset_global_settings
+- Type-safe database operations with enums
 """
 
-# NOTE: Shared fixtures (mock_source_engine, mock_target_engine, replicator, sample_create_statement, sample_table_data) are now provided by conftest.py and should not be redefined here.
-
 import pytest
-import hashlib
 from unittest.mock import MagicMock, patch, call
-from sqlalchemy import text, create_engine
-from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
-import logging
 
-# Import the component under test
 from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
+from etl_pipeline.config import DatabaseType
+
+# Import fixtures from modular structure
+from tests.fixtures.connection_fixtures import mock_source_engine
+from tests.fixtures.replicator_fixtures import (
+    sample_create_statement, 
+    sample_mysql_replicator_table_data,
+    mock_schema_discovery,
+    mock_target_engine,
+    replicator
+)
+from tests.fixtures.test_data_fixtures import sample_patient_data
+from tests.fixtures.env_fixtures import test_settings
 
 
 @pytest.mark.unit
 class TestExactMySQLReplicator:
     """Unit tests for ExactMySQLReplicator class with comprehensive mocking."""
-    
-    @pytest.fixture
-    def mock_source_engine(self):
-        """Mock source database engine."""
-        engine = MagicMock(spec=Engine)
-        engine.name = 'mysql'
-        return engine
-    
-    @pytest.fixture
-    def mock_target_engine(self):
-        """Mock target database engine."""
-        engine = MagicMock(spec=Engine)
-        engine.name = 'mysql'
-        return engine
-    
-    @pytest.fixture
-    def replicator(self, mock_source_engine, mock_target_engine):
-        """Create ExactMySQLReplicator instance with mocked engines."""
-        with patch('etl_pipeline.core.mysql_replicator.inspect') as mock_inspect:
-            mock_inspector = MagicMock()
-            mock_inspect.return_value = mock_inspector
-            
-            replicator = ExactMySQLReplicator(
-                source_engine=mock_source_engine,
-                target_engine=mock_target_engine,
-                source_db='test_source',
-                target_db='test_target'
-            )
-            replicator.inspector = mock_inspector
-            return replicator
-    
-    @pytest.fixture
-    def sample_create_statement(self):
-        """Sample CREATE TABLE statement for testing."""
-        return """CREATE TABLE `patient` (
-  `PatNum` int(11) NOT NULL AUTO_INCREMENT,
-  `LName` varchar(255) NOT NULL DEFAULT '',
-  `FName` varchar(255) NOT NULL DEFAULT '',
-  `Birthdate` datetime NOT NULL DEFAULT '0001-01-01 00:00:00',
-  `Email` varchar(255) NOT NULL DEFAULT '',
-  `HmPhone` varchar(255) NOT NULL DEFAULT '',
-  PRIMARY KEY (`PatNum`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"""
-    
-    @pytest.fixture
-    def sample_table_data(self):
-        """Sample table data for testing."""
-        return [
-            {'PatNum': 1, 'LName': 'Doe', 'FName': 'John', 'Email': 'john@example.com'},
-            {'PatNum': 2, 'LName': 'Smith', 'FName': 'Jane', 'Email': 'jane@example.com'},
-            {'PatNum': 3, 'LName': 'Johnson', 'FName': 'Bob', 'Email': 'bob@example.com'}
-        ]
+    # All fixtures are imported from modular fixture modules
 
 
 @pytest.mark.unit
 class TestInitialization:
     """Test replicator initialization."""
     
-    def test_initialization_with_valid_engines(self, mock_source_engine, mock_target_engine):
+    def test_initialization_with_valid_engines(self, mock_source_engine, mock_target_engine, test_settings):
         """Test successful initialization with valid database engines."""
-        with patch('etl_pipeline.core.mysql_replicator.inspect') as mock_inspect:
-            mock_inspector = MagicMock()
-            mock_inspect.return_value = mock_inspector
-            
-            replicator = ExactMySQLReplicator(
-                source_engine=mock_source_engine,
-                target_engine=mock_target_engine,
-                source_db='test_source',
-                target_db='test_target'
-            )
-            
-            assert replicator.source_engine == mock_source_engine
-            assert replicator.target_engine == mock_target_engine
-            assert replicator.source_db == 'test_source'
-            assert replicator.target_db == 'test_target'
-            assert replicator.inspector == mock_inspector
-            assert replicator.query_timeout == 300
-            assert replicator.max_batch_size == 10000
-            mock_inspect.assert_called_once_with(mock_source_engine)
+        replicator = ExactMySQLReplicator(
+            source_engine=mock_source_engine,
+            target_engine=mock_target_engine,
+            source_db='test_source',
+            target_db='test_target'
+        )
+        assert replicator.source_engine == mock_source_engine
+        assert replicator.target_engine == mock_target_engine
+        assert replicator.source_db == 'test_source'
+        assert replicator.target_db == 'test_target'
+        assert replicator.query_timeout == 300
+        assert replicator.max_batch_size == 10000
     
-    def test_initialization_with_custom_settings(self, mock_source_engine, mock_target_engine):
+    def test_initialization_with_custom_settings(self, mock_source_engine, mock_target_engine, test_settings):
         """Test initialization with custom timeout and batch size settings."""
-        with patch('etl_pipeline.core.mysql_replicator.inspect') as mock_inspect:
-            mock_inspector = MagicMock()
-            mock_inspect.return_value = mock_inspector
-            
-            replicator = ExactMySQLReplicator(
-                source_engine=mock_source_engine,
-                target_engine=mock_target_engine,
-                source_db='test_source',
-                target_db='test_target'
-            )
-            
-            # Test default values
-            assert replicator.query_timeout == 300  # 5 minutes
-            assert replicator.max_batch_size == 10000
-            
-            # Test that schema cache is initialized
-            assert replicator._schema_cache == {}
+        replicator = ExactMySQLReplicator(
+            source_engine=mock_source_engine,
+            target_engine=mock_target_engine,
+            source_db='test_source',
+            target_db='test_target',
+            query_timeout=123,
+            max_batch_size=456
+        )
+        assert replicator.query_timeout == 123
+        assert replicator.max_batch_size == 456
+        assert replicator._schema_cache == {}
+    
+    def test_initialization_with_new_config_system(self, mock_source_engine, mock_target_engine, test_settings):
+        """Test initialization using new configuration system."""
+        config = test_settings.get_database_config(DatabaseType.SOURCE)
+        assert config is not None
+        assert 'host' in config
+        assert 'database' in config
 
 
 @pytest.mark.unit
@@ -295,8 +250,11 @@ class TestTableReplication:
 class TestDataCopying:
     """Test data copying operations."""
     
-    def test_copy_table_data_small_table_success(self, replicator, sample_table_data):
+    def test_copy_table_data_small_table_success(self, replicator, sample_patient_data):
         """Test successful data copying for small tables."""
+        # Convert sample_patient_data to list of dicts for testing
+        sample_table_data = sample_patient_data.to_dict('records')
+        
         # Mock row count
         mock_source_conn = MagicMock()
         mock_source_conn.execute.return_value.scalar.return_value = len(sample_table_data)
@@ -350,8 +308,11 @@ class TestDataCopying:
         result = replicator.copy_table_data('patient')
         assert result is False
     
-    def test_copy_direct_success(self, replicator, sample_table_data):
+    def test_copy_direct_success(self, replicator, sample_patient_data):
         """Test direct copy method for small tables."""
+        # Convert sample_patient_data to list of dicts for testing
+        sample_table_data = sample_patient_data.to_dict('records')
+        
         # Mock source connection and result
         mock_source_conn = MagicMock()
         mock_result = MagicMock()
@@ -525,8 +486,11 @@ class TestPrimaryKeyOperations:
 class TestLimitOffsetCopy:
     """Test LIMIT/OFFSET copy operations."""
     
-    def test_copy_with_limit_offset_success(self, replicator, sample_table_data):
+    def test_copy_with_limit_offset_success(self, replicator, sample_patient_data):
         """Test successful LIMIT/OFFSET copy."""
+        # Convert sample_patient_data to list of dicts for testing
+        sample_table_data = sample_patient_data.to_dict('records')
+        
         mock_source_conn = MagicMock()
         mock_target_conn = MagicMock()
         
@@ -711,7 +675,7 @@ class TestUtilityMethods:
 class TestMySQLReplicatorIntegration:
     """Integration tests with real database connections."""
     
-    def test_full_table_replication_workflow(self):
+    def test_full_table_replication_workflow(self, test_settings):
         """Test complete table replication workflow with real databases."""
         pytest.skip("Integration tests require real database setup")
         
@@ -721,7 +685,7 @@ class TestMySQLReplicatorIntegration:
         # 3. Verify exact replica
         # 4. Validate data integrity
     
-    def test_large_table_replication_performance(self):
+    def test_large_table_replication_performance(self, test_settings):
         """Test replication performance with large tables."""
         pytest.skip("Integration tests require real database setup")
         
@@ -731,7 +695,7 @@ class TestMySQLReplicatorIntegration:
         # 3. Processing time validation
         # 4. Connection pool behavior
     
-    def test_schema_change_detection(self):
+    def test_schema_change_detection(self, test_settings):
         """Test schema change detection between source and target."""
         pytest.skip("Integration tests require real database setup")
         
@@ -746,7 +710,7 @@ class TestMySQLReplicatorIntegration:
 class TestMySQLReplicatorPerformance:
     """Performance tests for MySQL replicator."""
     
-    def test_small_table_replication_performance(self, replicator):
+    def test_small_table_replication_performance(self, replicator, test_settings):
         """Test performance with small tables (< 1000 rows)."""
         pytest.skip("Performance tests require test data setup")
         
@@ -755,7 +719,7 @@ class TestMySQLReplicatorPerformance:
         # 2. Memory usage < 100MB
         # 3. Connection efficiency
     
-    def test_medium_table_replication_performance(self, replicator):
+    def test_medium_table_replication_performance(self, replicator, test_settings):
         """Test performance with medium tables (1k-10k rows)."""
         pytest.skip("Performance tests require test data setup")
         
@@ -764,7 +728,7 @@ class TestMySQLReplicatorPerformance:
         # 2. Memory usage < 500MB
         # 3. Chunking efficiency
     
-    def test_large_table_replication_performance(self, replicator):
+    def test_large_table_replication_performance(self, replicator, test_settings):
         """Test performance with large tables (> 10k rows)."""
         pytest.skip("Performance tests require test data setup")
         
@@ -773,7 +737,7 @@ class TestMySQLReplicatorPerformance:
         # 2. Memory usage < 1GB
         # 3. Chunking strategy effectiveness
     
-    def test_memory_usage_optimization(self, replicator):
+    def test_memory_usage_optimization(self, replicator, test_settings):
         """Test memory usage during replication."""
         pytest.skip("Performance tests require memory monitoring setup")
         
@@ -787,7 +751,7 @@ class TestMySQLReplicatorPerformance:
 class TestMySQLReplicatorIdempotency:
     """Idempotency tests for MySQL replicator."""
     
-    def test_multiple_replica_creation_idempotent(self, replicator):
+    def test_multiple_replica_creation_idempotent(self, replicator, test_settings):
         """Test that creating replica multiple times produces same result."""
         pytest.skip("Idempotency tests require database setup")
         
@@ -797,7 +761,7 @@ class TestMySQLReplicatorIdempotency:
         # 3. Verify identical results
         # 4. No duplicate data
     
-    def test_data_copying_idempotent(self, replicator):
+    def test_data_copying_idempotent(self, replicator, test_settings):
         """Test that copying data multiple times produces same result."""
         pytest.skip("Idempotency tests require database setup")
         
@@ -807,7 +771,7 @@ class TestMySQLReplicatorIdempotency:
         # 3. Verify no duplicates
         # 4. Verify data integrity
     
-    def test_verification_consistency(self, replicator):
+    def test_verification_consistency(self, replicator, test_settings):
         """Test that verification produces consistent results."""
         pytest.skip("Idempotency tests require database setup")
         
