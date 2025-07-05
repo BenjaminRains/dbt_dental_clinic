@@ -14,6 +14,7 @@ Refactored to use new architectural patterns:
 
 import pytest
 import logging
+import os
 from sqlalchemy import text
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -22,25 +23,20 @@ from typing import List, Dict, Any
 from tests.fixtures.env_fixtures import load_test_environment
 load_test_environment()
 
+# Ensure test environment is set
+os.environ['ETL_ENVIRONMENT'] = 'test'
+
 from etl_pipeline.core.postgres_schema import PostgresSchema as PostgresSchemaClass
 from etl_pipeline.core.schema_discovery import SchemaDiscovery
 from etl_pipeline.core.connections import ConnectionFactory
 
 # Import new configuration system
-try:
-    from etl_pipeline.config import (
-        create_test_settings, 
-        DatabaseType, 
-        PostgresSchema,
-        reset_settings
-    )
-    NEW_CONFIG_AVAILABLE = True
-except ImportError:
-    # Fallback for backward compatibility
-    NEW_CONFIG_AVAILABLE = False
-    from enum import Enum
-    DatabaseType = Enum('DatabaseType', ['SOURCE', 'REPLICATION', 'ANALYTICS'])
-    PostgresSchema = Enum('PostgresSchema', ['RAW', 'STAGING', 'INTERMEDIATE', 'MARTS'])
+from etl_pipeline.config import (
+    create_test_settings, 
+    DatabaseType, 
+    PostgresSchema,
+    reset_settings
+)
 
 # Import standardized test fixtures
 from tests.fixtures import (
@@ -60,13 +56,17 @@ class TestPostgresSchemaRealIntegration:
     @pytest.fixture(autouse=True)
     def debug_environment(self, test_settings):
         """Log environment and connection info for debugging."""
-        import os
         logger.info(f"ETL_ENVIRONMENT: {os.getenv('ETL_ENVIRONMENT')}")
         logger.info(f"TEST_OPENDENTAL_SOURCE_HOST: {os.getenv('TEST_OPENDENTAL_SOURCE_HOST')}")
         logger.info(f"TEST_OPENDENTAL_SOURCE_PORT: {os.getenv('TEST_OPENDENTAL_SOURCE_PORT')}")
         logger.info(f"TEST_OPENDENTAL_SOURCE_DB: {os.getenv('TEST_OPENDENTAL_SOURCE_DB')}")
         logger.info(f"TEST_OPENDENTAL_SOURCE_USER: {os.getenv('TEST_OPENDENTAL_SOURCE_USER')}")
         logger.info(f"TEST_OPENDENTAL_SOURCE_PASSWORD: {os.getenv('TEST_OPENDENTAL_SOURCE_PASSWORD')}")
+        logger.info(f"TEST_MYSQL_REPLICATION_HOST: {os.getenv('TEST_MYSQL_REPLICATION_HOST')}")
+        logger.info(f"TEST_MYSQL_REPLICATION_DB: {os.getenv('TEST_MYSQL_REPLICATION_DB')}")
+        logger.info(f"TEST_POSTGRES_ANALYTICS_HOST: {os.getenv('TEST_POSTGRES_ANALYTICS_HOST')}")
+        logger.info(f"TEST_POSTGRES_ANALYTICS_DB: {os.getenv('TEST_POSTGRES_ANALYTICS_DB')}")
+        
         # Print the connection string as seen by the Settings object
         try:
             conn_str = test_settings.get_connection_string(DatabaseType.SOURCE)
@@ -83,32 +83,34 @@ class TestPostgresSchemaRealIntegration:
     @pytest.fixture
     def real_postgres_schema_instance(self, postgres_schema_test_settings):
         """Create a real PostgresSchema instance using test environment."""
-        import os
-        # Use new ConnectionFactory with test methods
-        mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
-        postgres_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        # Use new ConnectionFactory with test settings
+        mysql_engine = ConnectionFactory.get_replication_connection(postgres_schema_test_settings)
+        postgres_engine = ConnectionFactory.get_analytics_connection(postgres_schema_test_settings, PostgresSchema.RAW)
         
-        # Get database names from environment variables
-        mysql_db = os.environ["TEST_MYSQL_REPLICATION_DB"]
-        postgres_db = os.environ["TEST_POSTGRES_ANALYTICS_DB"]
+        # Get database names from settings
+        mysql_config = postgres_schema_test_settings.get_database_config(DatabaseType.REPLICATION)
+        postgres_config = postgres_schema_test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
+        
+        mysql_db = mysql_config['database']
+        postgres_db = postgres_config['database']
         
         return PostgresSchemaClass(
             mysql_engine=mysql_engine,
             postgres_engine=postgres_engine,
             mysql_db=mysql_db,
             postgres_db=postgres_db,
-            postgres_schema='raw'
+            postgres_schema=PostgresSchema.RAW.value
         )
 
     @pytest.fixture
     def real_schema_discovery_instance(self, postgres_schema_test_settings):
         """Create a real SchemaDiscovery instance using test environment."""
-        import os
-        # Use new ConnectionFactory with test methods
-        mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
+        # Use new ConnectionFactory with test settings
+        mysql_engine = ConnectionFactory.get_replication_connection(postgres_schema_test_settings)
         
-        # Get database name from environment variable
-        mysql_db = os.environ["TEST_MYSQL_REPLICATION_DB"]
+        # Get database name from settings
+        mysql_config = postgres_schema_test_settings.get_database_config(DatabaseType.REPLICATION)
+        mysql_db = mysql_config['database']
         
         return SchemaDiscovery(mysql_engine, mysql_db)
 
@@ -400,10 +402,10 @@ class TestPostgresSchemaRealIntegration:
         # Test new ConnectionFactory methods with Settings dependency injection
         # These should automatically use test environment when ETL_ENVIRONMENT=test
         
-        # Test the explicit test connection methods that use TEST_* environment variables
-        source_engine = ConnectionFactory.get_opendental_source_test_connection()
-        replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
-        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        # Test the new connection methods with test settings
+        source_engine = ConnectionFactory.get_source_connection(test_settings)
+        replication_engine = ConnectionFactory.get_replication_connection(test_settings)
+        analytics_engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
         
         # Verify engines are created
         assert source_engine is not None, "Test source engine should be created"
@@ -438,21 +440,20 @@ class TestPostgresSchemaRealIntegration:
         assert PostgresSchema.MARTS.value == "marts", "PostgresSchema.MARTS should be 'marts'"
         
         # Test that enums work with ConnectionFactory using test environment
-        # Use the test connection methods since the new architecture methods require additional config
-        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        analytics_engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
         assert analytics_engine is not None, "Analytics engine should be created with test connection method"
 
     @pytest.mark.integration
-    def test_test_environment_connection_methods(self):
+    def test_test_environment_connection_methods(self, test_settings):
         """Test that test environment connection methods work correctly.
         
         This test specifically verifies that we're using the test connection methods
         as specified in the connection environment separation documentation.
         """
-        # Test the explicit test connection methods that use TEST_* environment variables
-        source_engine = ConnectionFactory.get_opendental_source_test_connection()
-        replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
-        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+        # Test the new connection methods with test settings
+        source_engine = ConnectionFactory.get_source_connection(test_settings)
+        replication_engine = ConnectionFactory.get_replication_connection(test_settings)
+        analytics_engine = ConnectionFactory.get_analytics_connection(test_settings, PostgresSchema.RAW)
         
         # Verify engines are created
         assert source_engine is not None, "Test source engine should be created"
