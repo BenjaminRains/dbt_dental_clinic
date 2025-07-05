@@ -29,6 +29,7 @@ isort = "==5.13.2"
 pylint = "==3.0.3"
 pytest = "*"
 pytest-cov = "*"
+pytest-order = "*"
 
 [requires]
 python_version = "3.11"
