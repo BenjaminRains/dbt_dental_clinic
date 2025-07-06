@@ -616,18 +616,18 @@ class TestTableProcessorUnit:
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
         
-        with patch.object(processor, '_extract_to_replication', return_value=True), \
-             patch.object(processor, '_load_to_analytics', return_value=True), \
+        with patch.object(processor, '_extract_to_replication') as mock_extract, \
+             patch.object(processor, '_load_to_analytics') as mock_load, \
              patch.object(processor.settings, 'get_table_config', return_value={}), \
              patch.object(processor.settings, 'should_use_incremental', return_value=True):
-            
+            mock_extract.return_value = True
+            mock_load.return_value = True
             result = processor.process_table('test_table', force_full=True)
-            
             assert result is True
             # Should call with force_full=True for extraction
-            processor._extract_to_replication.assert_called_once_with('test_table', True)
+            mock_extract.assert_called_once_with('test_table', True)
             # Should call with is_incremental=False for loading
-            processor._load_to_analytics.assert_called_once_with('test_table', False, {})
+            mock_load.assert_called_once_with('test_table', False, {})
 
     @pytest.mark.unit
     def test_process_table_exception_handling(self, mock_table_processor_engines):
