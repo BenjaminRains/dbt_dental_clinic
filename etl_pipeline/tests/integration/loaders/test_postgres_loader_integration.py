@@ -44,6 +44,17 @@ from etl_pipeline.config import (
 # Import connection factory for test database connections
 from etl_pipeline.core.connections import ConnectionFactory
 
+# Import standardized test data fixtures
+from tests.fixtures import (
+    test_settings, 
+    populated_test_databases,
+    standard_patient_test_data,
+    incremental_patient_test_data,
+    partial_patient_test_data,
+    etl_tracking_test_data,
+    invalid_schema_test_data
+)
+
 # Load environment variables from .env file first
 from tests.fixtures.env_fixtures import load_test_environment
 load_test_environment()
@@ -58,12 +69,12 @@ def test_mysql_schema():
     """Test MySQL schema with create_statement for PostgresSchema verification."""
     return {
         'create_statement': '''
-            CREATE TABLE patient (
-                PatNum INT AUTO_INCREMENT PRIMARY KEY,
-                LName VARCHAR(100),
-                FName VARCHAR(100),
-                DateTStamp DATETIME,
-                Status VARCHAR(50)
+            CREATE TABLE `patient` (
+                `PatNum` INT AUTO_INCREMENT PRIMARY KEY,
+                `LName` VARCHAR(100),
+                `FName` VARCHAR(100),
+                `DateTStamp` DATETIME,
+                `PatStatus` TINYINT DEFAULT 0
             )
         '''
     }
@@ -114,20 +125,25 @@ class TestPostgresLoaderIntegration:
         return loader
     
     @pytest.fixture
-    def setup_patient_table(self, test_database_engines):
+    def setup_patient_table(self, test_database_engines, standard_patient_test_data):
         """Set up test table in both replication and analytics databases."""
         replication_engine, analytics_engine = test_database_engines
         
         try:
             # Create test table in replication database (MySQL)
+            # Note: PostgresLoader expects tables in the replication database without schema qualification
             with replication_engine.connect() as conn:
+                # Drop and recreate to ensure clean state
+                conn.execute(text("DROP TABLE IF EXISTS patient"))
+                conn.commit()
+                
                 conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS patient (
+                    CREATE TABLE patient (
                         PatNum INT PRIMARY KEY,
                         LName VARCHAR(100),
                         FName VARCHAR(100),
                         DateTStamp DATETIME,
-                        Status VARCHAR(50)
+                        PatStatus TINYINT DEFAULT 0
                     )
                 """))
                 conn.commit()
@@ -136,40 +152,39 @@ class TestPostgresLoaderIntegration:
                 conn.execute(text("DELETE FROM patient"))
                 conn.commit()
                 
-                # Insert test data
-                test_data = [
-                    {'PatNum': 1, 'LName': 'John Doe', 'FName': 'John', 'DateTStamp': '2023-01-01 10:00:00', 'Status': 'Active'},
-                    {'PatNum': 2, 'LName': 'Jane Smith', 'FName': 'Jane', 'DateTStamp': '2023-01-02 11:00:00', 'Status': 'Active'},
-                    {'PatNum': 3, 'LName': 'Bob Johnson', 'FName': 'Bob', 'DateTStamp': '2023-01-03 12:00:00', 'Status': 'Active'}
-                ]
-                
-                for row in test_data:
+                # Insert standardized test data
+                for row in standard_patient_test_data:
                     conn.execute(text("""
-                        INSERT INTO patient (PatNum, LName, FName, DateTStamp, Status) 
-                        VALUES (:PatNum, :LName, :FName, :DateTStamp, :Status)
+                        INSERT INTO patient (PatNum, LName, FName, DateTStamp, PatStatus) 
+                        VALUES (:PatNum, :LName, :FName, :DateTStamp, :PatStatus)
                     """), row)
                 conn.commit()
                 
-                logger.debug(f"Successfully set up patient table in replication database with {len(test_data)} rows")
+                logger.debug(f"Successfully set up patient table in replication database with {len(standard_patient_test_data)} rows")
             
             # Create test table in analytics database (PostgreSQL)
+            # Note: PostgresLoader expects tables in the 'raw' schema
             with analytics_engine.connect() as conn:
+                # Drop and recreate to ensure clean state
+                conn.execute(text("DROP TABLE IF EXISTS raw.patient"))
+                conn.commit()
+                
                 conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS patient (
-                        PatNum INTEGER PRIMARY KEY,
-                        LName VARCHAR(100),
-                        FName VARCHAR(100),
-                        DateTStamp TIMESTAMP,
-                        Status VARCHAR(50)
+                    CREATE TABLE raw.patient (
+                        "PatNum" INTEGER PRIMARY KEY,
+                        "LName" VARCHAR(100),
+                        "FName" VARCHAR(100),
+                        "DateTStamp" TIMESTAMP,
+                        "PatStatus" INTEGER
                     )
                 """))
                 conn.commit()
                 
                 # Clear existing data
-                conn.execute(text("DELETE FROM patient"))
+                conn.execute(text("DELETE FROM raw.patient"))
                 conn.commit()
                 
-                logger.debug("Successfully set up patient table in analytics database")
+                logger.debug("Successfully set up patient table in analytics database raw schema")
                 
         except Exception as e:
             logger.error(f"Failed to set up test table: {e}")
@@ -178,7 +193,7 @@ class TestPostgresLoaderIntegration:
         return replication_engine, analytics_engine
     
     @pytest.fixture
-    def setup_etl_tracking(self, test_database_engines):
+    def setup_etl_tracking(self, test_database_engines, etl_tracking_test_data):
         """Set up ETL tracking table in test analytics database."""
         replication_engine, analytics_engine = test_database_engines
         
@@ -195,17 +210,8 @@ class TestPostgresLoaderIntegration:
                 """))
                 conn.commit()
                 
-                # Insert test data for incremental testing
-                test_status_data = [
-                    {
-                        'table_name': 'patient',
-                        'last_loaded': '2023-01-01 10:00:00',
-                        'load_status': 'success',
-                        'rows_loaded': 3
-                    }
-                ]
-                
-                for row in test_status_data:
+                # Insert standardized test data for incremental testing
+                for row in etl_tracking_test_data:
                     conn.execute(text("""
                         INSERT INTO etl_load_status 
                         (table_name, last_loaded, load_status, rows_loaded)
@@ -231,7 +237,7 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
     """Integration tests for load_table functionality."""
     
     @pytest.mark.order(4)
-    def test_load_table_full_integration(self, postgres_loader_integration, setup_patient_table, test_mysql_schema):
+    def test_load_table_full_integration(self, postgres_loader_integration, setup_patient_table, test_mysql_schema, standard_patient_test_data):
         """Test complete table loading workflow with real test databases."""
         replication_engine, analytics_engine = setup_patient_table
         
@@ -242,15 +248,15 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
         
         # Verify data was loaded to analytics database
         with analytics_engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
-            assert count == 3
+            count = conn.execute(text('SELECT COUNT(*) FROM patient')).scalar()
+            assert count == len(standard_patient_test_data)
             
             # Verify specific data
-            result = conn.execute(text("SELECT * FROM patient ORDER BY PatNum")).fetchall()
-            assert len(result) == 3
+            result = conn.execute(text('SELECT * FROM patient ORDER BY "PatNum"')).fetchall()
+            assert len(result) == len(standard_patient_test_data)
     
     @pytest.mark.order(4)
-    def test_load_table_incremental_integration(self, postgres_loader_integration, setup_patient_table, setup_etl_tracking, test_mysql_schema):
+    def test_load_table_incremental_integration(self, postgres_loader_integration, setup_patient_table, setup_etl_tracking, test_mysql_schema, incremental_patient_test_data):
         """Test incremental table loading workflow with real test databases."""
         replication_engine, analytics_engine = setup_patient_table
         
@@ -259,11 +265,12 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
             conn.execute(text("DELETE FROM patient"))
             conn.commit()
             
-            # Add data that should be loaded incrementally (newer than last load timestamp)
-            conn.execute(text("""
-                INSERT INTO patient (PatNum, LName, FName, DateTStamp, Status) 
-                VALUES (4, 'New User', 'Test', '2023-01-04 13:00:00', 'Active')
-            """))
+            # Add standardized incremental test data
+            for row in incremental_patient_test_data:
+                conn.execute(text("""
+                    INSERT INTO patient (PatNum, LName, FName, DateTStamp, PatStatus) 
+                    VALUES (:PatNum, :LName, :FName, :DateTStamp, :PatStatus)
+                """), row)
             conn.commit()
         
         # Test incremental load
@@ -273,13 +280,13 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
         
         # Verify only new data was loaded (should be 1 new row)
         with analytics_engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
-            assert count == 1  # Only the new row should be loaded incrementally
+            count = conn.execute(text('SELECT COUNT(*) FROM patient')).scalar()
+            assert count == len(incremental_patient_test_data)  # Only the new row should be loaded incrementally
             
             # Verify the new data
-            result = conn.execute(text("SELECT * FROM patient ORDER BY PatNum")).fetchall()
-            assert len(result) == 1
-            assert result[0][1] == 'New User'  # LName column
+            result = conn.execute(text('SELECT * FROM patient ORDER BY "PatNum"')).fetchall()
+            assert len(result) == len(incremental_patient_test_data)
+            assert result[0][1] == incremental_patient_test_data[0]['LName']  # LName column
     
     @pytest.mark.order(4)
     def test_load_table_no_data_integration(self, postgres_loader_integration, test_database_engines, test_mysql_schema):
@@ -288,13 +295,16 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
         
         # Create empty table in replication database
         with replication_engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS empty_patient"))
+            conn.commit()
+            
             conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS empty_patient (
+                CREATE TABLE empty_patient (
                     PatNum INT PRIMARY KEY,
                     LName VARCHAR(100),
                     FName VARCHAR(100),
                     DateTStamp DATETIME,
-                    Status VARCHAR(50)
+                    PatStatus TINYINT
                 )
             """))
             conn.commit()
@@ -305,13 +315,16 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
         
         # Create empty table in analytics database
         with analytics_engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS empty_patient"))
+            conn.commit()
+            
             conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS empty_patient (
-                    PatNum INTEGER PRIMARY KEY,
-                    LName VARCHAR(100),
-                    FName VARCHAR(100),
-                    DateTStamp TIMESTAMP,
-                    Status VARCHAR(50)
+                CREATE TABLE empty_patient (
+                    "PatNum" INTEGER PRIMARY KEY,
+                    "LName" VARCHAR(100),
+                    "FName" VARCHAR(100),
+                    "DateTStamp" TIMESTAMP,
+                    "PatStatus" INTEGER
                 )
             """))
             conn.commit()
@@ -330,13 +343,16 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
         
         # Create new table in replication database
         with replication_engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS new_patient"))
+            conn.commit()
+            
             conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS new_patient (
+                CREATE TABLE new_patient (
                     PatNum INT PRIMARY KEY,
                     LName VARCHAR(100),
                     FName VARCHAR(100),
                     DateTStamp DATETIME,
-                    Status VARCHAR(50)
+                    PatStatus TINYINT
                 )
             """))
             conn.commit()
@@ -347,20 +363,23 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
             
             # Insert test data
             conn.execute(text("""
-                INSERT INTO new_patient (PatNum, LName, FName, DateTStamp, Status) 
-                VALUES (1, 'Test User', 'John', '2023-01-01 10:00:00', 'Active')
+                INSERT INTO new_patient (PatNum, LName, FName, DateTStamp, PatStatus) 
+                VALUES (1, 'Test User', 'John', '2023-01-01 10:00:00', 0)
             """))
             conn.commit()
         
         # Create new table in analytics database
         with analytics_engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS new_patient"))
+            conn.commit()
+            
             conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS new_patient (
-                    PatNum INTEGER PRIMARY KEY,
-                    LName VARCHAR(100),
-                    FName VARCHAR(100),
-                    DateTStamp TIMESTAMP,
-                    Status VARCHAR(50)
+                CREATE TABLE new_patient (
+                    "PatNum" INTEGER PRIMARY KEY,
+                    "LName" VARCHAR(100),
+                    "FName" VARCHAR(100),
+                    "DateTStamp" TIMESTAMP,
+                    "PatStatus" INTEGER
                 )
             """))
             conn.commit()
@@ -372,11 +391,11 @@ class TestLoadTableIntegration(TestPostgresLoaderIntegration):
         
         # Verify table was created and data was loaded
         with analytics_engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM new_patient")).scalar()
+            count = conn.execute(text('SELECT COUNT(*) FROM new_patient')).scalar()
             assert count == 1
             
             # Verify data
-            result = conn.execute(text("SELECT * FROM new_patient")).fetchall()
+            result = conn.execute(text('SELECT * FROM new_patient')).fetchall()
             assert len(result) == 1
             assert result[0][1] == 'Test User'  # LName column
 
@@ -396,11 +415,11 @@ class TestLoadTableChunkedIntegration(TestPostgresLoaderIntegration):
         
         # Verify data was loaded in chunks
         with analytics_engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
+            count = conn.execute(text('SELECT COUNT(*) FROM patient')).scalar()
             assert count == 3
             
             # Verify all data was loaded
-            result = conn.execute(text("SELECT * FROM patient ORDER BY PatNum")).fetchall()
+            result = conn.execute(text('SELECT * FROM patient ORDER BY "PatNum"')).fetchall()
             assert len(result) == 3
             assert result[0][1] == 'John Doe'  # LName
             assert result[1][1] == 'Jane Smith'  # LName
@@ -417,11 +436,11 @@ class TestLoadTableChunkedIntegration(TestPostgresLoaderIntegration):
         
         # Verify data was loaded
         with analytics_engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
+            count = conn.execute(text('SELECT COUNT(*) FROM patient')).scalar()
             assert count == 3
             
             # Verify all data was loaded
-            result = conn.execute(text("SELECT * FROM patient ORDER BY PatNum")).fetchall()
+            result = conn.execute(text('SELECT * FROM patient ORDER BY "PatNum"')).fetchall()
             assert len(result) == 3
 
 
@@ -429,41 +448,36 @@ class TestLoadTableChunkedIntegration(TestPostgresLoaderIntegration):
 class TestVerifyLoadIntegration(TestPostgresLoaderIntegration):
     """Integration tests for load verification functionality."""
     
-    def test_verify_load_success_integration(self, postgres_loader_integration, setup_patient_table):
+    def test_verify_load_success_integration(self, postgres_loader_integration, setup_patient_table, standard_patient_test_data):
         """Test load verification with real test databases."""
         replication_engine, analytics_engine = setup_patient_table
         
-        # First, load data to analytics database
+        # The setup_patient_table fixture already inserted standard_patient_test_data into the MySQL replication database
+        # Now we just need to insert the same data into the PostgreSQL analytics database to simulate a successful load
         with analytics_engine.connect() as conn:
-            # Insert same data as source
-            test_data = [
-                {'PatNum': 1, 'LName': 'John Doe', 'FName': 'John', 'DateTStamp': '2023-01-01 10:00:00', 'Status': 'Active'},
-                {'PatNum': 2, 'LName': 'Jane Smith', 'FName': 'Jane', 'DateTStamp': '2023-01-02 11:00:00', 'Status': 'Active'},
-                {'PatNum': 3, 'LName': 'Bob Johnson', 'FName': 'Bob', 'DateTStamp': '2023-01-03 12:00:00', 'Status': 'Active'}
-            ]
-            
-            for row in test_data:
-                conn.execute(text("""
-                    INSERT INTO patient (PatNum, LName, FName, DateTStamp, Status) 
-                    VALUES (:PatNum, :LName, :FName, :DateTStamp, :Status)
-                """), row)
+            # Insert standardized test data into the raw schema
+            for row in standard_patient_test_data:
+                conn.execute(text(
+                    'INSERT INTO raw.patient ("PatNum", "LName", "FName", "DateTStamp", "PatStatus") '
+                    'VALUES (:PatNum, :LName, :FName, :DateTStamp, :PatStatus)'
+                ), row)
             conn.commit()
         
-        # Test verification
+        # Test verification - this should return True since both databases have the same data
         result = postgres_loader_integration.verify_load('patient')
         
         assert result is True
         
         # Verify counts match
         with replication_engine.connect() as conn:
-            source_count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
+            source_count = conn.execute(text('SELECT COUNT(*) FROM patient')).scalar()
         
         with analytics_engine.connect() as conn:
-            target_count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
+            target_count = conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
         
-        assert source_count == target_count == 3
+        assert source_count == target_count == len(standard_patient_test_data)
     
-    def test_verify_load_count_mismatch_integration(self, postgres_loader_integration, setup_patient_table):
+    def test_verify_load_count_mismatch_integration(self, postgres_loader_integration, setup_patient_table, partial_patient_test_data):
         """Test load verification with count mismatch in real test databases."""
         replication_engine, analytics_engine = setup_patient_table
         
@@ -473,15 +487,11 @@ class TestVerifyLoadIntegration(TestPostgresLoaderIntegration):
             conn.execute(text("DELETE FROM patient"))
             conn.commit()
             
-            test_data = [
-                {'PatNum': 1, 'LName': 'John Doe', 'FName': 'John', 'DateTStamp': '2023-01-01 10:00:00', 'Status': 'Active'},
-                {'PatNum': 2, 'LName': 'Jane Smith', 'FName': 'Jane', 'DateTStamp': '2023-01-02 11:00:00', 'Status': 'Active'}
-            ]
-            
-            for row in test_data:
+            # Insert standardized partial test data
+            for row in partial_patient_test_data:
                 conn.execute(text("""
-                    INSERT INTO patient (PatNum, LName, FName, DateTStamp, Status) 
-                    VALUES (:PatNum, :LName, :FName, :DateTStamp, :Status)
+                    INSERT INTO patient ("PatNum", "LName", "FName", "DateTStamp", "PatStatus") 
+                    VALUES (:PatNum, :LName, :FName, :DateTStamp, :PatStatus)
                 """), row)
             conn.commit()
         
@@ -567,15 +577,19 @@ class TestErrorHandlingIntegration(TestPostgresLoaderIntegration):
         
         assert result is False
     
-    def test_schema_creation_failure_integration(self, postgres_loader_integration, test_database_engines, test_mysql_schema):
+    def test_schema_creation_failure_integration(self, postgres_loader_integration, test_database_engines, test_mysql_schema, invalid_schema_test_data):
         """Test handling of schema creation failures with real database."""
         replication_engine, analytics_engine = test_database_engines
         
         # Create a table with invalid schema that should cause creation failure
         # This tests real schema validation and creation
         with replication_engine.connect() as conn:
+            # Drop table first to avoid duplicate key errors
+            conn.execute(text("DROP TABLE IF EXISTS invalid_schema_table"))
+            conn.commit()
+            
             conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS invalid_schema_table (
+                CREATE TABLE invalid_schema_table (
                     id INT PRIMARY KEY,
                     invalid_column LONGTEXT,  -- This might cause issues in PostgreSQL
                     created_at DATETIME
@@ -583,11 +597,12 @@ class TestErrorHandlingIntegration(TestPostgresLoaderIntegration):
             """))
             conn.commit()
             
-            # Insert test data
-            conn.execute(text("""
-                INSERT INTO invalid_schema_table (id, invalid_column, created_at) 
-                VALUES (1, 'test data', '2023-01-01 10:00:00')
-            """))
+            # Insert standardized invalid schema test data
+            for row in invalid_schema_test_data:
+                conn.execute(text("""
+                    INSERT INTO invalid_schema_table (id, invalid_column, created_at) 
+                    VALUES (:id, :invalid_column, :created_at)
+                """), row)
             conn.commit()
         
         # Test real schema creation - this should handle the schema conversion
