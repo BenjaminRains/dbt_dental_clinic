@@ -87,7 +87,7 @@ class ConnectionFactory:
         database: str,
         user: str,
         password: str,
-        schema: str = 'raw',
+        schema: Optional[str] = 'raw',
         pool_size: int = DEFAULT_POOL_SIZE,
         max_overflow: int = DEFAULT_MAX_OVERFLOW,
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
@@ -219,6 +219,179 @@ class ConnectionFactory:
         """Get PostgreSQL analytics marts schema connection."""
         return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.MARTS)
     
+    # Test environment connection methods (for backward compatibility with fixtures)
+    @staticmethod
+    def get_opendental_source_test_connection(settings: Optional[Settings] = None) -> Engine:
+        """Get OpenDental source test database connection using TEST_* environment variables."""
+        if settings is None:
+            # Use environment variables directly for test connections
+            host = os.getenv('TEST_OPENDENTAL_SOURCE_HOST', 'localhost')
+            port = int(os.getenv('TEST_OPENDENTAL_SOURCE_PORT', '3306'))
+            database = os.getenv('TEST_OPENDENTAL_SOURCE_DB', 'test_opendental')
+            user = os.getenv('TEST_OPENDENTAL_SOURCE_USER', 'test_user')
+            password = os.getenv('TEST_OPENDENTAL_SOURCE_PASSWORD', 'test_pass')
+        else:
+            # Use settings if provided
+            config = settings.get_database_config(DatabaseType.SOURCE)
+            host = config['host']
+            port = config['port']
+            database = config['database']
+            user = config['user']
+            password = config['password']
+        
+        return ConnectionFactory.create_mysql_engine(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password
+        )
+    
+    @staticmethod
+    def get_mysql_replication_test_connection(settings: Optional[Settings] = None) -> Engine:
+        """Get MySQL replication test database connection using TEST_* environment variables."""
+        if settings is None:
+            # Use environment variables directly for test connections
+            host = os.getenv('TEST_MYSQL_REPLICATION_HOST', 'localhost')
+            port = int(os.getenv('TEST_MYSQL_REPLICATION_PORT', '3306'))
+            database = os.getenv('TEST_MYSQL_REPLICATION_DB', 'test_opendental_replication')
+            user = os.getenv('TEST_MYSQL_REPLICATION_USER', 'test_user')
+            password = os.getenv('TEST_MYSQL_REPLICATION_PASSWORD', 'test_pass')
+        else:
+            # Use settings if provided
+            config = settings.get_database_config(DatabaseType.REPLICATION)
+            host = config['host']
+            port = config['port']
+            database = config['database']
+            user = config['user']
+            password = config['password']
+        
+        return ConnectionFactory.create_mysql_engine(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password
+        )
+    
+    @staticmethod
+    def get_postgres_analytics_test_connection(settings: Optional[Settings] = None) -> Engine:
+        """Get PostgreSQL analytics test database connection using TEST_* environment variables."""
+        if settings is None:
+            # Use environment variables directly for test connections
+            host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST', 'localhost')
+            port = int(os.getenv('TEST_POSTGRES_ANALYTICS_PORT', '5432'))
+            database = os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics')
+            schema = os.getenv('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw')
+            user = os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'test_user')
+            password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_pass')
+        else:
+            # Use settings if provided
+            config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
+            host = config['host']
+            port = config['port']
+            database = config['database']
+            schema = config.get('schema', 'raw')
+            user = config['user']
+            password = config['password']
+        
+        return ConnectionFactory.create_postgres_engine(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            schema=schema
+        )
+    
+    @staticmethod
+    def get_opendental_analytics_raw_test_connection(settings: Optional[Settings] = None) -> Engine:
+        """Get PostgreSQL analytics raw schema test connection using TEST_* environment variables."""
+        return ConnectionFactory.get_postgres_analytics_test_connection(settings)
+    
+    @staticmethod
+    def get_opendental_analytics_staging_test_connection(settings: Optional[Settings] = None) -> Engine:
+        """Get PostgreSQL analytics staging schema test connection using TEST_* environment variables."""
+        if settings is None:
+            # Use environment variables directly for test connections
+            host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST', 'localhost')
+            port = int(os.getenv('TEST_POSTGRES_ANALYTICS_PORT', '5432'))
+            database = os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics')
+            user = os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'test_user')
+            password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_pass')
+        else:
+            # Use settings if provided
+            config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.STAGING)
+            host = config['host']
+            port = config['port']
+            database = config['database']
+            user = config['user']
+            password = config['password']
+        
+        return ConnectionFactory.create_postgres_engine(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            schema='staging'
+        )
+    
+    @staticmethod
+    def get_opendental_analytics_intermediate_test_connection(settings: Optional[Settings] = None) -> Engine:
+        """Get PostgreSQL analytics intermediate schema test connection using TEST_* environment variables."""
+        if settings is None:
+            # Use environment variables directly for test connections
+            host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST', 'localhost')
+            port = int(os.getenv('TEST_POSTGRES_ANALYTICS_PORT', '5432'))
+            database = os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics')
+            user = os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'test_user')
+            password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_pass')
+        else:
+            # Use settings if provided
+            config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.INTERMEDIATE)
+            host = config['host']
+            port = config['port']
+            database = config['database']
+            user = config['user']
+            password = config['password']
+        
+        return ConnectionFactory.create_postgres_engine(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            schema='intermediate'
+        )
+    
+    @staticmethod
+    def get_opendental_analytics_marts_test_connection(settings: Optional[Settings] = None) -> Engine:
+        """Get PostgreSQL analytics marts schema test connection using TEST_* environment variables."""
+        if settings is None:
+            # Use environment variables directly for test connections
+            host = os.getenv('TEST_POSTGRES_ANALYTICS_HOST', 'localhost')
+            port = int(os.getenv('TEST_POSTGRES_ANALYTICS_PORT', '5432'))
+            database = os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics')
+            user = os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'test_user')
+            password = os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_pass')
+        else:
+            # Use settings if provided
+            config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.MARTS)
+            host = config['host']
+            port = config['port']
+            database = config['database']
+            user = config['user']
+            password = config['password']
+        
+        return ConnectionFactory.create_postgres_engine(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
+            schema='marts'
+        )
 
 
 
