@@ -254,8 +254,8 @@ class TestTableProcessor:
             result = processor.process_table('test_table')
             
             assert result is True
-            processor._extract_to_replication.assert_called_once_with('test_table', False)
-            processor._load_to_analytics.assert_called_once_with('test_table', True, table_processor_standard_config)
+            mock_extract.assert_called_once_with('test_table', False)
+            mock_load.assert_called_once_with('test_table', True, table_processor_standard_config)
 
     def test_process_table_success_full_refresh(self, mock_table_processor_engines, table_processor_standard_config):
         """Test successful full refresh table processing."""
@@ -266,16 +266,19 @@ class TestTableProcessor:
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
         
-        with patch.object(processor, '_extract_to_replication', return_value=True), \
-             patch.object(processor, '_load_to_analytics', return_value=True), \
+        with patch.object(processor, '_extract_to_replication') as mock_extract, \
+             patch.object(processor, '_load_to_analytics') as mock_load, \
              patch.object(processor.settings, 'get_table_config', return_value=table_processor_standard_config), \
              patch.object(processor.settings, 'should_use_incremental', return_value=True):
+            
+            mock_extract.return_value = True
+            mock_load.return_value = True
             
             result = processor.process_table('test_table', force_full=True)
             
             assert result is True
-            processor._extract_to_replication.assert_called_once_with('test_table', True)
-            processor._load_to_analytics.assert_called_once_with('test_table', False, table_processor_standard_config)
+            mock_extract.assert_called_once_with('test_table', True)
+            mock_load.assert_called_once_with('test_table', False, table_processor_standard_config)
 
     def test_process_table_extraction_failure(self, mock_table_processor_engines, table_processor_standard_config):
         """Test process_table when extraction phase fails."""
@@ -675,16 +678,19 @@ class TestTableProcessor:
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
         
-        with patch.object(processor, '_extract_to_replication', return_value=True), \
-             patch.object(processor, '_load_to_analytics', return_value=True), \
+        with patch.object(processor, '_extract_to_replication') as mock_extract, \
+             patch.object(processor, '_load_to_analytics') as mock_load, \
              patch.object(processor.settings, 'get_table_config', return_value=table_processor_standard_config), \
              patch.object(processor.settings, 'should_use_incremental', return_value=True):
+            
+            mock_extract.return_value = True
+            mock_load.return_value = True
             
             result = processor.process_table('test_table', force_full=False)
             
             assert result is True
-            processor._extract_to_replication.assert_called_once_with('test_table', False)
-            processor._load_to_analytics.assert_called_once_with('test_table', True, table_processor_standard_config)
+            mock_extract.assert_called_once_with('test_table', False)
+            mock_load.assert_called_once_with('test_table', True, table_processor_standard_config)
 
     def test_process_table_full_refresh_logic(self, mock_table_processor_engines, table_processor_standard_config):
         """Test full refresh processing logic in process_table."""
@@ -695,16 +701,19 @@ class TestTableProcessor:
         processor.mysql_replication_engine = mock_replication
         processor.postgres_analytics_engine = mock_analytics
         
-        with patch.object(processor, '_extract_to_replication', return_value=True), \
-             patch.object(processor, '_load_to_analytics', return_value=True), \
+        with patch.object(processor, '_extract_to_replication') as mock_extract, \
+             patch.object(processor, '_load_to_analytics') as mock_load, \
              patch.object(processor.settings, 'get_table_config', return_value=table_processor_standard_config), \
              patch.object(processor.settings, 'should_use_incremental', return_value=True):
+            
+            mock_extract.return_value = True
+            mock_load.return_value = True
             
             result = processor.process_table('test_table', force_full=True)
             
             assert result is True
-            processor._extract_to_replication.assert_called_once_with('test_table', True)
-            processor._load_to_analytics.assert_called_once_with('test_table', False, table_processor_standard_config)
+            mock_extract.assert_called_once_with('test_table', True)
+            mock_load.assert_called_once_with('test_table', False, table_processor_standard_config)
 
     def test_process_table_settings_integration(self, mock_table_processor_engines):
         """Test integration with Settings class for table configuration."""
@@ -722,17 +731,17 @@ class TestTableProcessor:
             'priority': 'important'
         }
         
-        with patch.object(processor, '_extract_to_replication', return_value=True), \
-             patch.object(processor, '_load_to_analytics', return_value=True), \
-             patch.object(processor.settings, 'get_table_config', return_value=expected_config), \
-             patch.object(processor.settings, 'should_use_incremental', return_value=False):
+        with patch.object(processor, '_extract_to_replication', return_value=True) as mock_extract, \
+             patch.object(processor, '_load_to_analytics', return_value=True) as mock_load, \
+             patch.object(processor.settings, 'get_table_config', return_value=expected_config) as mock_get_config, \
+             patch.object(processor.settings, 'should_use_incremental', return_value=False) as mock_should_inc:
             
             result = processor.process_table('test_table')
             
             assert result is True
-            processor.settings.get_table_config.assert_called_once_with('test_table')
-            processor.settings.should_use_incremental.assert_called_once_with('test_table')
-            processor._load_to_analytics.assert_called_once_with('test_table', False, expected_config)
+            mock_get_config.assert_called_once_with('test_table')
+            mock_should_inc.assert_called_once_with('test_table')
+            mock_load.assert_called_once_with('test_table', False, expected_config)
 
     def test_mock_call_verification_with_debug_logging(self, mock_table_processor_engines, table_processor_standard_config):
         """Test mock call verification with debug logging for troubleshooting."""
