@@ -147,12 +147,16 @@ class ExactMySQLReplicator:
             return False
 
     def _copy_direct(self, table_name: str, row_count: int) -> bool:
-        """Direct table copy for smaller tables."""
+        """Direct table copy for smaller tables with dynamic column filtering."""
         try:
             with self.source_engine.connect() as source_conn, \
                  self.target_engine.connect() as target_conn:
                 
-                # Copy all data
+                # Get target table columns to filter source data
+                target_columns_result = target_conn.execute(text(f"SHOW COLUMNS FROM `{table_name}`"))
+                target_columns = set(row[0] for row in target_columns_result)
+                
+                # Copy data with column filtering
                 copy_query = text(f"SELECT * FROM `{table_name}`")
                 result = source_conn.execute(copy_query)
                 rows = result.fetchall()
@@ -161,19 +165,32 @@ class ExactMySQLReplicator:
                     logger.info(f"[COPY] No data to copy from {table_name}")
                     return True
                 
-                # Insert data
-                columns = result.keys()
-                placeholders = ', '.join([':' + col for col in columns])
+                # Filter columns to only include those that exist in target table
+                all_columns = list(result.keys())
+                filtered_columns = [col for col in all_columns if col in target_columns]
+                
+                if not filtered_columns:
+                    logger.error(f"[COPY] No matching columns found between source and target for {table_name}")
+                    return False
+                
+                # Create filtered column list for INSERT
+                placeholders = ', '.join([':' + col for col in filtered_columns])
                 insert_query = text(f"""
-                    INSERT INTO `{table_name}` ({', '.join(f'`{col}`' for col in columns)})
+                    INSERT INTO `{table_name}` ({', '.join(f'`{col}`' for col in filtered_columns)})
                     VALUES ({placeholders})
                 """)
                 
-                with target_conn.begin():
-                    target_conn.execute(insert_query, [dict(row._mapping) for row in rows])
+                # Filter row data to only include target columns
+                filtered_rows = []
+                for row in rows:
+                    row_dict = dict(row._mapping)
+                    filtered_row = {col: row_dict[col] for col in filtered_columns if col in row_dict}
+                    filtered_rows.append(filtered_row)
+                
+                target_conn.execute(insert_query, filtered_rows)
                 
                 rows_copied = len(rows)
-                logger.info(f"[COPY] Direct copy completed: {rows_copied:,} rows")
+                logger.info(f"[COPY] Direct copy completed: {rows_copied:,} rows (filtered to {len(filtered_columns)} columns)")
                 return True
                 
         except Exception as e:
