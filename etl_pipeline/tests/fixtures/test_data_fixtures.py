@@ -92,7 +92,7 @@ def patient_with_all_fields_test_data():
             'PatNum': 9999,
             'LName': 'Test',
             'FName': 'Type',
-            'MiddleI': 'T',
+            # 'MiddleI': 'T',  # Removed - column doesn't exist in actual schema
             'Preferred': 'Test',
             'PatStatus': 0,
             'Gender': 0,

@@ -17,7 +17,7 @@ STANDARD_TEST_PATIENTS = [
         'PatNum': 1,
         'LName': 'Doe',
         'FName': 'John',
-        'MiddleI': 'M',
+        # 'MiddleI': 'M',  # Removed - column doesn't exist in actual schema
         'Preferred': 'Johnny',
         'PatStatus': 0,
         'Gender': 0,
@@ -103,7 +103,7 @@ STANDARD_TEST_PATIENTS = [
         'PatNum': 2,
         'LName': 'Smith',
         'FName': 'Jane',
-        'MiddleI': 'A',
+        # 'MiddleI': 'A',  # Removed - column doesn't exist in actual schema
         'Preferred': 'Janey',
         'PatStatus': 0,
         'Gender': 1,
@@ -189,7 +189,7 @@ STANDARD_TEST_PATIENTS = [
         'PatNum': 3,
         'LName': 'Johnson',
         'FName': 'Bob',
-        'MiddleI': 'R',
+        # 'MiddleI': 'R',  # Removed - column doesn't exist in actual schema
         'Preferred': 'Bobby',
         'PatStatus': 0,
         'Gender': 0,
