@@ -324,8 +324,104 @@ class TestMySQLReplicatorRealIntegration:
         result = mysql_replicator.copy_table_data('patient')
         assert result is False
         
-        # Recreate the table for other tests by re-running the fixture setup
-        # This will be handled automatically by the fixture cleanup and setup
+        # Recreate the patient table for other tests
+        # This is necessary because we dropped the table and fixtures only clean data, not recreate tables
+        with mysql_replicator.source_engine.connect() as conn:
+            # Recreate the patient table with the same schema as setup script
+            create_patient_sql = """
+                CREATE TABLE patient (
+                    `PatNum` bigint(20) NOT NULL AUTO_INCREMENT,
+                    `LName` varchar(100) DEFAULT '',
+                    `FName` varchar(100) DEFAULT '',
+                    `MiddleI` varchar(100) DEFAULT '',
+                    `Preferred` varchar(100) DEFAULT '',
+                    `PatStatus` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `Gender` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `Position` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `Birthdate` date NOT NULL DEFAULT '0001-01-01',
+                    `SSN` varchar(100) DEFAULT '',
+                    `Address` varchar(100) DEFAULT '',
+                    `Address2` varchar(100) DEFAULT '',
+                    `City` varchar(100) DEFAULT '',
+                    `State` varchar(100) DEFAULT '',
+                    `Zip` varchar(100) DEFAULT '',
+                    `HmPhone` varchar(30) DEFAULT '',
+                    `WkPhone` varchar(30) DEFAULT '',
+                    `WirelessPhone` varchar(30) DEFAULT '',
+                    `Guarantor` bigint(20) NOT NULL DEFAULT 0,
+                    `CreditType` char(1) DEFAULT '',
+                    `Email` varchar(100) DEFAULT '',
+                    `Salutation` varchar(100) DEFAULT '',
+                    `EstBalance` double NOT NULL DEFAULT 0,
+                    `PriProv` bigint(20) NOT NULL DEFAULT 0,
+                    `SecProv` bigint(20) NOT NULL DEFAULT 0,
+                    `FeeSched` bigint(20) NOT NULL DEFAULT 0,
+                    `BillingType` bigint(20) NOT NULL DEFAULT 0,
+                    `ImageFolder` varchar(100) DEFAULT '',
+                    `AddrNote` text DEFAULT NULL,
+                    `FamFinUrgNote` text DEFAULT NULL,
+                    `MedUrgNote` varchar(255) DEFAULT '',
+                    `ApptModNote` varchar(255) DEFAULT '',
+                    `StudentStatus` char(1) DEFAULT '',
+                    `SchoolName` varchar(255) NOT NULL DEFAULT '',
+                    `ChartNumber` varchar(100) NOT NULL DEFAULT '',
+                    `MedicaidID` varchar(20) DEFAULT '',
+                    `Bal_0_30` double NOT NULL DEFAULT 0,
+                    `Bal_31_60` double NOT NULL DEFAULT 0,
+                    `Bal_61_90` double NOT NULL DEFAULT 0,
+                    `BalOver90` double NOT NULL DEFAULT 0,
+                    `InsEst` double NOT NULL DEFAULT 0,
+                    `BalTotal` double NOT NULL DEFAULT 0,
+                    `EmployerNum` bigint(20) NOT NULL DEFAULT 0,
+                    `EmploymentNote` varchar(255) DEFAULT '',
+                    `County` varchar(255) DEFAULT '',
+                    `GradeLevel` tinyint(4) NOT NULL DEFAULT 0,
+                    `Urgency` tinyint(4) NOT NULL DEFAULT 0,
+                    `DateFirstVisit` date NOT NULL DEFAULT '0001-01-01',
+                    `ClinicNum` bigint(20) NOT NULL DEFAULT 0,
+                    `HasIns` varchar(255) DEFAULT '',
+                    `TrophyFolder` varchar(255) DEFAULT '',
+                    `PlannedIsDone` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `Premed` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `Ward` varchar(255) DEFAULT '',
+                    `PreferConfirmMethod` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `PreferContactMethod` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `PreferRecallMethod` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `SchedBeforeTime` time DEFAULT NULL,
+                    `SchedAfterTime` time DEFAULT NULL,
+                    `SchedDayOfWeek` tinyint(3) unsigned NOT NULL DEFAULT 0,
+                    `Language` varchar(100) DEFAULT '',
+                    `AdmitDate` date NOT NULL DEFAULT '0001-01-01',
+                    `Title` varchar(15) DEFAULT NULL,
+                    `PayPlanDue` double NOT NULL DEFAULT 0,
+                    `SiteNum` bigint(20) NOT NULL DEFAULT 0,
+                    `DateTStamp` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+                    `ResponsParty` bigint(20) NOT NULL DEFAULT 0,
+                    `CanadianEligibilityCode` tinyint(4) NOT NULL DEFAULT 0,
+                    `AskToArriveEarly` int(11) NOT NULL DEFAULT 0,
+                    `PreferContactConfidential` tinyint(4) NOT NULL DEFAULT 0,
+                    `SuperFamily` bigint(20) NOT NULL DEFAULT 0,
+                    `TxtMsgOk` tinyint(4) NOT NULL DEFAULT 0,
+                    `SmokingSnoMed` varchar(32) NOT NULL DEFAULT '',
+                    `Country` varchar(255) NOT NULL DEFAULT '',
+                    `DateTimeDeceased` datetime NOT NULL DEFAULT '0001-01-01 00:00:00',
+                    `BillingCycleDay` int(11) NOT NULL DEFAULT 1,
+                    `SecUserNumEntry` bigint(20) NOT NULL DEFAULT 0,
+                    `SecDateEntry` date NOT NULL DEFAULT '0001-01-01',
+                    `HasSuperBilling` tinyint(4) NOT NULL DEFAULT 0,
+                    `PatNumCloneFrom` bigint(20) NOT NULL DEFAULT 0,
+                    `DiscountPlanNum` bigint(20) NOT NULL DEFAULT 0,
+                    `HasSignedTil` tinyint(4) NOT NULL DEFAULT 0,
+                    `ShortCodeOptIn` tinyint(4) NOT NULL DEFAULT 0,
+                    `SecurityHash` varchar(255) NOT NULL DEFAULT '',
+                    PRIMARY KEY (`PatNum`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """
+            conn.execute(text(create_patient_sql))
+            conn.commit()
+            
+        # Re-populate the table with test data using the fixture
+        populated_test_databases.setup_patient_data(database_types=[DatabaseType.SOURCE])
 
 
 if __name__ == "__main__":
