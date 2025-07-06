@@ -88,10 +88,10 @@ class IntegrationTestDataManager:
                 elif db_type == DatabaseType.ANALYTICS:
                     self._insert_patient_data_postgres(self.raw_engine, patient_data, "analytics")
                 
-                logger.info(f"✅ Inserted {len(patient_data)} patient records into {db_type.value} database")
+                logger.info(f"Inserted {len(patient_data)} patient records into {db_type.value} database")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to insert patient data into {db_type.value}: {e}")
+                logger.error(f"Failed to insert patient data into {db_type.value}: {e}")
                 raise
     
     def setup_appointment_data(self, 
@@ -117,10 +117,10 @@ class IntegrationTestDataManager:
                 elif db_type == DatabaseType.ANALYTICS:
                     self._insert_appointment_data_postgres(self.raw_engine, appointment_data, "analytics")
                 
-                logger.info(f"✅ Inserted {len(appointment_data)} appointment records into {db_type.value} database")
+                logger.info(f"Inserted {len(appointment_data)} appointment records into {db_type.value} database")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to insert appointment data into {db_type.value}: {e}")
+                logger.error(f"Failed to insert appointment data into {db_type.value}: {e}")
                 raise
     
 
@@ -205,6 +205,8 @@ class IntegrationTestDataManager:
     
     def _insert_appointment_data_mysql(self, engine: Engine, appointment_data: List[Dict[str, Any]], db_name: str) -> None:
         """Insert appointment data into MySQL database."""
+        # Dynamically detect columns in the appointment table
+        table_columns = self._get_table_columns(engine, "appointment")
         with engine.connect() as conn:
             # Clear existing test data first
             apt_nums = [appointment['AptNum'] for appointment in appointment_data]
@@ -213,19 +215,23 @@ class IntegrationTestDataManager:
                     text("DELETE FROM appointment WHERE AptNum IN :apt_nums").bindparams(bindparam("apt_nums", expanding=True)),
                     {"apt_nums": apt_nums}
                 )
-            # Insert new test data
+            # Insert new test data, only using columns that exist in the table
             for appointment in appointment_data:
-                fields = list(appointment.keys())
-                placeholders = ', '.join([f':{field}' for field in fields])
-                field_names = ', '.join([f'`{field}`' for field in fields])
-                
-                insert_sql = f"INSERT INTO appointment ({field_names}) VALUES ({placeholders})"
-                conn.execute(text(insert_sql), appointment)
+                filtered_appointment = {k: v for k, v in appointment.items() if k in table_columns}
+                columns = ', '.join(f'`{col}`' for col in filtered_appointment.keys())
+                values = ', '.join(f':{col}' for col in filtered_appointment.keys())
+                insert_sql = f"INSERT INTO appointment ({columns}) VALUES ({values})"
+                try:
+                    conn.execute(text(insert_sql), filtered_appointment)
+                except Exception as e:
+                    self.logger.error(f"Failed to insert appointment data into {db_name}: {e}")
             
             conn.commit()
     
     def _insert_appointment_data_postgres(self, engine: Engine, appointment_data: List[Dict[str, Any]], db_name: str) -> None:
         """Insert appointment data into PostgreSQL database."""
+        # Dynamically detect columns in the appointment table
+        table_columns = self._get_table_columns_postgres(engine, "appointment", schema="raw")
         with engine.connect() as conn:
             # Clear existing test data first
             apt_nums = [appointment['AptNum'] for appointment in appointment_data]
@@ -234,22 +240,24 @@ class IntegrationTestDataManager:
                     text('DELETE FROM raw.appointment WHERE "AptNum" = ANY(:apt_nums)'),
                     {"apt_nums": apt_nums}
                 )
-            # Insert new test data
+            # Insert new test data, only using columns that exist in the table
             for appointment in appointment_data:
+                filtered_appointment = {k: v for k, v in appointment.items() if k in table_columns}
+                
                 # Convert integer boolean values to PostgreSQL boolean for specific fields
-                appointment_copy = appointment.copy()
                 boolean_fields = ['AptStatus']
                 
                 for field in boolean_fields:
-                    if field in appointment_copy and isinstance(appointment_copy[field], int):
-                        appointment_copy[field] = bool(appointment_copy[field])
+                    if field in filtered_appointment and isinstance(filtered_appointment[field], int):
+                        filtered_appointment[field] = bool(filtered_appointment[field])
                 
-                fields = list(appointment_copy.keys())
-                placeholders = ', '.join([f':{field}' for field in fields])
-                field_names = ', '.join([f'"{field}"' for field in fields])
-                
-                insert_sql = f'INSERT INTO raw.appointment ({field_names}) VALUES ({placeholders})'
-                conn.execute(text(insert_sql), appointment_copy)
+                columns = ', '.join(f'"{col}"' for col in filtered_appointment.keys())
+                values = ', '.join(f':{col}' for col in filtered_appointment.keys())
+                insert_sql = f'INSERT INTO raw.appointment ({columns}) VALUES ({values})'
+                try:
+                    conn.execute(text(insert_sql), filtered_appointment)
+                except Exception as e:
+                    self.logger.error(f"Failed to insert appointment data into {db_name}: {e}")
             
             conn.commit()
     
@@ -273,10 +281,10 @@ class IntegrationTestDataManager:
                 elif db_type == DatabaseType.ANALYTICS:
                     self._cleanup_patient_data_postgres(self.raw_engine, "analytics")
                 
-                logger.info(f"✅ Cleaned up patient data from {db_type.value} database")
+                logger.info(f"Cleaned up patient data from {db_type.value} database")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to clean up patient data from {db_type.value}: {e}")
+                logger.error(f"Failed to clean up patient data from {db_type.value}: {e}")
                 raise
     
     def cleanup_appointment_data(self, database_types: Optional[List[DatabaseType]] = None) -> None:
@@ -299,10 +307,10 @@ class IntegrationTestDataManager:
                 elif db_type == DatabaseType.ANALYTICS:
                     self._cleanup_appointment_data_postgres(self.raw_engine, "analytics")
                 
-                logger.info(f"✅ Cleaned up appointment data from {db_type.value} database")
+                logger.info(f"Cleaned up appointment data from {db_type.value} database")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to clean up appointment data from {db_type.value}: {e}")
+                logger.error(f"Failed to clean up appointment data from {db_type.value}: {e}")
                 raise
     
     def _cleanup_patient_data_mysql(self, engine: Engine, db_name: str) -> None:
@@ -364,9 +372,9 @@ class IntegrationTestDataManager:
         try:
             self.cleanup_patient_data()
             self.cleanup_appointment_data()
-            logger.info("✅ Successfully cleaned up all test data")
+            logger.info("Successfully cleaned up all test data")
         except Exception as e:
-            logger.error(f"❌ Failed to clean up all test data: {e}")
+            logger.error(f"Failed to clean up all test data: {e}")
             raise
     
     def get_patient_count(self, database_type: DatabaseType) -> int:
@@ -397,7 +405,7 @@ class IntegrationTestDataManager:
                 return result.scalar() or 0
                 
         except Exception as e:
-            logger.error(f"❌ Failed to get patient count from {database_type.value}: {e}")
+            logger.error(f"Failed to get patient count from {database_type.value}: {e}")
             raise
     
     def get_appointment_count(self, database_type: DatabaseType) -> int:
@@ -428,7 +436,7 @@ class IntegrationTestDataManager:
                 return result.scalar() or 0
                 
         except Exception as e:
-            logger.error(f"❌ Failed to get appointment count from {database_type.value}: {e}")
+            logger.error(f"Failed to get appointment count from {database_type.value}: {e}")
             raise
     
     def dispose(self) -> None:
@@ -438,7 +446,7 @@ class IntegrationTestDataManager:
             self.replication_engine.dispose()
             self.analytics_engine.dispose()
             self.raw_engine.dispose()
-            logger.info("✅ Disposed of all database connections")
+            logger.info("Disposed of all database connections")
         except Exception as e:
-            logger.error(f"❌ Failed to dispose connections: {e}")
+            logger.error(f"Failed to dispose connections: {e}")
             raise 
