@@ -9,6 +9,7 @@ Modules:
 - test_data_definitions: Standardized test data that matches real schemas
 - test_data_manager: Manager class for test data operations
 - integration_fixtures: Pytest fixtures for integration tests
+- test_data_fixtures: Standardized test data fixtures for all tests
 """
 
 from .test_data_definitions import (
@@ -23,25 +24,35 @@ from .test_data_manager import IntegrationTestDataManager
 
 from .integration_fixtures import (
     test_data_manager,
-    populated_test_databases,
-    test_database_engines,
-    test_source_engine,
-    test_replication_engine,
-    test_analytics_engine,
-    test_raw_engine,
-    test_staging_engine,
-    test_intermediate_engine,
-    test_marts_engine,
-    setup_patient_table,  # Legacy compatibility
-    setup_etl_tracking    # Legacy compatibility
+    populated_test_databases
 )
 
-from .env_fixtures import test_settings
+from .env_fixtures import (
+    test_env_vars,
+    test_settings
+)
+
+from .config_fixtures import (
+    test_pipeline_config,
+    test_tables_config
+)
+
+from .test_data_fixtures import (
+    standard_patient_test_data,
+    incremental_patient_test_data,
+    partial_patient_test_data,
+    etl_tracking_test_data,
+    invalid_schema_test_data,
+    composite_pk_test_data,
+    large_table_test_data,
+    simple_test_table_data,
+    patient_with_all_fields_test_data
+)
 
 __all__ = [
     # Test data definitions
     'get_test_patient_data',
-    'get_test_appointment_data',
+    'get_test_appointment_data', 
     'get_test_data_for_table',
     'STANDARD_TEST_PATIENTS',
     'STANDARD_TEST_APPOINTMENTS',
@@ -52,17 +63,23 @@ __all__ = [
     # Integration fixtures
     'test_data_manager',
     'populated_test_databases',
-    'test_database_engines',
-    'test_source_engine',
-    'test_replication_engine',
-    'test_analytics_engine',
-    'test_raw_engine',
-    'test_staging_engine',
-    'test_intermediate_engine',
-    'test_marts_engine',
-    'setup_patient_table',
-    'setup_etl_tracking',
     
     # Environment fixtures
-    'test_settings'
+    'test_env_vars',
+    'test_settings',
+    
+    # Config fixtures
+    'test_pipeline_config',
+    'test_tables_config',
+    
+    # Test data fixtures
+    'standard_patient_test_data',
+    'incremental_patient_test_data',
+    'partial_patient_test_data',
+    'etl_tracking_test_data',
+    'invalid_schema_test_data',
+    'composite_pk_test_data',
+    'large_table_test_data',
+    'simple_test_table_data',
+    'patient_with_all_fields_test_data'
 ] 
