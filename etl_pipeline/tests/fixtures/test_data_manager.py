@@ -394,7 +394,7 @@ class IntegrationTestDataManager:
             
             with engine.connect() as conn:
                 result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-                return result.scalar()
+                return result.scalar() or 0
                 
         except Exception as e:
             logger.error(f"❌ Failed to get patient count from {database_type.value}: {e}")
@@ -425,7 +425,7 @@ class IntegrationTestDataManager:
             
             with engine.connect() as conn:
                 result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-                return result.scalar()
+                return result.scalar() or 0
                 
         except Exception as e:
             logger.error(f"❌ Failed to get appointment count from {database_type.value}: {e}")
