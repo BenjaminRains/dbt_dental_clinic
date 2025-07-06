@@ -77,7 +77,7 @@ def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
         database_types=[DatabaseType.SOURCE, DatabaseType.REPLICATION]
     )
     
-    logger.info("✅ Set up populated test databases with standard test data (SOURCE and REPLICATION only)")
+    logger.info("Set up populated test databases with standard test data (SOURCE and REPLICATION only)")
     
     return test_data_manager
 
@@ -101,7 +101,7 @@ def test_database_engines(test_settings) -> Generator[Tuple, None, None]:
         replication_engine = ConnectionFactory.get_mysql_replication_test_connection(test_settings)
         analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
         
-        logger.info("✅ Created test database engines using explicit test connection methods")
+        logger.info("Created test database engines using explicit test connection methods")
         
         yield (replication_engine, analytics_engine)
         
@@ -110,7 +110,7 @@ def test_database_engines(test_settings) -> Generator[Tuple, None, None]:
         analytics_engine.dispose()
         
     except Exception as e:
-        logger.error(f"❌ Failed to create test database engines: {e}")
+        logger.error(f"Failed to create test database engines: {e}")
         raise
 
 @pytest.fixture
@@ -125,7 +125,7 @@ def test_source_engine(test_settings):
     try:
         engine = ConnectionFactory.get_opendental_source_test_connection(test_settings)
         
-        logger.info("✅ Created test source engine using explicit test connection method")
+        logger.info("Created test source engine using explicit test connection method")
         
         yield engine
         
