@@ -132,10 +132,15 @@ class PostgresLoader:
         self.replication_engine = replication_engine
         self.analytics_engine = analytics_engine
         
-        # Use correct database names from conventions
-        self.replication_db = "opendental_replication"
-        self.analytics_db = "opendental_analytics"
-        self.analytics_schema = "raw"
+        # Get PostgreSQL-specific settings from config
+        settings_instance = get_settings()
+        analytics_config = settings_instance.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
+        replication_config = settings_instance.get_database_config(DatabaseType.REPLICATION)
+        
+        # Use actual database names from settings (supports both production and test environments)
+        self.replication_db = replication_config.get('database', 'opendental_replication')
+        self.analytics_db = analytics_config.get('database', 'opendental_analytics')
+        self.analytics_schema = analytics_config.get('schema', 'raw')
         
         # Initialize schema adapter
         self.schema_adapter = PostgresSchema(
@@ -145,11 +150,6 @@ class PostgresLoader:
             postgres_db=self.analytics_db,
             postgres_schema=self.analytics_schema
         )
-        
-        # Get PostgreSQL-specific settings from config
-        settings_instance = get_settings()
-        analytics_config = settings_instance.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
-        replication_config = settings_instance.get_database_config(DatabaseType.REPLICATION)
         
         self.target_schema = analytics_config.get('schema', 'raw')
         self.staging_schema = replication_config.get('schema', 'raw')
@@ -255,9 +255,12 @@ class PostgresLoader:
             with self.replication_engine.connect() as source_conn:
                 total_rows = source_conn.execute(text(count_query)).scalar()
             
-            if total_rows == 0:
+            if total_rows is None or total_rows == 0:
                 logger.info(f"No new data to load for {table_name}")
                 return True
+            
+            # Ensure total_rows is an integer
+            total_rows = int(total_rows)
             
             logger.info(f"Loading {total_rows} rows from {table_name} in chunks of {chunk_size}")
             
