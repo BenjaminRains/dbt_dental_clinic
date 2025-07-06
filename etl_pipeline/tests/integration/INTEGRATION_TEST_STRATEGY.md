@@ -2,7 +2,9 @@
 
 ## Overview
 
-The integration tests validate the complete ETL pipeline flow from source database to analytics database, including all intermediate components and edge cases. The tests must be executed in a specific order to properly simulate the data flow and validate dependencies.
+The integration tests validate the complete ETL pipeline flow from source database to analytics
+ database, including all intermediate components and edge cases. The tests must be executed in a
+  specific order to properly simulate the data flow and validate dependencies.
 
 ## Test Architecture
 
@@ -283,4 +285,5 @@ python etl_pipeline/scripts/run_integration_tests.py --order-only
 - Performance regression detection
 - Automated test result analysis
 
-This comprehensive test strategy ensures that the complete ETL pipeline is validated end-to-end while maintaining proper test isolation and execution order. 
+This comprehensive test strategy ensures that the complete ETL pipeline is validated end-to-end
+ while maintaining proper test isolation and execution order. 
