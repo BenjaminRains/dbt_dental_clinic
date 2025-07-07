@@ -226,7 +226,7 @@ def status(config: str, format: str, table: Optional[str], watch: bool, output: 
         
         # Initialize components with analytics engine for persistence
         connection_factory = ConnectionFactory()
-        analytics_engine = ConnectionFactory.get_analytics_connection()
+        analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
         monitor = UnifiedMetricsCollector(analytics_engine=analytics_engine)
         
         # Get pipeline status
@@ -309,7 +309,7 @@ def test_connections() -> None:
         
         # Test OpenDental source connection
         logger.debug("Testing OpenDental source connection...")
-        source_engine = ConnectionFactory.get_source_connection()
+        source_engine = ConnectionFactory.get_opendental_source_connection()
         # Actually attempt to connect
         logger.debug("Attempting to connect to OpenDental source...")
         with source_engine.connect() as conn:
@@ -319,7 +319,7 @@ def test_connections() -> None:
         
         # Test MySQL replication connection
         logger.debug("Testing MySQL replication connection...")
-        repl_engine = ConnectionFactory.get_replication_connection()
+        repl_engine = ConnectionFactory.get_mysql_replication_connection()
         # Actually attempt to connect
         logger.debug("Attempting to connect to MySQL replication...")
         with repl_engine.connect() as conn:
@@ -329,7 +329,7 @@ def test_connections() -> None:
         
         # Test PostgreSQL analytics connection
         logger.debug("Testing PostgreSQL analytics connection...")
-        analytics_engine = ConnectionFactory.get_analytics_connection()
+        analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
         # Actually attempt to connect
         logger.debug("Attempting to connect to PostgreSQL analytics...")
         with analytics_engine.connect() as conn:
