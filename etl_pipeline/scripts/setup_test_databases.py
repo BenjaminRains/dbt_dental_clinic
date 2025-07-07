@@ -64,11 +64,7 @@ try:
     import os
     fixtures_path = os.path.join(os.path.dirname(__file__), '..', 'tests', 'fixtures')
     sys.path.insert(0, fixtures_path)
-    try:
-        from test_data_definitions import get_test_patient_data, get_test_appointment_data
-    except ImportError:
-        # Fallback import path
-        from etl_pipeline.tests.fixtures.test_data_definitions import get_test_patient_data, get_test_appointment_data
+    from test_data_definitions import get_test_patient_data, get_test_appointment_data  # type: ignore
     NEW_CONFIG_AVAILABLE = True
 except ImportError as e:
     print(f"Import error: {e}")
