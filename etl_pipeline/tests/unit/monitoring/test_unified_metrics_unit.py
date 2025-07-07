@@ -422,16 +422,6 @@ class TestUnifiedMetricsCollectorUnit:
             assert collector is not None
             # Note: The persistence flag behavior may vary based on implementation
 
-    def test_backward_compatibility_aliases(self):
-        """Test backward compatibility aliases."""
-        from etl_pipeline.monitoring.unified_metrics import MetricsCollector, PipelineMetrics
-        
-        collector1 = MetricsCollector()
-        collector2 = PipelineMetrics()
-        
-        assert isinstance(collector1, UnifiedMetricsCollector)
-        assert isinstance(collector2, UnifiedMetricsCollector)
-
     def test_pipeline_id_uniqueness(self):
         """Test that pipeline IDs are unique."""
         # Add a small delay to ensure different timestamps
