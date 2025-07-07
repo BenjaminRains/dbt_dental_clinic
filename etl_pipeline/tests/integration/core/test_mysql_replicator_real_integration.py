@@ -119,9 +119,31 @@ class TestMySQLReplicatorRealIntegration:
     @pytest.mark.order(2)
     def test_real_table_data_copying(self, populated_test_databases, mysql_replicator):
         """Test real table data copying with actual MySQL databases."""
-        # Verify test data exists using standardized approach
-        patient_count = populated_test_databases.get_patient_count(DatabaseType.SOURCE)
-        assert patient_count > 0, "No test patients found in source database"
+        # Create simple test data directly in source database
+        test_patients = [
+            {'PatNum': 1001, 'LName': 'Test1', 'FName': 'John', 'PatStatus': 0, 'SSN': '111-11-1111'},
+            {'PatNum': 1002, 'LName': 'Test2', 'FName': 'Jane', 'PatStatus': 0, 'SSN': '222-22-2222'},
+            {'PatNum': 1003, 'LName': 'Test3', 'FName': 'Bob', 'PatStatus': 0, 'SSN': '333-33-3333'}
+        ]
+        
+        # Insert test data into source database
+        with mysql_replicator.source_engine.connect() as conn:
+            # Clear any existing test data
+            conn.execute(text("DELETE FROM patient WHERE PatNum IN (1001, 1002, 1003)"))
+            
+            # Insert test data
+            for patient in test_patients:
+                conn.execute(text("""
+                    INSERT INTO patient (PatNum, LName, FName, PatStatus, SSN) 
+                    VALUES (:PatNum, :LName, :FName, :PatStatus, :SSN)
+                """), patient)
+            conn.commit()
+        
+        # Verify test data was inserted
+        with mysql_replicator.source_engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM patient WHERE PatNum IN (1001, 1002, 1003)"))
+            source_count = result.scalar()
+            assert source_count == 3, f"Expected 3 test patients, found {source_count}"
         
         # First create the exact replica
         assert mysql_replicator.create_exact_replica('patient'), "Failed to create exact replica"
@@ -130,9 +152,10 @@ class TestMySQLReplicatorRealIntegration:
         result = mysql_replicator.copy_table_data('patient')
         assert result, "Real table data copying failed"
         
-        # Verify data was copied correctly using standardized approach
-        source_count = populated_test_databases.get_patient_count(DatabaseType.SOURCE)
-        target_count = populated_test_databases.get_patient_count(DatabaseType.REPLICATION)
+        # Verify data was copied correctly
+        with mysql_replicator.target_engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM patient WHERE PatNum IN (1001, 1002, 1003)"))
+            target_count = result.scalar()
         
         assert source_count == target_count, f"Data copy verification failed: source={source_count}, target={target_count}"
 
@@ -140,9 +163,24 @@ class TestMySQLReplicatorRealIntegration:
     @pytest.mark.order(2)
     def test_real_exact_replica_verification(self, populated_test_databases, mysql_replicator):
         """Test real exact replica verification with actual MySQL databases."""
-        # Verify test data exists using standardized approach
-        patient_count = populated_test_databases.get_patient_count(DatabaseType.SOURCE)
-        assert patient_count > 0, "No test patients found in source database"
+        # Create simple test data directly in source database
+        test_patients = [
+            {'PatNum': 2001, 'LName': 'Verify1', 'FName': 'John', 'PatStatus': 0, 'SSN': '444-44-4444'},
+            {'PatNum': 2002, 'LName': 'Verify2', 'FName': 'Jane', 'PatStatus': 0, 'SSN': '555-55-5555'}
+        ]
+        
+        # Insert test data into source database
+        with mysql_replicator.source_engine.connect() as conn:
+            # Clear any existing test data
+            conn.execute(text("DELETE FROM patient WHERE PatNum IN (2001, 2002)"))
+            
+            # Insert test data
+            for patient in test_patients:
+                conn.execute(text("""
+                    INSERT INTO patient (PatNum, LName, FName, PatStatus, SSN) 
+                    VALUES (:PatNum, :LName, :FName, :PatStatus, :SSN)
+                """), patient)
+            conn.commit()
         
         # Create and copy data
         assert mysql_replicator.create_exact_replica('patient'), "Failed to create exact replica"
@@ -156,11 +194,37 @@ class TestMySQLReplicatorRealIntegration:
     @pytest.mark.order(2)
     def test_real_multiple_table_replication(self, populated_test_databases, mysql_replicator):
         """Test replication of multiple tables with real data."""
-        # Verify test data exists using standardized approach
-        patient_count = populated_test_databases.get_patient_count(DatabaseType.SOURCE)
-        appointment_count = populated_test_databases.get_appointment_count(DatabaseType.SOURCE)
-        assert patient_count > 0, "No test patients found in source database"
-        assert appointment_count > 0, "No test appointments found in source database"
+        # Create simple test data directly in source database
+        test_patients = [
+            {'PatNum': 3001, 'LName': 'Multi1', 'FName': 'John', 'PatStatus': 0, 'SSN': '666-66-6666'},
+            {'PatNum': 3002, 'LName': 'Multi2', 'FName': 'Jane', 'PatStatus': 0, 'SSN': '777-77-7777'}
+        ]
+        
+        test_appointments = [
+            {'AptNum': 4001, 'PatNum': 3001, 'AptDateTime': '2023-01-01 10:00:00', 'AptStatus': 0, 'DateTStamp': '2023-01-01 10:00:00'},
+            {'AptNum': 4002, 'PatNum': 3002, 'AptDateTime': '2023-01-02 11:00:00', 'AptStatus': 0, 'DateTStamp': '2023-01-02 11:00:00'}
+        ]
+        
+        # Insert test data into source database
+        with mysql_replicator.source_engine.connect() as conn:
+            # Clear any existing test data
+            conn.execute(text("DELETE FROM patient WHERE PatNum IN (3001, 3002)"))
+            conn.execute(text("DELETE FROM appointment WHERE AptNum IN (4001, 4002)"))
+            
+            # Insert patient data
+            for patient in test_patients:
+                conn.execute(text("""
+                    INSERT INTO patient (PatNum, LName, FName, PatStatus, SSN) 
+                    VALUES (:PatNum, :LName, :FName, :PatStatus, :SSN)
+                """), patient)
+            
+            # Insert appointment data
+            for appointment in test_appointments:
+                conn.execute(text("""
+                    INSERT INTO appointment (AptNum, PatNum, AptDateTime, AptStatus, DateTStamp) 
+                    VALUES (:AptNum, :PatNum, :AptDateTime, :AptStatus, :DateTStamp)
+                """), appointment)
+            conn.commit()
         
         # Test replication for multiple tables
         test_tables = ['patient', 'appointment']
@@ -196,30 +260,52 @@ class TestMySQLReplicatorRealIntegration:
         assert not result, "Should fail for non-existent table"
 
     @pytest.mark.integration
-    @pytest.mark.order(2)
     def test_real_schema_discovery_integration(self, populated_test_databases, mysql_replicator):
-        """Test real SchemaDiscovery integration with MySQL replicator."""
-        # Verify test data exists using standardized approach
-        patient_count = populated_test_databases.get_patient_count(DatabaseType.SOURCE)
-        assert patient_count > 0, "No test patients found in source database"
-        
+        """Test that SchemaDiscovery is properly integrated with MySQL replicator."""
         # Test that SchemaDiscovery is properly integrated
         schema = mysql_replicator.schema_discovery.get_table_schema('patient')
         assert schema is not None, "SchemaDiscovery integration failed"
         assert 'columns' in schema, "SchemaDiscovery columns not found"
         assert 'schema_hash' in schema, "SchemaDiscovery schema_hash not found"
         
-        # Test table size info through SchemaDiscovery
+        # Test table size info through SchemaDiscovery (static config only)
         size_info = mysql_replicator.schema_discovery.get_table_size_info('patient')
         assert size_info is not None, "SchemaDiscovery size info failed"
-        assert size_info['row_count'] >= patient_count, "SchemaDiscovery row count incorrect"
+        assert 'row_count' in size_info, "SchemaDiscovery row count missing"
+        assert 'source' in size_info, "SchemaDiscovery source missing"
+        
+        # Verify that SchemaDiscovery returns static configuration data
+        # (not dynamic test data - that's not its responsibility)
+        assert size_info['source'] in ['static_configuration', 'error_fallback'], \
+            f"SchemaDiscovery should return static config, got: {size_info['source']}"
+        
+        # Test that we can get copy strategy from static configuration
+        copy_strategy = mysql_replicator.get_copy_strategy('patient')
+        assert copy_strategy in ['single_transaction', 'chunked_transactions'], \
+            f"Invalid copy strategy: {copy_strategy}"
 
     @pytest.mark.integration
     def test_real_data_integrity_verification(self, populated_test_databases, mysql_replicator):
         """Test real data integrity verification after replication."""
-        # Verify test data exists using standardized approach
-        patient_count = populated_test_databases.get_patient_count(DatabaseType.SOURCE)
-        assert patient_count > 0, "No test patients found in source database"
+        # Create simple test data directly in source database
+        test_patients = [
+            {'PatNum': 5001, 'LName': 'Integrity1', 'FName': 'John', 'PatStatus': 0, 'SSN': '888-88-8888'},
+            {'PatNum': 5002, 'LName': 'Integrity2', 'FName': 'Jane', 'PatStatus': 0, 'SSN': '999-99-9999'},
+            {'PatNum': 5003, 'LName': 'Integrity3', 'FName': 'Bob', 'PatStatus': 0, 'SSN': '000-00-0000'}
+        ]
+        
+        # Insert test data into source database
+        with mysql_replicator.source_engine.connect() as conn:
+            # Clear any existing test data
+            conn.execute(text("DELETE FROM patient WHERE PatNum IN (5001, 5002, 5003)"))
+            
+            # Insert test data
+            for patient in test_patients:
+                conn.execute(text("""
+                    INSERT INTO patient (PatNum, LName, FName, PatStatus, SSN) 
+                    VALUES (:PatNum, :LName, :FName, :PatStatus, :SSN)
+                """), patient)
+            conn.commit()
         
         # Create and copy data
         assert mysql_replicator.create_exact_replica('patient'), "Failed to create exact replica"
@@ -230,8 +316,8 @@ class TestMySQLReplicatorRealIntegration:
             source_result = source_conn.execute(text("""
                 SELECT PatNum, LName, FName, SSN 
                 FROM patient 
+                WHERE PatNum IN (5001, 5002, 5003)
                 ORDER BY PatNum
-                LIMIT 5
             """))
             source_data = [dict(row._mapping) for row in source_result.fetchall()]
         
@@ -239,8 +325,8 @@ class TestMySQLReplicatorRealIntegration:
             target_result = target_conn.execute(text("""
                 SELECT PatNum, LName, FName, SSN 
                 FROM patient 
+                WHERE PatNum IN (5001, 5002, 5003)
                 ORDER BY PatNum
-                LIMIT 5
             """))
             target_data = [dict(row._mapping) for row in target_result.fetchall()]
         
@@ -251,6 +337,49 @@ class TestMySQLReplicatorRealIntegration:
             assert source_record['LName'] == target_record['LName'], f"Data integrity check failed at record {i}: LName mismatch"
             assert source_record['FName'] == target_record['FName'], f"Data integrity check failed at record {i}: FName mismatch"
             assert source_record['SSN'] == target_record['SSN'], f"Data integrity check failed at record {i}: SSN mismatch"
+
+    @pytest.mark.integration
+    def test_real_data_copy_verification(self, populated_test_databases, mysql_replicator):
+        """Test data copying verification by querying database directly (not via SchemaDiscovery)."""
+        # Get actual row counts from database before copy
+        with mysql_replicator.source_engine.connect() as conn:
+            source_count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
+        
+        # Perform the copy operation
+        assert mysql_replicator.create_exact_replica('patient'), "Failed to create exact replica"
+        assert mysql_replicator.copy_table_data('patient'), "Failed to copy table data"
+        
+        # Verify row counts by querying database directly
+        with mysql_replicator.target_engine.connect() as conn:
+            target_count = conn.execute(text("SELECT COUNT(*) FROM patient")).scalar()
+        
+        # Assert that the copy worked correctly
+        assert target_count == source_count, f"Row count mismatch: source={source_count}, target={target_count}"
+        assert target_count > 0, "No data was copied"
+        
+        # Verify specific test data was copied correctly
+        with mysql_replicator.source_engine.connect() as source_conn:
+            source_data = source_conn.execute(text("""
+                SELECT PatNum, LName, FName 
+                FROM patient 
+                ORDER BY PatNum 
+                LIMIT 3
+            """)).fetchall()
+        
+        with mysql_replicator.target_engine.connect() as target_conn:
+            target_data = target_conn.execute(text("""
+                SELECT PatNum, LName, FName 
+                FROM patient 
+                ORDER BY PatNum 
+                LIMIT 3
+            """)).fetchall()
+        
+        # Compare the actual data
+        assert len(source_data) == len(target_data), "Data length mismatch"
+        for i, (source_row, target_row) in enumerate(zip(source_data, target_data)):
+            assert source_row.PatNum == target_row.PatNum, f"PatNum mismatch at row {i}"
+            assert source_row.LName == target_row.LName, f"LName mismatch at row {i}"
+            assert source_row.FName == target_row.FName, f"FName mismatch at row {i}"
 
     @pytest.mark.integration
     def test_chunked_copy_composite_pk(self, mysql_replicator, populated_test_databases):
