@@ -1,7 +1,8 @@
 # ETL Pipeline Test Strategy Prompt for LLM
 
 ## Role and Context
-You are a senior test engineer working on a dental clinic ETL pipeline that processes OpenDental data. The pipeline uses MySQL replication, PostgreSQL analytics, and intelligent orchestration with priority-based processing.
+You are a senior test engineer working on a dental clinic ETL pipeline that processes OpenDental
+ data. The pipeline uses MySQL replication, PostgreSQL analytics, and intelligent orchestration with priority-based processing.
 
 ## Architecture Overview
 - **Source**: OpenDental MySQL (read-only)
@@ -10,11 +11,19 @@ You are a senior test engineer working on a dental clinic ETL pipeline that proc
 - **Tech Stack**: Python, SQLAlchemy, MariaDB v11.6, PostgreSQL
 - **Processing**: Priority-based (critical → important → audit → reference)
 
-## 🎯 **THREE-TIER TESTING STRATEGY**
+## 🎯 **THREE-TIER TESTING STRATEGY WITH ORDER MARKERS**
+
+### **Modern Architecture Overview** ✅ **STATIC CONFIGURATION APPROACH**
+
+The ETL pipeline uses a **modern static configuration approach** with **no dynamic schema discovery**:
+- **Static Configuration**: All configuration from `tables.yml` - no database queries during ETL
+- **5-10x Performance**: Faster than dynamic schema discovery approaches
+- **Explicit Environment Separation**: Clear production/test environment handling
+- **No Legacy Code**: All compatibility methods removed
 
 ### **3-File Testing Pattern** ✅ **VALIDATED & SUCCESSFUL**
 
-We use a **three-tier testing approach** with **three test files per component** for maximum confidence and coverage:
+We use a **three-tier testing approach** with **three test files per component** for maximum confidence and coverage, plus **order markers** for proper integration test execution:
 
 #### **1. Unit Tests** (`test_[component]_unit.py`)
 - **Purpose**: Pure unit tests with comprehensive mocking
@@ -32,12 +41,13 @@ We use a **three-tier testing approach** with **three test files per component**
 - **Environment**: Mocked dependencies, no real connections
 - **Markers**: `@pytest.mark.unit` (default)
 
-#### **3. Integration Tests** (`test_[component]_integration.py`)
+#### **3. Integration Tests** (`test_[component]_integration.py`) ✅ **ORDER MARKERS IMPLEMENTED**
 - **Purpose**: Real database integration with test environment
 - **Scope**: Safety, error handling, actual data flow, all methods
 - **Coverage**: Integration scenarios and edge cases
 - **Execution**: < 10 seconds per component
 - **Environment**: Real test databases, no production connections
+- **Order Markers**: Proper test execution order for data flow validation
 - **Markers**: `@pytest.mark.integration`
 
 #### **4. End-to-End Tests** (`test_e2e_[component].py`)
@@ -65,7 +75,7 @@ tests/
 │   ├── orchestration/
 │   ├── monitoring/
 │   └── scripts/
-├── integration/                         # Real test database integration tests
+├── integration/                         # Real test database integration tests (ORDER MARKERS)
 │   ├── core/
 │   ├── config/
 │   ├── loaders/
@@ -79,6 +89,51 @@ tests/
     ├── orchestration/
     └── full_pipeline/
 ```
+
+### **Integration Test Order Markers** ✅ **FULLY IMPLEMENTED**
+
+**Status**: 🟢 **COMPLETE** - All integration tests have proper order markers implemented
+
+#### **Phase 0: Configuration & Setup (order=0)**
+- **Purpose**: Validate environment and database connectivity
+- **Files**: `config/test_config_integration.py`, `config/test_logging_integration.py`
+- **Tests**: Database connection validation, environment detection, configuration loading
+
+#### **Phase 1: Core ETL Pipeline (order=1-3)**
+- **Order 1**: ConfigReader (`config/test_config_reader_real_integration.py`)
+- **Order 2**: MySQL Replicator (`core/test_mysql_replicator_real_integration.py`)
+- **Order 3**: Postgres Schema (`core/test_postgres_schema_real_integration.py`)
+
+#### **Phase 2: Data Loading (order=4)**
+- **Purpose**: Test data loading and transformation
+- **File**: `loaders/test_postgres_loader_integration.py`
+
+#### **Phase 3: Orchestration (order=5)**
+- **Purpose**: Test complete pipeline orchestration
+- **Files**: `orchestration/test_pipeline_orchestrator_real_integration.py`, `orchestration/test_table_processor_real_integration.py`, `orchestration/test_priority_processor_real_integration.py`
+
+#### **Phase 4: Monitoring (order=6)**
+- **Purpose**: Test monitoring and metrics collection
+- **File**: `monitoring/test_unified_metrics_integration.py`
+
+### **Complete Ecosystem Overview** ✅ **13 COMPONENTS, 150 METHODS**
+
+**Nightly ETL Components (10 components, 123 methods)**:
+- **PipelineOrchestrator**: Main orchestration (6 methods)
+- **TableProcessor**: Core ETL engine (9 methods)
+- **PriorityProcessor**: Batch processing (5 methods)
+- **Settings**: Modern configuration (20 methods)
+- **ConfigReader**: Static configuration (12 methods)
+- **ConnectionFactory**: Database connections (25 methods)
+- **PostgresSchema**: Schema conversion (10 methods)
+- **SimpleMySQLReplicator**: MySQL replication (10 methods)
+- **PostgresLoader**: PostgreSQL loading (11 methods)
+- **UnifiedMetricsCollector**: Metrics collection (15 methods)
+
+**Management Scripts (3 scripts, 27 methods)**:
+- **OpenDentalSchemaAnalyzer**: Schema analysis (4 methods)
+- **Test Database Setup**: Test environment (8 functions)
+- **PipelineConfigManager**: Configuration management (15 methods)
 
 ## 📚 **SUPPORTING DOCUMENTATION REFERENCES**
 
@@ -193,9 +248,9 @@ def test_environment_config():
 
 ## 🎯 **COMPREHENSIVE METHOD TESTING**
 
-### **Complete Method Coverage (127 Methods)**
+### **Complete Method Coverage (150 Methods)**
 
-Based on the [Testing Plan](TESTING_PLAN.md), we need to test **127 methods** across all components:
+Based on the [Testing Plan](TESTING_PLAN.md), we need to test **150 methods** across all components:
 
 #### **Phase 1: Core Component Testing (Week 1)**
 - **Logging Module**: 15 methods (0% → 95% coverage)
@@ -212,7 +267,7 @@ Based on the [Testing Plan](TESTING_PLAN.md), we need to test **127 methods** ac
 - **Pipeline Orchestrator**: 7 methods (32% → 95% coverage)
 - **Priority Processor**: 5 methods (0% → 95% coverage)
 - **Table Processor**: 8 methods (16% → 95% coverage)
-- **Scripts**: 35 methods (0% → 90% coverage)
+- **Scripts**: 27 methods (0% → 90% coverage)
 
 #### **Phase 4: E2E Testing (Week 4)**
 - **Integration Tests**: 0% → 90% coverage
@@ -220,7 +275,7 @@ Based on the [Testing Plan](TESTING_PLAN.md), we need to test **127 methods** ac
 
 ### **Method-Level Testing Requirements**
 
-Each method must be tested in all three tiers:
+Each method must be tested in all three tiers with order markers for integration tests:
 
 ```python
 # Example: Testing PostgresLoader.load_table() method
@@ -241,6 +296,7 @@ def test_load_table_method_full_functionality(mock_settings, large_test_dataset)
 
 # Integration Test (test_postgres_loader_integration.py)
 @pytest.mark.integration
+@pytest.mark.order(4)  # Data Loading phase
 def test_load_table_method_integration(test_analytics_engine, sample_patient_data):
     """Test PostgresLoader.load_table() with real test database."""
     # Test method with real test database connections
@@ -300,7 +356,7 @@ Based on [Data Flow Diagram](DATA_FLOW_DIAGRAM.md):
 - **UnifiedMetricsCollector**: 15 methods
 
 #### **Management Scripts (27 methods)**
-- **OpenDentalSchemaAnalyzer**: 12 methods
+- **OpenDentalSchemaAnalyzer**: 4 methods
 - **Test Database Setup**: 8 functions
 - **PipelineConfigManager**: 15 methods
 
@@ -419,12 +475,20 @@ Please create the test file with comprehensive coverage of all methods.
 
 ## 🎯 **TESTING PHILOSOPHY**
 
+### **Modern Architecture Benefits**
+1. **Static Configuration**: All configuration from `tables.yml` - no database queries during ETL
+2. **5-10x Performance**: Faster than dynamic schema discovery approaches
+3. **Explicit Environment Separation**: Clear production/test environment handling
+4. **No Legacy Code**: All compatibility methods removed
+5. **Predictable Performance**: Consistent execution times with static configuration
+6. **Better Reliability**: No dependency on live database state during ETL
+
 ### **Test Types and Coverage Targets**
 - **Unit Tests**: >95% for critical components
 - **Comprehensive Tests**: >95% for full functionality
-- **Integration Tests**: >90% for full pipeline flows  
+- **Integration Tests**: >90% for full pipeline flows (with order markers)
 - **E2E Tests**: >90% for production connection validation
-- **Method Coverage**: 100% (all 127 methods)
+- **Method Coverage**: 100% (all 150 methods)
 
 ### **Key Testing Principles**
 1. **Mock at highest abstraction level possible**
@@ -435,6 +499,8 @@ Please create the test file with comprehensive coverage of all methods.
 6. **Use three-tier approach for comprehensive coverage**
 7. **Follow explicit environment separation**
 8. **Test all methods from methods documentation**
+9. **Use order markers for integration test execution**
+10. **Leverage static configuration for predictable testing**
 
 ## 🛠️ **DEBUGGING STRATEGY**
 
@@ -474,6 +540,8 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - [ ] Check conftest.py has required fixtures
 - [ ] Review connection architecture patterns from [connection_architecture.md]
 - [ ] Follow naming conventions from [etl_naming_conventions.md]
+- [ ] Plan order markers for integration tests
+- [ ] Understand static configuration approach
 
 ### **After Writing Tests (Three-Tier Approach)**
 - [ ] Verify tests cover actual business logic
@@ -484,17 +552,21 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - [ ] Test custom markers work correctly
 - [ ] Verify fixtures are properly shared
 - [ ] Confirm environment separation is maintained
-- [ ] Validate method coverage (all 127 methods)
+- [ ] Validate method coverage (all 150 methods)
+- [ ] Verify order markers work correctly
+- [ ] Test static configuration integration
 
 ### **Before Deployment**
 - [ ] Overall coverage >90%
 - [ ] Critical components >95% coverage (across all three test files)
-- [ ] All integration tests pass
+- [ ] All integration tests pass (with order markers)
 - [ ] All E2E tests pass
-- [ ] All methods from methods documentation tested
+- [ ] All methods from methods documentation tested (150 methods)
 - [ ] pytest.ini configuration validated
 - [ ] conftest.py fixtures tested
 - [ ] Environment separation verified
+- [ ] Order markers validated
+- [ ] Static configuration approach verified
 
 ## 🏆 **SUCCESS METRICS**
 
@@ -510,17 +582,19 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - **Priority Processor**: >95% (across unit + comprehensive + integration)
 - **Table Processor**: >95% (across unit + comprehensive + integration)
 - **Scripts**: >90% (across unit + comprehensive + integration)
-- **Integration flows**: >90% (end-to-end scenarios)
+- **Integration flows**: >90% (end-to-end scenarios with order markers)
 - **E2E flows**: >90% (production connection validation)
 
 ### **Quality Metrics**
 - **Test reliability**: >99% pass rate
 - **Test independence**: No shared state between tests
 - **Test maintainability**: Clear, documented test scenarios
-- **Method coverage**: 100% (all 127 methods)
+- **Method coverage**: 100% (all 150 methods)
 - **Three-tier approach**: All three test files working together
 - **Infrastructure**: pytest.ini and conftest.py properly configured
 - **Environment separation**: Clear production/test boundaries
+- **Order markers**: Proper integration test execution order
+- **Static configuration**: Predictable test behavior
 
 ## 🚀 **IMMEDIATE NEXT STEPS**
 
@@ -539,7 +613,7 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 6. **Pipeline Orchestrator** (7 methods)
 7. **Priority Processor** (5 methods)
 8. **Table Processor** (8 methods)
-9. **Scripts** (35 methods)
+9. **Scripts** (27 methods)
 10. **E2E Tests** (production connections)
 
 ## 📝 **FINAL NOTES**
@@ -553,8 +627,10 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 6. **Use three-tier approach**: Three test files per component for maximum confidence
 7. **Leverage infrastructure**: Use pytest.ini and conftest.py effectively
 8. **Follow environment separation**: Clear production/test boundaries
-9. **Test all methods**: 100% method coverage from methods documentation
+9. **Test all methods**: 100% method coverage from methods documentation (150 methods)
 10. **Use supporting documentation**: Reference all architecture documents
+11. **Use order markers**: Proper integration test execution order
+12. **Leverage static configuration**: Predictable test behavior
 
 ### **When in Doubt**
 - **Add debug logging**: Use logger.debug() liberally
@@ -566,6 +642,8 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - **Check configuration**: Verify pytest.ini settings
 - **Reference documentation**: Use all supporting architecture documents
 - **Maintain environment separation**: Never mix production/test connections
-- **Test all methods**: Ensure 100% method coverage
+- **Test all methods**: Ensure 100% method coverage (150 methods)
+- **Use order markers**: Ensure proper integration test execution
+- **Leverage static configuration**: Use predictable test behavior
 
-This comprehensive test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 127 methods across the three-tier testing approach.
+This comprehensive test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 150 methods across the three-tier testing approach with order markers for proper integration test execution.
