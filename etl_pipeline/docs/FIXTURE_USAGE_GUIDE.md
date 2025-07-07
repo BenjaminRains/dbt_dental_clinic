@@ -1,647 +1,566 @@
 # Fixture Usage Guide
 
-This guide shows how to use the fixtures defined in `conftest.py` in your actual tests.
+This guide shows how to use the fixtures defined in the modular fixture system for ETL pipeline tests.
+
+## Architecture Note
+
+**Updated for ETL Pipeline v3.0**: This guide reflects the current modular fixture architecture where:
+- **Modular Fixtures**: Fixtures are organized in separate files under `tests/fixtures/`
+- **New Configuration System**: Uses `Settings` class and `ConnectionFactory` with explicit environment separation
+- **Test Data Manager**: Centralized test data management with `IntegrationTestDataManager`
+- **Explicit Environment Separation**: Clear distinction between production and test connections
 
 ## Table of Contents
-1. [Basic Fixture Usage](#basic-fixture-usage)
-2. [Unit Test Examples](#unit-test-examples)
-3. [Integration Test Examples](#integration-test-examples)
-4. [Performance Test Examples](#performance-test-examples)
-5. [Idempotency Test Examples](#idempotency-test-examples)
-6. [Mock Fixture Examples](#mock-fixture-examples)
-7. [Database Fixture Examples](#database-fixture-examples)
+1. [Fixture Organization](#fixture-organization)
+2. [Environment and Configuration Fixtures](#environment-and-configuration-fixtures)
+3. [Database Connection Fixtures](#database-connection-fixtures)
+4. [Test Data Fixtures](#test-data-fixtures)
+5. [Integration Test Fixtures](#integration-test-fixtures)
+6. [Mock Fixtures](#mock-fixtures)
+7. [Component-Specific Fixtures](#component-specific-fixtures)
+8. [Best Practices](#best-practices)
 
-## Basic Fixture Usage
+## Fixture Organization
 
-### How Fixtures Work
-Fixtures are automatically injected into test functions as parameters:
+The fixtures are organized in a modular structure under `tests/fixtures/`:
 
-```python
-def test_patient_processing(sample_patient_data):
-    """The sample_patient_data fixture is automatically injected."""
-    assert len(sample_patient_data) == 5  # 5 sample patients
-    assert 'PatNum' in sample_patient_data.columns
+```
+tests/fixtures/
+├── __init__.py                    # Main fixture imports
+├── env_fixtures.py               # Environment and settings
+├── config_fixtures.py            # Configuration management
+├── connection_fixtures.py        # Database connection mocks
+├── test_data_fixtures.py         # Standardized test data
+├── test_data_manager.py          # Integration test data management
+├── test_data_definitions.py      # Test data definitions
+├── integration_fixtures.py       # Integration test setup
+├── replicator_fixtures.py        # MySQL replicator tests
+├── loader_fixtures.py            # PostgreSQL loader tests
+├── orchestrator_fixtures.py      # Pipeline orchestration tests
+├── transformer_fixtures.py       # Data transformation tests
+├── metrics_fixtures.py           # Metrics and monitoring tests
+├── logging_fixtures.py           # Logging configuration tests
+├── priority_processor_fixtures.py # Priority processing tests
+├── schema_discovery_fixtures.py  # Schema discovery tests
+├── postgres_schema_fixtures.py   # PostgreSQL schema tests
+├── legacy_fixtures.py            # Legacy compatibility
+└── mock_utils.py                 # Mock utilities
 ```
 
-### Multiple Fixtures
-You can use multiple fixtures in a single test:
+All fixtures are automatically imported in `tests/conftest.py` for global availability.
+
+## Environment and Configuration Fixtures
+
+### Basic Environment Setup
 
 ```python
-def test_pipeline_with_data(sample_patient_data, mock_analytics_engine, mock_settings):
-    """Use multiple fixtures together."""
-    processor = PatientProcessor(mock_analytics_engine, mock_settings)
-    result = processor.process(sample_patient_data)
-    assert result.success
+# tests/unit/test_basic_functionality.py
+import pytest
+
+def test_environment_setup(test_env_vars, test_settings):
+    """Test that environment is properly configured."""
+    assert test_env_vars['ETL_ENVIRONMENT'] == 'test'
+    assert test_settings.environment == 'test'
+    
+    # Verify test database configuration
+    source_config = test_settings.get_source_connection_config()
+    assert 'TEST_OPENDENTAL_SOURCE_HOST' in test_env_vars
+    assert source_config['host'] == test_env_vars['TEST_OPENDENTAL_SOURCE_HOST']
 ```
 
-## Unit Test Examples
-
-### 1. Patient Data Processing
+### Configuration Testing
 
 ```python
-# tests/unit/transformers/test_patient_transformer.py
+# tests/unit/config/test_configuration.py
+import pytest
+
+def test_pipeline_configuration(test_pipeline_config, test_settings):
+    """Test pipeline configuration loading."""
+    # Verify pipeline config structure
+    assert 'general' in test_pipeline_config
+    assert 'connections' in test_pipeline_config
+    
+    # Test configuration access
+    batch_size = test_settings.get_pipeline_setting('general.batch_size')
+    assert batch_size == 1000
+
+def test_tables_configuration(test_tables_config, test_settings):
+    """Test tables configuration loading."""
+    # Verify tables config structure
+    assert 'tables' in test_tables_config
+    assert 'patient' in test_tables_config['tables']
+    
+    # Test table configuration access
+    patient_config = test_settings.get_table_config('patient')
+    assert patient_config['table_importance'] == 'critical'
+    assert patient_config['batch_size'] == 100
+```
+
+### Settings Management
+
+```python
+# tests/unit/config/test_settings.py
+import pytest
+
+def test_settings_creation(test_settings):
+    """Test settings creation and validation."""
+    # Verify settings are properly initialized
+    assert test_settings.environment == 'test'
+    assert test_settings.env_prefix == 'TEST_'
+    
+    # Test configuration validation
+    assert test_settings.validate_configs() is True
+
+def test_database_configs(test_settings):
+    """Test database configuration retrieval."""
+    # Test source configuration
+    source_config = test_settings.get_source_connection_config()
+    assert 'host' in source_config
+    assert 'database' in source_config
+    
+    # Test replication configuration
+    repl_config = test_settings.get_replication_connection_config()
+    assert 'host' in repl_config
+    assert 'database' in repl_config
+    
+    # Test analytics configuration
+    analytics_config = test_settings.get_analytics_connection_config()
+    assert 'host' in analytics_config
+    assert 'database' in analytics_config
+```
+
+## Database Connection Fixtures
+
+### Real Database Connections (Integration Tests)
+
+```python
+# tests/integration/test_database_connections.py
+import pytest
+from sqlalchemy import text
+
+def test_source_connection(test_source_engine):
+    """Test source database connection."""
+    with test_source_engine.connect() as conn:
+        result = conn.execute(text("SELECT 1"))
+        assert result.scalar() == 1
+
+def test_replication_connection(test_replication_engine):
+    """Test replication database connection."""
+    with test_replication_engine.connect() as conn:
+        result = conn.execute(text("SELECT 1"))
+        assert result.scalar() == 1
+
+def test_analytics_connection(test_analytics_engine):
+    """Test analytics database connection."""
+    with test_analytics_engine.connect() as conn:
+        result = conn.execute(text("SELECT 1"))
+        assert result.scalar() == 1
+
+def test_schema_specific_connections(test_raw_engine, test_staging_engine, 
+                                   test_intermediate_engine, test_marts_engine):
+    """Test schema-specific connections."""
+    # Test raw schema
+    with test_raw_engine.connect() as conn:
+        result = conn.execute(text("SELECT current_schema()"))
+        schema = result.scalar()
+        assert 'raw' in schema.lower()
+    
+    # Test staging schema
+    with test_staging_engine.connect() as conn:
+        result = conn.execute(text("SELECT current_schema()"))
+        schema = result.scalar()
+        assert 'staging' in schema.lower()
+```
+
+### Mock Database Connections (Unit Tests)
+
+```python
+# tests/unit/core/test_connections.py
+import pytest
+from unittest.mock import patch
+
+def test_mock_connection_factory(mock_connection_factory):
+    """Test mock connection factory."""
+    # Test source connection
+    source_engine = mock_connection_factory.get_connection('source')
+    assert source_engine.name == 'mysql'
+    assert source_engine.url.database == 'test_opendental'
+    
+    # Test replication connection
+    repl_engine = mock_connection_factory.get_connection('replication')
+    assert repl_engine.name == 'mysql'
+    assert repl_engine.url.database == 'test_replication'
+    
+    # Test analytics connection
+    analytics_engine = mock_connection_factory.get_connection('analytics')
+    assert analytics_engine.name == 'postgresql'
+    assert analytics_engine.url.database == 'test_analytics'
+
+def test_mock_engines(mock_source_engine, mock_replication_engine, mock_analytics_engine):
+    """Test individual mock engines."""
+    assert mock_source_engine.name == 'mysql'
+    assert mock_replication_engine.name == 'mysql'
+    assert mock_analytics_engine.name == 'postgresql'
+```
+
+## Test Data Fixtures
+
+### Standardized Test Data
+
+```python
+# tests/unit/data/test_data_validation.py
 import pytest
 import pandas as pd
-from etl_pipeline.transformers.patient_transformer import PatientTransformer
 
-def test_patient_data_validation(sample_patient_data):
-    """Test patient data validation with sample data."""
-    transformer = PatientTransformer()
+def test_patient_data_structure(standard_patient_test_data):
+    """Test patient data structure."""
+    assert len(standard_patient_test_data) == 3
     
-    # Validate the sample data
-    result = transformer.validate_data(sample_patient_data)
-    
-    assert result.is_valid
-    assert result.valid_count == 5
-    assert result.invalid_count == 0
-
-def test_patient_field_mapping(sample_patient_data):
-    """Test field mapping from source to target schema."""
-    transformer = PatientTransformer()
-    
-    # Transform the data
-    transformed_data = transformer.transform(sample_patient_data)
-    
-    # Check that required fields are present
-    required_fields = ['patient_id', 'first_name', 'last_name', 'email', 'phone']
+    # Check required fields
+    required_fields = ['PatNum', 'LName', 'FName', 'DateTStamp', 'PatStatus']
     for field in required_fields:
-        assert field in transformed_data.columns
+        assert field in standard_patient_test_data[0]
     
     # Check data types
-    assert transformed_data['patient_id'].dtype == 'int64'
-    assert transformed_data['first_name'].dtype == 'object'
+    assert isinstance(standard_patient_test_data[0]['PatNum'], int)
+    assert isinstance(standard_patient_test_data[0]['LName'], str)
 
-def test_patient_data_cleaning(sample_patient_data):
-    """Test data cleaning operations."""
-    transformer = PatientTransformer()
+def test_incremental_data(incremental_patient_test_data):
+    """Test incremental data structure."""
+    assert len(incremental_patient_test_data) == 1
+    assert incremental_patient_test_data[0]['PatNum'] == 4
+
+def test_comprehensive_patient_data(patient_with_all_fields_test_data):
+    """Test comprehensive patient data."""
+    patient = patient_with_all_fields_test_data[0]
     
-    # Add some dirty data
-    dirty_data = sample_patient_data.copy()
-    dirty_data.loc[0, 'Email'] = '  JOHN.DOE@EXAMPLE.COM  '  # Extra spaces, uppercase
-    
-    # Clean the data
-    cleaned_data = transformer.clean_data(dirty_data)
-    
-    # Verify cleaning worked
-    assert cleaned_data.loc[0, 'Email'] == 'john.doe@example.com'
+    # Check all major field categories
+    assert 'PatNum' in patient  # Primary key
+    assert 'LName' in patient   # Basic info
+    assert 'Email' in patient   # Contact info
+    assert 'Birthdate' in patient  # Demographics
+    assert 'EstBalance' in patient  # Financial
 ```
 
-### 2. Appointment Data Processing
+### Test Data Manager (Integration Tests)
 
 ```python
-# tests/unit/transformers/test_appointment_transformer.py
+# tests/integration/test_data_management.py
 import pytest
-from etl_pipeline.transformers.appointment_transformer import AppointmentTransformer
 
-def test_appointment_status_mapping(sample_appointment_data):
-    """Test appointment status code mapping."""
-    transformer = AppointmentTransformer()
-    
-    # Check status mappings
-    status_mappings = {
-        1: 'scheduled',
-        2: 'completed', 
-        5: 'broken_missed'
-    }
-    
-    for source_status, expected_status in status_mappings.items():
-        test_data = sample_appointment_data[sample_appointment_data['AptStatus'] == source_status]
-        if not test_data.empty:
-            transformed = transformer.transform(test_data)
-            assert transformed.iloc[0]['status'] == expected_status
+def test_test_data_manager_setup(test_data_manager):
+    """Test test data manager initialization."""
+    # Verify manager has all required connections
+    assert test_data_manager.source_engine is not None
+    assert test_data_manager.replication_engine is not None
+    assert test_data_manager.analytics_engine is not None
 
-def test_appointment_datetime_parsing(sample_appointment_data):
-    """Test datetime field parsing."""
-    transformer = AppointmentTransformer()
+def test_patient_data_setup(test_data_manager):
+    """Test patient data setup."""
+    # Set up patient data in source and replication databases
+    test_data_manager.setup_patient_data(
+        include_all_fields=True,
+        database_types=['source', 'replication']
+    )
     
-    transformed_data = transformer.transform(sample_appointment_data)
+    # Verify data was inserted
+    source_count = test_data_manager.get_patient_count('source')
+    repl_count = test_data_manager.get_patient_count('replication')
     
-    # Check that datetime fields are properly parsed
-    assert pd.api.types.is_datetime64_any_dtype(transformed_data['appointment_datetime'])
-    assert pd.api.types.is_datetime64_any_dtype(transformed_data['created_at'])
+    assert source_count > 0
+    assert repl_count > 0
+    assert source_count == repl_count
+
+def test_appointment_data_setup(test_data_manager):
+    """Test appointment data setup."""
+    # Set up appointment data
+    test_data_manager.setup_appointment_data(
+        database_types=['source', 'replication']
+    )
+    
+    # Verify data was inserted
+    source_count = test_data_manager.get_appointment_count('source')
+    repl_count = test_data_manager.get_appointment_count('replication')
+    
+    assert source_count > 0
+    assert repl_count > 0
+
+def test_data_cleanup(test_data_manager):
+    """Test data cleanup."""
+    # Set up some data
+    test_data_manager.setup_patient_data()
+    
+    # Verify data exists
+    assert test_data_manager.get_patient_count('source') > 0
+    
+    # Clean up
+    test_data_manager.cleanup_patient_data()
+    
+    # Verify data was cleaned up
+    assert test_data_manager.get_patient_count('source') == 0
 ```
 
-### 3. Securitylog Data Processing
+## Integration Test Fixtures
 
-```python
-# tests/unit/transformers/test_securitylog_transformer.py
-import pytest
-from etl_pipeline.transformers.securitylog_transformer import SecurityLogTransformer
-
-def test_securitylog_permission_mapping(sample_securitylog_data):
-    """Test permission type mapping."""
-    transformer = SecurityLogTransformer()
-    
-    transformed_data = transformer.transform(sample_securitylog_data)
-    
-    # Check permission type mappings
-    permission_mappings = {
-        1: 'login',
-        2: 'patient_access',
-        3: 'appointment_access',
-        4: 'procedure_access',
-        5: 'payment_access'
-    }
-    
-    for source_perm, expected_perm in permission_mappings.items():
-        test_data = sample_securitylog_data[sample_securitylog_data['"PermType"'] == source_perm]
-        if not test_data.empty:
-            transformed = transformer.transform(test_data)
-            assert transformed.iloc[0]['permission_type'] == expected_perm
-
-def test_securitylog_error_handling(sample_securitylog_data):
-    """Test handling of error records."""
-    transformer = SecurityLogTransformer()
-    
-    # Find records with errors
-    error_records = sample_securitylog_data[sample_securitylog_data['"DefNumError"'].notna()]
-    
-    if not error_records.empty:
-        transformed = transformer.transform(error_records)
-        assert 'has_error' in transformed.columns
-        assert transformed['has_error'].all()
-```
-
-## Integration Test Examples
-
-### 1. End-to-End Pipeline Testing
+### Populated Test Databases
 
 ```python
 # tests/integration/test_full_pipeline.py
 import pytest
-import time
-from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
 
-def test_full_pipeline_with_sample_data(
-    sample_patient_data, 
-    sample_appointment_data, 
-    sample_procedure_data,
-    test_replication_database,
-    test_analytics_database
-):
-    """Test complete pipeline with sample data."""
-    # Initialize pipeline
-    orchestrator = PipelineOrchestrator()
+def test_pipeline_with_populated_databases(populated_test_databases):
+    """Test pipeline with pre-populated test databases."""
+    # Databases already have test data
+    source_count = populated_test_databases.get_patient_count('source')
+    repl_count = populated_test_databases.get_patient_count('replication')
     
-    # Run pipeline
-    start_time = time.time()
-    result = orchestrator.run_pipeline()
-    duration = time.time() - start_time
+    assert source_count > 0
+    assert repl_count > 0
     
-    # Verify results
-    assert result.success
-    assert result.tables_processed > 0
-    assert duration < 60  # Should complete within 1 minute
-    
-    # Verify data was loaded
-    assert result.patients_loaded == len(sample_patient_data)
-    assert result.appointments_loaded == len(sample_appointment_data)
-    assert result.procedures_loaded == len(sample_procedure_data)
+    # Run pipeline logic here
+    # ...
 
-def test_pipeline_idempotency(
-    sample_patient_data,
-    test_replication_database,
-    test_analytics_database
-):
-    """Test that running pipeline twice produces same results."""
-    orchestrator = PipelineOrchestrator()
+def test_database_engines_compatibility(test_database_engines):
+    """Test database engines compatibility."""
+    replication_engine, analytics_engine = test_database_engines
     
-    # First run
-    result1 = orchestrator.run_pipeline()
-    assert result1.success
+    # Test replication engine
+    with replication_engine.connect() as conn:
+        result = conn.execute(text("SELECT 1"))
+        assert result.scalar() == 1
     
-    # Second run (should be idempotent)
-    result2 = orchestrator.run_pipeline()
-    assert result2.success
-    
-    # Verify same results
-    assert result1.patients_loaded == result2.patients_loaded
-    assert result1.appointments_loaded == result2.appointments_loaded
+    # Test analytics engine
+    with analytics_engine.connect() as conn:
+        result = conn.execute(text("SELECT 1"))
+        assert result.scalar() == 1
 ```
 
-### 2. Database Integration Testing
+### ETL Tracking Setup
 
 ```python
-# tests/integration/test_database_integration.py
+# tests/integration/test_etl_tracking.py
 import pytest
-from sqlalchemy import text
-from etl_pipeline.core.connections import ConnectionFactory
 
-def test_mysql_replication_with_real_data(
-    sample_patient_data,
-    test_replication_database
-):
-    """Test MySQL replication with real test database."""
-    # Create replication engine
-    engine = ConnectionFactory.create_mysql_connection(
-        host=test_replication_database['host'],
-        port=test_replication_database['port'],
-        database=test_replication_database['database'],
-        user=test_replication_database['user'],
-        password=test_replication_database['password']
-    )
+def test_etl_tracking_setup(setup_etl_tracking):
+    """Test ETL tracking table setup."""
+    # ETL tracking table is already set up
+    # Test tracking functionality here
+    pass
+
+def test_patient_table_setup(setup_patient_table):
+    """Test patient table setup."""
+    test_data_manager, patient_data = setup_patient_table
     
-    # Load test data
+    # Verify patient data was set up
+    assert len(patient_data) > 0
+    assert test_data_manager.get_patient_count('source') > 0
+```
+
+## Mock Fixtures
+
+### Mock Settings
+
+```python
+# tests/unit/config/test_settings_mocks.py
+import pytest
+
+def test_mock_settings_environment(mock_settings_environment):
+    """Test mock settings environment."""
+    with mock_settings_environment() as mock_settings:
+        # Test configuration access
+        db_config = mock_settings.get_database_config('source')
+        assert db_config['host'] == 'localhost'
+        assert db_config['database'] == 'test_db'
+        
+        # Test table configuration
+        table_config = mock_settings.get_table_config('patient')
+        assert table_config['incremental'] is True
+        assert table_config['batch_size'] == 1000
+
+def test_mock_connection_factory_with_settings(mock_connection_factory, test_settings):
+    """Test mock connection factory with settings."""
+    # Mock the connection factory
+    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+        mock_factory.get_opendental_source_test_connection.return_value = mock_connection_factory.get_connection('source')
+        
+        # Test connection creation
+        engine = mock_factory.get_opendental_source_test_connection()
+        assert engine.name == 'mysql'
+```
+
+### Mock Database Engines
+
+```python
+# tests/unit/core/test_mock_engines.py
+import pytest
+
+def test_mock_engine_with_connection(mock_engine_with_connection):
+    """Test mock engine with connection."""
+    # Create mock connection
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value.scalar.return_value = 42
+    
+    # Create engine with mock connection
+    engine = mock_engine_with_connection(mock_conn)
+    
+    # Test connection usage
     with engine.connect() as conn:
-        # Create table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS patient (
-                PatNum INT PRIMARY KEY,
-                LName VARCHAR(100),
-                FName VARCHAR(100),
-                Email VARCHAR(255)
-            )
-        """))
+        result = conn.execute(text("SELECT 42"))
+        assert result.scalar() == 42
+
+def test_mock_connection_pool(mock_connection_pool):
+    """Test mock connection pool."""
+    # Test pool connection
+    conn = mock_connection_pool.connect()
+    assert conn is not None
+    
+    # Test pool disposal
+    mock_connection_pool.dispose()
+```
+
+## Component-Specific Fixtures
+
+### Replicator Fixtures
+
+```python
+# tests/unit/core/test_simple_mysql_replicator.py
+import pytest
+
+def test_replicator_with_mocks(mock_settings, standard_patient_test_data):
+    """Test SimpleMySQLReplicator with mocked components."""
+    from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
+    
+    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+        # Configure mock connections
+        mock_source_engine = MagicMock()
+        mock_target_engine = MagicMock()
         
-        # Insert test data
-        for _, row in sample_patient_data.iterrows():
-            conn.execute(text("""
-                INSERT INTO patient (PatNum, LName, FName, Email)
-                VALUES (:patnum, :lname, :fname, :email)
-            """), {
-                'patnum': row['PatNum'],
-                'lname': row['LName'],
-                'fname': row['FName'],
-                'email': row['Email']
-            })
+        mock_factory.get_opendental_source_test_connection.return_value = mock_source_engine
+        mock_factory.get_mysql_replication_test_connection.return_value = mock_target_engine
         
-        # Verify data
-        result = conn.execute(text("SELECT COUNT(*) FROM patient"))
-        count = result.scalar()
-        assert count == len(sample_patient_data)
-
-def test_postgres_analytics_with_real_data(
-    sample_securitylog_data,
-    test_analytics_database
-):
-    """Test PostgreSQL analytics with real test database."""
-    # Create analytics engine
-    engine = ConnectionFactory.create_postgres_connection(
-        host=test_analytics_database['host'],
-        port=test_analytics_database['port'],
-        database=test_analytics_database['database'],
-        schema=test_analytics_database['schema'],
-        user=test_analytics_database['user'],
-        password=test_analytics_database['password']
-    )
-    
-    # Load test data
-    with engine.connect() as conn:
-        # Create table
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS securitylog (
-                "SecurityLogNum" SERIAL PRIMARY KEY,
-                "PermType" SMALLINT,
-                "UserNum" BIGINT,
-                "LogDateTime" TIMESTAMP,
-                "LogText" TEXT,
-                "PatNum" BIGINT,
-                "CompName" VARCHAR(255),
-                "FKey" BIGINT,
-                "LogSource" SMALLINT,
-                "DefNum" BIGINT,
-                "DefNumError" BIGINT,
-                "DateTPrevious" TIMESTAMP
-            )
-        """))
+        # Create replicator
+        replicator = SimpleMySQLReplicator(settings=mock_settings)
         
-        # Insert test data
-        for _, row in sample_securitylog_data.iterrows():
-            conn.execute(text("""
-                INSERT INTO securitylog (
-                    "PermType", "UserNum", "LogDateTime", "LogText", 
-                    "PatNum", "CompName", "FKey", "LogSource", 
-                    "DefNum", "DefNumError", "DateTPrevious"
-                ) VALUES (
-                    :permtype, :usernum, :logdatetime, :logtext,
-                    :patnum, :compname, :fkey, :logsource,
-                    :defnum, :defnumerror, :dateprevious
-                )
-            """), {
-                'permtype': row['"PermType"'],
-                'usernum': row['"UserNum"'],
-                'logdatetime': row['"LogDateTime"'],
-                'logtext': row['"LogText"'],
-                'patnum': row['"PatNum"'],
-                'compname': row['"CompName"'],
-                'fkey': row['"FKey"'],
-                'logsource': row['"LogSource"'],
-                'defnum': row['"DefNum"'],
-                'defnumerror': row['"DefNumError"'],
-                'dateprevious': row['"DateTPrevious"']
-            })
-        
-        # Verify data
-        result = conn.execute(text("SELECT COUNT(*) FROM securitylog"))
-        count = result.scalar()
-        assert count == len(sample_securitylog_data)
+        # Test replicator initialization
+        assert replicator.source_engine == mock_source_engine
+        assert replicator.target_engine == mock_target_engine
 ```
 
-## Performance Test Examples
-
-### 1. Large Dataset Performance Testing
+### Loader Fixtures
 
 ```python
-# tests/performance/test_large_dataset_performance.py
+# tests/unit/loaders/test_postgres_loader.py
 import pytest
-import time
-from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
-def test_securitylog_large_dataset_performance(
-    large_test_dataset,
-    test_analytics_database,
-    performance_test_config
-):
-    """Test performance with large securitylog dataset."""
-    # Generate large dataset
-    large_data = large_test_dataset(100000)  # 100K records
+def test_postgres_loader_with_mocks(mock_analytics_engine, standard_patient_test_data):
+    """Test PostgresLoader with mocked components."""
+    from etl_pipeline.loaders.postgres_loader import PostgresLoader
     
-    # Initialize loader
-    loader = PostgresLoader(
-        host=test_analytics_database['host'],
-        port=test_analytics_database['port'],
-        database=test_analytics_database['database'],
-        user=test_analytics_database['user'],
-        password=test_analytics_database['password']
-    )
+    # Create loader with mock engine
+    loader = PostgresLoader(engine=mock_analytics_engine)
     
-    # Measure performance
-    start_time = time.time()
-    result = loader.load_table('securitylog', large_data)
-    duration = time.time() - start_time
-    
-    # Verify performance requirements
-    expected_duration = performance_test_config['medium_dataset']['expected_duration_seconds']
-    assert duration < expected_duration, f"Performance test failed: {duration}s > {expected_duration}s"
-    
-    # Verify data integrity
-    assert result.records_loaded == len(large_data)
-    assert result.success
-
-def test_securitylog_extreme_performance(
-    large_securitylog_dataset,
-    test_analytics_database,
-    performance_test_config
-):
-    """Test extreme performance with very large securitylog dataset."""
-    # Generate extreme dataset
-    extreme_data = large_securitylog_dataset(1000000)  # 1M records
-    
-    # Initialize loader
-    loader = PostgresLoader(
-        host=test_analytics_database['host'],
-        port=test_analytics_database['port'],
-        database=test_analytics_database['database'],
-        user=test_analytics_database['user'],
-        password=test_analytics_database['password']
-    )
-    
-    # Measure performance
-    start_time = time.time()
-    result = loader.load_table('securitylog', extreme_data)
-    duration = time.time() - start_time
-    
-    # Verify performance requirements
-    expected_duration = performance_test_config['securitylog_performance']['test_scenarios']['large']['expected_seconds']
-    assert duration < expected_duration, f"Extreme performance test failed: {duration}s > {expected_duration}s"
-    
-    # Verify data integrity
-    assert result.records_loaded == len(extreme_data)
-    assert result.success
+    # Test loader functionality
+    # ...
 ```
 
-## Idempotency Test Examples
-
-### 1. Pipeline Idempotency Testing
+### Metrics Fixtures
 
 ```python
-# tests/integration/test_idempotency.py
+# tests/unit/monitoring/test_unified_metrics.py
 import pytest
-from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
 
-def test_pipeline_idempotent_processing(
-    sample_patient_data,
-    sample_appointment_data,
-    test_replication_database,
-    test_analytics_database,
-    idempotency_test_data
-):
-    """Test that pipeline is idempotent (running twice produces same results)."""
-    orchestrator = PipelineOrchestrator()
+def test_metrics_collector(mock_unified_metrics_connection, mock_metrics_data):
+    """Test UnifiedMetricsCollector with mocked components."""
+    from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
     
-    # First run
-    result1 = orchestrator.run_pipeline(force_full=False)
-    assert result1.success
+    # Create metrics collector
+    collector = UnifiedMetricsCollector(connection=mock_unified_metrics_connection)
     
-    # Record initial state
-    initial_state = {
-        'patient_count': result1.patients_loaded,
-        'appointment_count': result1.appointments_loaded,
-        'processing_time': result1.processing_time
-    }
+    # Test metrics collection
+    collector.record_table_processed('patient', 100, 'success')
     
-    # Second run (should be idempotent)
-    result2 = orchestrator.run_pipeline(force_full=False)
-    assert result2.success
-    
-    # Verify idempotency
-    assert result2.patients_loaded == initial_state['patient_count']
-    assert result2.appointments_loaded == initial_state['appointment_count']
-    
-    # Verify no duplicate processing
-    assert result2.processing_time < result1.processing_time  # Should be faster on second run
-
-def test_incremental_processing_with_changes(
-    sample_patient_data,
-    test_replication_database,
-    test_analytics_database,
-    incremental_test_scenarios
-):
-    """Test incremental processing when source data changes."""
-    orchestrator = PipelineOrchestrator()
-    
-    # Initial run
-    result1 = orchestrator.run_pipeline(force_full=False)
-    assert result1.success
-    
-    # Simulate source data changes
-    changes = incremental_test_scenarios['multiple_changes']['source_changes']
-    
-    # Apply changes to source database
-    with test_replication_database.connect() as conn:
-        for change in changes:
-            if change['table'] == 'patient':
-                conn.execute(text("""
-                    UPDATE patient 
-                    SET LName = :new_value 
-                    WHERE PatNum = :id
-                """), {
-                    'new_value': change['new_value'],
-                    'id': change['id']
-                })
-    
-    # Second run (should process only changes)
-    result2 = orchestrator.run_pipeline(force_full=False)
-    assert result2.success
-    
-    # Verify only changed data was processed
-    assert result2.patients_processed == len(changes)
-    assert result2.processing_time < result1.processing_time
-```
-
-## Mock Fixture Examples
-
-### 1. Using Mock Database Engines
-
-```python
-# tests/unit/core/test_mysql_replicator.py
-import pytest
-from unittest.mock import MagicMock
-from etl_pipeline.core.mysql_replicator import ExactMySQLReplicator
-
-def test_mysql_replicator_with_mocks(
-    mock_source_engine,
-    mock_replication_engine,
-    sample_patient_data
-):
-    """Test MySQL replicator with mocked engines."""
-    # Configure mocks
-    mock_source_engine.execute.return_value.fetchall.return_value = sample_patient_data.to_dict('records')
-    mock_replication_engine.execute.return_value = MagicMock()
-    
-    # Create replicator
-    replicator = ExactMySQLReplicator(
-        source_engine=mock_source_engine,
-        target_engine=mock_replication_engine,
-        source_db='opendental',
-        target_db='opendental_replication'
-    )
-    
-    # Test replication
-    result = replicator.copy_table_data('patient')
-    
-    # Verify mocks were called correctly
-    mock_source_engine.execute.assert_called()
-    mock_replication_engine.execute.assert_called()
-    assert result is True
-
-def test_connection_factory_with_mocks(mock_connection_factory):
-    """Test connection factory with mocked connections."""
-    # Test source connection
-    source_engine = mock_connection_factory.get_opendental_source_connection()
-    assert source_engine is not None
-    
-    # Test replication connection
-    replication_engine = mock_connection_factory.get_mysql_replication_connection()
-    assert replication_engine is not None
-    
-    # Test analytics connection
-    analytics_engine = mock_connection_factory.get_postgres_analytics_connection()
-    assert analytics_engine is not None
-```
-
-### 2. Using Mock Settings
-
-```python
-# tests/unit/config/test_settings_integration.py
-import pytest
-from etl_pipeline.config.settings import Settings
-
-def test_settings_with_mock(mock_settings):
-    """Test settings integration with mocked configuration."""
-    # Test database config
-    db_config = mock_settings.get_database_config('source')
-    assert db_config['host'] == 'localhost'
-    assert db_config['database'] == 'test_db'
-    
-    # Test table config
-    table_config = mock_settings.get_table_config('patient')
-    assert table_config['incremental'] is True
-    assert table_config['batch_size'] == 1000
-    
-    # Test incremental settings
-    assert mock_settings.should_use_incremental() is True
-    
-    # Test table priority
-    tables = mock_settings.get_tables_by_importance()
-    assert 'patient' in tables
-    assert 'appointment' in tables
-```
-
-## Database Fixture Examples
-
-### 1. Using Test Database Configuration
-
-```python
-# tests/integration/test_database_configuration.py
-import pytest
-from etl_pipeline.core.connections import ConnectionFactory
-
-def test_database_configuration(test_database_config):
-    """Test database configuration fixtures."""
-    # Test source database config
-    source_config = test_database_config['source']
-    assert source_config['testing_strategy'] == 'MOCK_ONLY'
-    assert source_config['user'] == 'readonly_user'
-    
-    # Test replication database config
-    replication_config = test_database_config['replication']
-    assert replication_config['testing_strategy'] == 'REAL_TEST_DATA'
-    assert replication_config['user'] == 'replication_user'
-    assert replication_config['port'] == 3305
-    
-    # Test analytics database config
-    analytics_config = test_database_config['analytics']
-    assert analytics_config['testing_strategy'] == 'REAL_TEST_DATA'
-    assert analytics_config['user'] == 'analytics_user'
-    assert analytics_config['schema'] == 'raw'
-
-def test_environment_configuration(test_environment_config):
-    """Test environment configuration fixtures."""
-    # Test environment settings
-    assert test_environment_config['environment'] == 'test'
-    assert test_environment_config['log_level'] == 'DEBUG'
-    
-    # Test user permissions
-    readonly_user = test_environment_config['users']['readonly_user']
-    assert readonly_user['permissions'] == ['SELECT']
-    assert readonly_user['testing_strategy'] == 'MOCK_ONLY'
-    
-    replication_user = test_environment_config['users']['replication_user']
-    assert 'CREATE' in replication_user['permissions']
-    assert 'DROP' in replication_user['permissions']
-    assert replication_user['testing_strategy'] == 'REAL_TEST_DATA'
+    # Verify metrics were recorded
+    # ...
 ```
 
 ## Best Practices
 
-### 1. Fixture Naming
-- Use descriptive names that indicate the fixture's purpose
-- Prefix with `sample_` for small test data
-- Prefix with `large_` for performance testing data
-- Prefix with `mock_` for mocked objects
+### 1. Fixture Scope and Performance
 
-### 2. Fixture Scope
-- Use `function` scope for most fixtures (default)
-- Use `session` scope for expensive setup (databases, large data)
-- Use `class` scope for shared state within test classes
+```python
+# Use function scope for most fixtures (default)
+def test_something(test_settings):
+    """Function-scoped test - fresh settings for each test."""
+    pass
 
-### 3. Fixture Dependencies
-- Keep fixtures independent when possible
-- Use dependency injection for complex scenarios
-- Document fixture dependencies clearly
+# Use session scope for expensive setup
+@pytest.fixture(scope="session")
+def expensive_setup():
+    """Session-scoped fixture - set up once for all tests."""
+    # Expensive setup here
+    yield setup_result
+    # Cleanup here
+```
 
-### 4. Performance Considerations
-- Use small datasets for unit tests
-- Use realistic datasets for integration tests
-- Use large datasets only for performance tests
-- Clean up resources in fixture teardown
+### 2. Fixture Dependencies
 
-### 5. Test Organization
-- Group related tests in classes
-- Use descriptive test names
-- Include setup and teardown in fixtures
-- Document test scenarios and expected outcomes
+```python
+# Keep fixtures independent when possible
+def test_independent(test_settings, standard_patient_test_data):
+    """Test with independent fixtures."""
+    pass
+
+# Use dependency injection for complex scenarios
+def test_complex_setup(test_data_manager, populated_test_databases):
+    """Test with dependent fixtures."""
+    # test_data_manager is used by populated_test_databases
+    pass
+```
+
+### 3. Environment Separation
+
+```python
+# Always use test environment for tests
+def test_production_vs_test(test_env_vars, production_env_vars):
+    """Test environment separation."""
+    # Test environment uses TEST_ prefix
+    assert 'TEST_OPENDENTAL_SOURCE_HOST' in test_env_vars
+    assert test_env_vars['ETL_ENVIRONMENT'] == 'test'
+    
+    # Production environment uses base variables
+    assert 'OPENDENTAL_SOURCE_HOST' in production_env_vars
+    assert production_env_vars['ETL_ENVIRONMENT'] == 'production'
+```
+
+### 4. Test Data Management
+
+```python
+# Use standardized test data
+def test_with_standard_data(standard_patient_test_data):
+    """Use standardized test data for consistency."""
+    assert len(standard_patient_test_data) == 3
+
+# Use test data manager for integration tests
+def test_with_data_manager(test_data_manager):
+    """Use test data manager for complex scenarios."""
+    test_data_manager.setup_patient_data()
+    # Test logic here
+    test_data_manager.cleanup_patient_data()  # Automatic cleanup
+```
+
+### 5. Mock vs Real Connections
+
+```python
+# Use mocks for unit tests
+def test_unit_with_mocks(mock_settings, mock_connection_factory):
+    """Unit tests should use mocks."""
+    pass
+
+# Use real connections for integration tests
+def test_integration_with_real_connections(test_source_engine, test_analytics_engine):
+    """Integration tests should use real connections."""
+    pass
+```
 
 ## Running Tests with Fixtures
 
@@ -650,10 +569,11 @@ def test_environment_configuration(test_environment_config):
 pytest tests/
 
 # Run specific test file
-pytest tests/unit/transformers/test_patient_transformer.py
+pytest tests/unit/config/test_settings.py
 
 # Run tests with specific marker
 pytest tests/ -m "unit"
+pytest tests/ -m "integration"
 
 # Run tests with verbose output
 pytest tests/ -v
@@ -661,11 +581,52 @@ pytest tests/ -v
 # Run tests with coverage
 pytest tests/ --cov=etl_pipeline --cov-report=html
 
-# Run performance tests only
-pytest tests/performance/ -m "performance"
+# Run specific fixture tests
+pytest tests/ -k "test_data_manager"
 
-# Run integration tests only
-pytest tests/integration/ -m "integration"
+# Run tests with specific environment
+ETL_ENVIRONMENT=test pytest tests/
 ```
 
-This guide provides comprehensive examples of how to use the fixtures in your ETL pipeline tests. The fixtures are designed to be flexible, reusable, and maintainable across different types of testing scenarios. 
+## Fixture Reference
+
+### Environment Fixtures
+- `test_env_vars`: Test environment variables
+- `production_env_vars`: Production environment variables
+- `test_settings`: Test settings instance
+- `reset_global_settings`: Reset settings between tests
+
+### Configuration Fixtures
+- `test_pipeline_config`: Test pipeline configuration
+- `test_tables_config`: Test tables configuration
+- `complete_config_environment`: Complete configuration environment
+- `mock_settings_environment`: Mock settings environment
+
+### Database Connection Fixtures
+- `test_source_engine`: Real test source engine
+- `test_replication_engine`: Real test replication engine
+- `test_analytics_engine`: Real test analytics engine
+- `test_raw_engine`: Real test raw schema engine
+- `test_staging_engine`: Real test staging schema engine
+- `test_intermediate_engine`: Real test intermediate schema engine
+- `test_marts_engine`: Real test marts schema engine
+- `mock_connection_factory`: Mock connection factory
+- `mock_source_engine`: Mock source engine
+- `mock_replication_engine`: Mock replication engine
+- `mock_analytics_engine`: Mock analytics engine
+
+### Test Data Fixtures
+- `standard_patient_test_data`: Standard patient test data
+- `incremental_patient_test_data`: Incremental patient test data
+- `patient_with_all_fields_test_data`: Comprehensive patient data
+- `test_data_manager`: Integration test data manager
+- `populated_test_databases`: Pre-populated test databases
+
+### Component-Specific Fixtures
+- `mock_unified_metrics_connection`: Mock metrics connection
+- `mock_metrics_data`: Mock metrics data
+- `mock_analytics_engine_for_metrics`: Mock analytics engine for metrics
+- `postgres_schema_test_settings`: PostgreSQL schema test settings
+- `schema_discovery_test_settings`: Schema discovery test settings
+
+This guide provides comprehensive examples of how to use the current fixture system in your ETL pipeline tests. The fixtures are designed to be flexible, reusable, and maintainable across different types of testing scenarios. 
