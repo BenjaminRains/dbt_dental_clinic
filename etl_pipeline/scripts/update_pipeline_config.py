@@ -2,6 +2,7 @@
 """
 Script to update pipeline.yml configuration.
 This script provides a programmatic way to add, modify, or validate pipeline configuration.
+Includes modern connection handling validation and integration with ConnectionFactory.
 """
 
 import yaml
@@ -11,12 +12,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
 
+# Import modern connection handling
+from etl_pipeline.core.connections import ConnectionFactory
+from sqlalchemy import text
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class PipelineConfigManager:
-    """Manages pipeline.yml configuration updates."""
+    """Manages pipeline.yml configuration updates with modern connection validation."""
     
     def __init__(self, config_path: str = "etl_pipeline/config/pipeline.yml"):
         self.config_path = Path(config_path)
@@ -106,6 +111,65 @@ class PipelineConfigManager:
             logger.error(f"Failed to add connection config: {e}")
             return False
     
+    def validate_connection_config(self, db_type: str) -> bool:
+        """Validate connection configuration using modern ConnectionFactory."""
+        try:
+            logger.info(f"Validating connection configuration for {db_type}")
+            
+            # Map db_type to ConnectionFactory methods
+            connection_methods = {
+                'source': ConnectionFactory.get_opendental_source_connection,
+                'replication': ConnectionFactory.get_mysql_replication_connection,
+                'analytics': ConnectionFactory.get_postgres_analytics_connection,
+                'analytics_raw': ConnectionFactory.get_opendental_analytics_raw_connection,
+                'analytics_staging': ConnectionFactory.get_opendental_analytics_staging_connection,
+                'analytics_intermediate': ConnectionFactory.get_opendental_analytics_intermediate_connection,
+                'analytics_marts': ConnectionFactory.get_opendental_analytics_marts_connection,
+                'source_test': ConnectionFactory.get_opendental_source_test_connection,
+                'replication_test': ConnectionFactory.get_mysql_replication_test_connection,
+                'analytics_test': ConnectionFactory.get_postgres_analytics_test_connection,
+                'analytics_raw_test': ConnectionFactory.get_opendental_analytics_raw_test_connection,
+                'analytics_staging_test': ConnectionFactory.get_opendental_analytics_staging_test_connection,
+                'analytics_intermediate_test': ConnectionFactory.get_opendental_analytics_intermediate_test_connection,
+                'analytics_marts_test': ConnectionFactory.get_opendental_analytics_marts_test_connection
+            }
+            
+            if db_type not in connection_methods:
+                logger.error(f"Unknown database type: {db_type}")
+                return False
+            
+            # Test the connection
+            try:
+                engine = connection_methods[db_type]()
+                with engine.connect() as conn:
+                    # Simple test query
+                    result = conn.execute(text("SELECT 1"))
+                    assert result.scalar() == 1
+                logger.info(f"Connection validation successful for {db_type}")
+                return True
+            except Exception as e:
+                logger.error(f"Connection validation failed for {db_type}: {e}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to validate connection config for {db_type}: {e}")
+            return False
+    
+    def validate_all_connections(self) -> Dict[str, bool]:
+        """Validate all connection configurations."""
+        results = {}
+        
+        # Define all connection types to validate
+        connection_types = [
+            'source', 'replication', 'analytics', 'analytics_raw', 
+            'analytics_staging', 'analytics_intermediate', 'analytics_marts'
+        ]
+        
+        for conn_type in connection_types:
+            results[conn_type] = self.validate_connection_config(conn_type)
+        
+        return results
+    
     def add_stage_config(self, stage: str, **kwargs) -> bool:
         """Add or update pipeline stage configuration."""
         try:
@@ -154,6 +218,37 @@ class PipelineConfigManager:
             return True
         except Exception as e:
             logger.error(f"Configuration validation failed: {e}")
+            return False
+    
+    def validate_test_environment(self) -> bool:
+        """Validate test environment configuration."""
+        try:
+            logger.info("Validating test environment configuration...")
+            
+            # Test connection types for test environment
+            test_connection_types = [
+                'source_test', 'replication_test', 'analytics_test',
+                'analytics_raw_test', 'analytics_staging_test', 
+                'analytics_intermediate_test', 'analytics_marts_test'
+            ]
+            
+            results = {}
+            for conn_type in test_connection_types:
+                results[conn_type] = self.validate_connection_config(conn_type)
+            
+            # Check if all test connections are valid
+            all_valid = all(results.values())
+            
+            if all_valid:
+                logger.info("Test environment validation passed")
+            else:
+                failed_connections = [k for k, v in results.items() if not v]
+                logger.warning(f"Test environment validation failed for: {failed_connections}")
+            
+            return all_valid
+            
+        except Exception as e:
+            logger.error(f"Test environment validation failed: {e}")
             return False
     
     def show_config(self, section: Optional[str] = None) -> None:
@@ -233,6 +328,8 @@ def main():
     parser.add_argument('--incremental-column', help='Set incremental column for table')
     parser.add_argument('--batch-size', type=int, help='Set batch size for table')
     parser.add_argument('--priority', choices=['high', 'medium', 'low'], help='Set table priority')
+    parser.add_argument('--validate-connections', action='store_true', help='Validate all connection configurations')
+    parser.add_argument('--validate-test', action='store_true', help='Validate test environment configuration')
     
     args = parser.parse_args()
     
@@ -247,6 +344,34 @@ def main():
     # Validate configuration
     if not validate_configuration(config):
         return 1
+    
+    # Create config manager
+    config_manager = PipelineConfigManager(args.config)
+    
+    # Handle connection validation
+    if args.validate_connections:
+        print("Validating all connection configurations...")
+        results = config_manager.validate_all_connections()
+        
+        print("\nConnection Validation Results:")
+        for conn_type, is_valid in results.items():
+            status = "✅ PASS" if is_valid else "❌ FAIL"
+            print(f"  {conn_type}: {status}")
+        
+        if not all(results.values()):
+            print("\nSome connections failed validation. Check your environment variables.")
+            return 1
+        else:
+            print("\nAll connections validated successfully!")
+    
+    # Handle test environment validation
+    if args.validate_test:
+        print("Validating test environment configuration...")
+        if config_manager.validate_test_environment():
+            print("Test environment validation passed!")
+        else:
+            print("Test environment validation failed!")
+            return 1
     
     # Apply updates
     changes_made = False
