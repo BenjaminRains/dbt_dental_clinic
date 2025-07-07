@@ -1,12 +1,20 @@
 """
-Core functionality for the ETL pipeline.
-"""
-# Import from unified logging system
-from ..config.logging import get_logger, ETLLogger
-from .exceptions import ETLPipelineError
+ETL Pipeline Core Components
+===========================
 
+This package provides the core components for the ETL pipeline,
+including connection management and database operations.
+"""
+
+from .connections import (
+    ConnectionFactory,
+    ConnectionManager,
+    create_connection_manager
+)
+
+# Export clean interface for ETL scripts
 __all__ = [
-    'get_logger',
-    'ETLLogger',
-    'ETLPipelineError'
+    'ConnectionFactory',
+    'ConnectionManager', 
+    'create_connection_manager'
 ]
