@@ -9,36 +9,142 @@ import re
 from datetime import datetime
 import logging
 import os
+import yaml
 
 from etl_pipeline.config.logging import get_logger
-from etl_pipeline.config import get_settings
+from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
+from etl_pipeline.core.connections import ConnectionFactory
 
 logger = logging.getLogger(__name__)
 
 class PostgresSchema:
-    """Handles schema adaptation from MySQL to PostgreSQL with improved type mapping."""
+    """
+    Handles schema adaptation from MySQL to PostgreSQL with improved type mapping.
     
-    def __init__(self, mysql_engine: Engine, postgres_engine: Engine, mysql_db: str, postgres_db: str, postgres_schema: str = 'raw'):
+    This class works with the new Settings-centric architecture and automatically
+    uses the correct environment (production/test) based on Settings detection.
+    
+    Integration with SimpleMySQLReplicator:
+    - Uses static table configuration from tables.yml
+    - Generates schema information from MySQL replication database
+    - Provides schema conversion for PostgreSQL analytics database
+    """
+    
+    def __init__(self, postgres_schema: str = 'raw', settings=None):
         """
-        Initialize PostgreSQL schema adaptation.
+        Initialize PostgreSQL schema adaptation using new Settings-centric architecture.
         
         Args:
-            mysql_engine: MySQL replication database engine
-            postgres_engine: PostgreSQL analytics database engine
-            mysql_db: MySQL database name
-            postgres_db: PostgreSQL database name
-            postgres_schema: PostgreSQL schema name
+            postgres_schema: PostgreSQL schema name (default: 'raw')
+            settings: Settings instance (uses global if None)
         """
-        self.mysql_engine = mysql_engine
-        self.postgres_engine = postgres_engine
-        self.mysql_db = mysql_db
-        self.postgres_db = postgres_db
+        # Use provided settings or get global settings
+        self.settings = settings or get_settings()
+        
+        # Get database connections using new ConnectionFactory (unified API)
+        self.mysql_engine = ConnectionFactory.get_mysql_replication_connection()
+        self.postgres_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+        
+        # Get database names from settings
+        mysql_config = self.settings.get_replication_connection_config()
+        postgres_config = self.settings.get_analytics_connection_config(
+            ConfigPostgresSchema(postgres_schema)
+        )
+        
+        self.mysql_db = mysql_config.get('database', 'opendental_replication')
+        self.postgres_db = postgres_config.get('database', 'opendental_analytics')
         self.postgres_schema = postgres_schema
         self._schema_cache = {}
         
         # Initialize inspectors
-        self.mysql_inspector = inspect(mysql_engine)
-        self.postgres_inspector = inspect(postgres_engine)
+        self.mysql_inspector = inspect(self.mysql_engine)
+        self.postgres_inspector = inspect(self.postgres_engine)
+        
+        # Log initialization info
+        logger.info(f"PostgresSchema initialized with schema: {postgres_schema}")
+        logger.debug(f"MySQL DB: {self.mysql_db}, PostgreSQL DB: {self.postgres_db}")
+    
+    def get_table_schema_from_mysql(self, table_name: str) -> Dict:
+        """
+        Get MySQL table schema directly from the replication database.
+        This replaces SchemaDiscovery dependency with direct MySQL queries.
+        
+        Args:
+            table_name: Name of the table
+            
+        Returns:
+            Dict: Schema information in the format expected by adapt_schema
+        """
+        try:
+            with self.mysql_engine.connect() as conn:
+                # Get CREATE TABLE statement
+                result = conn.execute(text(f"SHOW CREATE TABLE `{table_name}`"))
+                row = result.fetchone()
+                
+                if not row:
+                    raise ValueError(f"Table {table_name} not found in {self.mysql_db}")
+                
+                create_statement = row[1]
+                
+                # Get table metadata
+                metadata_result = conn.execute(text(f"SHOW TABLE STATUS LIKE '{table_name}'"))
+                metadata_row = metadata_result.fetchone()
+                
+                metadata = {
+                    'engine': metadata_row[1] if metadata_row and metadata_row[1] else 'InnoDB',
+                    'charset': 'utf8mb4',
+                    'collation': 'utf8mb4_general_ci',
+                    'auto_increment': metadata_row[10] if metadata_row and len(metadata_row) > 10 and metadata_row[10] else None,
+                    'row_count': metadata_row[4] if metadata_row and len(metadata_row) > 4 and metadata_row[4] else 0
+                }
+                
+                # Get column information
+                columns_result = conn.execute(text(f"""
+                    SELECT 
+                        column_name,
+                        data_type,
+                        is_nullable,
+                        column_default,
+                        extra,
+                        column_comment,
+                        column_key
+                    FROM information_schema.columns
+                    WHERE table_schema = '{self.mysql_db}'
+                    AND table_name = '{table_name}'
+                    ORDER BY ordinal_position
+                """))
+                
+                columns = []
+                for col_row in columns_result:
+                    columns.append({
+                        'name': col_row[0],
+                        'type': col_row[1],
+                        'is_nullable': col_row[2] == 'YES',
+                        'default': col_row[3],
+                        'extra': col_row[4],
+                        'comment': col_row[5] or '',
+                        'key_type': col_row[6]
+                    })
+                
+                schema_info = {
+                    'table_name': table_name,
+                    'create_statement': create_statement,
+                    'metadata': metadata,
+                    'columns': columns,
+                    'schema_hash': self._calculate_schema_hash(create_statement),
+                    'analysis_timestamp': datetime.now().isoformat(),
+                    'analysis_version': '4.0'
+                }
+                
+                return schema_info
+                
+        except Exception as e:
+            logger.error(f"Error getting schema for {table_name}: {str(e)}")
+            raise
+    
+    def _calculate_schema_hash(self, create_statement: str) -> str:
+        """Calculate hash of create statement for change detection."""
+        return hashlib.md5(create_statement.encode()).hexdigest()
     
     def _analyze_column_data(self, table_name: str, column_name: str, mysql_type: str) -> str:
         """
@@ -67,7 +173,8 @@ class PostgresSchema:
                         LIMIT 1
                     """)
                     result = conn.execute(query)
-                    has_non_bool = result.scalar() > 0
+                    scalar_result = result.scalar()
+                    has_non_bool = scalar_result is not None and scalar_result > 0
                     
                     if not has_non_bool:
                         logger.info(f"Column {table_name}.{column_name} identified as boolean")
@@ -133,7 +240,7 @@ class PostgresSchema:
         logger.debug(f"Standard conversion: {mysql_type} -> base_type={base_type} -> {pg_type}")
         return pg_type
     
-    def _convert_mysql_type(self, mysql_type: str, table_name: str = None, column_name: str = None) -> str:
+    def _convert_mysql_type(self, mysql_type: str, table_name: Optional[str] = None, column_name: Optional[str] = None) -> str:
         """
         Convert MySQL data type to PostgreSQL data type with intelligent analysis.
         
@@ -158,7 +265,7 @@ class PostgresSchema:
         
         Args:
             table_name: Name of the table
-            mysql_schema: MySQL schema information from SchemaDiscovery
+            mysql_schema: MySQL schema information from get_table_schema_from_mysql()
             
         Returns:
             str: PostgreSQL-compatible CREATE TABLE statement
@@ -226,7 +333,7 @@ class PostgresSchema:
         
         Args:
             table_name: Name of the table
-            mysql_schema: MySQL schema information from SchemaDiscovery
+            mysql_schema: MySQL schema information from get_table_schema_from_mysql()
             
         Returns:
             bool: True if successful
@@ -267,7 +374,7 @@ class PostgresSchema:
         
         Args:
             table_name: Name of the table
-            mysql_schema: MySQL schema information from SchemaDiscovery
+            mysql_schema: MySQL schema information from get_table_schema_from_mysql()
             
         Returns:
             bool: True if schemas match
@@ -296,13 +403,13 @@ class PostgresSchema:
                 col_type = match.group(2).strip()
                 column_defs.append((col_name, col_type))
             
-            # Check if we're in a test environment
-            is_test_env = os.environ.get('ENVIRONMENT', '').lower() in ['test', 'testing']
-            etl_test_env = os.environ.get('ETL_ENVIRONMENT', '').lower() in ['test', 'testing']
+            # Check if we're in a test environment using Settings
+            environment = self.settings.environment
+            is_test_env = environment == 'test'
             
             # Compare column counts
             if len(pg_columns) != len(column_defs):
-                if is_test_env or etl_test_env:
+                if is_test_env:
                     # In test environments, log warning but don't fail on column count mismatch
                     logger.warning(f"Column count mismatch for {table_name}: PostgreSQL has {len(pg_columns)}, MySQL has {len(column_defs)} (test environment - continuing)")
                 else:
@@ -313,7 +420,7 @@ class PostgresSchema:
             # Compare column names and types
             for pg_col, (mysql_name, mysql_type) in zip(pg_columns, column_defs):
                 if pg_col['name'] != mysql_name:
-                    if is_test_env or etl_test_env:
+                    if is_test_env:
                         # In test environments, log warning but don't fail on name mismatch
                         logger.warning(f"Column name mismatch: {pg_col['name']} != {mysql_name} (test environment - continuing)")
                     else:
@@ -340,7 +447,7 @@ class PostgresSchema:
                 col_type_normalized = normalize_type(str(pg_col['type']))
                 
                 if pg_type_normalized != col_type_normalized:
-                    if is_test_env or etl_test_env:
+                    if is_test_env:
                         # In test environments, log warning but don't fail
                         logger.warning(f"Column type mismatch for {mysql_name}: PostgreSQL has {pg_col['type']}, expected {pg_type} (test environment - continuing)")
                     else:
