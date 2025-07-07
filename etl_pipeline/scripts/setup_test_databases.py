@@ -13,6 +13,7 @@ IMPORTANT SAFETY FEATURES:
 - Uses new ConnectionFactory with test methods
 - Integrates with new Settings architecture
 - Uses standardized test data from test fixtures
+- Includes ping checks before MySQL connections
 
 Usage:
     python -m etl_pipeline.scripts.setup_test_databases
@@ -27,6 +28,8 @@ Requirements:
 import os
 import sys
 import logging
+import subprocess
+import platform
 from sqlalchemy import create_engine, text
 from datetime import datetime, date
 from dotenv import load_dotenv
@@ -61,7 +64,11 @@ try:
     import os
     fixtures_path = os.path.join(os.path.dirname(__file__), '..', 'tests', 'fixtures')
     sys.path.insert(0, fixtures_path)
-    from test_data_definitions import get_test_patient_data, get_test_appointment_data
+    try:
+        from test_data_definitions import get_test_patient_data, get_test_appointment_data
+    except ImportError:
+        # Fallback import path
+        from etl_pipeline.tests.fixtures.test_data_definitions import get_test_patient_data, get_test_appointment_data
     NEW_CONFIG_AVAILABLE = True
 except ImportError as e:
     print(f"Import error: {e}")
@@ -168,6 +175,42 @@ def confirm_database_creation():
             return False
         else:
             print("Please enter 'yes' or 'no'")
+
+def ping_mysql_server(host, port):
+    """
+    Pings the MySQL server to ensure it's running and accessible.
+    
+    Args:
+        host (str): MySQL server hostname or IP address
+        port (str): MySQL server port
+        
+    Returns:
+        bool: True if ping successful, False otherwise
+    """
+    try:
+        # Use a simple ping command (ping only the host, not the port)
+        if platform.system() == "Windows":
+            # Windows uses 'ping' command
+            result = subprocess.run(["ping", "-n", "1", host], 
+                                  capture_output=True, text=True, timeout=10)
+        else:
+            # Linux/macOS uses 'ping' command
+            result = subprocess.run(["ping", "-c", "1", host], 
+                                  capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            logger.info(f"Successfully pinged MySQL server host {host}")
+            return True
+        else:
+            logger.error(f"Failed to ping MySQL server host {host}. Output: {result.stdout}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        logger.error(f"Ping to MySQL server host {host} timed out after 10 seconds")
+        return False
+    except Exception as e:
+        logger.error(f"Error pinging MySQL server host {host}: {e}")
+        return False
 
 def setup_postgresql_test_database(settings):
     """Set up PostgreSQL test analytics database using new ConnectionFactory."""
@@ -579,6 +622,22 @@ def main():
     try:
         logger.info("Starting database setup...")
         
+        # Ping MySQL servers before attempting connections
+        source_host = os.environ.get('TEST_OPENDENTAL_SOURCE_HOST', 'localhost')
+        source_port = os.environ.get('TEST_OPENDENTAL_SOURCE_PORT', '3306')
+        replication_host = os.environ.get('TEST_MYSQL_REPLICATION_HOST', 'localhost')
+        replication_port = os.environ.get('TEST_MYSQL_REPLICATION_PORT', '3305')
+        
+        logger.info(f"Pinging MySQL source server at {source_host}:{source_port}")
+        if not ping_mysql_server(source_host, source_port):
+            logger.error(f"MySQL source server ping failed at {source_host}:{source_port}. Cannot proceed with database setup.")
+            sys.exit(1)
+            
+        logger.info(f"Pinging MySQL replication server at {replication_host}:{replication_port}")
+        if not ping_mysql_server(replication_host, replication_port):
+            logger.error(f"MySQL replication server ping failed at {replication_host}:{replication_port}. Cannot proceed with database setup.")
+            sys.exit(1)
+
         # Set up MySQL test source database using new ConnectionFactory
         setup_mysql_test_database(settings, DatabaseType.SOURCE)
         
