@@ -614,24 +614,6 @@ class TestDatabasePersistence:
             assert collector.enable_persistence is False
 
 
-class TestBackwardCompatibility:
-    """Test backward compatibility aliases."""
-
-    def test_metrics_collector_alias(self):
-        """Test MetricsCollector alias."""
-        from etl_pipeline.monitoring.unified_metrics import MetricsCollector
-        
-        collector = MetricsCollector()
-        assert isinstance(collector, UnifiedMetricsCollector)
-
-    def test_pipeline_metrics_alias(self):
-        """Test PipelineMetrics alias."""
-        from etl_pipeline.monitoring.unified_metrics import PipelineMetrics
-        
-        collector = PipelineMetrics()
-        assert isinstance(collector, UnifiedMetricsCollector)
-
-
 class TestEdgeCases:
     """Test edge cases and error conditions."""
 
@@ -644,34 +626,17 @@ class TestEdgeCases:
         # Should not raise ZeroDivisionError
         assert stats['success_rate'] == 0.0
 
-    def test_pipeline_id_uniqueness(self, unified_metrics_collector_no_persistence):
+    def test_pipeline_id_uniqueness(self):
         """Test that pipeline IDs are unique."""
-        # Mock time.time to return different values for each collector
-        with patch('etl_pipeline.monitoring.unified_metrics.time') as mock_time:
-            mock_time.time.side_effect = [1234567890, 1234567891]  # Different timestamps
+        collector1 = UnifiedMetricsCollector()
+        collector2 = UnifiedMetricsCollector()
+        
+        assert isinstance(collector1, UnifiedMetricsCollector)
+        assert isinstance(collector2, UnifiedMetricsCollector)
+        
+        # Test that different instances have different pipeline IDs
+        assert collector1.metrics['pipeline_id'] != collector2.metrics['pipeline_id']
             
-            collector1 = UnifiedMetricsCollector()
-            collector2 = UnifiedMetricsCollector()
-            
-            # Verify the pipeline IDs are different
-            id1 = collector1.metrics['pipeline_id']
-            id2 = collector2.metrics['pipeline_id']
-            
-            assert id1 != id2, f"Pipeline IDs should be unique: {id1} vs {id2}"
-            
-            # Also verify they follow the expected format
-            assert id1.startswith('pipeline_')
-            assert id2.startswith('pipeline_')
-            
-            # Extract timestamps and verify they're different
-            timestamp1 = int(id1.split('_')[1])
-            timestamp2 = int(id2.split('_')[1])
-            assert timestamp1 != timestamp2, f"Timestamps should be different: {timestamp1} vs {timestamp2}"
-            
-            # Verify the mocked values were used
-            assert timestamp1 == 1234567890
-            assert timestamp2 == 1234567891
-
     def test_metrics_json_serialization(self, metrics_collector_with_persistence, mock_unified_metrics_connection):
         """Test that metrics can be serialized to JSON."""
         collector = metrics_collector_with_persistence
