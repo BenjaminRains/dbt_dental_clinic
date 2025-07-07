@@ -32,7 +32,7 @@ class PostgresSchema(Enum):
 
 
 class Settings:
-    """Clean configuration settings manager."""
+    """Clean configuration settings manager - focused on configuration only."""
     
     # Environment variable mappings for each database type
     ENV_MAPPINGS = {
@@ -60,7 +60,7 @@ class Settings:
         }
     }
     
-    def __init__(self, environment: str = None, provider = None):
+    def __init__(self, environment: Optional[str] = None, provider = None):
         """Initialize settings."""
         self.environment = environment or self._detect_environment()
         self.env_prefix = "TEST_" if self.environment == 'test' else ""
@@ -122,6 +122,39 @@ class Settings:
         self._connection_cache[cache_key] = config
         return config
     
+    # ============================================================================
+    # CONNECTION-SPECIFIC METHODS (Single Source of Truth)
+    # ============================================================================
+    
+    def get_source_connection_config(self) -> Dict:
+        """Get OpenDental source connection configuration."""
+        return self.get_database_config(DatabaseType.SOURCE)
+    
+    def get_replication_connection_config(self) -> Dict:
+        """Get MySQL replication connection configuration."""
+        return self.get_database_config(DatabaseType.REPLICATION)
+    
+    def get_analytics_connection_config(self, schema: PostgresSchema = PostgresSchema.RAW) -> Dict:
+        """Get PostgreSQL analytics connection configuration."""
+        return self.get_database_config(DatabaseType.ANALYTICS, schema)
+    
+    # Schema-specific analytics connections
+    def get_analytics_raw_connection_config(self) -> Dict:
+        """Get PostgreSQL analytics raw schema connection configuration."""
+        return self.get_analytics_connection_config(PostgresSchema.RAW)
+    
+    def get_analytics_staging_connection_config(self) -> Dict:
+        """Get PostgreSQL analytics staging schema connection configuration."""
+        return self.get_analytics_connection_config(PostgresSchema.STAGING)
+    
+    def get_analytics_intermediate_connection_config(self) -> Dict:
+        """Get PostgreSQL analytics intermediate schema connection configuration."""
+        return self.get_analytics_connection_config(PostgresSchema.INTERMEDIATE)
+    
+    def get_analytics_marts_connection_config(self) -> Dict:
+        """Get PostgreSQL analytics marts schema connection configuration."""
+        return self.get_analytics_connection_config(PostgresSchema.MARTS)
+    
     def _get_base_config(self, db_type: DatabaseType) -> Dict:
         """Get base configuration from environment variables."""
         env_mapping = self.ENV_MAPPINGS[db_type]
@@ -158,42 +191,6 @@ class Settings:
         else:  # DatabaseType.ANALYTICS (PostgreSQL)
             config.setdefault('connect_timeout', 10)
             config.setdefault('application_name', 'etl_pipeline')
-    
-    def get_connection_string(self, 
-                            db_type: DatabaseType,
-                            schema: Optional[PostgresSchema] = None) -> str:
-        """Get SQLAlchemy connection string."""
-        config = self.get_database_config(db_type, schema)
-        
-        # Validate required fields
-        required_fields = ['host', 'port', 'database', 'user', 'password']
-        missing_fields = [field for field in required_fields if not config.get(field)]
-        if missing_fields:
-            raise ValueError(f"Missing required fields for {db_type.value}: {missing_fields}")
-        
-        if db_type in [DatabaseType.SOURCE, DatabaseType.REPLICATION]:
-            # MySQL connection string
-            return (
-                f"mysql+pymysql://{config['user']}:{config['password']}@"
-                f"{config['host']}:{config['port']}/{config['database']}"
-                f"?connect_timeout={config.get('connect_timeout', 10)}"
-                f"&read_timeout={config.get('read_timeout', 30)}"
-                f"&write_timeout={config.get('write_timeout', 30)}"
-                f"&charset={config.get('charset', 'utf8mb4')}"
-            )
-        else:  # DatabaseType.ANALYTICS (PostgreSQL)
-            conn_str = (
-                f"postgresql+psycopg2://{config['user']}:{config['password']}@"
-                f"{config['host']}:{config['port']}/{config['database']}"
-                f"?connect_timeout={config.get('connect_timeout', 10)}"
-                f"&application_name={config.get('application_name', 'etl_pipeline')}"
-            )
-            
-            # Add schema to search path if specified
-            if config.get('schema'):
-                conn_str += f"&options=-csearch_path%3D{config['schema']}"
-            
-            return conn_str
     
     def validate_configs(self) -> bool:
         """Validate that all required configurations are present."""
@@ -303,8 +300,8 @@ def set_settings(settings: Settings):
 
 
 # Factory functions
-def create_settings(environment: str = None, 
-                   config_dir: Path = None,
+def create_settings(environment: Optional[str] = None, 
+                   config_dir: Optional[Path] = None,
                    **test_configs) -> Settings:
     """Create settings instance with flexible configuration."""
     if test_configs:
@@ -318,9 +315,9 @@ def create_settings(environment: str = None,
     
     return Settings(environment=environment, provider=provider)
 
-def create_test_settings(pipeline_config: Dict = None,
-                        tables_config: Dict = None,
-                        env_vars: Dict = None) -> Settings:
+def create_test_settings(pipeline_config: Optional[Dict] = None,
+                        tables_config: Optional[Dict] = None,
+                        env_vars: Optional[Dict] = None) -> Settings:
     """Create test settings with injected configuration."""
     return create_settings(
         environment='test',
