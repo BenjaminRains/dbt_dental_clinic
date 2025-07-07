@@ -3,13 +3,13 @@ DEPRECATION NOTICE - REFACTORING IN PROGRESS
 ============================================
 
 This file is part of the ETL Pipeline Schema Analysis Refactoring Plan.
-See: docs/refactoring_plan_schema_analysis.md
+See: docs/refactor_remove_schema_discovery_from_etl.md
 
 PLANNED CHANGES:
 - Will update for simplified tables.yml configuration structure
 - Will remove three-section YAML support (source_tables, staging_tables, target_tables)
 - Will use new get_table_config() method from settings
-- Will integrate with enhanced SchemaDiscovery for configuration
+- Will integrate with enhanced PostgresSchema for configuration
 - Will maintain current data movement functionality
 
 TIMELINE: Phase 4 of refactoring plan
@@ -26,6 +26,8 @@ It performs minimal transformations (only data type conversion) and focuses on i
 
 DATA FLOW:
 MySQL OpenDental (Source Database)
+    ↓
+SimpleMySQLReplicator (MySQL to MySQL copy)
     ↓
 opendental_replication (MySQL Replication Database)
     ↓
@@ -45,12 +47,12 @@ KEY ARCHITECTURAL PRINCIPLES:
    - No Business Logic: No field mappings, calculations, or business rules
 
 2. CONFIGURATION-DRIVEN TYPE CONVERSION
-   - Source: MySQL data types from SchemaDiscovery
+   - Source: MySQL data types from PostgresSchema.get_table_schema_from_mysql()
    - Target: PostgreSQL data types via PostgresSchema
    - Standardization: Consistent type mapping across all tables
 
 3. INCREMENTAL LOADING SUPPORT
-   - Strategy: Time-based incremental loading using incremental_columns
+   - Strategy: Time-based incremental loading using incremental_columns from tables.yml
    - Fallback: Full load when incremental not possible
    - Tracking: Load status tracking in etl_load_status table
 
@@ -71,11 +73,12 @@ WHAT POSTGRESLOADER SHOULD NOT DO:
 
 WHAT POSTGRESLOADER SHOULD DO:
 - Infrastructure Operations (schema conversion, data extraction/loading)
-- Configuration Integration (tables.yml, SchemaDiscovery, PostgresSchema)
+- Configuration Integration (tables.yml, PostgresSchema)
 - Pipeline Mechanics (incremental loading, chunking, verification)
 
 This creates a clean separation where:
-- PostgresLoader = Data Movement Infrastructure
+- SimpleMySQLReplicator = MySQL to MySQL data movement
+- PostgresLoader = MySQL to PostgreSQL data movement
 - dbt models = Business Logic & Analytics
 
 SIMPLIFIED VERSION - CORE LOADING FUNCTIONALITY ONLY
@@ -90,7 +93,7 @@ Core Functionality:
 - Schema integration with PostgresSchema for table creation
 
 Removed Components:
-- Schema analysis methods (use schema_discovery.py instead)
+- Schema analysis methods (use PostgresSchema.get_table_schema_from_mysql() instead)
 - Metadata methods (grants, triggers, views, dependencies)
 - Redundant table information methods
 - Methods that duplicate existing functionality
@@ -111,69 +114,150 @@ from sqlalchemy import text, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
 import os
+import yaml
 
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.postgres_schema import PostgresSchema
+from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config.logging import get_logger
 
 logger = get_logger(__name__)
 
 class PostgresLoader:
-    """PostgreSQL loader for loading data from MySQL replication to PostgreSQL analytics."""
+    """
+    PostgreSQL loader for loading data from MySQL replication to PostgreSQL analytics.
     
-    def __init__(self, replication_engine: Engine, analytics_engine: Engine):
+    This class integrates with SimpleMySQLReplicator and uses static configuration
+    from tables.yml, eliminating the need for dynamic SchemaDiscovery during ETL operations.
+    
+    Integration with SimpleMySQLReplicator:
+    - Works with data copied by SimpleMySQLReplicator to MySQL replication database
+    - Uses static table configuration from tables.yml for incremental loading
+    - Generates schema information directly from MySQL replication database
+    - Provides data movement to PostgreSQL analytics database
+    
+    NEW ARCHITECTURE:
+    - Uses ConnectionFactory for explicit environment separation
+    - Uses Settings as single source of truth for configuration
+    - Supports both production and test environments via explicit method calls
+    """
+    
+    def __init__(self, tables_config_path: Optional[str] = None, use_test_environment: bool = False):
         """
-        Initialize the PostgreSQL loader.
+        Initialize the PostgreSQL loader using new settings-centric architecture.
         
         Args:
-            replication_engine: MySQL replication database engine
-            analytics_engine: PostgreSQL analytics database engine
+            tables_config_path: Path to tables.yml (uses default if None)
+            use_test_environment: Whether to use test environment connections (default: False)
         """
-        self.replication_engine = replication_engine
-        self.analytics_engine = analytics_engine
+        # Set test environment if requested
+        if use_test_environment:
+            os.environ['ETL_ENVIRONMENT'] = 'test'
+            logger.info("Set ETL_ENVIRONMENT=test for test database connections")
         
-        # Get PostgreSQL-specific settings from config
-        settings_instance = get_settings()
-        analytics_config = settings_instance.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
-        replication_config = settings_instance.get_database_config(DatabaseType.REPLICATION)
+        # Set tables config path
+        if tables_config_path is None:
+            tables_config_path = os.path.join(
+                os.path.dirname(__file__), 
+                '..', 
+                'config', 
+                'tables.yml'
+            )
+        self.tables_config_path = tables_config_path
+        
+        # Load table configuration
+        self.table_configs = self._load_configuration()
+        
+        # Get settings instance (will automatically detect environment from ETL_ENVIRONMENT)
+        self.settings = get_settings()
+        
+        # Get database connections using explicit production methods
+        # The settings instance automatically handles environment detection based on ETL_ENVIRONMENT
+        self.replication_engine = ConnectionFactory.get_mysql_replication_connection()
+        self.analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+        
+        # Log which environment we're using
+        environment = self.settings.environment.upper()
+        logger.info(f"PostgresLoader initialized with {environment} environment connections")
+        
+        # Get database configurations from settings
+        replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+        analytics_config = self.settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
         
         # Use actual database names from settings (supports both production and test environments)
         self.replication_db = replication_config.get('database', 'opendental_replication')
         self.analytics_db = analytics_config.get('database', 'opendental_analytics')
         self.analytics_schema = analytics_config.get('schema', 'raw')
         
-        # Initialize schema adapter
+        # Initialize schema adapter using new constructor
         self.schema_adapter = PostgresSchema(
-            mysql_engine=replication_engine,
-            postgres_engine=analytics_engine,
-            mysql_db=self.replication_db,
-            postgres_db=self.analytics_db,
-            postgres_schema=self.analytics_schema
+            postgres_schema=self.analytics_schema,
+            settings=self.settings
         )
         
         self.target_schema = analytics_config.get('schema', 'raw')
         self.staging_schema = replication_config.get('schema', 'raw')
+        
+        logger.info(f"PostgresLoader initialized with {len(self.table_configs)} table configurations")
+        logger.info(f"Replication DB: {self.replication_db}, Analytics DB: {self.analytics_db}.{self.analytics_schema}")
     
-    def load_table(self, table_name: str, mysql_schema: Dict, force_full: bool = False) -> bool:
+    def _load_configuration(self) -> Dict:
+        """Load table configuration from tables.yml."""
+        try:
+            with open(self.tables_config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            tables = config.get('tables', {})
+            logger.info(f"Loaded configuration for {len(tables)} tables from {self.tables_config_path}")
+            return tables
+            
+        except FileNotFoundError:
+            logger.error(f"Configuration file not found: {self.tables_config_path}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to load configuration from {self.tables_config_path}: {e}")
+            raise
+    
+    def get_table_config(self, table_name: str) -> Dict:
+        """
+        Get configuration for a specific table.
+        
+        Args:
+            table_name: Name of the table
+            
+        Returns:
+            Dict: Table configuration
+        """
+        return self.table_configs.get(table_name, {})
+    
+    def load_table(self, table_name: str, force_full: bool = False) -> bool:
         """
         Load table from MySQL replication to PostgreSQL analytics using pure SQLAlchemy.
         This approach avoids pandas' connection handling issues entirely.
         
         Args:
             table_name: Name of the table to load
-            mysql_schema: MySQL schema information from SchemaDiscovery
             force_full: Whether to force a full load instead of incremental
             
         Returns:
             bool: True if successful
         """
         try:
+            # Get table configuration
+            table_config = self.get_table_config(table_name)
+            if not table_config:
+                logger.error(f"No configuration found for table: {table_name}")
+                return False
+            
+            # Get MySQL schema from replication database
+            mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
+            
             # Create or verify PostgreSQL table
             if not self._ensure_postgres_table(table_name, mysql_schema):
                 return False
             
-            # Get incremental columns
-            incremental_columns = mysql_schema.get('incremental_columns', [])
+            # Get incremental columns from configuration
+            incremental_columns = table_config.get('incremental_columns', [])
             
             # Build query to get data
             query = self._build_load_query(table_name, incremental_columns, force_full)
@@ -227,14 +311,13 @@ class PostgresLoader:
             logger.error(f"Error loading table {table_name}: {str(e)}")
             return False
     
-    def load_table_chunked(self, table_name: str, mysql_schema: Dict, force_full: bool = False, 
+    def load_table_chunked(self, table_name: str, force_full: bool = False, 
                           chunk_size: int = 10000) -> bool:
         """
         Load table in chunks for memory efficiency with large datasets.
         
         Args:
             table_name: Name of the table to load
-            mysql_schema: MySQL schema information from SchemaDiscovery
             force_full: Whether to force a full load instead of incremental
             chunk_size: Number of rows to process in each chunk
             
@@ -242,12 +325,21 @@ class PostgresLoader:
             bool: True if successful
         """
         try:
+            # Get table configuration
+            table_config = self.get_table_config(table_name)
+            if not table_config:
+                logger.error(f"No configuration found for table: {table_name}")
+                return False
+            
+            # Get MySQL schema from replication database
+            mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
+            
             # Create or verify PostgreSQL table
             if not self._ensure_postgres_table(table_name, mysql_schema):
                 return False
             
-            # Get incremental columns
-            incremental_columns = mysql_schema.get('incremental_columns', [])
+            # Get incremental columns from configuration
+            incremental_columns = table_config.get('incremental_columns', [])
             
             # First, get total count
             count_query = self._build_count_query(table_name, incremental_columns, force_full)
@@ -362,7 +454,7 @@ class PostgresLoader:
         
         Args:
             table_name: Name of the table
-            mysql_schema: MySQL schema information from SchemaDiscovery
+            mysql_schema: MySQL schema information from PostgresSchema.get_table_schema_from_mysql()
             
         Returns:
             bool: True if table exists and matches schema
