@@ -1,10 +1,12 @@
 """
-Step 1.3: Replace etl_pipeline/config/__init__.py
+Configuration Management for ETL Pipeline
+=========================================
 
-BACKUP YOUR EXISTING FILE FIRST!
-cp etl_pipeline/config/__init__.py etl_pipeline/config/__init__.py.backup
+This package provides configuration management capabilities for the ETL pipeline,
+including static configuration reading and settings management.
 
-Then replace with this clean implementation.
+The configuration package is separate from connection handling, which is managed
+by the core package following the clean separation of concerns architecture.
 """
 
 from .settings import (
@@ -18,7 +20,9 @@ from .settings import (
     create_test_settings
 )
 
-# Export clean interface
+from .config_reader import ConfigReader
+
+# Export clean interface for configuration management only
 __all__ = [
     'Settings',
     'DatabaseType',
@@ -28,8 +32,8 @@ __all__ = [
     'set_settings',
     'create_settings',
     'create_test_settings',
-    'settings'  # For backward compatibility
+    'ConfigReader'
 ]
 
-# Default settings instance (lazy-loaded)
-settings = get_settings()
+# Note: No default settings instance exported to avoid backward compatibility
+# ETL scripts should explicitly import and use settings as needed
