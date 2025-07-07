@@ -18,11 +18,21 @@ FEATURES:
 - Configurable retention and cleanup policies
 
 USAGE:
-    # Basic usage
-    metrics = UnifiedMetricsCollector(analytics_engine)
+    # Production usage (explicit)
+    metrics = create_production_metrics_collector()
     metrics.start_pipeline()
     metrics.record_table_processed('patient', 1000, 30.5, True)
     metrics.end_pipeline()
+    
+    # Test usage (explicit)
+    metrics = create_test_metrics_collector()
+    metrics.start_pipeline()
+    metrics.record_table_processed('patient', 100, 5.2, True)
+    metrics.end_pipeline()
+    
+    # Direct usage with explicit environment separation
+    metrics = UnifiedMetricsCollector(use_test_connections=False)  # Production
+    metrics = UnifiedMetricsCollector(use_test_connections=True)   # Test
     
     # Status reporting
     status = metrics.get_pipeline_status()
@@ -38,9 +48,11 @@ import time
 import json
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
+
+from etl_pipeline.core.connections import ConnectionFactory
 
 logger = logging.getLogger(__name__)
 
@@ -48,19 +60,38 @@ class UnifiedMetricsCollector:
     """
     Unified metrics collector that combines real-time collection,
     database persistence, and status reporting capabilities.
+    
+    Follows connection architecture guidelines with explicit environment separation.
     """
     
     def __init__(self, analytics_engine: Optional[Engine] = None, 
-                 enable_persistence: bool = True):
+                 enable_persistence: bool = True,
+                 use_test_connections: bool = False):
         """
         Initialize unified metrics collector.
         
         Args:
-            analytics_engine: SQLAlchemy engine for analytics database
+            analytics_engine: SQLAlchemy engine for analytics database (optional)
             enable_persistence: Whether to enable database persistence
+            use_test_connections: Whether to use test connections (explicit environment separation)
         """
-        self.analytics_engine = analytics_engine
-        self.enable_persistence = enable_persistence and analytics_engine is not None
+        self.use_test_connections = use_test_connections
+        
+        # Get analytics engine using ConnectionFactory (following architecture guidelines)
+        if analytics_engine is None:
+            if use_test_connections:
+                # Explicit test connection (following architecture guidelines)
+                self.analytics_engine = ConnectionFactory.get_opendental_analytics_raw_test_connection()
+                logger.info("Using test analytics connection for metrics persistence")
+            else:
+                # Production connection (following architecture guidelines)
+                self.analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+                logger.info("Using production analytics connection for metrics persistence")
+        else:
+            self.analytics_engine = analytics_engine
+            logger.info("Using provided analytics engine for metrics persistence")
+        
+        self.enable_persistence = enable_persistence and self.analytics_engine is not None
         
         # Initialize metrics storage
         self.reset_metrics()
@@ -68,6 +99,27 @@ class UnifiedMetricsCollector:
         # Initialize database if persistence is enabled
         if self.enable_persistence:
             self._initialize_metrics_table()
+    
+    def _get_analytics_connection(self) -> Engine:
+        """
+        Get the appropriate analytics connection based on environment.
+        
+        Returns:
+            SQLAlchemy engine for analytics database
+            
+        Raises:
+            ValueError: If unable to create analytics connection
+        """
+        try:
+            if self.use_test_connections:
+                # Explicit test connection (following architecture guidelines)
+                return ConnectionFactory.get_opendental_analytics_raw_test_connection()
+            else:
+                # Production connection (following architecture guidelines)
+                return ConnectionFactory.get_opendental_analytics_raw_connection()
+        except Exception as e:
+            logger.error(f"Failed to create analytics connection: {str(e)}")
+            raise ValueError(f"Unable to create analytics connection: {str(e)}") from e
     
     def reset_metrics(self):
         """Reset metrics to initial state."""
@@ -426,6 +478,45 @@ class UnifiedMetricsCollector:
             logger.error(f"Failed to initialize metrics tables: {str(e)}")
             self.enable_persistence = False
 
-# Backward compatibility aliases
-MetricsCollector = UnifiedMetricsCollector
-PipelineMetrics = UnifiedMetricsCollector 
+# Factory functions following connection architecture guidelines
+def create_metrics_collector(use_test_connections: bool = False, 
+                           enable_persistence: bool = True) -> UnifiedMetricsCollector:
+    """
+    Create a metrics collector with appropriate connection following architecture guidelines.
+    
+    Args:
+        use_test_connections: Whether to use test connections (explicit environment separation)
+        enable_persistence: Whether to enable database persistence
+        
+    Returns:
+        UnifiedMetricsCollector instance with appropriate connection
+    """
+    return UnifiedMetricsCollector(
+        analytics_engine=None,  # Let the collector get the appropriate connection
+        enable_persistence=enable_persistence,
+        use_test_connections=use_test_connections
+    )
+
+def create_production_metrics_collector(enable_persistence: bool = True) -> UnifiedMetricsCollector:
+    """
+    Create a metrics collector for production environment (explicit).
+    
+    Args:
+        enable_persistence: Whether to enable database persistence
+        
+    Returns:
+        UnifiedMetricsCollector instance with production connection
+    """
+    return create_metrics_collector(use_test_connections=False, enable_persistence=enable_persistence)
+
+def create_test_metrics_collector(enable_persistence: bool = True) -> UnifiedMetricsCollector:
+    """
+    Create a metrics collector for test environment (explicit).
+    
+    Args:
+        enable_persistence: Whether to enable database persistence
+        
+    Returns:
+        UnifiedMetricsCollector instance with test connection
+    """
+    return create_metrics_collector(use_test_connections=True, enable_persistence=enable_persistence) 
