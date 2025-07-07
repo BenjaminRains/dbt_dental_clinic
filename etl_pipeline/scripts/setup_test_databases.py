@@ -10,7 +10,7 @@ IMPORTANT SAFETY FEATURES:
 - Requires explicit confirmation for database creation
 - Validates all database names contain 'test' to prevent production accidents
 - Uses test-specific environment variables (TEST_*)
-- Uses new ConnectionFactory with test methods
+- Uses new ConnectionFactory with unified API
 - Integrates with new Settings architecture
 - Uses standardized test data from test fixtures
 - Includes ping checks before MySQL connections
@@ -208,13 +208,13 @@ def ping_mysql_server(host, port):
         logger.error(f"Error pinging MySQL server host {host}: {e}")
         return False
 
-def setup_postgresql_test_database(settings):
+def setup_postgresql_test_database():
     """Set up PostgreSQL test analytics database using new ConnectionFactory."""
     logger.info("Setting up PostgreSQL test analytics database...")
     
     try:
-        # Use new ConnectionFactory with test methods
-        analytics_engine = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+        # Use new ConnectionFactory with unified API
+        analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
         
         with analytics_engine.connect() as conn:
             # Create only the raw schema if it doesn't exist
@@ -382,15 +382,15 @@ def setup_postgresql_test_database(settings):
         logger.error(f"Failed to create patient table: {e}")
         sys.exit(1) # exit if error
 
-def setup_mysql_test_database(settings, database_type):
+def setup_mysql_test_database(database_type):
     """Set up MySQL test database using new ConnectionFactory."""
     logger.info(f"Setting up MySQL test {database_type.value} database...")
     
     try:
         if database_type == DatabaseType.SOURCE:
-            engine = ConnectionFactory.get_source_connection(settings)
+            engine = ConnectionFactory.get_opendental_source_connection()
         elif database_type == DatabaseType.REPLICATION:
-            engine = ConnectionFactory.get_replication_connection(settings)
+            engine = ConnectionFactory.get_mysql_replication_connection()
         else:
             raise ValueError(f"Unsupported database type: {database_type}")
         
@@ -591,14 +591,6 @@ def main():
     if not confirm_database_creation():
         sys.exit(0)
     
-    # Create test settings using new architecture
-    try:
-        settings = create_test_settings()
-        logger.info("Created test settings using new architecture")
-    except Exception as e:
-        logger.error(f"Failed to create test settings: {e}")
-        sys.exit(1)
-    
     # Debug: Print relevant environment variables
     logger.info("Environment Configuration:")
     logger.info(f"  TEST_POSTGRES_ANALYTICS_DB: {os.environ.get('TEST_POSTGRES_ANALYTICS_DB')}")
@@ -635,13 +627,13 @@ def main():
             sys.exit(1)
 
         # Set up MySQL test source database using new ConnectionFactory
-        setup_mysql_test_database(settings, DatabaseType.SOURCE)
+        setup_mysql_test_database(DatabaseType.SOURCE)
         
         # Set up PostgreSQL test database using new ConnectionFactory
-        setup_postgresql_test_database(settings)
+        setup_postgresql_test_database()
         
         # Set up MySQL test replication database using new ConnectionFactory
-        setup_mysql_test_database(settings, DatabaseType.REPLICATION)
+        setup_mysql_test_database(DatabaseType.REPLICATION)
         
         logger.info("Test database setup completed successfully!")
         logger.info("You can now run integration tests with: pytest -m integration")
