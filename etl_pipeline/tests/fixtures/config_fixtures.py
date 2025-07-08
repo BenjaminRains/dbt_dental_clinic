@@ -6,6 +6,7 @@ This module contains fixtures related to:
 - Table configuration  
 - Settings creation and management
 - Configuration validation
+- Database type and schema enums
 """
 
 import os
@@ -13,23 +14,26 @@ import pytest
 from unittest.mock import patch, mock_open
 from typing import Dict, Any
 
-# Import ETL pipeline components for testing
-try:
-    from etl_pipeline.config.settings import Settings
-except ImportError:
-    # Fallback for new configuration system
-    from etl_pipeline.config import create_settings
-    Settings = None
-
 # Import new configuration system components
-try:
-    from etl_pipeline.config import reset_settings, create_test_settings, DatabaseType, PostgresSchema
-    NEW_CONFIG_AVAILABLE = True
-except ImportError:
-    # Fallback for backward compatibility
-    NEW_CONFIG_AVAILABLE = False
-    DatabaseType = None
-    PostgresSchema = None
+from etl_pipeline.config import (
+    Settings,
+    DatabaseType,
+    PostgresSchema,
+    reset_settings,
+    create_test_settings
+)
+
+
+@pytest.fixture
+def database_types():
+    """Database type enums for testing."""
+    return DatabaseType
+
+
+@pytest.fixture
+def postgres_schemas():
+    """PostgreSQL schema enums for testing."""
+    return PostgresSchema
 
 
 @pytest.fixture
@@ -292,4 +296,112 @@ def mock_settings_environment():
         
         return patches
     
-    return _mock_settings_environment 
+    return _mock_settings_environment
+
+
+@pytest.fixture
+def test_settings_with_enums(test_env_vars, test_pipeline_config, test_tables_config):
+    """Create test settings using enums for database configuration testing."""
+    return create_test_settings(
+        pipeline_config=test_pipeline_config,
+        tables_config=test_tables_config,
+        env_vars=test_env_vars
+    )
+
+
+@pytest.fixture
+def database_config_test_cases():
+    """Test cases for database configuration using enums."""
+    return [
+        # (db_type, schema, expected_config_keys)
+        (DatabaseType.SOURCE, None, ['host', 'port', 'database', 'user', 'password']),
+        (DatabaseType.REPLICATION, None, ['host', 'port', 'database', 'user', 'password']),
+        (DatabaseType.ANALYTICS, PostgresSchema.RAW, ['host', 'port', 'database', 'schema', 'user', 'password']),
+        (DatabaseType.ANALYTICS, PostgresSchema.STAGING, ['host', 'port', 'database', 'schema', 'user', 'password']),
+        (DatabaseType.ANALYTICS, PostgresSchema.INTERMEDIATE, ['host', 'port', 'database', 'schema', 'user', 'password']),
+        (DatabaseType.ANALYTICS, PostgresSchema.MARTS, ['host', 'port', 'database', 'schema', 'user', 'password']),
+    ]
+
+
+@pytest.fixture
+def schema_specific_configs():
+    """Schema-specific configuration test cases."""
+    return {
+        'raw': {
+            'schema': 'raw',
+            'application_name': 'etl_pipeline'
+        },
+        'staging': {
+            'schema': 'staging',
+            'application_name': 'etl_pipeline'
+        },
+        'intermediate': {
+            'schema': 'intermediate',
+            'application_name': 'etl_pipeline'
+        },
+        'marts': {
+            'schema': 'marts',
+            'application_name': 'etl_pipeline'
+        }
+    }
+
+
+@pytest.fixture
+def connection_config_validation_cases():
+    """Test cases for connection configuration validation."""
+    return [
+        # Valid configurations
+        {
+            'name': 'valid_source',
+            'db_type': DatabaseType.SOURCE,
+            'schema': None,
+            'config': {
+                'host': 'localhost',
+                'port': 3306,
+                'database': 'test_db',
+                'user': 'test_user',
+                'password': 'test_pass'
+            },
+            'should_pass': True
+        },
+        {
+            'name': 'valid_analytics_raw',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.RAW,
+            'config': {
+                'host': 'localhost',
+                'port': 5432,
+                'database': 'test_analytics',
+                'schema': 'raw',
+                'user': 'test_user',
+                'password': 'test_pass'
+            },
+            'should_pass': True
+        },
+        # Invalid configurations
+        {
+            'name': 'missing_host',
+            'db_type': DatabaseType.SOURCE,
+            'schema': None,
+            'config': {
+                'port': 3306,
+                'database': 'test_db',
+                'user': 'test_user',
+                'password': 'test_pass'
+            },
+            'should_pass': False
+        },
+        {
+            'name': 'invalid_port',
+            'db_type': DatabaseType.SOURCE,
+            'schema': None,
+            'config': {
+                'host': 'localhost',
+                'port': 'invalid',
+                'database': 'test_db',
+                'user': 'test_user',
+                'password': 'test_pass'
+            },
+            'should_pass': False
+        }
+    ] 
