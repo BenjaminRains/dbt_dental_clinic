@@ -27,8 +27,8 @@ load_test_environment()
 os.environ['ETL_ENVIRONMENT'] = 'test'
 
 from etl_pipeline.core.postgres_schema import PostgresSchema as PostgresSchemaClass
-from etl_pipeline.core.schema_discovery import SchemaDiscovery
 from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.config.config_reader import ConfigReader
 
 # Import new configuration system
 from etl_pipeline.config import (
@@ -67,12 +67,12 @@ class TestPostgresSchemaRealIntegration:
         logger.info(f"TEST_POSTGRES_ANALYTICS_HOST: {os.getenv('TEST_POSTGRES_ANALYTICS_HOST')}")
         logger.info(f"TEST_POSTGRES_ANALYTICS_DB: {os.getenv('TEST_POSTGRES_ANALYTICS_DB')}")
         
-        # Print the connection string as seen by the Settings object
+        # Print the connection configuration as seen by the Settings object
         try:
-            conn_str = test_settings.get_connection_string(DatabaseType.SOURCE)
-            logger.info(f"Test SOURCE connection string: {conn_str}")
+            source_config = test_settings.get_database_config(DatabaseType.SOURCE)
+            logger.info(f"Test SOURCE connection config: {source_config}")
         except Exception as e:
-            logger.error(f"Could not get test source connection string: {e}")
+            logger.error(f"Could not get test source connection config: {e}")
         yield
     
     @pytest.fixture
@@ -81,38 +81,19 @@ class TestPostgresSchemaRealIntegration:
         return test_settings
 
     @pytest.fixture
-    def real_postgres_schema_instance(self, postgres_schema_test_settings):
-        """Create a real PostgresSchema instance using test environment."""
-        # Use new ConnectionFactory with test settings
-        mysql_engine = ConnectionFactory.get_replication_connection(postgres_schema_test_settings)
-        postgres_engine = ConnectionFactory.get_analytics_connection(postgres_schema_test_settings, PostgresSchema.RAW)
-        
-        # Get database names from settings
-        mysql_config = postgres_schema_test_settings.get_database_config(DatabaseType.REPLICATION)
-        postgres_config = postgres_schema_test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
-        
-        mysql_db = mysql_config['database']
-        postgres_db = postgres_config['database']
-        
-        return PostgresSchemaClass(
-            mysql_engine=mysql_engine,
-            postgres_engine=postgres_engine,
-            mysql_db=mysql_db,
-            postgres_db=postgres_db,
-            postgres_schema=PostgresSchema.RAW.value
-        )
+    def config_reader(self):
+        """Create a ConfigReader instance for schema configuration."""
+        return ConfigReader()
 
     @pytest.fixture
-    def real_schema_discovery_instance(self, postgres_schema_test_settings):
-        """Create a real SchemaDiscovery instance using test environment."""
-        # Use new ConnectionFactory with test settings
-        mysql_engine = ConnectionFactory.get_replication_connection(postgres_schema_test_settings)
-        
-        # Get database name from settings
-        mysql_config = postgres_schema_test_settings.get_database_config(DatabaseType.REPLICATION)
-        mysql_db = mysql_config['database']
-        
-        return SchemaDiscovery(mysql_engine, mysql_db)
+    def real_postgres_schema_instance(self, postgres_schema_test_settings):
+        """Create a real PostgresSchema instance using test environment."""
+        return PostgresSchemaClass(
+            postgres_schema=PostgresSchema.RAW.value,
+            settings=postgres_schema_test_settings
+        )
+
+
 
     @pytest.fixture
     def postgres_schema_test_tables(self):
@@ -161,7 +142,7 @@ class TestPostgresSchemaRealIntegration:
 
     @pytest.mark.integration
     @pytest.mark.order(3)
-    def test_real_schema_adaptation(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
+    def test_real_schema_adaptation(self, populated_test_databases, real_postgres_schema_instance, config_reader):
         """Test real schema adaptation from MySQL to PostgreSQL."""
         # Use standardized test data manager
         manager = populated_test_databases
@@ -170,8 +151,12 @@ class TestPostgresSchemaRealIntegration:
         patient_count = manager.get_patient_count(DatabaseType.REPLICATION)
         assert patient_count > 0, "Test patient data not found in replication database"
         
-        # Get MySQL schema for patient table
-        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
+        # Get table configuration from ConfigReader
+        patient_config = config_reader.get_table_config('patient')
+        assert patient_config is not None, "Patient table configuration not found"
+        
+        # Get MySQL schema for patient table using the new method
+        mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL schema adaptation
@@ -183,7 +168,7 @@ class TestPostgresSchemaRealIntegration:
 
     @pytest.mark.integration
     @pytest.mark.order(3)
-    def test_real_postgres_table_creation(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
+    def test_real_postgres_table_creation(self, populated_test_databases, real_postgres_schema_instance, config_reader):
         """Test real PostgreSQL table creation from MySQL schema."""
         # Use standardized test data manager
         manager = populated_test_databases
@@ -192,8 +177,12 @@ class TestPostgresSchemaRealIntegration:
         patient_count = manager.get_patient_count(DatabaseType.REPLICATION)
         assert patient_count > 0, "Test patient data not found in replication database"
         
-        # Get MySQL schema for patient table
-        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
+        # Get table configuration from ConfigReader
+        patient_config = config_reader.get_table_config('patient')
+        assert patient_config is not None, "Patient table configuration not found"
+        
+        # Get MySQL schema for patient table using the new method
+        mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL PostgreSQL table creation
@@ -209,7 +198,7 @@ class TestPostgresSchemaRealIntegration:
             assert result.fetchone() is not None, "Patient table not created in PostgreSQL"
 
     @pytest.mark.integration
-    def test_real_schema_verification(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
+    def test_real_schema_verification(self, populated_test_databases, real_postgres_schema_instance, config_reader):
         """Test real schema verification between MySQL and PostgreSQL."""
         # Use standardized test data manager
         manager = populated_test_databases
@@ -218,8 +207,12 @@ class TestPostgresSchemaRealIntegration:
         patient_count = manager.get_patient_count(DatabaseType.REPLICATION)
         assert patient_count > 0, "Test patient data not found in replication database"
         
-        # Get MySQL schema for patient table
-        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
+        # Get table configuration from ConfigReader
+        patient_config = config_reader.get_table_config('patient')
+        assert patient_config is not None, "Patient table configuration not found"
+        
+        # Get MySQL schema for patient table using the new method
+        mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Create PostgreSQL table
@@ -230,7 +223,7 @@ class TestPostgresSchemaRealIntegration:
         assert result, "Schema verification failed"
 
     @pytest.mark.integration
-    def test_real_boolean_type_detection(self, test_data_manager, real_postgres_schema_instance, real_schema_discovery_instance):
+    def test_real_boolean_type_detection(self, test_data_manager, real_postgres_schema_instance, config_reader):
         """Test real boolean type detection for TINYINT columns."""
         # Set up boolean test data using standardized methods
         test_data_manager.setup_patient_data(include_all_fields=True, database_types=[DatabaseType.REPLICATION])
@@ -239,8 +232,12 @@ class TestPostgresSchemaRealIntegration:
         patient_count = test_data_manager.get_patient_count(DatabaseType.REPLICATION)
         assert patient_count > 0, "Test patient data not found in replication database"
         
-        # Get MySQL schema for patient table (contains boolean fields)
-        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
+        # Get table configuration from ConfigReader
+        patient_config = config_reader.get_table_config('patient')
+        assert patient_config is not None, "Patient table configuration not found"
+        
+        # Get MySQL schema for patient table (contains boolean fields) using the new method
+        mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL boolean type detection through schema adaptation
@@ -254,7 +251,7 @@ class TestPostgresSchemaRealIntegration:
         assert '"Position" boolean' in pg_create_statement, "Position should be detected as boolean"
 
     @pytest.mark.integration
-    def test_real_multiple_table_schema_conversion(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance, postgres_schema_test_tables):
+    def test_real_multiple_table_schema_conversion(self, populated_test_databases, real_postgres_schema_instance, config_reader, postgres_schema_test_tables):
         """Test schema conversion for multiple tables with real data."""
         # Use standardized test data manager
         manager = populated_test_databases
@@ -270,8 +267,12 @@ class TestPostgresSchemaRealIntegration:
         for table in postgres_schema_test_tables:
             logger.info(f"Testing schema conversion for table: {table}")
             
-            # Get MySQL schema
-            mysql_schema = real_schema_discovery_instance.get_table_schema(table)
+            # Get table configuration from ConfigReader
+            table_config = config_reader.get_table_config(table)
+            assert table_config is not None, f"Table configuration not found for {table}"
+            
+            # Get MySQL schema using the new method
+            mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql(table)
             assert mysql_schema is not None, f"MySQL schema discovery failed for {table}"
             
             # Adapt schema
@@ -290,7 +291,7 @@ class TestPostgresSchemaRealIntegration:
             logger.info(f"Successfully converted schema for table: {table}")
 
     @pytest.mark.integration
-    def test_real_type_conversion_accuracy(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
+    def test_real_type_conversion_accuracy(self, populated_test_databases, real_postgres_schema_instance, config_reader):
         """Test real type conversion accuracy for various MySQL types."""
         # Use standardized test data manager
         manager = populated_test_databases
@@ -299,8 +300,12 @@ class TestPostgresSchemaRealIntegration:
         patient_count = manager.get_patient_count(DatabaseType.REPLICATION)
         assert patient_count > 0, "Test patient data not found in replication database"
         
-        # Get MySQL schema for patient table (has various data types)
-        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
+        # Get table configuration from ConfigReader
+        patient_config = config_reader.get_table_config('patient')
+        assert patient_config is not None, "Patient table configuration not found"
+        
+        # Get MySQL schema for patient table (has various data types) using the new method
+        mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test REAL type conversion
@@ -335,8 +340,8 @@ class TestPostgresSchemaRealIntegration:
         assert not result, "Should fail for non-existent table"
 
     @pytest.mark.integration
-    def test_real_schema_discovery_integration(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
-        """Test real SchemaDiscovery integration with PostgresSchema."""
+    def test_real_config_reader_integration(self, populated_test_databases, real_postgres_schema_instance, config_reader):
+        """Test real ConfigReader integration with PostgresSchema."""
         # Use standardized test data manager
         manager = populated_test_databases
         
@@ -344,14 +349,19 @@ class TestPostgresSchemaRealIntegration:
         patient_count = manager.get_patient_count(DatabaseType.REPLICATION)
         assert patient_count > 0, "Test patient data not found in replication database"
         
-        # Test that SchemaDiscovery is properly integrated
-        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
-        assert mysql_schema is not None, "SchemaDiscovery integration failed"
-        assert 'create_statement' in mysql_schema, "SchemaDiscovery create_statement not found"
+        # Test that ConfigReader is properly integrated
+        patient_config = config_reader.get_table_config('patient')
+        assert patient_config is not None, "ConfigReader integration failed"
+        assert 'primary_key' in patient_config, "Patient table configuration missing primary_key"
         
-        # Test schema adaptation using SchemaDiscovery output
+        # Test schema discovery using the new method
+        mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql('patient')
+        assert mysql_schema is not None, "Schema discovery integration failed"
+        assert 'create_statement' in mysql_schema, "Schema discovery create_statement not found"
+        
+        # Test schema adaptation using schema discovery output
         pg_create_statement = real_postgres_schema_instance.adapt_schema('patient', mysql_schema)
-        assert pg_create_statement is not None, "Schema adaptation with SchemaDiscovery failed"
+        assert pg_create_statement is not None, "Schema adaptation with schema discovery failed"
 
     @pytest.mark.integration
     def test_real_data_type_analysis(self, populated_test_databases, real_postgres_schema_instance):
@@ -376,7 +386,7 @@ class TestPostgresSchemaRealIntegration:
         assert pg_type == 'boolean', f"Position should be detected as boolean, got {pg_type}"
 
     @pytest.mark.integration
-    def test_real_schema_cache_functionality(self, populated_test_databases, real_postgres_schema_instance, real_schema_discovery_instance):
+    def test_real_schema_cache_functionality(self, populated_test_databases, real_postgres_schema_instance, config_reader):
         """Test real schema cache functionality."""
         # Use standardized test data manager
         manager = populated_test_databases
@@ -385,8 +395,12 @@ class TestPostgresSchemaRealIntegration:
         patient_count = manager.get_patient_count(DatabaseType.REPLICATION)
         assert patient_count > 0, "Test patient data not found in replication database"
         
-        # Get MySQL schema for patient table
-        mysql_schema = real_schema_discovery_instance.get_table_schema('patient')
+        # Get table configuration from ConfigReader
+        patient_config = config_reader.get_table_config('patient')
+        assert patient_config is not None, "Patient table configuration not found"
+        
+        # Get MySQL schema for patient table using the new method
+        mysql_schema = real_postgres_schema_instance.get_table_schema_from_mysql('patient')
         assert mysql_schema is not None, "MySQL schema discovery failed"
         
         # Test schema adaptation multiple times (should use cache)
