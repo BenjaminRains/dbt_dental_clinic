@@ -6,6 +6,7 @@ This module contains fixtures related to:
 - Test environment setup
 - Global settings management
 - Pytest configuration
+- Database connection environment variables
 """
 
 import os
@@ -37,7 +38,12 @@ def load_test_environment():
 load_test_environment()
 
 # Import new configuration system components
-from etl_pipeline.config import reset_settings, create_test_settings, DatabaseType, PostgresSchema
+from etl_pipeline.config import (
+    reset_settings,
+    create_test_settings,
+    DatabaseType,
+    PostgresSchema
+)
 
 
 @pytest.fixture(autouse=True)
@@ -229,4 +235,79 @@ def pytest_collection_modifyitems(config, items):
         if "database" in item.name.lower():
             item.add_marker(pytest.mark.database)
         if "external" in item.name.lower():
-            item.add_marker(pytest.mark.external) 
+            item.add_marker(pytest.mark.external)
+
+
+@pytest.fixture
+def environment_detection_test_cases():
+    """Test cases for environment detection."""
+    return [
+        # (env_vars, expected_environment, description)
+        ({'ETL_ENVIRONMENT': 'test'}, 'test', 'ETL_ENVIRONMENT takes precedence'),
+        ({'ENVIRONMENT': 'production'}, 'production', 'ENVIRONMENT used when ETL_ENVIRONMENT not set'),
+        ({'APP_ENV': 'development'}, 'development', 'APP_ENV used when others not set'),
+        ({}, 'production', 'Default to production when no environment vars set'),
+        ({'ETL_ENVIRONMENT': 'invalid'}, 'production', 'Invalid environment defaults to production'),
+    ]
+
+
+@pytest.fixture
+def database_environment_mappings():
+    """Database environment variable mappings for testing."""
+    return {
+        DatabaseType.SOURCE: {
+            'host': 'OPENDENTAL_SOURCE_HOST',
+            'port': 'OPENDENTAL_SOURCE_PORT',
+            'database': 'OPENDENTAL_SOURCE_DB',
+            'user': 'OPENDENTAL_SOURCE_USER',
+            'password': 'OPENDENTAL_SOURCE_PASSWORD'
+        },
+        DatabaseType.REPLICATION: {
+            'host': 'MYSQL_REPLICATION_HOST',
+            'port': 'MYSQL_REPLICATION_PORT',
+            'database': 'MYSQL_REPLICATION_DB',
+            'user': 'MYSQL_REPLICATION_USER',
+            'password': 'MYSQL_REPLICATION_PASSWORD'
+        },
+        DatabaseType.ANALYTICS: {
+            'host': 'POSTGRES_ANALYTICS_HOST',
+            'port': 'POSTGRES_ANALYTICS_PORT',
+            'database': 'POSTGRES_ANALYTICS_DB',
+            'schema': 'POSTGRES_ANALYTICS_SCHEMA',
+            'user': 'POSTGRES_ANALYTICS_USER',
+            'password': 'POSTGRES_ANALYTICS_PASSWORD'
+        }
+    }
+
+
+@pytest.fixture
+def test_environment_prefixes():
+    """Test environment prefixes for different database types."""
+    return {
+        'test': 'TEST_',
+        'production': '',
+        'development': 'DEV_'
+    }
+
+
+@pytest.fixture
+def schema_environment_variables():
+    """Schema-specific environment variables for testing."""
+    return {
+        PostgresSchema.RAW: {
+            'schema': 'raw',
+            'env_var': 'POSTGRES_ANALYTICS_SCHEMA'
+        },
+        PostgresSchema.STAGING: {
+            'schema': 'staging',
+            'env_var': 'POSTGRES_ANALYTICS_SCHEMA'
+        },
+        PostgresSchema.INTERMEDIATE: {
+            'schema': 'intermediate',
+            'env_var': 'POSTGRES_ANALYTICS_SCHEMA'
+        },
+        PostgresSchema.MARTS: {
+            'schema': 'marts',
+            'env_var': 'POSTGRES_ANALYTICS_SCHEMA'
+        }
+    } 
