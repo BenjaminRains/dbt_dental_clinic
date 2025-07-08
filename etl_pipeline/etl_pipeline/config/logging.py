@@ -205,14 +205,14 @@ class ETLLogger:
         """
         self.info(f"[PASS] Completed {operation} for table: {table_name} | Records: {records_count}")
 
-    def log_etl_error(self, table_name: str, operation: str, error: Exception) -> None:
+    def log_etl_error(self, table_name: str, operation: str, error: Optional[Exception]) -> None:
         """
         Log an error during an ETL operation.
         
         Args:
             table_name: Name of the table being processed
             operation: Type of operation that failed
-            error: Exception that occurred
+            error: Exception that occurred (can be None)
         """
         self.error(f"[FAIL] Error during {operation} for table: {table_name} | Error: {error}")
 
