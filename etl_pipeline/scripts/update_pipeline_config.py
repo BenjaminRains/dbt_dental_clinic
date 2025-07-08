@@ -14,6 +14,7 @@ import logging
 
 # Import modern connection handling
 from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.config import get_settings
 from sqlalchemy import text
 
 # Configure logging
@@ -116,22 +117,23 @@ class PipelineConfigManager:
         try:
             logger.info(f"Validating connection configuration for {db_type}")
             
-            # Map db_type to ConnectionFactory methods
+            # Map db_type to ConnectionFactory methods with settings injection
+            settings = get_settings()
             connection_methods = {
-                'source': ConnectionFactory.get_opendental_source_connection,
-                'replication': ConnectionFactory.get_mysql_replication_connection,
-                'analytics': ConnectionFactory.get_postgres_analytics_connection,
-                'analytics_raw': ConnectionFactory.get_opendental_analytics_raw_connection,
-                'analytics_staging': ConnectionFactory.get_opendental_analytics_staging_connection,
-                'analytics_intermediate': ConnectionFactory.get_opendental_analytics_intermediate_connection,
-                'analytics_marts': ConnectionFactory.get_opendental_analytics_marts_connection,
-                'source_test': ConnectionFactory.get_opendental_source_test_connection,
-                'replication_test': ConnectionFactory.get_mysql_replication_test_connection,
-                'analytics_test': ConnectionFactory.get_postgres_analytics_test_connection,
-                'analytics_raw_test': ConnectionFactory.get_opendental_analytics_raw_test_connection,
-                'analytics_staging_test': ConnectionFactory.get_opendental_analytics_staging_test_connection,
-                'analytics_intermediate_test': ConnectionFactory.get_opendental_analytics_intermediate_test_connection,
-                'analytics_marts_test': ConnectionFactory.get_opendental_analytics_marts_test_connection
+                'source': lambda: ConnectionFactory.get_source_connection(settings),
+                'replication': lambda: ConnectionFactory.get_replication_connection(settings),
+                'analytics': lambda: ConnectionFactory.get_analytics_connection(settings),
+                'analytics_raw': lambda: ConnectionFactory.get_analytics_raw_connection(settings),
+                'analytics_staging': lambda: ConnectionFactory.get_analytics_staging_connection(settings),
+                'analytics_intermediate': lambda: ConnectionFactory.get_analytics_intermediate_connection(settings),
+                'analytics_marts': lambda: ConnectionFactory.get_analytics_marts_connection(settings),
+                'source_test': lambda: ConnectionFactory.get_source_connection(settings),
+                'replication_test': lambda: ConnectionFactory.get_replication_connection(settings),
+                'analytics_test': lambda: ConnectionFactory.get_analytics_connection(settings),
+                'analytics_raw_test': lambda: ConnectionFactory.get_analytics_raw_connection(settings),
+                'analytics_staging_test': lambda: ConnectionFactory.get_analytics_staging_connection(settings),
+                'analytics_intermediate_test': lambda: ConnectionFactory.get_analytics_intermediate_connection(settings),
+                'analytics_marts_test': lambda: ConnectionFactory.get_analytics_marts_connection(settings)
             }
             
             if db_type not in connection_methods:
