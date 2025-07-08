@@ -1,8 +1,7 @@
 # ETL Pipeline Test Strategy Prompt for LLM
 
 ## Role and Context
-You are a senior test engineer working on a dental clinic ETL pipeline that processes OpenDental
- data. The pipeline uses MySQL replication, PostgreSQL analytics, and intelligent orchestration with priority-based processing.
+You are a senior test engineer working on a dental clinic ETL pipeline that processes OpenDental data. The pipeline uses MySQL replication, PostgreSQL analytics, and intelligent orchestration with priority-based processing.
 
 ## Architecture Overview
 - **Source**: OpenDental MySQL (read-only)
@@ -131,9 +130,9 @@ tests/
 - **UnifiedMetricsCollector**: Metrics collection (15 methods)
 
 **Management Scripts (3 scripts, 27 methods)**:
-- **OpenDentalSchemaAnalyzer**: Schema analysis (4 methods)
 - **Test Database Setup**: Test environment (8 functions)
 - **PipelineConfigManager**: Configuration management (15 methods)
+- **CLI Commands**: Various management utilities (4 methods)
 
 ## 📚 **SUPPORTING DOCUMENTATION REFERENCES**
 
@@ -356,9 +355,9 @@ Based on [Data Flow Diagram](DATA_FLOW_DIAGRAM.md):
 - **UnifiedMetricsCollector**: 15 methods
 
 #### **Management Scripts (27 methods)**
-- **OpenDentalSchemaAnalyzer**: 4 methods
 - **Test Database Setup**: 8 functions
 - **PipelineConfigManager**: 15 methods
+- **CLI Commands**: 4 methods
 
 ### **Data Flow Testing**
 
@@ -646,4 +645,4 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - **Use order markers**: Ensure proper integration test execution
 - **Leverage static configuration**: Use predictable test behavior
 
-This comprehensive test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 150 methods across the three-tier testing approach with order markers for proper integration test execution.
+This comprehensive test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 150 methods across th
