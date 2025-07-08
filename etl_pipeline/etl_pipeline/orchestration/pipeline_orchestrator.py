@@ -65,7 +65,8 @@ from ..config import Settings, DatabaseType, ConfigReader
 logger = logging.getLogger(__name__)
 
 class PipelineOrchestrator:
-    def __init__(self, config_path: Optional[str] = None, environment: str = 'production'):
+    def __init__(self, config_path: Optional[str] = None, environment: str = 'production', 
+                 settings: Optional[Settings] = None, config_reader: Optional[ConfigReader] = None):
         """
         Initialize the pipeline orchestrator.
         
@@ -75,12 +76,23 @@ class PipelineOrchestrator:
         Args:
             config_path: Path to the configuration file (used for ConfigReader)
             environment: Environment name ('production', 'test') for database connections
+            settings: Optional Settings instance to use (for testing)
+            config_reader: Optional ConfigReader instance to use (for testing)
         """
-        self.settings = Settings(environment=environment)
-        self.config_path = config_path or "etl_pipeline/config/tables.yml"
+        if settings is not None:
+            self.settings = settings
+            self.config_path = None
+        else:
+            self.settings = Settings(environment=environment)
+            self.config_path = config_path or "etl_pipeline/config/tables.yml"
         
-        # Create ConfigReader immediately
-        self.config_reader = ConfigReader(self.config_path)
+        # Use injected config_reader or create default one
+        if config_reader is not None:
+            self.config_reader = config_reader
+        else:
+            # Ensure we have a valid config path
+            config_path_str = self.config_path or "etl_pipeline/config/tables.yml"
+            self.config_reader = ConfigReader(config_path_str)
         
         # Initialize components with ConfigReader (will be set during connection initialization)
         self.table_processor = None
@@ -91,6 +103,12 @@ class PipelineOrchestrator:
         
         # Track initialization state
         self._initialized = False
+    
+    # Test configuration creation moved to fixtures
+    # This method is deprecated and will be removed
+    def _create_test_config_reader(self):
+        """DEPRECATED: Use dependency injection instead."""
+        raise NotImplementedError("Test configuration should be injected via fixtures")
         
     def initialize_connections(self) -> bool:
         """
