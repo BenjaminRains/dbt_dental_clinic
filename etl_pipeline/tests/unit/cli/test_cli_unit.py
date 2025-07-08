@@ -475,7 +475,7 @@ class TestCLIStatusUnit:
         """Test successful status command execution."""
         # Setup mock connection factory
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         # Setup mock metrics collector
         mock_metrics = MagicMock()
@@ -503,8 +503,8 @@ class TestCLIStatusUnit:
         assert "patient" in result.output
         
         # Verify mocks were called correctly
-        mock_conn_factory.get_opendental_analytics_raw_connection.assert_called_once()
-        mock_metrics_class.assert_called_once_with(analytics_engine=mock_analytics_engine)
+        mock_conn_factory.get_analytics_raw_connection.assert_called_once()
+        mock_metrics_class.assert_called_once_with(analytics_engine=mock_analytics_engine, settings=mock_conn_factory.get_analytics_raw_connection.call_args[0][0])
         mock_metrics.get_pipeline_status.assert_called_once_with(table=None)
     
     @pytest.mark.unit
@@ -515,7 +515,7 @@ class TestCLIStatusUnit:
         """Test status command with JSON format."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -541,7 +541,7 @@ class TestCLIStatusUnit:
         """Test status command with summary format."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -569,7 +569,7 @@ class TestCLIStatusUnit:
         """Test status command with specific table filter."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -596,7 +596,7 @@ class TestCLIStatusUnit:
         """Test status command with output file."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -622,7 +622,7 @@ class TestCLIStatusUnit:
         """Test status command when metrics collection fails."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -669,9 +669,9 @@ class TestCLIConnectionTestingUnit:
         mock_analytics_engine.connect.return_value.__exit__.return_value = None
         
         # Setup connection factory
-        mock_conn_factory.get_opendental_source_connection.return_value = mock_source_engine
-        mock_conn_factory.get_mysql_replication_connection.return_value = mock_repl_engine
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_source_connection.return_value = mock_source_engine
+        mock_conn_factory.get_replication_connection.return_value = mock_repl_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         # Test connection testing command
         result = self.runner.invoke(cli, ['test-connections'])
@@ -692,7 +692,7 @@ class TestCLIConnectionTestingUnit:
     def test_test_connections_failure(self, mock_conn_factory):
         """Test connection testing when connections fail."""
         # Setup connection factory to raise exception
-        mock_conn_factory.get_opendental_source_connection.side_effect = Exception("Connection failed")
+        mock_conn_factory.get_source_connection.side_effect = Exception("Connection failed")
         
         # Test connection testing command
         result = self.runner.invoke(cli, ['test-connections'])
