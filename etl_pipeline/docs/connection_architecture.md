@@ -12,10 +12,11 @@ The ETL pipeline uses a clean, modern connection architecture with explicit envi
 - **ConnectionFactory Class**: Pure connection logic - creates database engines from configuration
 - **ConnectionManager Class**: Connection lifecycle management - handles pooling, retries, and cleanup
 
-### 2. Explicit Environment Separation
-- **Production Environment**: Uses base environment variables (e.g., `OPENDENTAL_SOURCE_HOST`)
-- **Test Environment**: Uses `TEST_` prefixed variables (e.g., `TEST_OPENDENTAL_SOURCE_HOST`)
-- **No Automatic Detection**: Method names explicitly indicate the environment
+### 2. Unified Interface with Settings Injection
+- **Environment Agnostic**: Same methods work for both production and test environments
+- **Settings Injection**: All connection methods take Settings objects as parameters
+- **Provider Pattern**: Configuration source determined by Settings provider
+- **No Method Proliferation**: Single method per database type, not per environment
 
 ### 3. Configuration Provider Pattern (Dependency Injection)
 - **ConfigProvider Interface**: Abstract base for all configuration sources
@@ -143,7 +144,7 @@ Settings → Provider → Configuration Sources
 settings.get_database_config(DatabaseType.SOURCE)
 settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
 
-# ❌ WRONG - Using raw strings (will cause errors)
+# Using raw strings (will cause errors)
 settings.get_database_config("source")  # Type error
 settings.get_database_config("analytics", "raw")  # Type error
 
@@ -221,10 +222,10 @@ def _get_base_config(self, db_type: DatabaseType) -> Dict:
 
 ### 3. ConnectionFactory Class (`etl_pipeline/core/connections.py`)
 
-**Purpose**: Creates database engines with proper configuration and connection pooling.
+**Purpose**: Creates database engines with proper configuration and connection pooling using Settings injection.
 
 **Key Features**:
-- Explicit production and test connection methods
+- **Unified interface** with Settings injection for all environments
 - Connection pooling with configurable parameters
 - Database-specific optimizations (MySQL vs PostgreSQL)
 - Comprehensive error handling and logging
@@ -239,39 +240,29 @@ DEFAULT_POOL_TIMEOUT = 30
 DEFAULT_POOL_RECYCLE = 1800  # 30 minutes
 ```
 
-#### Production Connection Methods
+#### Unified Connection Methods with Settings Injection
 
-All production methods use environment variables **without** the `TEST_` prefix:
-
-```python
-# MySQL Production Connections
-ConnectionFactory.get_opendental_source_connection()           # Uses OPENDENTAL_SOURCE_* env vars
-ConnectionFactory.get_mysql_replication_connection()          # Uses MYSQL_REPLICATION_* env vars
-
-# PostgreSQL Production Connections
-ConnectionFactory.get_postgres_analytics_connection()         # Uses POSTGRES_ANALYTICS_* env vars
-ConnectionFactory.get_opendental_analytics_raw_connection()   # Uses POSTGRES_ANALYTICS_* env vars + raw schema
-ConnectionFactory.get_opendental_analytics_staging_connection() # Uses POSTGRES_ANALYTICS_* env vars + staging schema
-ConnectionFactory.get_opendental_analytics_intermediate_connection() # Uses POSTGRES_ANALYTICS_* env vars + intermediate schema
-ConnectionFactory.get_opendental_analytics_marts_connection() # Uses POSTGRES_ANALYTICS_* env vars + marts schema
-```
-
-#### Test Connection Methods
-
-All test methods use environment variables **with** the `TEST_` prefix:
+All connection methods use **Settings injection** for environment-agnostic operation:
 
 ```python
-# MySQL Test Connections
-ConnectionFactory.get_opendental_source_test_connection()     # Uses TEST_OPENDENTAL_SOURCE_* env vars
-ConnectionFactory.get_mysql_replication_test_connection()    # Uses TEST_MYSQL_REPLICATION_* env vars
+# Unified interface - works for both production and test environments
+ConnectionFactory.get_source_connection(settings)                    # MySQL source database
+ConnectionFactory.get_replication_connection(settings)              # MySQL replication database
+ConnectionFactory.get_analytics_connection(settings, schema)        # PostgreSQL analytics with schema
 
-# PostgreSQL Test Connections
-ConnectionFactory.get_postgres_analytics_test_connection()   # Uses TEST_POSTGRES_ANALYTICS_* env vars
-ConnectionFactory.get_opendental_analytics_raw_test_connection() # Uses TEST_POSTGRES_ANALYTICS_* env vars + raw schema
-ConnectionFactory.get_opendental_analytics_staging_test_connection() # Uses TEST_POSTGRES_ANALYTICS_* env vars + staging schema
-ConnectionFactory.get_opendental_analytics_intermediate_test_connection() # Uses TEST_POSTGRES_ANALYTICS_* env vars + intermediate schema
-ConnectionFactory.get_opendental_analytics_marts_test_connection() # Uses TEST_POSTGRES_ANALYTICS_* env vars + marts schema
+# Convenience methods for common schemas
+ConnectionFactory.get_analytics_raw_connection(settings)            # PostgreSQL raw schema
+ConnectionFactory.get_analytics_staging_connection(settings)        # PostgreSQL staging schema
+ConnectionFactory.get_analytics_intermediate_connection(settings)   # PostgreSQL intermediate schema
+ConnectionFactory.get_analytics_marts_connection(settings)          # PostgreSQL marts schema
 ```
+
+**Benefits of Unified Interface**:
+- **Single method per database type** - no method proliferation
+- **Environment agnostic** - same method works for production and test
+- **Settings injection** - follows dependency injection principles
+- **Type safety** - uses DatabaseType and PostgresSchema enums
+- **Consistent API** - uniform interface across all environments
 
 ### 4. ConnectionManager Class (`etl_pipeline/core/connections.py`)
 
@@ -286,9 +277,11 @@ ConnectionFactory.get_opendental_analytics_marts_test_connection() # Uses TEST_P
 **Usage Pattern**:
 ```python
 from etl_pipeline.core import create_connection_manager
+from etl_pipeline.config import get_settings
 
-# Efficient batch processing
-source_engine = ConnectionFactory.get_opendental_source_connection()
+# Efficient batch processing with Settings injection
+settings = get_settings()
+source_engine = ConnectionFactory.get_source_connection(settings)
 with create_connection_manager(source_engine) as manager:
     result1 = manager.execute_with_retry("SELECT COUNT(*) FROM patient")
     result2 = manager.execute_with_retry("SELECT COUNT(*) FROM appointment")
@@ -354,13 +347,17 @@ TEST_POSTGRES_ANALYTICS_PASSWORD=test_analytics_password
 
 ```python
 from etl_pipeline.core import ConnectionFactory, create_connection_manager
+from etl_pipeline.config import get_settings
 
 def replicate_table(table_name: str):
     """Replicate a table from source to replication database."""
     
-    # Get production connections (explicit)
-    source_engine = ConnectionFactory.get_opendental_source_connection()
-    replication_engine = ConnectionFactory.get_mysql_replication_connection()
+    # Get settings for environment-agnostic connections
+    settings = get_settings()
+    
+    # Get connections using unified interface
+    source_engine = ConnectionFactory.get_source_connection(settings)
+    replication_engine = ConnectionFactory.get_replication_connection(settings)
     
     # Use connection manager for efficient batch operations
     with create_connection_manager(source_engine) as source_manager:
@@ -377,32 +374,44 @@ def replicate_table(table_name: str):
 ### 2. Schema-Specific Operations
 
 ```python
+from etl_pipeline.config import get_settings
+
+# Get settings for environment-agnostic connections
+settings = get_settings()
+
 # Raw schema operations
-raw_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+raw_engine = ConnectionFactory.get_analytics_raw_connection(settings)
 
 # Staging schema operations
-staging_engine = ConnectionFactory.get_opendental_analytics_staging_connection()
+staging_engine = ConnectionFactory.get_analytics_staging_connection(settings)
 
 # Intermediate schema operations
-intermediate_engine = ConnectionFactory.get_opendental_analytics_intermediate_connection()
+intermediate_engine = ConnectionFactory.get_analytics_intermediate_connection(settings)
 
 # Marts schema operations
-marts_engine = ConnectionFactory.get_opendental_analytics_marts_connection()
+marts_engine = ConnectionFactory.get_analytics_marts_connection(settings)
 ```
 
 ### 3. Test Code
 
 ```python
-# Unit tests use test connections (explicit)
+from etl_pipeline.config import create_test_settings
+
+# Unit tests use test settings with provider injection
 def test_replicate_table():
-    source_engine = ConnectionFactory.get_opendental_source_test_connection()
-    replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
+    test_settings = create_test_settings(
+        env_vars={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
+    )
+    source_engine = ConnectionFactory.get_source_connection(test_settings)
+    replication_engine = ConnectionFactory.get_replication_connection(test_settings)
     # Test logic here
 
-# Integration tests use test connections (explicit)
+# Integration tests use test environment settings
 def test_real_connection():
     try:
-        engine = ConnectionFactory.get_opendental_source_test_connection()
+        # Uses test environment settings automatically
+        settings = get_settings()  # Will use test environment
+        engine = ConnectionFactory.get_source_connection(settings)
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             assert result.fetchone()[0] == 1
@@ -569,29 +578,7 @@ def test_real_config_loading():
     assert config['database'] is not None
 ```
 
-### Legacy Mock-Based Tests (Deprecated)
 
-**Note**: The following approach is deprecated in favor of the provider pattern:
-
-```python
-# ❌ OLD APPROACH - Direct environment variable mocking
-@patch('etl_pipeline.core.connections.create_engine')
-def test_connection_creation_legacy(self, mock_create_engine):
-    with patch.dict(os.environ, {
-        'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
-        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
-    }):
-        engine = ConnectionFactory.get_opendental_source_test_connection()
-        # Test with mocked engine
-
-# ✅ NEW APPROACH - Provider-based testing
-def test_connection_creation_provider():
-    test_provider = DictConfigProvider(
-        env={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
-    )
-    settings = Settings(environment='test', provider=test_provider)
-    # Test with provider-injected configuration
-```
 
 ### Test Settings Creation with Enums
 
@@ -679,35 +666,35 @@ if not settings.validate_configs():
 - Maximum 3 retry attempts by default
 - Fresh connection creation on retry
 
-## Migration Guide
+## Usage Guide
 
-### From Legacy Code
+### Connection Creation
 
-1. **Replace ambiguous methods**:
+1. **Get Settings for Environment-Agnostic Connections**:
    ```python
-   # OLD (ambiguous)
-   engine = ConnectionFactory.get_source_connection()
+   from etl_pipeline.config import get_settings
    
-   # NEW (explicit)
-   engine = ConnectionFactory.get_opendental_source_connection()  # Production
-   # OR
-   engine = ConnectionFactory.get_opendental_source_test_connection()  # Test
+   # Get settings for current environment
+   settings = get_settings()  # Environment determined by settings
+   engine = ConnectionFactory.get_source_connection(settings)  # Works for both prod/test
    ```
 
-2. **Use environment variables**:
+2. **Use Settings for Configuration Access**:
    ```python
-   # OLD
-   host = os.getenv('DB_HOST')
-   port = os.getenv('DB_PORT')
-   
-   # NEW
-   # All handled automatically by ConnectionFactory with explicit environment separation
+   # Get configuration from settings
+   settings = get_settings()
+   config = settings.get_database_config(DatabaseType.SOURCE)
+   host = config['host']
+   port = config['port']
    ```
 
-3. **Add proper error handling**:
+3. **Add Proper Error Handling with Settings Validation**:
    ```python
    try:
-       engine = ConnectionFactory.get_opendental_source_connection()
+       settings = get_settings()
+       if not settings.validate_configs():
+           raise ValueError("Configuration validation failed")
+       engine = ConnectionFactory.get_source_connection(settings)
    except ValueError as e:
        logger.error(f"Configuration error: {e}")
        raise
@@ -723,26 +710,20 @@ if not settings.validate_configs():
 - **Testing**: Use `DictConfigProvider` for injected test configuration
 - **Never**: Mix provider types in the same code path
 
-### 2. Always Use Explicit Environment Methods
-- Production code: Use methods without "test" in the name
-- Test code: Use methods with "test" in the name
+### 2. Always Use Settings Injection
+- Production code: Use `get_settings()` for production environment
+- Test code: Use `create_test_settings()` for test environment
 - Never mix environments in the same code path
 
 ### 3. Use Provider-Based Testing
 ```python
-# ✅ GOOD - Use DictConfigProvider for unit tests
+# Use DictConfigProvider for unit tests
 def test_database_config():
     test_provider = DictConfigProvider(
         env={'OPENDENTAL_SOURCE_HOST': 'test-host'}
     )
     settings = Settings(environment='test', provider=test_provider)
     # Test with injected configuration
-
-# ❌ BAD - Don't mock environment variables directly
-def test_database_config_legacy():
-    with patch.dict(os.environ, {'OPENDENTAL_SOURCE_HOST': 'test-host'}):
-        settings = Settings()  # Still uses FileConfigProvider
-        # Test with real environment variables
 ```
 
 ### 4. Use ConnectionManager for Batch Operations
@@ -755,11 +736,11 @@ def test_database_config_legacy():
 - Fail fast if configuration is incomplete
 - Clear error messages for missing variables
 
-### 6. Use Schema-Specific Connections
-- Raw schema: `get_opendental_analytics_raw_connection()`
-- Staging schema: `get_opendental_analytics_staging_connection()`
-- Intermediate schema: `get_opendental_analytics_intermediate_connection()`
-- Marts schema: `get_opendental_analytics_marts_connection()`
+### 6. Use Schema-Specific Connections with Settings Injection
+- Raw schema: `get_analytics_raw_connection(settings)`
+- Staging schema: `get_analytics_staging_connection(settings)`
+- Intermediate schema: `get_analytics_intermediate_connection(settings)`
+- Marts schema: `get_analytics_marts_connection(settings)`
 
 ### 7. Handle Errors Gracefully
 - Catch specific exception types
@@ -768,25 +749,25 @@ def test_database_config_legacy():
 
 ### 8. Use Factory Functions for Testing
 ```python
-# ✅ GOOD - Use factory functions for common test scenarios
+# Use factory functions for common test scenarios
 test_settings = create_test_settings(
     pipeline_config={'connections': {'source': {'pool_size': 5}}},
     env_vars={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
 )
 
-# ✅ GOOD - Use enums for type safety
+# Use enums for type safety
 config = test_settings.get_database_config(DatabaseType.SOURCE, PostgresSchema.RAW)
 ```
 
 ## Architecture Benefits
 
 1. **Clear Separation of Concerns**: Configuration vs. connection logic
-2. **Explicit Environment Separation**: No accidental cross-contamination
-3. **Safety**: Impossible to accidentally use wrong environment
+2. **Unified Interface**: Single method per database type, environment-agnostic
+3. **Safety**: Impossible to accidentally use wrong environment through Settings injection
 4. **Performance**: Optimized connection pooling and caching
-5. **Maintainability**: Clean, well-documented architecture
+5. **Maintainability**: Clean, well-documented architecture with no method proliferation
 6. **Testability**: Easy to mock and test individual components with provider pattern
-7. **Flexibility**: Easy to add new database types or environments
+7. **Flexibility**: Easy to add new database types without environment-specific methods
 8. **Reliability**: Comprehensive error handling and retry logic
 9. **Type Safety**: Enums prevent invalid database types and schema names
 10. **Developer Experience**: IDE autocomplete and refactoring support for database types
@@ -795,6 +776,7 @@ config = test_settings.get_database_config(DatabaseType.SOURCE, PostgresSchema.R
 13. **No Environment Pollution**: Tests don't affect real environment variables
 14. **Consistent API**: Same interface for production and test configuration
 15. **Extensibility**: Easy to add new provider types (e.g., database, API, etc.)
+16. **No Method Proliferation**: Single method per database type instead of separate production/test methods
 
 ## Provider Pattern Benefits
 
