@@ -121,6 +121,15 @@ This document provides a comprehensive list of all methods across the ETL pipeli
 - **`create_mysql_engine(host, port, database, user, password, **kwargs)`** - Create MySQL engine with proper configuration
 - **`create_postgres_engine(host, port, database, user, password, schema, **kwargs)`** - Create PostgreSQL engine with configuration
 
+#### Unified Interface Methods (Settings Injection)
+- **`get_source_connection(settings)`** - Get source database connection using provided settings
+- **`get_replication_connection(settings)`** - Get replication database connection using provided settings
+- **`get_analytics_connection(settings, schema)`** - Get analytics database connection using provided settings and schema
+- **`get_analytics_raw_connection(settings)`** - Get analytics raw schema connection using provided settings
+- **`get_analytics_staging_connection(settings)`** - Get analytics staging schema connection using provided settings
+- **`get_analytics_intermediate_connection(settings)`** - Get analytics intermediate schema connection using provided settings
+- **`get_analytics_marts_connection(settings)`** - Get analytics marts schema connection using provided settings
+
 #### Class: `ConnectionManager`
 - **`__init__(engine, max_retries, retry_delay)`** - Initialize connection manager with retry settings
 - **`get_connection()`** - Get database connection from pool
