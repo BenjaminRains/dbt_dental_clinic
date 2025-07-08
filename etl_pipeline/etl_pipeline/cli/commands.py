@@ -12,11 +12,11 @@ cli/main.py (Click group)
     ↓
 cli/commands.py (run function) ← This file
     ↓
-PipelineOrchestrator (new framework)
+PipelineOrchestrator (framework)
     ↓
 main.py (pipeline execution)
 
-ALTERNATIVE FLOW (legacy):
+CLI FLOW:
 User runs: python -m etl_pipeline
     ↓
 __main__.py (redirects to CLI)
@@ -27,7 +27,7 @@ cli/main.py (Click-based)
     ↓
 cli/commands.py (actual commands) ← This file
     ↓
-PipelineOrchestrator (new framework)
+PipelineOrchestrator (framework)
     ↓
 main.py (pipeline execution)
 
