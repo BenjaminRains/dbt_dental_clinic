@@ -115,26 +115,26 @@ def mock_connection_factory_methods():
     factory = MagicMock()
     
     # Production connection methods
-    factory.get_opendental_source_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_mysql_replication_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_postgres_analytics_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_source_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_replication_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_connection = MagicMock(return_value=MagicMock(spec=Engine))
     
     # Schema-specific production analytics connections
-    factory.get_opendental_analytics_raw_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_opendental_analytics_staging_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_opendental_analytics_intermediate_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_opendental_analytics_marts_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_raw_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_staging_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_intermediate_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_marts_connection = MagicMock(return_value=MagicMock(spec=Engine))
     
-    # Test connection methods
-    factory.get_opendental_source_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_mysql_replication_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_postgres_analytics_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    # Test connection methods (use same methods with test settings)
+    factory.get_source_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_replication_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_connection = MagicMock(return_value=MagicMock(spec=Engine))
     
-    # Schema-specific test analytics connections
-    factory.get_opendental_analytics_raw_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_opendental_analytics_staging_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_opendental_analytics_intermediate_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_opendental_analytics_marts_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    # Schema-specific test analytics connections (use same methods with test settings)
+    factory.get_analytics_raw_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_staging_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_intermediate_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_analytics_marts_connection = MagicMock(return_value=MagicMock(spec=Engine))
     
     return factory
 
@@ -261,21 +261,21 @@ def connection_factory_test_cases():
     return [
         # Production connection methods
         {
-            'method': 'get_opendental_source_connection',
+            'method': 'get_source_connection',
             'environment': 'production',
             'db_type': DatabaseType.SOURCE,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
-            'method': 'get_mysql_replication_connection',
+            'method': 'get_replication_connection',
             'environment': 'production',
             'db_type': DatabaseType.REPLICATION,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
-            'method': 'get_postgres_analytics_connection',
+            'method': 'get_analytics_connection',
             'environment': 'production',
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.RAW,
@@ -283,28 +283,28 @@ def connection_factory_test_cases():
         },
         # Schema-specific production analytics connections
         {
-            'method': 'get_opendental_analytics_raw_connection',
+            'method': 'get_analytics_raw_connection',
             'environment': 'production',
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.RAW,
             'expected_engine_type': 'postgresql'
         },
         {
-            'method': 'get_opendental_analytics_staging_connection',
+            'method': 'get_analytics_staging_connection',
             'environment': 'production',
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.STAGING,
             'expected_engine_type': 'postgresql'
         },
         {
-            'method': 'get_opendental_analytics_intermediate_connection',
+            'method': 'get_analytics_intermediate_connection',
             'environment': 'production',
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.INTERMEDIATE,
             'expected_engine_type': 'postgresql'
         },
         {
-            'method': 'get_opendental_analytics_marts_connection',
+            'method': 'get_analytics_marts_connection',
             'environment': 'production',
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.MARTS,
