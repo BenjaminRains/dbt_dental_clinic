@@ -71,8 +71,8 @@ class SimpleMySQLReplicator:
         self.tables_config_path = tables_config_path
         
         # Get database connections using explicit production methods
-        self.source_engine = ConnectionFactory.get_opendental_source_connection()
-        self.target_engine = ConnectionFactory.get_mysql_replication_connection()
+        self.source_engine = ConnectionFactory.get_source_connection(self.settings)
+        self.target_engine = ConnectionFactory.get_replication_connection(self.settings)
         
         # Load configuration
         self.table_configs = self._load_configuration()
