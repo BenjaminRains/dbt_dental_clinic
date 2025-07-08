@@ -309,7 +309,6 @@ def get_test_patient_data(include_all_fields: bool = True) -> List[Dict[str, Any
     
     Args:
         include_all_fields: Ignored - always returns complete patient records.
-                           Kept for backward compatibility.
     
     Returns:
         List of patient data dictionaries
