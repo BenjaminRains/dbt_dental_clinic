@@ -155,6 +155,8 @@ class Settings:
         """Get PostgreSQL analytics marts schema connection configuration."""
         return self.get_analytics_connection_config(PostgresSchema.MARTS)
     
+
+    
     def _get_base_config(self, db_type: DatabaseType) -> Dict:
         """Get base configuration from environment variables."""
         env_mapping = self.ENV_MAPPINGS[db_type]
