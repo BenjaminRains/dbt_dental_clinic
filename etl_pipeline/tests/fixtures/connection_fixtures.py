@@ -6,6 +6,7 @@ This module contains fixtures related to:
 - Connection factory mocks
 - Engine mocks for different database types
 - Connection utilities
+- ConnectionFactory method mocks
 """
 
 import pytest
@@ -14,36 +15,20 @@ from sqlalchemy.engine import Engine
 from sqlalchemy import create_engine, text
 from typing import Dict, Any
 
+# Import new configuration system components
+from etl_pipeline.config import DatabaseType, PostgresSchema
+
 
 @pytest.fixture
 def database_types():
     """Database type enums for testing."""
-    try:
-        from etl_pipeline.config import DatabaseType
-        return DatabaseType
-    except ImportError:
-        # Fallback mock for testing
-        class MockDatabaseType:
-            SOURCE = 'source'
-            REPLICATION = 'replication'
-            ANALYTICS = 'analytics'
-        return MockDatabaseType
+    return DatabaseType
 
 
 @pytest.fixture
 def postgres_schemas():
     """PostgreSQL schema enums for testing."""
-    try:
-        from etl_pipeline.config import PostgresSchema
-        return PostgresSchema
-    except ImportError:
-        # Fallback mock for testing
-        class MockPostgresSchema:
-            RAW = 'raw'
-            STAGING = 'staging'
-            INTERMEDIATE = 'intermediate'
-            MARTS = 'marts'
-        return MockPostgresSchema
+    return PostgresSchema
 
 
 @pytest.fixture(scope="session")
@@ -121,6 +106,36 @@ def mock_connection_factory():
         return mock_engine
     
     factory.get_connection = mock_get_connection
+    return factory
+
+
+@pytest.fixture
+def mock_connection_factory_methods():
+    """Mock ConnectionFactory methods following new architecture."""
+    factory = MagicMock()
+    
+    # Production connection methods
+    factory.get_opendental_source_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_mysql_replication_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_postgres_analytics_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    
+    # Schema-specific production analytics connections
+    factory.get_opendental_analytics_raw_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_opendental_analytics_staging_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_opendental_analytics_intermediate_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_opendental_analytics_marts_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    
+    # Test connection methods
+    factory.get_opendental_source_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_mysql_replication_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_postgres_analytics_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    
+    # Schema-specific test analytics connections
+    factory.get_opendental_analytics_raw_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_opendental_analytics_staging_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_opendental_analytics_intermediate_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    factory.get_opendental_analytics_marts_test_connection = MagicMock(return_value=MagicMock(spec=Engine))
+    
     return factory
 
 
@@ -237,4 +252,203 @@ def mock_connection_timeout():
             self.message = message
             super().__init__(self.message)
     
-    return MockConnectionTimeout 
+    return MockConnectionTimeout
+
+
+@pytest.fixture
+def connection_factory_test_cases():
+    """Test cases for ConnectionFactory methods."""
+    return [
+        # Production connection methods
+        {
+            'method': 'get_opendental_source_connection',
+            'environment': 'production',
+            'db_type': DatabaseType.SOURCE,
+            'schema': None,
+            'expected_engine_type': 'mysql'
+        },
+        {
+            'method': 'get_mysql_replication_connection',
+            'environment': 'production',
+            'db_type': DatabaseType.REPLICATION,
+            'schema': None,
+            'expected_engine_type': 'mysql'
+        },
+        {
+            'method': 'get_postgres_analytics_connection',
+            'environment': 'production',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.RAW,
+            'expected_engine_type': 'postgresql'
+        },
+        # Schema-specific production analytics connections
+        {
+            'method': 'get_opendental_analytics_raw_connection',
+            'environment': 'production',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.RAW,
+            'expected_engine_type': 'postgresql'
+        },
+        {
+            'method': 'get_opendental_analytics_staging_connection',
+            'environment': 'production',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.STAGING,
+            'expected_engine_type': 'postgresql'
+        },
+        {
+            'method': 'get_opendental_analytics_intermediate_connection',
+            'environment': 'production',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.INTERMEDIATE,
+            'expected_engine_type': 'postgresql'
+        },
+        {
+            'method': 'get_opendental_analytics_marts_connection',
+            'environment': 'production',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.MARTS,
+            'expected_engine_type': 'postgresql'
+        },
+        # Test connection methods
+        {
+            'method': 'get_opendental_source_test_connection',
+            'environment': 'test',
+            'db_type': DatabaseType.SOURCE,
+            'schema': None,
+            'expected_engine_type': 'mysql'
+        },
+        {
+            'method': 'get_mysql_replication_test_connection',
+            'environment': 'test',
+            'db_type': DatabaseType.REPLICATION,
+            'schema': None,
+            'expected_engine_type': 'mysql'
+        },
+        {
+            'method': 'get_postgres_analytics_test_connection',
+            'environment': 'test',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.RAW,
+            'expected_engine_type': 'postgresql'
+        },
+        # Schema-specific test analytics connections
+        {
+            'method': 'get_opendental_analytics_raw_test_connection',
+            'environment': 'test',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.RAW,
+            'expected_engine_type': 'postgresql'
+        },
+        {
+            'method': 'get_opendental_analytics_staging_test_connection',
+            'environment': 'test',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.STAGING,
+            'expected_engine_type': 'postgresql'
+        },
+        {
+            'method': 'get_opendental_analytics_intermediate_test_connection',
+            'environment': 'test',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.INTERMEDIATE,
+            'expected_engine_type': 'postgresql'
+        },
+        {
+            'method': 'get_opendental_analytics_marts_test_connection',
+            'environment': 'test',
+            'db_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.MARTS,
+            'expected_engine_type': 'postgresql'
+        }
+    ]
+
+
+@pytest.fixture
+def mock_connection_manager():
+    """Mock ConnectionManager for testing."""
+    manager = MagicMock()
+    
+    # Mock context manager methods
+    manager.__enter__ = MagicMock(return_value=manager)
+    manager.__exit__ = MagicMock(return_value=None)
+    
+    # Mock connection methods
+    manager.get_connection = MagicMock(return_value=MagicMock())
+    manager.close_connection = MagicMock()
+    manager.execute_with_retry = MagicMock(return_value=MagicMock())
+    
+    return manager
+
+
+@pytest.fixture
+def connection_string_test_cases():
+    """Test cases for connection string building."""
+    return [
+        # MySQL connection strings
+        {
+            'db_type': DatabaseType.SOURCE,
+            'config': {
+                'host': 'localhost',
+                'port': 3306,
+                'database': 'test_db',
+                'user': 'test_user',
+                'password': 'test_pass',
+                'connect_timeout': 10,
+                'read_timeout': 30,
+                'write_timeout': 30,
+                'charset': 'utf8mb4'
+            },
+            'expected_prefix': 'mysql+pymysql://',
+            'expected_params': ['connect_timeout=10', 'read_timeout=30', 'write_timeout=30', 'charset=utf8mb4']
+        },
+        # PostgreSQL connection strings
+        {
+            'db_type': DatabaseType.ANALYTICS,
+            'config': {
+                'host': 'localhost',
+                'port': 5432,
+                'database': 'test_analytics',
+                'user': 'test_user',
+                'password': 'test_pass',
+                'schema': 'raw',
+                'connect_timeout': 10,
+                'application_name': 'etl_pipeline'
+            },
+            'expected_prefix': 'postgresql+psycopg2://',
+            'expected_params': ['connect_timeout=10', 'application_name=etl_pipeline', 'options=-csearch_path%3Draw']
+        }
+    ]
+
+
+@pytest.fixture
+def pool_config_test_cases():
+    """Test cases for connection pool configuration."""
+    return [
+        {
+            'name': 'default_pool',
+            'pool_size': 5,
+            'max_overflow': 10,
+            'pool_timeout': 30,
+            'pool_recycle': 1800,
+            'expected_config': {
+                'pool_size': 5,
+                'max_overflow': 10,
+                'pool_timeout': 30,
+                'pool_recycle': 1800
+            }
+        },
+        {
+            'name': 'custom_pool',
+            'pool_size': 10,
+            'max_overflow': 20,
+            'pool_timeout': 60,
+            'pool_recycle': 3600,
+            'expected_config': {
+                'pool_size': 10,
+                'max_overflow': 20,
+                'pool_timeout': 60,
+                'pool_recycle': 3600
+            }
+        }
+    ] 
