@@ -37,6 +37,26 @@ from .config_fixtures import (
     test_tables_config
 )
 
+from .cli_fixtures import (
+    cli_runner,
+    cli_test_config,
+    cli_test_env_vars,
+    cli_config_provider,
+    cli_test_settings,
+    cli_test_config_reader,
+    cli_with_injected_config,
+    temp_cli_config_file,
+    temp_tables_config_file,
+    mock_cli_database_connections,
+    cli_expected_outputs,
+    cli_error_cases,
+    cli_performance_thresholds,
+    cli_output_validators,
+    cli_integration_test_data,
+    cli_mock_orchestrator,
+    cli_mock_metrics_collector
+)
+
 from .test_data_fixtures import (
     standard_patient_test_data,
     incremental_patient_test_data,
@@ -71,6 +91,25 @@ __all__ = [
     # Config fixtures
     'test_pipeline_config',
     'test_tables_config',
+    
+    # CLI fixtures
+    'cli_runner',
+    'cli_test_config',
+    'cli_test_env_vars',
+    'cli_config_provider',
+    'cli_test_settings',
+    'cli_test_config_reader',
+    'cli_with_injected_config',
+    'temp_cli_config_file',
+    'temp_tables_config_file',
+    'mock_cli_database_connections',
+    'cli_expected_outputs',
+    'cli_error_cases',
+    'cli_performance_thresholds',
+    'cli_output_validators',
+    'cli_integration_test_data',
+    'cli_mock_orchestrator',
+    'cli_mock_metrics_collector',
     
     # Test data fixtures
     'standard_patient_test_data',
