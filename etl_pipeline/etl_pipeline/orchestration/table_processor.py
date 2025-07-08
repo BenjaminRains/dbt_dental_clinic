@@ -88,7 +88,7 @@ class TableProcessor:
         """
         self.settings = Settings(environment=environment)
         self.config_path = config_path or "etl_pipeline/config/tables.yml"
-        self.metrics = UnifiedMetricsCollector(use_test_connections=(environment == 'test'))
+        self.metrics = UnifiedMetricsCollector(use_test_connections=(environment == 'test'), settings=self.settings)
         
         # Create ConfigReader immediately if not provided
         if config_reader is None:
@@ -130,17 +130,17 @@ class TableProcessor:
             if source_engine:
                 self.opendental_source_engine = source_engine
             else:
-                self.opendental_source_engine = ConnectionFactory.get_opendental_source_connection()
+                self.opendental_source_engine = ConnectionFactory.get_source_connection(self.settings)
                 
             if replication_engine:
                 self.mysql_replication_engine = replication_engine
             else:
-                self.mysql_replication_engine = ConnectionFactory.get_mysql_replication_connection()
+                self.mysql_replication_engine = ConnectionFactory.get_replication_connection(self.settings)
                 
             if analytics_engine:
                 self.postgres_analytics_engine = analytics_engine
             else:
-                self.postgres_analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+                self.postgres_analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
             
             # Cache database names to avoid repeated lookups
             self._source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
