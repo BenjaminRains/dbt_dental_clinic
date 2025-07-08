@@ -1,13 +1,12 @@
 """
 Integration tests for ETL pipeline configuration system.
 
-This module tests the new configuration architecture with:
+This module tests the configuration architecture with:
 - Real database connections using clean configuration
 - Configuration loading and validation
 - Environment detection and variable prefixing
 - Connection string generation
 - Error handling scenarios
-- Legacy compatibility during transition
 
 Refactored according to architectural refactor guide and conftest refactor plan.
 """
@@ -219,24 +218,23 @@ class TestConfigurationLoading:
         print("✅ Database configuration access working correctly")
 
     @pytest.mark.config
-    def test_connection_string_generation(self, test_env_vars):
-        """Test connection string generation with new interface."""
+    def test_database_config_generation(self, test_env_vars):
+        """Test database configuration generation with new interface."""
         settings = create_test_settings(env_vars=test_env_vars)
         
-        # Test MySQL connection string
-        mysql_conn_str = settings.get_connection_string(DatabaseType.SOURCE)
-        assert 'mysql+pymysql://' in mysql_conn_str
-        assert '192.168.2.10' in mysql_conn_str
-        assert 'test_opendental' in mysql_conn_str
+        # Test MySQL configuration
+        mysql_config = settings.get_database_config(DatabaseType.SOURCE)
+        assert mysql_config['host'] == '192.168.2.10'
+        assert mysql_config['database'] == 'test_opendental'
+        assert mysql_config['user'] == 'test_user'
         
-        # Test PostgreSQL connection string with schema
-        postgres_conn_str = settings.get_connection_string(DatabaseType.ANALYTICS, PostgresSchema.RAW)
-        assert 'postgresql+psycopg2://' in postgres_conn_str
-        assert 'localhost' in postgres_conn_str
-        assert 'test_opendental_analytics' in postgres_conn_str
-        assert 'search_path%3Draw' in postgres_conn_str
+        # Test PostgreSQL configuration with schema
+        postgres_config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
+        assert postgres_config['host'] == 'localhost'
+        assert postgres_config['database'] == 'test_opendental_analytics'
+        assert postgres_config['schema'] == 'raw'
         
-        print("✅ Connection string generation working correctly")
+        print("✅ Database configuration generation working correctly")
 
     @pytest.mark.config
     def test_configuration_validation(self, test_env_vars, test_pipeline_config, test_tables_config):
