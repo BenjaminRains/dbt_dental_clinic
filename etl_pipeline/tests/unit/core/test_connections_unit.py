@@ -7,36 +7,39 @@ from unittest.mock import patch, MagicMock
 import os
 from dotenv import load_dotenv
 
-from etl_pipeline.core.connections import ConnectionFactory, ConnectionManager
+from etl_pipeline.core.connections import ConnectionFactory, ConnectionManager, create_connection_manager
 from etl_pipeline.config import (
     create_test_settings, 
     DatabaseType, 
     PostgresSchema,
     reset_settings
 )
+from etl_pipeline.config.providers import DictConfigProvider
 
 # Load environment variables for testing
 load_dotenv()
 
 class TestConnectionFactoryUnit:
-    """Unit tests for ConnectionFactory using pure mocks."""
+    """Unit tests for ConnectionFactory using pure mocks with provider pattern."""
     
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_source_connection_success(self, mock_create_engine):
-        """Test successful source connection creation with new settings-based approach."""
+        """Test successful source connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings with environment variables
-        test_env_vars = {
-            'OPENDENTAL_SOURCE_HOST': 'prod-host',
-            'OPENDENTAL_SOURCE_PORT': '3306',
-            'OPENDENTAL_SOURCE_DB': 'opendental',
-            'OPENDENTAL_SOURCE_USER': 'readonly_user',
-            'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass'
-        }
+        # Create test provider with injected configuration
+        test_provider = DictConfigProvider(
+            env={
+                'OPENDENTAL_SOURCE_HOST': 'prod-host',
+                'OPENDENTAL_SOURCE_PORT': '3306',
+                'OPENDENTAL_SOURCE_DB': 'opendental',
+                'OPENDENTAL_SOURCE_USER': 'readonly_user',
+                'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_source_connection(settings)
         
@@ -47,21 +50,23 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_source_connection_test_environment(self, mock_create_engine):
-        """Test successful test source connection creation."""
+        """Test successful test source connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings with TEST_ prefixed environment variables
-        test_env_vars = {
-            'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
-            'TEST_OPENDENTAL_SOURCE_PORT': '3306',
-            'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
-            'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-            'ETL_ENVIRONMENT': 'test'
-        }
+        # Create test provider with TEST_ prefixed environment variables
+        test_provider = DictConfigProvider(
+            env={
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'ETL_ENVIRONMENT': 'test'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_source_connection(settings)
         
@@ -70,15 +75,19 @@ class TestConnectionFactoryUnit:
         call_args = mock_create_engine.call_args[0][0]
         assert 'mysql+pymysql://test_user:test_pass@test-host:3306/test_opendental' in call_args
 
-    def test_get_source_connection_missing_env_vars(self):
-        """Test source connection with missing environment variables."""
-        # Create test settings with missing environment variables
-        test_env_vars = {
-            'OPENDENTAL_SOURCE_HOST': 'prod-host',
-            # Missing other required variables
-        }
+    @patch('etl_pipeline.core.connections.create_engine')
+    @patch.dict(os.environ, {}, clear=True)  # Clear all environment variables
+    def test_get_source_connection_missing_env_vars(self, mock_create_engine):
+        """Test source connection with missing environment variables using provider pattern."""
+        # Create test provider with missing environment variables
+        test_provider = DictConfigProvider(
+            env={
+                'OPENDENTAL_SOURCE_HOST': 'prod-host',
+                # Missing other required variables
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         with pytest.raises(ValueError) as exc_info:
             ConnectionFactory.get_source_connection(settings)
@@ -87,20 +96,22 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_replication_connection_success(self, mock_create_engine):
-        """Test successful replication connection creation."""
+        """Test successful replication connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings with environment variables
-        test_env_vars = {
-            'MYSQL_REPLICATION_HOST': 'repl-host',
-            'MYSQL_REPLICATION_PORT': '3306',
-            'MYSQL_REPLICATION_DB': 'opendental_repl',
-            'MYSQL_REPLICATION_USER': 'repl_user',
-            'MYSQL_REPLICATION_PASSWORD': 'repl_pass'
-        }
+        # Create test provider with injected configuration
+        test_provider = DictConfigProvider(
+            env={
+                'MYSQL_REPLICATION_HOST': 'repl-host',
+                'MYSQL_REPLICATION_PORT': '3306',
+                'MYSQL_REPLICATION_DB': 'opendental_repl',
+                'MYSQL_REPLICATION_USER': 'repl_user',
+                'MYSQL_REPLICATION_PASSWORD': 'repl_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_replication_connection(settings)
         
@@ -111,21 +122,23 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_replication_connection_test_environment(self, mock_create_engine):
-        """Test successful test replication connection creation."""
+        """Test successful test replication connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings with TEST_ prefixed environment variables
-        test_env_vars = {
-            'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
-            'TEST_MYSQL_REPLICATION_PORT': '3306',
-            'TEST_MYSQL_REPLICATION_DB': 'test_opendental_repl',
-            'TEST_MYSQL_REPLICATION_USER': 'test_replication_user',
-            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
-            'ETL_ENVIRONMENT': 'test'
-        }
+        # Create test provider with TEST_ prefixed environment variables
+        test_provider = DictConfigProvider(
+            env={
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3306',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_repl',
+                'TEST_MYSQL_REPLICATION_USER': 'test_replication_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                'ETL_ENVIRONMENT': 'test'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_replication_connection(settings)
         
@@ -134,15 +147,19 @@ class TestConnectionFactoryUnit:
         call_args = mock_create_engine.call_args[0][0]
         assert 'mysql+pymysql://test_replication_user:test_repl_pass@test-repl-host:3306/test_opendental_repl' in call_args
 
-    def test_get_replication_connection_missing_env_vars(self):
-        """Test replication connection with missing environment variables."""
-        # Create test settings with missing environment variables
-        test_env_vars = {
-            'MYSQL_REPLICATION_HOST': 'repl-host',
-            # Missing other required variables
-        }
+    @patch('etl_pipeline.core.connections.create_engine')
+    @patch.dict(os.environ, {}, clear=True)  # Clear all environment variables
+    def test_get_replication_connection_missing_env_vars(self, mock_create_engine):
+        """Test replication connection with missing environment variables using provider pattern."""
+        # Create test provider with missing environment variables
+        test_provider = DictConfigProvider(
+            env={
+                'MYSQL_REPLICATION_HOST': 'repl-host',
+                # Missing other required variables
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         with pytest.raises(ValueError) as exc_info:
             ConnectionFactory.get_replication_connection(settings)
@@ -151,21 +168,23 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_analytics_connection_success(self, mock_create_engine):
-        """Test successful analytics connection creation."""
+        """Test successful analytics connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings with environment variables
-        test_env_vars = {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_SCHEMA': 'raw',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }
+        # Create test provider with injected configuration
+        test_provider = DictConfigProvider(
+            env={
+                'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+                'POSTGRES_ANALYTICS_PORT': '5432',
+                'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+                'POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'POSTGRES_ANALYTICS_USER': 'analytics_user',
+                'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
         
@@ -176,22 +195,24 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_analytics_connection_test_environment(self, mock_create_engine):
-        """Test successful test analytics connection creation."""
+        """Test successful test analytics connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings with TEST_ prefixed environment variables
-        test_env_vars = {
-            'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
-            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass',
-            'ETL_ENVIRONMENT': 'test'
-        }
+        # Create test provider with TEST_ prefixed environment variables
+        test_provider = DictConfigProvider(
+            env={
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass',
+                'ETL_ENVIRONMENT': 'test'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
         
@@ -202,20 +223,22 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_analytics_connection_different_schemas(self, mock_create_engine):
-        """Test analytics connection creation with different schemas."""
+        """Test analytics connection creation with different schemas using provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings
-        test_env_vars = {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }
+        # Create test provider
+        test_provider = DictConfigProvider(
+            env={
+                'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+                'POSTGRES_ANALYTICS_PORT': '5432',
+                'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+                'POSTGRES_ANALYTICS_USER': 'analytics_user',
+                'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         # Test different schemas
         schemas_to_test = [
@@ -238,20 +261,22 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_analytics_raw_connection_success(self, mock_create_engine):
-        """Test successful analytics raw schema connection creation."""
+        """Test successful analytics raw schema connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings
-        test_env_vars = {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }
+        # Create test provider
+        test_provider = DictConfigProvider(
+            env={
+                'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+                'POSTGRES_ANALYTICS_PORT': '5432',
+                'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+                'POSTGRES_ANALYTICS_USER': 'analytics_user',
+                'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_analytics_raw_connection(settings)
         
@@ -264,20 +289,22 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_analytics_staging_connection_success(self, mock_create_engine):
-        """Test successful analytics staging schema connection creation."""
+        """Test successful analytics staging schema connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings
-        test_env_vars = {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }
+        # Create test provider
+        test_provider = DictConfigProvider(
+            env={
+                'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+                'POSTGRES_ANALYTICS_PORT': '5432',
+                'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+                'POSTGRES_ANALYTICS_USER': 'analytics_user',
+                'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_analytics_staging_connection(settings)
         
@@ -290,20 +317,22 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_analytics_intermediate_connection_success(self, mock_create_engine):
-        """Test successful analytics intermediate schema connection creation."""
+        """Test successful analytics intermediate schema connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings
-        test_env_vars = {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }
+        # Create test provider
+        test_provider = DictConfigProvider(
+            env={
+                'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+                'POSTGRES_ANALYTICS_PORT': '5432',
+                'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+                'POSTGRES_ANALYTICS_USER': 'analytics_user',
+                'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_analytics_intermediate_connection(settings)
         
@@ -316,20 +345,22 @@ class TestConnectionFactoryUnit:
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_get_analytics_marts_connection_success(self, mock_create_engine):
-        """Test successful analytics marts schema connection creation."""
+        """Test successful analytics marts schema connection creation with provider pattern."""
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         
-        # Create test settings
-        test_env_vars = {
-            'POSTGRES_ANALYTICS_HOST': 'analytics-host',
-            'POSTGRES_ANALYTICS_PORT': '5432',
-            'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
-            'POSTGRES_ANALYTICS_USER': 'analytics_user',
-            'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
-        }
+        # Create test provider
+        test_provider = DictConfigProvider(
+            env={
+                'POSTGRES_ANALYTICS_HOST': 'analytics-host',
+                'POSTGRES_ANALYTICS_PORT': '5432',
+                'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+                'POSTGRES_ANALYTICS_USER': 'analytics_user',
+                'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+            }
+        )
         
-        settings = create_test_settings(env_vars=test_env_vars)
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
         result = ConnectionFactory.get_analytics_marts_connection(settings)
         
@@ -341,33 +372,37 @@ class TestConnectionFactoryUnit:
         assert call_kwargs['connect_args']['options'] == '-csearch_path=marts'
 
     def test_connection_methods_use_correct_environment_variables(self):
-        """Test that production and test methods use different environment variables."""
+        """Test that production and test methods use different environment variables with provider pattern."""
         # Test that production and test methods use different environment variables
         with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine:
             mock_engine = MagicMock()
             mock_create_engine.return_value = mock_engine
             
             # Production environment variables
-            prod_env_vars = {
-                'OPENDENTAL_SOURCE_HOST': 'prod-host',
-                'OPENDENTAL_SOURCE_PORT': '3306',
-                'OPENDENTAL_SOURCE_DB': 'opendental',
-                'OPENDENTAL_SOURCE_USER': 'readonly_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass'
-            }
+            prod_provider = DictConfigProvider(
+                env={
+                    'OPENDENTAL_SOURCE_HOST': 'prod-host',
+                    'OPENDENTAL_SOURCE_PORT': '3306',
+                    'OPENDENTAL_SOURCE_DB': 'opendental',
+                    'OPENDENTAL_SOURCE_USER': 'readonly_user',
+                    'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass'
+                }
+            )
             
             # Test environment variables
-            test_env_vars = {
-                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
-                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
-                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'ETL_ENVIRONMENT': 'test'
-            }
+            test_provider = DictConfigProvider(
+                env={
+                    'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                    'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                    'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                    'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                    'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                    'ETL_ENVIRONMENT': 'test'
+                }
+            )
             
             # Test production method
-            prod_settings = create_test_settings(env_vars=prod_env_vars)
+            prod_settings = create_test_settings(env_vars=prod_provider.get_config('env'))
             ConnectionFactory.get_source_connection(prod_settings)
             prod_call_args = mock_create_engine.call_args[0][0]
             assert 'prod-host' in prod_call_args
@@ -378,7 +413,7 @@ class TestConnectionFactoryUnit:
             mock_create_engine.reset_mock()
             
             # Test test method
-            test_settings = create_test_settings(env_vars=test_env_vars)
+            test_settings = create_test_settings(env_vars=test_provider.get_config('env'))
             ConnectionFactory.get_source_connection(test_settings)
             test_call_args = mock_create_engine.call_args[0][0]
             assert 'test-host' in test_call_args
@@ -417,6 +452,70 @@ class TestConnectionFactoryUnit:
         assert "Missing required MySQL connection parameters" in str(exc_info.value)
         assert "port" in str(exc_info.value)
         assert "database" in str(exc_info.value)
+
+    def test_build_mysql_connection_string(self):
+        """Test MySQL connection string building."""
+        config = {
+            'host': 'test-host',
+            'port': 3306,
+            'database': 'test_db',
+            'user': 'test_user',
+            'password': 'test_pass',
+            'connect_timeout': 15,
+            'read_timeout': 45,
+            'write_timeout': 30,
+            'charset': 'utf8mb4'
+        }
+        
+        result = ConnectionFactory._build_mysql_connection_string(config)
+        
+        expected = (
+            "mysql+pymysql://test_user:test_pass@test-host:3306/test_db"
+            "?connect_timeout=15&read_timeout=45&write_timeout=30&charset=utf8mb4"
+        )
+        assert result == expected
+
+    def test_build_postgres_connection_string(self):
+        """Test PostgreSQL connection string building."""
+        config = {
+            'host': 'test-host',
+            'port': 5432,
+            'database': 'test_db',
+            'user': 'test_user',
+            'password': 'test_pass',
+            'schema': 'raw',
+            'connect_timeout': 15,
+            'application_name': 'etl_pipeline'
+        }
+        
+        result = ConnectionFactory._build_postgres_connection_string(config)
+        
+        expected = (
+            "postgresql+psycopg2://test_user:test_pass@test-host:5432/test_db"
+            "?connect_timeout=15&application_name=etl_pipeline"
+            "&options=-csearch_path%3Draw"
+        )
+        assert result == expected
+
+    def test_build_postgres_connection_string_no_schema(self):
+        """Test PostgreSQL connection string building without schema."""
+        config = {
+            'host': 'test-host',
+            'port': 5432,
+            'database': 'test_db',
+            'user': 'test_user',
+            'password': 'test_pass',
+            'connect_timeout': 15,
+            'application_name': 'etl_pipeline'
+        }
+        
+        result = ConnectionFactory._build_postgres_connection_string(config)
+        
+        expected = (
+            "postgresql+psycopg2://test_user:test_pass@test-host:5432/test_db"
+            "?connect_timeout=15&application_name=etl_pipeline"
+        )
+        assert result == expected
 
     @patch('etl_pipeline.core.connections.create_engine')
     def test_create_mysql_engine_success(self, mock_create_engine):
@@ -561,8 +660,6 @@ class TestConnectionFactoryUnit:
             )
         
         assert "Failed to create PostgreSQL connection to test_db.test_schema" in str(exc_info.value)
-
-
 
 
 class TestConnectionManagerUnit:
@@ -762,4 +859,30 @@ class TestConnectionManagerUnit:
                 raise ValueError("Test exception")
         
         # Connection should still be closed even with exception
-        mock_connection.close.assert_called_once() 
+        mock_connection.close.assert_called_once()
+
+
+class TestConnectionManagerFactoryUnit:
+    """Unit tests for create_connection_manager function."""
+    
+    def test_create_connection_manager(self):
+        """Test create_connection_manager function."""
+        mock_engine = MagicMock()
+        
+        manager = create_connection_manager(mock_engine, max_retries=5, retry_delay=2.0)
+        
+        assert isinstance(manager, ConnectionManager)
+        assert manager.engine == mock_engine
+        assert manager.max_retries == 5
+        assert manager.retry_delay == 2.0
+
+    def test_create_connection_manager_defaults(self):
+        """Test create_connection_manager function with default parameters."""
+        mock_engine = MagicMock()
+        
+        manager = create_connection_manager(mock_engine)
+        
+        assert isinstance(manager, ConnectionManager)
+        assert manager.engine == mock_engine
+        assert manager.max_retries == 3  # Default value
+        assert manager.retry_delay == 1.0  # Default value 
