@@ -57,7 +57,7 @@ load_test_environment()
 
 # Import new architectural components
 try:
-    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema, reset_settings
+    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema, reset_settings, get_settings
     from etl_pipeline.core.connections import ConnectionFactory
     # Import standardized test data directly to avoid pytest dependencies
     import sys
@@ -214,7 +214,8 @@ def setup_postgresql_test_database():
     
     try:
         # Use new ConnectionFactory with unified API
-        analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+        settings = get_settings()
+        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
         
         with analytics_engine.connect() as conn:
             # Create only the raw schema if it doesn't exist
@@ -387,10 +388,11 @@ def setup_mysql_test_database(database_type):
     logger.info(f"Setting up MySQL test {database_type.value} database...")
     
     try:
+        settings = get_settings()
         if database_type == DatabaseType.SOURCE:
-            engine = ConnectionFactory.get_opendental_source_connection()
+            engine = ConnectionFactory.get_source_connection(settings)
         elif database_type == DatabaseType.REPLICATION:
-            engine = ConnectionFactory.get_mysql_replication_connection()
+            engine = ConnectionFactory.get_replication_connection(settings)
         else:
             raise ValueError(f"Unsupported database type: {database_type}")
         
