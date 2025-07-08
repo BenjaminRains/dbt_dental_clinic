@@ -14,6 +14,9 @@
 | Multi-scenario test failures | [10.1](#101-multi-scenario-test-problems) | Split into separate test methods |
 | Exit code 2 instead of 0 (file not found) | [10.1.1](#1011-fix-file-dependencies) | Use temporary files |
 | Wrong error messages in sequence tests | [10.1.2](#1012-split-multi-scenario-tests) | Reset mocks between scenarios |
+| CLI output validation failures | [12.1](#121-cli-output-validation-patterns) | Match actual CLI output format |
+| Configuration file not found errors | [12.2](#122-configuration-file-testing-patterns) | Create temporary test files |
+| Complex configuration mocking | [12.3](#123-real-configuration-vs-mock-configuration) | Use real config with test data |
 
 ---
 
@@ -300,6 +303,111 @@ test_replication_engine = ConnectionFactory.get_mysql_replication_test_connectio
 test_analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
 ```
 
+### 9.3 CLI Integration Testing with Real Configuration
+**Problem**: CLI integration tests fail because they try to mock complex configuration systems that require real files
+**Context**: Integration tests that need to test actual CLI behavior with real database connections
+**Error Pattern**: 
+- `FileNotFoundError: Configuration file not found: etl_pipeline/config/tables.yml`
+- `AssertionError: "Would process specific tables" not in output` (wrong expected text)
+- Complex mocking that bypasses real configuration validation
+
+**Solutions**:
+
+#### 9.3.1 Use Temporary Configuration Files
+```python
+# ❌ WRONG - Mocking complex configuration system
+@patch('etl_pipeline.orchestration.pipeline_orchestrator.PipelineOrchestrator')
+def test_cli_dry_run(self, mock_orchestrator_class):
+    # Complex mock setup that doesn't match real behavior
+    mock_orchestrator = MagicMock()
+    mock_orchestrator_class.return_value = mock_orchestrator
+    # ... complex mock configuration
+
+# ✅ CORRECT - Use temporary real configuration files
+@pytest.fixture
+def cli_with_injected_config_and_reader(cli_test_settings, cli_test_config_reader):
+    """Fixture that sets up test environment for CLI commands using real configuration."""
+    
+    # Create a temporary tables.yml file for testing
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        test_tables_config = {
+            'tables': {
+                'patient': {'table_importance': 'critical', 'batch_size': 100},
+                'appointment': {'table_importance': 'important', 'batch_size': 50}
+            }
+        }
+        yaml.dump(test_tables_config, f)
+        temp_config_path = f.name
+    
+    # Use the real PipelineOrchestrator but patch the ConfigReader to use our temporary file
+    with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConfigReader') as mock_config_reader_class:
+        from etl_pipeline.config.config_reader import ConfigReader
+        
+        class TestConfigReader(ConfigReader):
+            def __init__(self, config_path=None):
+                # Always use our temporary config file regardless of what path is passed
+                super().__init__(temp_config_path)
+        
+        mock_config_reader_class.side_effect = TestConfigReader
+        
+        yield temp_config_path
+    
+    # Clean up temporary file
+    if os.path.exists(temp_config_path):
+        os.unlink(temp_config_path)
+```
+
+#### 9.3.2 Validate Actual CLI Output Patterns
+```python
+# ❌ WRONG - Expecting wrong output text
+def validate_dry_run_output(output: str, expected_tables: Optional[list] = None):
+    if expected_tables:
+        assert "Would process specific tables" in output  # WRONG TEXT
+
+# ✅ CORRECT - Match actual CLI output
+def validate_dry_run_output(output: str, expected_tables: Optional[list] = None):
+    if expected_tables:
+        assert f"Would process {len(expected_tables)} specific tables" in output  # CORRECT TEXT
+        for table in expected_tables:
+            assert table in output
+```
+
+#### 9.3.3 Test Real CLI Behavior, Not Mocked Behavior
+```python
+# ❌ WRONG - Testing mock behavior instead of real CLI
+@patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+def test_cli_dry_run(self, mock_orchestrator_class):
+    mock_orchestrator = MagicMock()
+    mock_orchestrator_class.return_value = mock_orchestrator
+    # Mock bypasses all real validation and processing
+    
+    result = cli_runner.invoke(cli, ['run', '--dry-run'])
+    assert result.exit_code == 0  # Tests mock, not real CLI
+
+# ✅ CORRECT - Test real CLI with real configuration
+def test_cli_dry_run_integration(self, cli_runner, cli_with_injected_config_and_reader):
+    """Test run command dry run with fixture-based configuration."""
+    # Use real CLI with temporary configuration file
+    result = cli_runner.invoke(cli, [
+        'run', '--dry-run', '--config', cli_with_injected_config_and_reader
+    ])
+    
+    # Verify real CLI behavior
+    assert result.exit_code == 0
+    assert "DRY RUN MODE - No changes will be made" in result.output
+    assert "CRITICAL: 1 tables" in result.output
+    assert "patient" in result.output
+```
+
+**Key Principles**:
+- **Use real configuration files** with temporary test data instead of complex mocking
+- **Test actual CLI output** by reading the implementation first
+- **Validate real behavior** with real database connections in integration tests
+- **Keep mocks simple** - only mock what you can't control (like file paths)
+- **Clean up resources** with proper fixture teardown
+
+**Related Sections**: [10.1.1](#1011-fix-file-dependencies), [10.1.4](#1014-mock-bypassing-validation), [4.1](#41-testing-real-logic-vs-mocks), [31](#31-test-expectations-vs-real-behavior)
+
 ## 10. Comprehensive Test Cleanup Issues
 
 ### 10.1 Multi-Scenario Test Problems
@@ -409,6 +517,119 @@ def test_invalid_config(self, mock_orchestrator_class):
 
 **Related Sections**: [2](#2-context-manager-protocol), [7](#7-error-scenarios-and-edge-cases), [9.1](#91-cli-command-testing)
 
+## 12. Advanced CLI Testing Patterns
+
+### 12.1 CLI Output Validation Patterns
+**Problem**: CLI output validation fails because expected text doesn't match actual output
+**Context**: Integration tests that validate CLI command output
+**Error Pattern**: `AssertionError: "expected text" not in output`
+
+**Solution**: Use dynamic text matching based on actual CLI implementation
+```python
+# ❌ WRONG - Hardcoded expected text
+def validate_dry_run_output(output: str, expected_tables: Optional[list] = None):
+    if expected_tables:
+        assert "Would process specific tables" in output  # WRONG - doesn't match actual
+
+# ✅ CORRECT - Dynamic text matching
+def validate_dry_run_output(output: str, expected_tables: Optional[list] = None):
+    if expected_tables:
+        assert f"Would process {len(expected_tables)} specific tables" in output  # CORRECT
+        for table in expected_tables:
+            assert table in output
+```
+
+**Key Principle**: Match the actual CLI output format, not assumptions
+
+### 12.2 Configuration File Testing Patterns
+**Problem**: Tests fail because they expect configuration files that don't exist
+**Context**: Integration tests that need real configuration files
+**Error Pattern**: `FileNotFoundError: Configuration file not found`
+
+**Solution**: Create temporary configuration files for testing
+```python
+# ❌ WRONG - Expect non-existent files
+result = cli_runner.invoke(cli, ['run', '--config', 'nonexistent.yml'])
+
+# ✅ CORRECT - Create temporary test files
+@pytest.fixture
+def temp_config_file():
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        test_config = {
+            'tables': {
+                'patient': {'table_importance': 'critical'},
+                'appointment': {'table_importance': 'important'}
+            }
+        }
+        yaml.dump(test_config, f)
+        temp_path = f.name
+    
+    yield temp_path
+    
+    # Clean up
+    if os.path.exists(temp_path):
+        os.unlink(temp_path)
+
+def test_with_config(temp_config_file):
+    result = cli_runner.invoke(cli, ['run', '--config', temp_config_file])
+    assert result.exit_code == 0
+```
+
+**Key Principle**: Use real files with test data instead of expecting non-existent files
+
+### 12.3 Real Configuration vs Mock Configuration
+**Problem**: Complex mocking of configuration systems that bypass real validation
+**Context**: Integration tests that need to test actual configuration loading
+**Error Pattern**: Mock bypasses configuration validation, making tests unrealistic
+
+**Solution**: Use real configuration classes with temporary test data
+```python
+# ❌ WRONG - Complex mocking that bypasses validation
+@patch('etl_pipeline.orchestration.pipeline_orchestrator.PipelineOrchestrator')
+def test_cli_dry_run(self, mock_orchestrator_class):
+    # Complex mock setup that doesn't match real behavior
+    mock_orchestrator = MagicMock()
+    mock_orchestrator_class.return_value = mock_orchestrator
+    # Mock bypasses all real configuration validation
+
+# ✅ CORRECT - Use real configuration with test data
+@pytest.fixture
+def cli_with_injected_config_and_reader(cli_test_settings, cli_test_config_reader):
+    """Fixture that sets up test environment for CLI commands using real configuration."""
+    
+    # Create a temporary tables.yml file for testing
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        test_tables_config = {
+            'tables': {
+                'patient': {'table_importance': 'critical', 'batch_size': 100},
+                'appointment': {'table_importance': 'important', 'batch_size': 50}
+            }
+        }
+        yaml.dump(test_tables_config, f)
+        temp_config_path = f.name
+    
+    # Use the real PipelineOrchestrator but patch the ConfigReader to use our temporary file
+    with patch('etl_pipeline.orchestration.pipeline_orchestrator.ConfigReader') as mock_config_reader_class:
+        from etl_pipeline.config.config_reader import ConfigReader
+        
+        class TestConfigReader(ConfigReader):
+            def __init__(self, config_path=None):
+                # Always use our temporary config file regardless of what path is passed
+                super().__init__(temp_config_path)
+        
+        mock_config_reader_class.side_effect = TestConfigReader
+        
+        yield temp_config_path
+    
+    # Clean up temporary file
+    if os.path.exists(temp_config_path):
+        os.unlink(temp_config_path)
+```
+
+**Key Principle**: Test real configuration loading with test data, not mocked configuration
+
+**Related Sections**: [9.3](#93-cli-integration-testing-with-real-configuration), [10.1.1](#1011-fix-file-dependencies), [4.1](#41-testing-real-logic-vs-mocks)
+
 ## 11. Debugging Strategies
 
 ### 11.1 Incremental Debugging
@@ -461,6 +682,12 @@ mock_func.assert_not_called()
 **Solution Applied**: Sections 2, 3.2, 4.1, 7.1
 **Result**: Comprehensive test coverage with proper mocking
 **Key Insight**: Test real logic with mocked dependencies, not mock behavior
+
+### Case Study 4: CLI Integration Testing with Real Configuration (July 2025)
+**Problem**: CLI integration tests failing due to missing configuration files and output validation mismatches
+**Solution Applied**: Sections 10.1.1, 10.1.4, 4.1, 31
+**Result**: 16/16 tests passing with real database connections and configuration
+**Key Insight**: Use real configuration files with temporary test data instead of complex mocking
 
 ---
 
