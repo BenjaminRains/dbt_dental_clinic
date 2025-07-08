@@ -9,7 +9,7 @@ import logging
 from typing import Optional, Dict
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from etl_pipeline.config.settings import get_settings, PostgresSchema
+from etl_pipeline.config.settings import get_settings, PostgresSchema, DatabaseType
 
 logger = logging.getLogger(__name__)
 
@@ -162,155 +162,49 @@ class ConnectionFactory:
             error_msg = f"Failed to create PostgreSQL connection to {database}.{schema}: {str(e)}"
             logger.error(error_msg)
             raise Exception(error_msg) from e
-    
-    # ============================================================================
-    # EXPLICIT PRODUCTION CONNECTION METHODS (Following Architecture Guidelines)
-    # ============================================================================
-    
+
+# ============================================================================
+# UNIFIED INTERFACE METHODS WITH SETTINGS INJECTION (Recommended Approach)
+# ============================================================================
+
     @staticmethod
-    def get_opendental_source_connection() -> Engine:
-        """Get OpenDental source database connection (explicit production environment)."""
-        settings = get_settings()
-        # Ensure we're using production environment
-        if settings.environment != 'production':
-            logger.warning("Creating production connection but environment is not 'production'")
-        config = settings.get_source_connection_config()
+    def get_source_connection(settings) -> Engine:
+        """Get source database connection using provided settings."""
+        config = settings.get_database_config(DatabaseType.SOURCE)
         return ConnectionFactory.create_mysql_engine(**config)
     
     @staticmethod
-    def get_mysql_replication_connection() -> Engine:
-        """Get MySQL replication database connection (explicit production environment)."""
-        settings = get_settings()
-        # Ensure we're using production environment
-        if settings.environment != 'production':
-            logger.warning("Creating production connection but environment is not 'production'")
-        config = settings.get_replication_connection_config()
+    def get_replication_connection(settings) -> Engine:
+        """Get replication database connection using provided settings."""
+        config = settings.get_database_config(DatabaseType.REPLICATION)
         return ConnectionFactory.create_mysql_engine(**config)
     
     @staticmethod
-    def get_postgres_analytics_connection() -> Engine:
-        """Get PostgreSQL analytics database connection (explicit production environment)."""
-        settings = get_settings()
-        # Ensure we're using production environment
-        if settings.environment != 'production':
-            logger.warning("Creating production connection but environment is not 'production'")
-        config = settings.get_analytics_connection_config(PostgresSchema.RAW)
+    def get_analytics_connection(settings, schema: PostgresSchema = PostgresSchema.RAW) -> Engine:
+        """Get analytics database connection using provided settings and schema."""
+        config = settings.get_database_config(DatabaseType.ANALYTICS, schema)
         return ConnectionFactory.create_postgres_engine(**config)
-    
-    # Schema-specific production analytics connections
+
+    # Convenience methods for common schemas
     @staticmethod
-    def get_opendental_analytics_raw_connection() -> Engine:
-        """Get PostgreSQL analytics raw schema connection (explicit production environment)."""
-        settings = get_settings()
-        # Ensure we're using production environment
-        if settings.environment != 'production':
-            logger.warning("Creating production connection but environment is not 'production'")
-        config = settings.get_analytics_connection_config(PostgresSchema.RAW)
-        return ConnectionFactory.create_postgres_engine(**config)
+    def get_analytics_raw_connection(settings) -> Engine:
+        """Get analytics raw schema connection using provided settings."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
     
     @staticmethod
-    def get_opendental_analytics_staging_connection() -> Engine:
-        """Get PostgreSQL analytics staging schema connection (explicit production environment)."""
-        settings = get_settings()
-        # Ensure we're using production environment
-        if settings.environment != 'production':
-            logger.warning("Creating production connection but environment is not 'production'")
-        config = settings.get_analytics_connection_config(PostgresSchema.STAGING)
-        return ConnectionFactory.create_postgres_engine(**config)
+    def get_analytics_staging_connection(settings) -> Engine:
+        """Get analytics staging schema connection using provided settings."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.STAGING)
     
     @staticmethod
-    def get_opendental_analytics_intermediate_connection() -> Engine:
-        """Get PostgreSQL analytics intermediate schema connection (explicit production environment)."""
-        settings = get_settings()
-        # Ensure we're using production environment
-        if settings.environment != 'production':
-            logger.warning("Creating production connection but environment is not 'production'")
-        config = settings.get_analytics_connection_config(PostgresSchema.INTERMEDIATE)
-        return ConnectionFactory.create_postgres_engine(**config)
+    def get_analytics_intermediate_connection(settings) -> Engine:
+        """Get analytics intermediate schema connection using provided settings."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.INTERMEDIATE)
     
     @staticmethod
-    def get_opendental_analytics_marts_connection() -> Engine:
-        """Get PostgreSQL analytics marts schema connection (explicit production environment)."""
-        settings = get_settings()
-        # Ensure we're using production environment
-        if settings.environment != 'production':
-            logger.warning("Creating production connection but environment is not 'production'")
-        config = settings.get_analytics_connection_config(PostgresSchema.MARTS)
-        return ConnectionFactory.create_postgres_engine(**config)
-
-    # ============================================================================
-    # EXPLICIT TEST CONNECTION METHODS (Following Architecture Guidelines)
-    # ============================================================================
-
-    @staticmethod
-    def get_opendental_source_test_connection() -> Engine:
-        """Get OpenDental source test database connection (explicit test environment)."""
-        settings = get_settings()
-        # Force test environment for test connections
-        if settings.environment != 'test':
-            logger.warning("Creating test connection but environment is not 'test'")
-        config = settings.get_source_connection_config()
-        return ConnectionFactory.create_mysql_engine(**config)
-
-    @staticmethod
-    def get_mysql_replication_test_connection() -> Engine:
-        """Get MySQL replication test database connection (explicit test environment)."""
-        settings = get_settings()
-        # Force test environment for test connections
-        if settings.environment != 'test':
-            logger.warning("Creating test connection but environment is not 'test'")
-        config = settings.get_replication_connection_config()
-        return ConnectionFactory.create_mysql_engine(**config)
-
-    @staticmethod
-    def get_postgres_analytics_test_connection() -> Engine:
-        """Get PostgreSQL analytics test database connection (explicit test environment)."""
-        settings = get_settings()
-        # Force test environment for test connections
-        if settings.environment != 'test':
-            logger.warning("Creating test connection but environment is not 'test'")
-        config = settings.get_analytics_connection_config(PostgresSchema.RAW)
-        return ConnectionFactory.create_postgres_engine(**config)
-
-    @staticmethod
-    def get_opendental_analytics_raw_test_connection() -> Engine:
-        """Get PostgreSQL analytics raw schema test connection (explicit test environment)."""
-        settings = get_settings()
-        # Force test environment for test connections
-        if settings.environment != 'test':
-            logger.warning("Creating test connection but environment is not 'test'")
-        config = settings.get_analytics_connection_config(PostgresSchema.RAW)
-        return ConnectionFactory.create_postgres_engine(**config)
-
-    @staticmethod
-    def get_opendental_analytics_staging_test_connection() -> Engine:
-        """Get PostgreSQL analytics staging schema test connection (explicit test environment)."""
-        settings = get_settings()
-        # Force test environment for test connections
-        if settings.environment != 'test':
-            logger.warning("Creating test connection but environment is not 'test'")
-        config = settings.get_analytics_connection_config(PostgresSchema.STAGING)
-        return ConnectionFactory.create_postgres_engine(**config)
-
-    @staticmethod
-    def get_opendental_analytics_intermediate_test_connection() -> Engine:
-        """Get PostgreSQL analytics intermediate schema test connection (explicit test environment)."""
-        settings = get_settings()
-        # Force test environment for test connections
-        if settings.environment != 'test':
-            logger.warning("Creating test connection but environment is not 'test'")
-        config = settings.get_analytics_connection_config(PostgresSchema.INTERMEDIATE)
-        return ConnectionFactory.create_postgres_engine(**config)
-
-    @staticmethod
-    def get_opendental_analytics_marts_test_connection() -> Engine:
-        """Get PostgreSQL analytics marts schema test connection (explicit test environment)."""
-        settings = get_settings()
-        # Force test environment for test connections
-        if settings.environment != 'test':
-            logger.warning("Creating test connection but environment is not 'test'")
-        config = settings.get_analytics_connection_config(PostgresSchema.MARTS)
-        return ConnectionFactory.create_postgres_engine(**config)
+    def get_analytics_marts_connection(settings) -> Engine:
+        """Get analytics marts schema connection using provided settings."""
+        return ConnectionFactory.get_analytics_connection(settings, PostgresSchema.MARTS)
 
 
 class ConnectionManager:
