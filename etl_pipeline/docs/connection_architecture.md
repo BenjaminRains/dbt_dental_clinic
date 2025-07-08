@@ -2,12 +2,13 @@
 
 ## Overview
 
-The ETL pipeline uses a clean, modern connection architecture with explicit environment separation and clear separation of concerns. This document explains the complete connection handling system, including configuration management, connection creation, and usage patterns.
+The ETL pipeline uses a clean, modern connection architecture with explicit environment separation, clear separation of concerns, and a robust provider pattern for dependency injection. This document explains the complete connection handling system, including configuration management, connection creation, and usage patterns.
 
 ## Architecture Principles
 
 ### 1. Single Responsibility Principle
-- **Settings Class**: Pure configuration management - reads environment variables and manages settings
+- **Settings Class**: Pure configuration management - uses providers to get configuration
+- **ConfigProvider Interface**: Abstract configuration source - enables dependency injection
 - **ConnectionFactory Class**: Pure connection logic - creates database engines from configuration
 - **ConnectionManager Class**: Connection lifecycle management - handles pooling, retries, and cleanup
 
@@ -16,23 +17,60 @@ The ETL pipeline uses a clean, modern connection architecture with explicit envi
 - **Test Environment**: Uses `TEST_` prefixed variables (e.g., `TEST_OPENDENTAL_SOURCE_HOST`)
 - **No Automatic Detection**: Method names explicitly indicate the environment
 
-### 3. Configuration Provider Pattern
-- **FileConfigProvider**: Loads configuration from YAML files and environment variables
-- **DictConfigProvider**: In-memory configuration for testing
-- **Dependency Injection**: Easy to swap configuration sources
+### 3. Configuration Provider Pattern (Dependency Injection)
+- **ConfigProvider Interface**: Abstract base for all configuration sources
+- **FileConfigProvider**: Loads configuration from YAML files and real environment variables
+- **DictConfigProvider**: In-memory configuration for testing with injected values
+- **Dependency Injection**: Easy to swap configuration sources without code changes
 
 ## Core Components
 
-### 1. Settings Class (`etl_pipeline/config/settings.py`)
+### 1. ConfigProvider Interface (`etl_pipeline/config/providers.py`)
 
-**Purpose**: Configuration management and environment detection.
+**Purpose**: Abstract configuration source that enables dependency injection.
+
+**Key Features**:
+- Abstract interface for all configuration sources
+- Consistent API for pipeline, tables, and environment configuration
+- Enables easy swapping between production and test configurations
+- Supports both file-based and in-memory configuration
+
+**Provider Types**:
+
+#### FileConfigProvider (Production)
+```python
+class FileConfigProvider(ConfigProvider):
+    def get_config(self, config_type: str) -> Dict[str, Any]:
+        if config_type == 'pipeline':
+            return self._load_yaml_config('pipeline')  # Loads pipeline.yml
+        elif config_type == 'tables':
+            return self._load_yaml_config('tables')    # Loads tables.yml
+        elif config_type == 'env':
+            return dict(os.environ)                    # Returns real env vars
+```
+
+#### DictConfigProvider (Testing)
+```python
+class DictConfigProvider(ConfigProvider):
+    def __init__(self, **configs):
+        self.configs = {
+            'pipeline': configs.get('pipeline', {}),
+            'tables': configs.get('tables', {'tables': {}}),
+            'env': configs.get('env', {})              # Injected test env vars
+        }
+```
+
+### 2. Settings Class (`etl_pipeline/config/settings.py`)
+
+**Purpose**: Configuration management using provider pattern for dependency injection.
 
 **Key Features**:
 - Environment detection from multiple sources
 - Environment variable mapping for each database type
 - Configuration caching for performance
 - Validation of required configuration
-- Support for both file-based and dictionary-based configuration
+- **Provider-based configuration loading** (not direct env var reading)
+- Support for both file-based and dictionary-based configuration through providers
 
 **Environment Detection**:
 ```python
@@ -62,6 +100,42 @@ The enums provide type safety and prevent errors by ensuring only valid database
 3. **IDE Support**: Enables autocomplete and refactoring support
 4. **Validation**: Ensures configuration only uses valid enum values
 5. **Maintainability**: Centralized definition of valid database types and schemas
+
+**Provider Integration**:
+The Settings class uses the provider pattern to load configuration:
+
+```python
+class Settings:
+    def __init__(self, environment: Optional[str] = None, provider = None):
+        # Provider setup with dependency injection
+        if provider is None:
+            from .providers import FileConfigProvider
+            provider = FileConfigProvider(Path(__file__).parent)
+        self.provider = provider
+        
+        # Load configurations from provider (not direct env var reading)
+        self.pipeline_config = self.provider.get_config('pipeline')
+        self.tables_config = self.provider.get_config('tables') 
+        self._env_vars = self.provider.get_config('env')  # Provider's env vars
+```
+
+**Configuration Flow**:
+```
+Settings → Provider → Configuration Sources
+                ↓
+        ┌─────────────────┐
+        │ FileConfigProvider │ (Production)
+        │ - pipeline.yml   │
+        │ - tables.yml     │
+        │ - os.environ     │
+        └─────────────────┘
+                ↓
+        ┌─────────────────┐
+        │ DictConfigProvider │ (Testing)
+        │ - Injected configs │
+        │ - Mock env vars   │
+        └─────────────────┘
+```
 
 **Usage Examples**:
 ```python
@@ -102,6 +176,9 @@ settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)  # Dire
 
 # Configuration validation
 settings.validate_configs()  # Returns bool
+
+# Provider-based configuration (internal)
+settings._get_base_config(db_type)  # Uses provider's env vars first, falls back to os.getenv
 ```
 
 **Enum Integration in Methods**:
@@ -120,7 +197,29 @@ def get_database_config(self, db_type: DatabaseType, schema: Optional[PostgresSc
     # ...
 ```
 
-### 2. ConnectionFactory Class (`etl_pipeline/core/connections.py`)
+**Provider-Based Configuration Loading**:
+The Settings class uses the provider pattern for all configuration loading:
+
+```python
+def _get_base_config(self, db_type: DatabaseType) -> Dict:
+    """Get base configuration from provider's environment variables."""
+    env_mapping = self.ENV_MAPPINGS[db_type]
+    config = {}
+    
+    for key, env_var in env_mapping.items():
+        prefixed_var = f"{self.env_prefix}{env_var}"
+        
+        # ✅ Use provider's environment variables first, fallback to os.getenv
+        value = self._env_vars.get(prefixed_var) or self._env_vars.get(env_var)
+        if value is None:
+            value = os.getenv(prefixed_var) or os.getenv(env_var)
+        
+        config[key] = value
+    
+    return config
+```
+
+### 3. ConnectionFactory Class (`etl_pipeline/core/connections.py`)
 
 **Purpose**: Creates database engines with proper configuration and connection pooling.
 
@@ -130,6 +229,7 @@ def get_database_config(self, db_type: DatabaseType, schema: Optional[PostgresSc
 - Database-specific optimizations (MySQL vs PostgreSQL)
 - Comprehensive error handling and logging
 - Rate limiting and retry logic
+- **Settings integration** for configuration (recommended approach)
 
 **Connection Pool Settings**:
 ```python
@@ -173,7 +273,7 @@ ConnectionFactory.get_opendental_analytics_intermediate_test_connection() # Uses
 ConnectionFactory.get_opendental_analytics_marts_test_connection() # Uses TEST_POSTGRES_ANALYTICS_* env vars + marts schema
 ```
 
-### 3. ConnectionManager Class (`etl_pipeline/core/connections.py`)
+### 4. ConnectionManager Class (`etl_pipeline/core/connections.py`)
 
 **Purpose**: Efficient connection management for batch operations.
 
@@ -341,41 +441,159 @@ tables:
     estimated_rows: 100000
 ```
 
+## Provider Integration
+
+### Configuration Flow Architecture
+
+The provider pattern enables clean dependency injection throughout the configuration system:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Application   │───▶│     Settings    │───▶│    Provider     │
+│                 │    │                 │    │                 │
+│ - ETL Scripts   │    │ - Environment   │    │ - FileConfig    │
+│ - Tests         │    │   Detection     │    │ - DictConfig    │
+│ - API Endpoints │    │ - Config Caching│    │ - Custom Config │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │                       │
+                                ▼                       ▼
+                       ┌─────────────────┐    ┌─────────────────┐
+                       │ ConnectionFactory│    │ Configuration   │
+                       │                 │    │ Sources         │
+                       │ - Engine Creation│    │                 │
+                       │ - Pool Settings │    │ - pipeline.yml  │
+                       └─────────────────┘    │ - tables.yml    │
+                                               │ - os.environ    │
+                                               │ - Test Configs  │
+                                               └─────────────────┘
+```
+
+### Provider Usage Patterns
+
+#### Production Usage (FileConfigProvider)
+```python
+# Default behavior - uses FileConfigProvider
+settings = Settings(environment='production')
+# Loads from:
+# - pipeline.yml
+# - tables.yml  
+# - os.environ (real environment variables)
+
+# Explicit FileConfigProvider usage
+from etl_pipeline.config.providers import FileConfigProvider
+provider = FileConfigProvider(Path('/path/to/config'))
+settings = Settings(environment='production', provider=provider)
+```
+
+#### Testing Usage (DictConfigProvider)
+```python
+# Unit testing with injected configuration
+from etl_pipeline.config.providers import DictConfigProvider
+
+test_provider = DictConfigProvider(
+    pipeline={'connections': {'source': {'pool_size': 5}}},
+    tables={'tables': {'patient': {'batch_size': 1000}}},
+    env={
+        'OPENDENTAL_SOURCE_HOST': 'test-host',
+        'OPENDENTAL_SOURCE_DB': 'test_db',
+        'TEST_OPENDENTAL_SOURCE_HOST': 'test-prefixed-host'
+    }
+)
+
+settings = Settings(environment='test', provider=test_provider)
+# Uses injected configuration instead of real files/env vars
+```
+
+#### Factory Functions for Testing
+```python
+from etl_pipeline.config.settings import create_test_settings
+
+# Convenient test settings creation
+test_settings = create_test_settings(
+    pipeline_config={'connections': {'source': {'connect_timeout': 5}}},
+    tables_config={'tables': {'patient': {'batch_size': 1000}}},
+    env_vars={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
+)
+```
+
 ## Testing Strategy
 
-### Unit Tests
+### Unit Tests with Provider Pattern
 
-Unit tests use **pure mocks** and don't require real database connections:
+Unit tests use **DictConfigProvider** for pure dependency injection:
 
 ```python
+def test_database_config_with_provider():
+    """Test database configuration using provider pattern."""
+    # Create test provider with injected configuration
+    test_provider = DictConfigProvider(
+        pipeline={'connections': {'source': {'pool_size': 5}}},
+        tables={'tables': {'patient': {'batch_size': 1000}}},
+        env={
+            'OPENDENTAL_SOURCE_HOST': 'test-host',
+            'OPENDENTAL_SOURCE_DB': 'test_db',
+            'OPENDENTAL_SOURCE_USER': 'test_user',
+            'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+        }
+    )
+    
+    settings = Settings(environment='test', provider=test_provider)
+    
+    # Test configuration loading from provider
+    config = settings.get_source_connection_config()
+    assert config['host'] == 'test-host'
+    assert config['database'] == 'test_db'
+    assert config['user'] == 'test_user'
+    assert config['password'] == 'test_pass'
+    
+    # Test pipeline config overrides
+    assert config['pool_size'] == 5
+```
+
+### Integration Tests with FileConfigProvider
+
+Integration tests use **FileConfigProvider** with real configuration files:
+
+```python
+def test_real_config_loading():
+    """Test loading configuration from real files."""
+    # Uses default FileConfigProvider
+    settings = Settings(environment='production')
+    
+    # Validate configuration is loaded correctly
+    assert settings.validate_configs() is True
+    
+    # Test real configuration values
+    config = settings.get_source_connection_config()
+    assert config['host'] is not None
+    assert config['database'] is not None
+```
+
+### Legacy Mock-Based Tests (Deprecated)
+
+**Note**: The following approach is deprecated in favor of the provider pattern:
+
+```python
+# ❌ OLD APPROACH - Direct environment variable mocking
 @patch('etl_pipeline.core.connections.create_engine')
-def test_connection_creation(self, mock_create_engine):
-    # Mock environment variables
+def test_connection_creation_legacy(self, mock_create_engine):
     with patch.dict(os.environ, {
         'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
         'TEST_OPENDENTAL_SOURCE_PORT': '3306',
-        # ... other test env vars
     }):
         engine = ConnectionFactory.get_opendental_source_test_connection()
         # Test with mocked engine
+
+# ✅ NEW APPROACH - Provider-based testing
+def test_connection_creation_provider():
+    test_provider = DictConfigProvider(
+        env={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
+    )
+    settings = Settings(environment='test', provider=test_provider)
+    # Test with provider-injected configuration
 ```
 
-### Integration Tests
-
-Integration tests use **real test database connections**:
-
-```python
-def test_real_connection(self):
-    try:
-        engine = ConnectionFactory.get_opendental_source_test_connection()
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            assert result.fetchone()[0] == 1
-    except Exception as e:
-        pytest.skip(f"Test database not available: {str(e)}")
-```
-
-### Test Settings Creation
+### Test Settings Creation with Enums
 
 ```python
 from etl_pipeline.config.settings import create_test_settings, DatabaseType, PostgresSchema
@@ -500,31 +718,65 @@ if not settings.validate_configs():
 
 ## Best Practices
 
-### 1. Always Use Explicit Environment Methods
+### 1. Use Provider Pattern for Configuration
+- **Production**: Use `FileConfigProvider` (default) for real configuration files
+- **Testing**: Use `DictConfigProvider` for injected test configuration
+- **Never**: Mix provider types in the same code path
+
+### 2. Always Use Explicit Environment Methods
 - Production code: Use methods without "test" in the name
 - Test code: Use methods with "test" in the name
 - Never mix environments in the same code path
 
-### 2. Use ConnectionManager for Batch Operations
+### 3. Use Provider-Based Testing
+```python
+# ✅ GOOD - Use DictConfigProvider for unit tests
+def test_database_config():
+    test_provider = DictConfigProvider(
+        env={'OPENDENTAL_SOURCE_HOST': 'test-host'}
+    )
+    settings = Settings(environment='test', provider=test_provider)
+    # Test with injected configuration
+
+# ❌ BAD - Don't mock environment variables directly
+def test_database_config_legacy():
+    with patch.dict(os.environ, {'OPENDENTAL_SOURCE_HOST': 'test-host'}):
+        settings = Settings()  # Still uses FileConfigProvider
+        # Test with real environment variables
+```
+
+### 4. Use ConnectionManager for Batch Operations
 - Efficient connection reuse
 - Automatic retry logic
 - Proper resource cleanup
 
-### 3. Validate Configuration Early
+### 5. Validate Configuration Early
 - Call `settings.validate_configs()` at startup
 - Fail fast if configuration is incomplete
 - Clear error messages for missing variables
 
-### 4. Use Schema-Specific Connections
+### 6. Use Schema-Specific Connections
 - Raw schema: `get_opendental_analytics_raw_connection()`
 - Staging schema: `get_opendental_analytics_staging_connection()`
 - Intermediate schema: `get_opendental_analytics_intermediate_connection()`
 - Marts schema: `get_opendental_analytics_marts_connection()`
 
-### 5. Handle Errors Gracefully
+### 7. Handle Errors Gracefully
 - Catch specific exception types
 - Log meaningful error messages
 - Implement proper cleanup in error cases
+
+### 8. Use Factory Functions for Testing
+```python
+# ✅ GOOD - Use factory functions for common test scenarios
+test_settings = create_test_settings(
+    pipeline_config={'connections': {'source': {'pool_size': 5}}},
+    env_vars={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
+)
+
+# ✅ GOOD - Use enums for type safety
+config = test_settings.get_database_config(DatabaseType.SOURCE, PostgresSchema.RAW)
+```
 
 ## Architecture Benefits
 
@@ -533,10 +785,37 @@ if not settings.validate_configs():
 3. **Safety**: Impossible to accidentally use wrong environment
 4. **Performance**: Optimized connection pooling and caching
 5. **Maintainability**: Clean, well-documented architecture
-6. **Testability**: Easy to mock and test individual components
+6. **Testability**: Easy to mock and test individual components with provider pattern
 7. **Flexibility**: Easy to add new database types or environments
 8. **Reliability**: Comprehensive error handling and retry logic
 9. **Type Safety**: Enums prevent invalid database types and schema names
 10. **Developer Experience**: IDE autocomplete and refactoring support for database types
+11. **Dependency Injection**: Provider pattern enables clean testing and configuration swapping
+12. **Configuration Isolation**: Test configuration is completely isolated from production
+13. **No Environment Pollution**: Tests don't affect real environment variables
+14. **Consistent API**: Same interface for production and test configuration
+15. **Extensibility**: Easy to add new provider types (e.g., database, API, etc.)
 
-This architecture provides a robust, maintainable, and safe foundation for all ETL operations with clear separation between production and test environments. 
+## Provider Pattern Benefits
+
+### 1. **Dependency Injection**
+- Easy to swap configuration sources without code changes
+- Clean separation between production and test configuration
+- No need to mock environment variables or files
+
+### 2. **Test Isolation**
+- Tests use completely isolated configuration
+- No risk of test configuration affecting production
+- No need to restore environment variables after tests
+
+### 3. **Configuration Flexibility**
+- Support for multiple configuration sources (files, environment, databases, APIs)
+- Easy to add new configuration types
+- Consistent interface across all configuration sources
+
+### 4. **Type Safety**
+- Enums ensure only valid database types and schemas are used
+- Compile-time checking prevents runtime errors
+- IDE support for autocomplete and refactoring
+
+This architecture provides a robust, maintainable, and safe foundation for all ETL operations with clear separation between production and test environments, enabled by the provider pattern for clean dependency injection. 
