@@ -171,10 +171,9 @@ class PostgresLoader:
         # Get settings instance (will automatically detect environment from ETL_ENVIRONMENT)
         self.settings = get_settings()
         
-        # Get database connections using explicit production methods
-        # The settings instance automatically handles environment detection based on ETL_ENVIRONMENT
-        self.replication_engine = ConnectionFactory.get_mysql_replication_connection()
-        self.analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+        # Get database connections using unified interface with Settings injection
+        self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+        self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
         
         # Log which environment we're using
         environment = self.settings.environment.upper()
