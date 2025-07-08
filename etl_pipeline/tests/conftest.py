@@ -8,30 +8,6 @@ to make them available to all tests in the test suite.
 # Import essential fixtures from modular fixtures directory
 from tests.fixtures.env_fixtures import test_env_vars, production_env_vars, setup_test_environment, reset_global_settings, test_settings
 
-# Import postgres schema fixtures for integration tests
-from tests.fixtures.postgres_schema_fixtures import (
-    postgres_schema_test_settings,
-    real_postgres_schema_instance,
-    real_schema_discovery_instance,
-    postgres_schema_test_tables,
-    postgres_schema_error_cases,
-    mock_postgres_schema_engines,
-    mock_schema_discovery,
-    sample_mysql_schemas,
-    expected_postgres_schemas,
-    postgres_schema_test_data,
-    mock_postgres_schema_instance
-)
-
-# Import schema discovery fixtures for integration tests
-from tests.fixtures.schema_discovery_fixtures import (
-    schema_discovery_test_settings,
-    schema_discovery_instance,
-    mock_schema_discovery,
-    sample_table_schemas,
-    sample_table_size_info
-)
-
 # Import integration fixtures for integration tests
 from tests.fixtures.integration_fixtures import (
     test_data_manager,
@@ -77,4 +53,26 @@ from tests.fixtures.metrics_fixtures import (
     mock_metrics_error,
     metrics_collector_with_settings,
     mock_analytics_engine_for_metrics
+)
+
+# Import test data fixtures for standardized test data
+from tests.fixtures.test_data_fixtures import (
+    standard_patient_test_data,
+    incremental_patient_test_data,
+    partial_patient_test_data,
+    etl_tracking_test_data,
+    invalid_schema_test_data,
+    composite_pk_test_data,
+    large_table_test_data,
+    simple_test_table_data,
+    patient_with_all_fields_test_data
+)
+
+# Import test data definitions for reusable test data
+from tests.fixtures.test_data_definitions import (
+    get_test_patient_data,
+    get_test_appointment_data,
+    get_test_data_for_table,
+    STANDARD_TEST_PATIENTS,
+    STANDARD_TEST_APPOINTMENTS
 ) 
