@@ -11,6 +11,9 @@
 | Test expects different behavior than code | [31](#31-test-expectations-vs-real-behavior) | Read implementation first |
 | Context manager errors | [2](#2-context-manager-protocol) | Add `__enter__` and `__exit__` |
 | Unexpected keyword argument errors | [12](#12-handling-keyword-arguments) | Use `**kwargs` in side effects |
+| Multi-scenario test failures | [10.1](#101-multi-scenario-test-problems) | Split into separate test methods |
+| Exit code 2 instead of 0 (file not found) | [10.1.1](#1011-fix-file-dependencies) | Use temporary files |
+| Wrong error messages in sequence tests | [10.1.2](#1012-split-multi-scenario-tests) | Reset mocks between scenarios |
 
 ---
 
@@ -297,9 +300,118 @@ test_replication_engine = ConnectionFactory.get_mysql_replication_test_connectio
 test_analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
 ```
 
-## 10. Debugging Strategies
+## 10. Comprehensive Test Cleanup Issues
 
-### 10.1 Incremental Debugging
+### 10.1 Multi-Scenario Test Problems
+**Problem**: Tests that try to test multiple scenarios in one method fail due to mock state pollution
+**Context**: Comprehensive tests that attempt to test multiple failure scenarios sequentially
+**Error Pattern**: 
+- Exit code 2 instead of expected 0 (file not found)
+- Wrong error messages (expecting "Replication failed" but getting "Source failed")
+- Tests that pass individually but fail when run together
+
+**Root Causes**:
+1. **Non-existent files**: Using `'test_config.yaml'` without creating the file
+2. **Mock state pollution**: Not resetting mocks between scenarios in the same test method
+3. **Poor isolation**: Testing multiple scenarios in one method without proper cleanup
+
+**Solutions**:
+
+#### 10.1.1 Fix File Dependencies
+```python
+# ❌ WRONG - Using non-existent file
+result = self.runner.invoke(cli, ['run', '--config', 'test_config.yaml'])
+
+# ✅ CORRECT - Create temporary file
+with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    yaml.dump(config_data, f)
+    config_path = f.name
+
+try:
+    result = self.runner.invoke(cli, ['run', '--config', config_path])
+    assert result.exit_code == 0
+finally:
+    os.unlink(config_path)  # Always clean up
+```
+
+#### 10.1.2 Split Multi-Scenario Tests
+```python
+# ❌ WRONG - Multiple scenarios in one test
+def test_connection_failures(self, mock_conn_factory):
+    # Scenario 1: Source fails
+    mock_conn_factory.get_source_connection.side_effect = Exception("Source failed")
+    result = self.runner.invoke(cli, ['test-connections'])
+    assert "Source failed" in result.output
+    
+    # Scenario 2: Replication fails (mock not reset!)
+    mock_conn_factory.get_replication_connection.side_effect = Exception("Replication failed")
+    result = self.runner.invoke(cli, ['test-connections'])
+    assert "Replication failed" in result.output  # Still gets "Source failed"
+
+# ✅ CORRECT - Separate test methods
+def test_source_connection_failure(self, mock_conn_factory):
+    mock_conn_factory.get_source_connection.side_effect = Exception("Source failed")
+    result = self.runner.invoke(cli, ['test-connections'])
+    assert "Source failed" in result.output
+
+def test_replication_connection_failure(self, mock_conn_factory):
+    mock_conn_factory.get_replication_connection.side_effect = Exception("Replication failed")
+    result = self.runner.invoke(cli, ['test-connections'])
+    assert "Replication failed" in result.output
+```
+
+#### 10.1.3 Proper Mock Reset (if keeping multi-scenario tests)
+```python
+# ✅ CORRECT - Reset mocks between scenarios
+def test_multiple_scenarios(self, mock_conn_factory):
+    # Scenario 1
+    mock_conn_factory.get_source_connection.side_effect = Exception("Source failed")
+    result = self.runner.invoke(cli, ['test-connections'])
+    assert "Source failed" in result.output
+    
+    # RESET: Clear all mocks
+    mock_conn_factory.reset_mock()
+    
+    # Scenario 2
+    mock_conn_factory.get_replication_connection.side_effect = Exception("Replication failed")
+    result = self.runner.invoke(cli, ['test-connections'])
+    assert "Replication failed" in result.output
+```
+
+**Key Principles**:
+- **One scenario per test method** (recommended)
+- **Always use temporary files** for config file tests
+- **Reset mocks between scenarios** if testing multiple scenarios
+- **Use try/finally** for resource cleanup
+- **Test isolation** prevents interference between tests
+
+#### 10.1.4 Mock Bypassing Validation
+**Problem**: Tests expect validation failures but mocks bypass the validation logic
+**Context**: CLI tests that mock components but expect validation errors
+**Example**:
+```python
+# ❌ WRONG - Mock bypasses validation
+@patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+def test_invalid_config(self, mock_orchestrator_class):
+    mock_orchestrator_class.return_value = MagicMock()  # Mock succeeds
+    result = self.runner.invoke(cli, ['run', '--config', 'invalid.yaml'])
+    assert result.exit_code != 0  # FAILS - mock bypassed validation
+
+# ✅ CORRECT - Mock simulates validation failure
+@patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+def test_invalid_config(self, mock_orchestrator_class):
+    mock_orchestrator_class.side_effect = Exception("Invalid configuration")
+    result = self.runner.invoke(cli, ['run', '--config', 'invalid.yaml'])
+    assert result.exit_code != 0  # PASSES - mock simulates failure
+```
+
+**Key Insight**: When testing error scenarios with mocks, ensure the mock simulates the expected failure, don't just mock success.
+
+**Related Sections**: [2](#2-context-manager-protocol), [7](#7-error-scenarios-and-edge-cases), [9.1](#91-cli-command-testing)
+
+## 11. Debugging Strategies
+
+### 11.1 Incremental Debugging
 ```python
 # 1. Add logging to understand flow
 logger.info(f"Processing {len(tables)} tables")
@@ -315,7 +427,7 @@ print(f"Mock return value: {mock_func.return_value}")
 assert mock_func.called, "Mock was not called"
 ```
 
-### 10.2 Mock Call Analysis
+### 11.2 Mock Call Analysis
 ```python
 # Debug mock behavior
 print(f"Call count: {mock_func.call_count}")
