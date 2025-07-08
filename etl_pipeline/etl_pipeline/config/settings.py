@@ -163,7 +163,11 @@ class Settings:
         for key, env_var in env_mapping.items():
             # Try prefixed variable first, then base
             prefixed_var = f"{self.env_prefix}{env_var}"
-            value = os.getenv(prefixed_var) or os.getenv(env_var)
+            
+            # Use provider's environment variables first, fallback to os.getenv
+            value = self._env_vars.get(prefixed_var) or self._env_vars.get(env_var)
+            if value is None:
+                value = os.getenv(prefixed_var) or os.getenv(env_var)
             
             if key == 'port' and value:
                 try:
@@ -203,7 +207,11 @@ class Settings:
                 
                 # Check environment-specific variables
                 prefixed_var = f"{self.env_prefix}{env_var}"
-                value = os.getenv(prefixed_var) or os.getenv(env_var)
+                
+                # Use provider's environment variables first, fallback to os.getenv
+                value = self._env_vars.get(prefixed_var) or self._env_vars.get(env_var)
+                if value is None:
+                    value = os.getenv(prefixed_var) or os.getenv(env_var)
                 
                 if not value:
                     if self.environment == 'test':
