@@ -43,7 +43,6 @@ tests/fixtures/
 ├── priority_processor_fixtures.py # Priority processing tests
 ├── schema_discovery_fixtures.py  # Schema discovery tests
 ├── postgres_schema_fixtures.py   # PostgreSQL schema tests
-├── legacy_fixtures.py            # Legacy compatibility
 └── mock_utils.py                 # Mock utilities
 ```
 
