@@ -538,7 +538,7 @@ class TestCLIStatusComprehensive:
         """Test status command with all output formats."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -599,7 +599,7 @@ class TestCLIStatusComprehensive:
         """Test status command with output file generation."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -629,7 +629,7 @@ class TestCLIStatusComprehensive:
         """Test status command with specific table filtering."""
         # Setup mocks
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -657,7 +657,7 @@ class TestCLIStatusComprehensive:
         
         # Test with metrics collection failure
         mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         mock_metrics = MagicMock()
         mock_metrics_class.return_value = mock_metrics
@@ -702,9 +702,9 @@ class TestCLIConnectionTestingComprehensive:
         mock_analytics_engine.connect.return_value.__exit__.return_value = None
         
         # Setup connection factory
-        mock_conn_factory.get_opendental_source_connection.return_value = mock_source_engine
-        mock_conn_factory.get_mysql_replication_connection.return_value = mock_repl_engine
-        mock_conn_factory.get_opendental_analytics_raw_connection.return_value = mock_analytics_engine
+        mock_conn_factory.get_source_connection.return_value = mock_source_engine
+        mock_conn_factory.get_replication_connection.return_value = mock_repl_engine
+        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
         # Test successful connection testing
         result = self.runner.invoke(cli, ['test-connections'])
@@ -724,7 +724,7 @@ class TestCLIConnectionTestingComprehensive:
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_source_connection_failure(self, mock_conn_factory):
         """Test source connection failure scenario."""
-        mock_conn_factory.get_opendental_source_connection.side_effect = Exception("Source connection failed")
+        mock_conn_factory.get_source_connection.side_effect = Exception("Source connection failed")
         
         result = self.runner.invoke(cli, ['test-connections'])
         assert result.exit_code != 0
@@ -734,7 +734,7 @@ class TestCLIConnectionTestingComprehensive:
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_replication_connection_failure(self, mock_conn_factory):
         """Test replication connection failure scenario."""
-        mock_conn_factory.get_mysql_replication_connection.side_effect = Exception("Replication connection failed")
+        mock_conn_factory.get_replication_connection.side_effect = Exception("Replication connection failed")
         
         result = self.runner.invoke(cli, ['test-connections'])
         assert result.exit_code != 0
@@ -744,7 +744,7 @@ class TestCLIConnectionTestingComprehensive:
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_analytics_connection_failure(self, mock_conn_factory):
         """Test analytics connection failure scenario."""
-        mock_conn_factory.get_opendental_analytics_raw_connection.side_effect = Exception("Analytics connection failed")
+        mock_conn_factory.get_analytics_raw_connection.side_effect = Exception("Analytics connection failed")
         
         result = self.runner.invoke(cli, ['test-connections'])
         assert result.exit_code != 0
