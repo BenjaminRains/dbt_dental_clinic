@@ -60,6 +60,19 @@ from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrato
 
 logger = get_logger(__name__)
 
+# Global variable for test settings injection (used by tests)
+_test_settings = None
+
+def inject_test_settings(settings):
+    """Inject test settings for testing purposes."""
+    global _test_settings
+    _test_settings = settings
+
+def clear_test_settings():
+    """Clear injected test settings."""
+    global _test_settings
+    _test_settings = None
+
 @click.command()
 @click.option('--config', '-c', type=click.Path(exists=True), help='Path to configuration file')
 @click.option('--tables', '-t', multiple=True, help='Specific tables to process')
@@ -75,8 +88,14 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
             click.echo("Error: Parallel workers must be between 1 and 20")
             raise click.Abort()
         
-        # Initialize pipeline orchestrator
-        orchestrator = PipelineOrchestrator(config_path=config)
+        # Initialize pipeline orchestrator with test settings if available
+        if _test_settings is not None:
+            # Use injected test settings
+            orchestrator = PipelineOrchestrator(config_path=config, environment='test')
+            orchestrator.settings = _test_settings
+        else:
+            # Use default settings
+            orchestrator = PipelineOrchestrator(config_path=config)
         
         if dry_run:
             # DRY RUN MODE: Show what would be done without making changes
