@@ -28,6 +28,7 @@ from sqlalchemy import text, inspect
 from sqlalchemy.engine import Engine
 
 from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.config import get_settings
 
 # Configure logging
 logging.basicConfig(
@@ -54,7 +55,8 @@ class OpenDentalSchemaAnalyzer:
     def __init__(self):
         """Initialize with source database connection using modern connection handling."""
         # Use explicit production connection
-        self.source_engine = ConnectionFactory.get_opendental_source_connection()
+        settings = get_settings()
+        self.source_engine = ConnectionFactory.get_source_connection(settings)
         self.source_db = os.getenv('OPENDENTAL_SOURCE_DB')
         
         if not self.source_db:
