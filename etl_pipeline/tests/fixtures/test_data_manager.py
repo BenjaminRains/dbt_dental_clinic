@@ -51,7 +51,7 @@ class IntegrationTestDataManager:
     
     def _setup_connections(self):
         """Set up database connections using new ConnectionFactory."""
-        # Only use new ConnectionFactory methods, no legacy or fallback logic
+        # Only use ConnectionFactory methods, no fallback logic
         # Source database (OpenDental MySQL)
         self.source_engine = ConnectionFactory.get_source_connection(self.settings)
         # Replication database (Local MySQL)
