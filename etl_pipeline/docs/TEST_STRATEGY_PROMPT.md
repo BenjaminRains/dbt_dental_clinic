@@ -3,152 +3,83 @@
 ## Role and Context
 You are a senior test engineer working on a dental clinic ETL pipeline that processes OpenDental data. The pipeline uses MySQL replication, PostgreSQL analytics, and intelligent orchestration with priority-based processing.
 
-## Architecture Overview
-- **Source**: OpenDental MySQL (read-only)
-- **Replication**: Local MySQL (opendental_replication) 
-- **Analytics**: PostgreSQL (opendental_analytics with raw schema)
-- **Tech Stack**: Python, SQLAlchemy, MariaDB v11.6, PostgreSQL
-- **Processing**: Priority-based (critical → important → audit → reference)
+## 🎯 **THREE-TIER TESTING STRATEGY**
 
-## 🎯 **THREE-TIER TESTING STRATEGY WITH ORDER MARKERS**
-
-### **Modern Architecture Overview** ✅ **STATIC CONFIGURATION APPROACH**
-
-The ETL pipeline uses a **modern static configuration approach** with **no dynamic schema discovery**:
+### **Modern Architecture Overview**
+The ETL pipeline uses a **modern static configuration approach** with **provider pattern dependency injection**:
 - **Static Configuration**: All configuration from `tables.yml` - no database queries during ETL
+- **Provider Pattern**: Dependency injection for configuration sources (FileConfigProvider/DictConfigProvider)
 - **5-10x Performance**: Faster than dynamic schema discovery approaches
 - **Explicit Environment Separation**: Clear production/test environment handling
-- **No Legacy Code**: All compatibility methods removed
+- **Test Isolation**: Complete configuration isolation between production and test environments
+- **Type Safety**: Enums for database types and schema names prevent runtime errors
 
-### **3-File Testing Pattern** ✅ **VALIDATED & SUCCESSFUL**
-
-We use a **three-tier testing approach** with **three test files per component** for maximum confidence and coverage, plus **order markers** for proper integration test execution:
+### **3-File Testing Pattern**
+We use a **three-tier testing approach** with **three test files per component** for maximum confidence and coverage:
 
 #### **1. Unit Tests** (`test_[component]_unit.py`)
-- **Purpose**: Pure unit tests with comprehensive mocking
+- **Purpose**: Pure unit tests with comprehensive mocking and provider pattern
 - **Scope**: Fast execution, isolated component behavior, no real connections
 - **Coverage**: Core logic and edge cases for all methods
 - **Execution**: < 1 second per component
-- **Environment**: No production connections, full mocking
+- **Provider Usage**: DictConfigProvider for injected test configuration
 - **Markers**: `@pytest.mark.unit`
 
 #### **2. Comprehensive Tests** (`test_[component].py`) 
-- **Purpose**: Full functionality testing with mocked dependencies
+- **Purpose**: Full functionality testing with mocked dependencies and provider pattern
 - **Scope**: Complete component behavior, error handling, all methods
 - **Coverage**: 90%+ target coverage (main test suite)
 - **Execution**: < 5 seconds per component
-- **Environment**: Mocked dependencies, no real connections
+- **Provider Usage**: DictConfigProvider for comprehensive test scenarios
 - **Markers**: `@pytest.mark.unit` (default)
 
-#### **3. Integration Tests** (`test_[component]_integration.py`) ✅ **ORDER MARKERS IMPLEMENTED**
-- **Purpose**: Real database integration with test environment
+#### **3. Integration Tests** (`test_[component]_integration.py`)
+- **Purpose**: Real database integration with test environment and provider pattern
 - **Scope**: Safety, error handling, actual data flow, all methods
 - **Coverage**: Integration scenarios and edge cases
 - **Execution**: < 10 seconds per component
-- **Environment**: Real test databases, no production connections
+- **Environment**: Real test databases, no production connections with FileConfigProvider
 - **Order Markers**: Proper test execution order for data flow validation
+- **Provider Usage**: FileConfigProvider with real test configuration files
 - **Markers**: `@pytest.mark.integration`
 
 #### **4. End-to-End Tests** (`test_e2e_[component].py`)
-- **Purpose**: Production connection testing with test data
+- **Purpose**: Production connection testing with test data and provider pattern
 - **Scope**: Full pipeline validation with real production connections
 - **Coverage**: Complete workflow validation
 - **Execution**: < 30 seconds per component
-- **Environment**: Production connections with test data only
+- **Environment**: Production connections with test data only using FileConfigProvider
+- **Provider Usage**: FileConfigProvider with production configuration files
 - **Markers**: `@pytest.mark.e2e`
 
-### **Updated Directory Structure** ✅ **COMPREHENSIVE**
+### **Directory Structure**
 ```
 tests/
 ├── unit/                                # Pure unit tests only (mocked)
-│   ├── core/
-│   ├── config/
-│   ├── loaders/
-│   ├── orchestration/
-│   ├── monitoring/
-│   └── scripts/
 ├── comprehensive/                       # Comprehensive tests (mocked dependencies)
-│   ├── core/
-│   ├── config/
-│   ├── loaders/
-│   ├── orchestration/
-│   ├── monitoring/
-│   └── scripts/
 ├── integration/                         # Real test database integration tests (ORDER MARKERS)
-│   ├── core/
-│   ├── config/
-│   ├── loaders/
-│   ├── orchestration/
-│   ├── monitoring/
-│   ├── scripts/
-│   └── end_to_end/
 └── e2e/                                # Production connection E2E tests
-    ├── core/
-    ├── loaders/
-    ├── orchestration/
-    └── full_pipeline/
 ```
-
-### **Integration Test Order Markers** ✅ **FULLY IMPLEMENTED**
-
-**Status**: 🟢 **COMPLETE** - All integration tests have proper order markers implemented
-
-#### **Phase 0: Configuration & Setup (order=0)**
-- **Purpose**: Validate environment and database connectivity
-- **Files**: `config/test_config_integration.py`, `config/test_logging_integration.py`
-- **Tests**: Database connection validation, environment detection, configuration loading
-
-#### **Phase 1: Core ETL Pipeline (order=1-3)**
-- **Order 1**: ConfigReader (`config/test_config_reader_real_integration.py`)
-- **Order 2**: MySQL Replicator (`core/test_mysql_replicator_real_integration.py`)
-- **Order 3**: Postgres Schema (`core/test_postgres_schema_real_integration.py`)
-
-#### **Phase 2: Data Loading (order=4)**
-- **Purpose**: Test data loading and transformation
-- **File**: `loaders/test_postgres_loader_integration.py`
-
-#### **Phase 3: Orchestration (order=5)**
-- **Purpose**: Test complete pipeline orchestration
-- **Files**: `orchestration/test_pipeline_orchestrator_real_integration.py`, `orchestration/test_table_processor_real_integration.py`, `orchestration/test_priority_processor_real_integration.py`
-
-#### **Phase 4: Monitoring (order=6)**
-- **Purpose**: Test monitoring and metrics collection
-- **File**: `monitoring/test_unified_metrics_integration.py`
-
-### **Complete Ecosystem Overview** ✅ **13 COMPONENTS, 150 METHODS**
-
-**Nightly ETL Components (10 components, 123 methods)**:
-- **PipelineOrchestrator**: Main orchestration (6 methods)
-- **TableProcessor**: Core ETL engine (9 methods)
-- **PriorityProcessor**: Batch processing (5 methods)
-- **Settings**: Modern configuration (20 methods)
-- **ConfigReader**: Static configuration (12 methods)
-- **ConnectionFactory**: Database connections (25 methods)
-- **PostgresSchema**: Schema conversion (10 methods)
-- **SimpleMySQLReplicator**: MySQL replication (10 methods)
-- **PostgresLoader**: PostgreSQL loading (11 methods)
-- **UnifiedMetricsCollector**: Metrics collection (15 methods)
-
-**Management Scripts (3 scripts, 27 methods)**:
-- **Test Database Setup**: Test environment (8 functions)
-- **PipelineConfigManager**: Configuration management (15 methods)
-- **CLI Commands**: Various management utilities (4 methods)
 
 ## 📚 **SUPPORTING DOCUMENTATION REFERENCES**
 
 ### **Core Architecture Documents**
-- **[Connection Architecture](connection_architecture.md)**: Complete connection handling system with explicit environment separation
+- **[Testing Plan](TESTING_PLAN.md)**: Comprehensive testing checklist with 150 methods to test
+- **[Connection Architecture](connection_architecture.md)**: Complete connection handling system with provider pattern
 - **[Data Flow Diagram](DATA_FLOW_DIAGRAM.md)**: Complete pipeline ecosystem with 150 methods across 13 components
-- **[ETL Naming Conventions](etl_naming_conventions.md)**: Clear data flow and naming strategy
+- **[ETL Pipeline Methods](etl_pipeline_methods.md)**: Complete method documentation for all components
 - **[Fixture Usage Guide](FIXTURE_USAGE_GUIDE.md)**: Comprehensive fixture system for testing
 
-### **Testing Plan**
-- **[Testing Plan](TESTING_PLAN.md)**: Comprehensive testing checklist with 127 methods to test
+**IMPORTANT**: Retrieve detailed information from these documents when building tests. They contain:
+- Complete method lists and signatures
+- Architecture patterns and best practices
+- Connection management strategies
+- Data flow diagrams and dependencies
+- Fixture definitions and usage patterns
 
 ## 🛠️ **TEST INFRASTRUCTURE CONFIGURATION**
 
-### **pytest.ini Configuration** 📋
-
+### **pytest.ini Configuration**
 ```ini
 [pytest]
 testpaths = tests
@@ -176,266 +107,48 @@ addopts =
     --strict-markers
 ```
 
-### **conftest.py Shared Infrastructure** 🔧
-
-The `conftest.py` file provides shared fixtures and configuration for all test files:
-
-#### **1. Database Mock Fixtures**
+### **Provider Pattern Testing Examples**
 ```python
-@pytest.fixture
-def mock_database_engines():
-    """Mock database engines for unit tests."""
-    return {
-        'source': MagicMock(spec=Engine),
-        'replication': MagicMock(spec=Engine),
-        'analytics': MagicMock(spec=Engine)
-    }
-
-@pytest.fixture
-def mock_connection_factory():
-    """Mock connection factory for testing."""
-    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock:
-        mock.get_opendental_source_connection.return_value = MagicMock(spec=Engine)
-        mock.get_mysql_replication_connection.return_value = MagicMock(spec=Engine)
-        mock.get_postgres_analytics_connection.return_value = MagicMock(spec=Engine)
-        yield mock
-```
-
-#### **2. Test Data Fixtures**
-```python
-@pytest.fixture
-def sample_patient_data():
-    """Sample patient data for testing with PostgreSQL raw schema field names."""
-    return pd.DataFrame([
-        {
-            '"PatNum"': 1,
-            '"LName"': 'Doe',
-            '"FName"': 'John',
-            # ... more fields
+# Unit Test with DictConfigProvider
+def test_database_config_with_provider():
+    """Test database configuration using provider pattern."""
+    test_provider = DictConfigProvider(
+        env={
+            'OPENDENTAL_SOURCE_HOST': 'test-host',
+            'OPENDENTAL_SOURCE_DB': 'test_db',
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-prefixed-host'
         }
-    ])
+    )
+    
+    settings = Settings(environment='test', provider=test_provider)
+    config = settings.get_database_config(DatabaseType.SOURCE)  # Using enums
+    assert config['host'] == 'test-prefixed-host'
 
-@pytest.fixture
-def large_test_dataset():
-    """Generate large securitylog dataset for performance testing."""
-    def _generate_large_securitylog(count: int = 10000):
-        # Generate realistic test data
-        pass
-    return _generate_large_securitylog
+# Integration Test with FileConfigProvider
+def test_real_config_loading():
+    """Test loading configuration from real files."""
+    settings = Settings(environment='production')  # Uses FileConfigProvider
+    assert settings.validate_configs() is True
 ```
 
-#### **3. Configuration Fixtures**
-```python
-@pytest.fixture
-def mock_settings():
-    """Mock settings for testing."""
-    with patch('etl_pipeline.config.settings.Settings') as mock:
-        settings_instance = MagicMock()
-        # Configure mock settings
-        yield settings_instance
+## 🎯 **TESTING PHILOSOPHY**
 
-@pytest.fixture
-def test_environment_config():
-    """Test environment configuration that mirrors production structure."""
-    return {
-        'environment': 'test',
-        'log_level': 'DEBUG',
-        'batch_size': 100,  # Smaller for faster tests
-        # ... more configuration
-    }
-```
-
-## 🎯 **COMPREHENSIVE METHOD TESTING**
-
-### **Complete Method Coverage (150 Methods)**
-
-Based on the [Testing Plan](TESTING_PLAN.md), we need to test **150 methods** across all components:
-
-#### **Phase 1: Core Component Testing (Week 1)**
-- **Logging Module**: 15 methods (0% → 95% coverage)
-- **Configuration Module**: 22 methods (0% → 95% coverage)
-- **Core Connections**: 25 methods (0% → 95% coverage)
-- **Core Postgres Schema**: 10 methods (0% → 95% coverage)
-
-#### **Phase 2: Data Movement Testing (Week 2)**
-- **MySQL Replicator**: 10 methods (91% → 95% coverage) ✅ **COMPLETED**
-- **PostgresLoader**: 10 methods (0% → 95% coverage)
-- **Unified Metrics**: 15 methods (0% → 95% coverage)
-
-#### **Phase 3: Orchestration Testing (Week 3)**
-- **Pipeline Orchestrator**: 7 methods (32% → 95% coverage)
-- **Priority Processor**: 5 methods (0% → 95% coverage)
-- **Table Processor**: 8 methods (16% → 95% coverage)
-- **Scripts**: 27 methods (0% → 90% coverage)
-
-#### **Phase 4: E2E Testing (Week 4)**
-- **Integration Tests**: 0% → 90% coverage
-- **E2E Tests**: 0% → 90% coverage
-
-### **Method-Level Testing Requirements**
-
-Each method must be tested in all three tiers with order markers for integration tests:
-
-```python
-# Example: Testing PostgresLoader.load_table() method
-
-# Unit Test (test_postgres_loader_unit.py)
-@pytest.mark.unit
-def test_load_table_method_basic_functionality(mock_analytics_engine, sample_patient_data):
-    """Test PostgresLoader.load_table() basic functionality with mocking."""
-    # Test core logic without real connections
-    pass
-
-# Comprehensive Test (test_postgres_loader.py)
-@pytest.mark.unit  # Default marker
-def test_load_table_method_full_functionality(mock_settings, large_test_dataset):
-    """Test PostgresLoader.load_table() complete functionality with mocked dependencies."""
-    # Test full method behavior with all dependencies mocked
-    pass
-
-# Integration Test (test_postgres_loader_integration.py)
-@pytest.mark.integration
-@pytest.mark.order(4)  # Data Loading phase
-def test_load_table_method_integration(test_analytics_engine, sample_patient_data):
-    """Test PostgresLoader.load_table() with real test database."""
-    # Test method with real test database connections
-    pass
-```
-
-## 🔗 **CONNECTION ARCHITECTURE INTEGRATION**
-
-### **Explicit Environment Separation**
-
-Based on [Connection Architecture](connection_architecture.md):
-
-```python
-# Production connections (for E2E tests only)
-source_engine = ConnectionFactory.get_opendental_source_connection()
-replication_engine = ConnectionFactory.get_mysql_replication_connection()
-analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
-
-# Test connections (for integration tests)
-test_source_engine = ConnectionFactory.get_opendental_source_test_connection()
-test_replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
-test_analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
-
-# Schema-specific connections
-test_raw_engine = ConnectionFactory.get_opendental_analytics_raw_test_connection()
-test_staging_engine = ConnectionFactory.get_opendental_analytics_staging_test_connection()
-test_intermediate_engine = ConnectionFactory.get_opendental_analytics_intermediate_test_connection()
-test_marts_engine = ConnectionFactory.get_opendental_analytics_marts_test_connection()
-```
-
-### **Database Type Enums**
-
-```python
-from etl_pipeline.config.settings import DatabaseType, PostgresSchema
-
-# Using enums for type safety
-source_config = settings.get_database_config(DatabaseType.SOURCE)
-analytics_config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
-```
-
-## 📊 **DATA FLOW INTEGRATION**
-
-### **Complete Pipeline Ecosystem**
-
-Based on [Data Flow Diagram](DATA_FLOW_DIAGRAM.md):
-
-#### **Nightly ETL Components (123 methods)**
-- **PipelineOrchestrator**: 6 methods
-- **TableProcessor**: 9 methods (CORE ETL ENGINE)
-- **PriorityProcessor**: 5 methods
-- **Settings**: 20 methods
-- **ConfigReader**: 12 methods
-- **ConnectionFactory**: 25 methods
-- **PostgresSchema**: 10 methods
-- **SimpleMySQLReplicator**: 10 methods
-- **PostgresLoader**: 11 methods
-- **UnifiedMetricsCollector**: 15 methods
-
-#### **Management Scripts (27 methods)**
-- **Test Database Setup**: 8 functions
-- **PipelineConfigManager**: 15 methods
-- **CLI Commands**: 4 methods
-
-### **Data Flow Testing**
-
-```python
-# Test complete data flow
-def test_complete_data_flow():
-    """Test complete data flow: Source → Replication → Analytics."""
-    # Phase 1: Extract (MySQL → MySQL)
-    # Phase 2: Load (MySQL → PostgreSQL)
-    # Phase 3: Transform (PostgreSQL → dbt models)
-    pass
-```
-
-## 🏷️ **NAMING CONVENTIONS INTEGRATION**
-
-### **Consistent Naming Strategy**
-
-Based on [ETL Naming Conventions](etl_naming_conventions.md):
-
-```python
-# Environment Variables
-OPENDENTAL_SOURCE_HOST=client-opendental-server
-MYSQL_REPLICATION_HOST=localhost
-POSTGRES_ANALYTICS_HOST=localhost
-
-# Connection Factory Methods
-get_opendental_source_connection()           # Source MySQL
-get_mysql_replication_connection()           # Replication MySQL
-get_opendental_analytics_raw_connection()    # Raw schema
-get_opendental_analytics_staging_connection() # Staging schema
-
-# Database Names
-source_db = "opendental"
-replication_db = "opendental_replication"
-analytics_db = "opendental_analytics"
-```
-
-### **Schema Structure**
-
-```sql
--- PostgreSQL Database: opendental_analytics
-raw.patient              -- ETL pipeline output
-staging.stg_opendental__patient  -- dbt staging
-intermediate.int_patient_demographics  -- dbt intermediate
-marts.dim_patient        -- dbt marts
-```
-
-## 🧪 **FIXTURE SYSTEM INTEGRATION**
-
-### **Modular Fixture Architecture**
-
-Based on [Fixture Usage Guide](FIXTURE_USAGE_GUIDE.md):
-
-```python
-# Environment and Configuration Fixtures
-def test_environment_setup(test_env_vars, test_settings):
-    """Test that environment is properly configured."""
-    assert test_env_vars['ETL_ENVIRONMENT'] == 'test'
-    assert test_settings.environment == 'test'
-
-# Database Connection Fixtures
-def test_source_connection(test_source_engine):
-    """Test source database connection."""
-    with test_source_engine.connect() as conn:
-        result = conn.execute(text("SELECT 1"))
-        assert result.scalar() == 1
-
-# Test Data Fixtures
-def test_patient_data_structure(standard_patient_test_data):
-    """Test patient data structure."""
-    assert len(standard_patient_test_data) == 3
-
-# Integration Test Fixtures
-def test_pipeline_with_populated_databases(populated_test_databases):
-    """Test pipeline with pre-populated test databases."""
-    source_count = populated_test_databases.get_patient_count('source')
-    assert source_count > 0
-```
+### **Key Testing Principles**
+1. **Mock at highest abstraction level possible**
+2. **Test behavior, not implementation**
+3. **Focus on data integrity and pipeline robustness**
+4. **Verify error handling and recovery**
+5. **Ensure idempotent operations**
+6. **Use three-tier approach for comprehensive coverage**
+7. **Follow explicit environment separation**
+8. **Test all methods from methods documentation**
+9. **Use order markers for integration test execution**
+10. **Leverage static configuration for predictable testing**
+11. **Use provider pattern for dependency injection**
+12. **Ensure test isolation with DictConfigProvider for unit tests**
+13. **Use enums for type safety in database operations**
+14. **Leverage FileConfigProvider for integration/E2E tests**
+15. **Maintain configuration isolation between test types**
 
 ## 🚀 **TEST BUILDING PROMPT TEMPLATE**
 
@@ -466,40 +179,11 @@ I need to build [UNIT/COMPREHENSIVE/INTEGRATION/E2E] tests for [COMPONENT_NAME] 
 - Testing Plan: [TESTING_PLAN.md]
 - Connection Architecture: [connection_architecture.md]
 - Data Flow Diagram: [DATA_FLOW_DIAGRAM.md]
-- ETL Naming Conventions: [etl_naming_conventions.md]
+- ETL Pipeline Methods: [etl_pipeline_methods.md]
 - Fixture Usage Guide: [FIXTURE_USAGE_GUIDE.md]
 
 Please create the test file with comprehensive coverage of all methods.
 ```
-
-## 🎯 **TESTING PHILOSOPHY**
-
-### **Modern Architecture Benefits**
-1. **Static Configuration**: All configuration from `tables.yml` - no database queries during ETL
-2. **5-10x Performance**: Faster than dynamic schema discovery approaches
-3. **Explicit Environment Separation**: Clear production/test environment handling
-4. **No Legacy Code**: All compatibility methods removed
-5. **Predictable Performance**: Consistent execution times with static configuration
-6. **Better Reliability**: No dependency on live database state during ETL
-
-### **Test Types and Coverage Targets**
-- **Unit Tests**: >95% for critical components
-- **Comprehensive Tests**: >95% for full functionality
-- **Integration Tests**: >90% for full pipeline flows (with order markers)
-- **E2E Tests**: >90% for production connection validation
-- **Method Coverage**: 100% (all 150 methods)
-
-### **Key Testing Principles**
-1. **Mock at highest abstraction level possible**
-2. **Test behavior, not implementation**
-3. **Focus on data integrity and pipeline robustness**
-4. **Verify error handling and recovery**
-5. **Ensure idempotent operations**
-6. **Use three-tier approach for comprehensive coverage**
-7. **Follow explicit environment separation**
-8. **Test all methods from methods documentation**
-9. **Use order markers for integration test execution**
-10. **Leverage static configuration for predictable testing**
 
 ## 🛠️ **DEBUGGING STRATEGY**
 
@@ -529,7 +213,7 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 
 ## 📋 **VERIFICATION CHECKLIST**
 
-### **Before Implementing Tests (Three-Tier Approach)**
+### **Before Implementing Tests**
 - [ ] Review component's actual functionality (not mocked behavior)
 - [ ] Understand data flow and dependencies from [DATA_FLOW_DIAGRAM.md]
 - [ ] Identify critical error scenarios
@@ -538,11 +222,14 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - [ ] Verify pytest.ini configuration supports test types
 - [ ] Check conftest.py has required fixtures
 - [ ] Review connection architecture patterns from [connection_architecture.md]
-- [ ] Follow naming conventions from [etl_naming_conventions.md]
+- [ ] Follow naming conventions from [etl_pipeline_methods.md]
 - [ ] Plan order markers for integration tests
 - [ ] Understand static configuration approach
+- [ ] Plan provider pattern usage (DictConfigProvider for unit/comprehensive, FileConfigProvider for integration/E2E)
+- [ ] Identify enum usage for type safety (DatabaseType, PostgresSchema)
+- [ ] Plan test isolation strategy with provider pattern
 
-### **After Writing Tests (Three-Tier Approach)**
+### **After Writing Tests**
 - [ ] Verify tests cover actual business logic
 - [ ] Ensure error scenarios are tested
 - [ ] Check that mocks don't hide real issues
@@ -554,46 +241,26 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - [ ] Validate method coverage (all 150 methods)
 - [ ] Verify order markers work correctly
 - [ ] Test static configuration integration
+- [ ] Verify provider pattern usage
+- [ ] Test enum usage for type safety
+- [ ] Verify test isolation with provider pattern
+- [ ] Confirm no environment pollution in tests
+- [ ] Validate dependency injection works correctly
 
-### **Before Deployment**
-- [ ] Overall coverage >90%
-- [ ] Critical components >95% coverage (across all three test files)
-- [ ] All integration tests pass (with order markers)
-- [ ] All E2E tests pass
-- [ ] All methods from methods documentation tested (150 methods)
-- [ ] pytest.ini configuration validated
-- [ ] conftest.py fixtures tested
-- [ ] Environment separation verified
-- [ ] Order markers validated
-- [ ] Static configuration approach verified
+## 🎯 **SUCCESS METRICS**
 
-## 🏆 **SUCCESS METRICS**
+### **Coverage Targets**
+- **Overall Code Coverage**: > 90% (CRITICAL)
+- **Critical Component Coverage**: > 95% (CRITICAL)
+- **Integration Test Coverage**: > 90% (HIGH)
+- **E2E Test Coverage**: > 90% (HIGH)
+- **Error Path Coverage**: 100% (CRITICAL)
+- **Method Coverage**: 100% (CRITICAL)
 
-### **Coverage Targets (Three-Tier Approach)**
-- **Logging Module**: >95% (across unit + comprehensive + integration)
-- **Configuration Module**: >95% (across unit + comprehensive + integration)
-- **Core Connections**: >95% (across unit + comprehensive + integration)
-- **Core Postgres Schema**: >95% (across unit + comprehensive + integration)
-- **MySQL Replicator**: >95% (across unit + comprehensive + integration) ✅ **COMPLETED**
-- **PostgresLoader**: >95% (across unit + comprehensive + integration)
-- **Unified Metrics**: >95% (across unit + comprehensive + integration)
-- **Pipeline Orchestrator**: >95% (across unit + comprehensive + integration)
-- **Priority Processor**: >95% (across unit + comprehensive + integration)
-- **Table Processor**: >95% (across unit + comprehensive + integration)
-- **Scripts**: >90% (across unit + comprehensive + integration)
-- **Integration flows**: >90% (end-to-end scenarios with order markers)
-- **E2E flows**: >90% (production connection validation)
-
-### **Quality Metrics**
-- **Test reliability**: >99% pass rate
-- **Test independence**: No shared state between tests
-- **Test maintainability**: Clear, documented test scenarios
-- **Method coverage**: 100% (all 150 methods)
-- **Three-tier approach**: All three test files working together
-- **Infrastructure**: pytest.ini and conftest.py properly configured
-- **Environment separation**: Clear production/test boundaries
-- **Order markers**: Proper integration test execution order
-- **Static configuration**: Predictable test behavior
+### **Performance Targets**
+- **Test Execution Time**: < 15 minutes for full suite
+- **Test Reliability**: > 99% pass rate
+- **Test Maintainability**: < 10% test code per production code
 
 ## 🚀 **IMMEDIATE NEXT STEPS**
 
@@ -645,4 +312,4 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - **Use order markers**: Ensure proper integration test execution
 - **Leverage static configuration**: Use predictable test behavior
 
-This comprehensive test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 150 methods across th
+This test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 150 methods across the three-tier testing approach.
