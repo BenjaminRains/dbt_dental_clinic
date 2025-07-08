@@ -246,9 +246,9 @@ def mock_cli_database_connections():
     """Mock database connections for CLI integration tests."""
     with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
         # Mock connection factory methods
-        mock_factory.get_opendental_source_connection.return_value = MagicMock()
-        mock_factory.get_mysql_replication_connection.return_value = MagicMock()
-        mock_factory.get_opendental_analytics_raw_connection.return_value = MagicMock()
+        mock_factory.get_source_connection.return_value = MagicMock()
+        mock_factory.get_replication_connection.return_value = MagicMock()
+        mock_factory.get_analytics_raw_connection.return_value = MagicMock()
         
         # Mock test connection methods
         mock_factory.get_opendental_source_test_connection.return_value = MagicMock()
