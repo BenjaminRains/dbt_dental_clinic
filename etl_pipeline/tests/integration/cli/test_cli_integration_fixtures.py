@@ -927,7 +927,7 @@ class TestCLIConfigurationIntegrationWithFixtures:
     def test_test_connections_with_failure(self, cli_runner, mock_cli_database_connections):
         """Test test-connections command with connection failure simulation."""
         # Patch the connection factory method that's actually called in the command
-        with patch('etl_pipeline.cli.commands.ConnectionFactory.get_opendental_source_connection') as mock_source:
+        with patch('etl_pipeline.cli.commands.ConnectionFactory.get_source_connection') as mock_source:
             # Create a mock engine that raises an exception when connect() is called
             mock_engine = MagicMock()
             mock_engine.connect.side_effect = Exception("Source connection failed")
