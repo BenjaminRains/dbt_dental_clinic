@@ -86,10 +86,10 @@ def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
 @pytest.fixture
 def test_database_engines(test_settings) -> Generator[Tuple, None, None]:
     """
-    Provides test database engines using explicit test connection methods.
+    Provides test database engines using unified connection methods.
     
     Returns:
-        Tuple of (replication_engine, analytics_engine) for backward compatibility
+        Tuple of (replication_engine, analytics_engine)
     
     Usage:
         def test_something(test_database_engines):
@@ -97,15 +97,13 @@ def test_database_engines(test_settings) -> Generator[Tuple, None, None]:
             # ... test logic ...
     """
     try:
-        # Use explicit test connection methods as per connection_environment_separation.md
-        replication_engine = ConnectionFactory.get_mysql_replication_test_connection(test_settings)
-        analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
+        replication_engine = ConnectionFactory.get_replication_connection(test_settings)
+        analytics_engine = ConnectionFactory.get_analytics_connection(test_settings)
         
-        logger.info("Created test database engines using explicit test connection methods")
+        logger.info("Created test database engines using unified connection methods")
         
         yield (replication_engine, analytics_engine)
         
-        # Clean up connections
         replication_engine.dispose()
         analytics_engine.dispose()
         
@@ -116,21 +114,13 @@ def test_database_engines(test_settings) -> Generator[Tuple, None, None]:
 @pytest.fixture
 def test_source_engine(test_settings):
     """
-    Provides test source database engine using explicit test connection method.
-    
-    Usage:
-        def test_source_connection(test_source_engine):
-            # ... test logic with source database ...
+    Provides test source database engine using unified connection method.
     """
     try:
-        engine = ConnectionFactory.get_opendental_source_test_connection(test_settings)
-        
-        logger.info("Created test source engine using explicit test connection method")
-        
+        engine = ConnectionFactory.get_source_connection(test_settings)
+        logger.info("Created test source engine using unified connection method")
         yield engine
-        
         engine.dispose()
-        
     except Exception as e:
         logger.error(f"FAILED: Failed to create test source engine: {e}")
         raise
@@ -138,21 +128,13 @@ def test_source_engine(test_settings):
 @pytest.fixture
 def test_replication_engine(test_settings):
     """
-    Provides test replication database engine using explicit test connection method.
-    
-    Usage:
-        def test_replication_connection(test_replication_engine):
-            # ... test logic with replication database ...
+    Provides test replication database engine using unified connection method.
     """
     try:
-        engine = ConnectionFactory.get_mysql_replication_test_connection(test_settings)
-        
-        logger.info("SUCCESS: Created test replication engine using explicit test connection method")
-        
+        engine = ConnectionFactory.get_replication_connection(test_settings)
+        logger.info("SUCCESS: Created test replication engine using unified connection method")
         yield engine
-        
         engine.dispose()
-        
     except Exception as e:
         logger.error(f"FAILED: Failed to create test replication engine: {e}")
         raise
@@ -160,21 +142,13 @@ def test_replication_engine(test_settings):
 @pytest.fixture
 def test_analytics_engine(test_settings):
     """
-    Provides test analytics database engine using explicit test connection method.
-    
-    Usage:
-        def test_analytics_connection(test_analytics_engine):
-            # ... test logic with analytics database ...
+    Provides test analytics database engine using unified connection method.
     """
     try:
-        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
-        
-        logger.info("SUCCESS: Created test analytics engine using explicit test connection method")
-        
+        engine = ConnectionFactory.get_analytics_connection(test_settings)
+        logger.info("SUCCESS: Created test analytics engine using unified connection method")
         yield engine
-        
         engine.dispose()
-        
     except Exception as e:
         logger.error(f"FAILED: Failed to create test analytics engine: {e}")
         raise
@@ -182,22 +156,13 @@ def test_analytics_engine(test_settings):
 @pytest.fixture
 def test_raw_engine(test_settings):
     """
-    Provides test raw schema engine using explicit test connection method.
-    
-    Usage:
-        def test_raw_schema(test_raw_engine):
-            # ... test logic with raw schema ...
+    Provides test raw schema engine using unified connection method.
     """
     try:
-        # Use the basic test analytics connection and specify raw schema
-        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
-        
-        logger.info("SUCCESS: Created test raw schema engine using explicit test connection method")
-        
+        engine = ConnectionFactory.get_analytics_raw_connection(test_settings)
+        logger.info("SUCCESS: Created test raw schema engine using unified connection method")
         yield engine
-        
         engine.dispose()
-        
     except Exception as e:
         logger.error(f"FAILED: Failed to create test raw schema engine: {e}")
         raise
@@ -205,22 +170,13 @@ def test_raw_engine(test_settings):
 @pytest.fixture
 def test_staging_engine(test_settings):
     """
-    Provides test staging schema engine using explicit test connection method.
-    
-    Usage:
-        def test_staging_schema(test_staging_engine):
-            # ... test logic with staging schema ...
+    Provides test staging schema engine using unified connection method.
     """
     try:
-        # Use the basic test analytics connection and specify staging schema
-        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
-        
-        logger.info("SUCCESS: Created test staging schema engine using explicit test connection method")
-        
+        engine = ConnectionFactory.get_analytics_staging_connection(test_settings)
+        logger.info("SUCCESS: Created test staging schema engine using unified connection method")
         yield engine
-        
         engine.dispose()
-        
     except Exception as e:
         logger.error(f"FAILED: Failed to create test staging schema engine: {e}")
         raise
@@ -228,22 +184,13 @@ def test_staging_engine(test_settings):
 @pytest.fixture
 def test_intermediate_engine(test_settings):
     """
-    Provides test intermediate schema engine using explicit test connection method.
-    
-    Usage:
-        def test_intermediate_schema(test_intermediate_engine):
-            # ... test logic with intermediate schema ...
+    Provides test intermediate schema engine using unified connection method.
     """
     try:
-        # Use the basic test analytics connection and specify intermediate schema
-        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
-        
-        logger.info("SUCCESS: Created test intermediate schema engine using explicit test connection method")
-        
+        engine = ConnectionFactory.get_analytics_intermediate_connection(test_settings)
+        logger.info("SUCCESS: Created test intermediate schema engine using unified connection method")
         yield engine
-        
         engine.dispose()
-        
     except Exception as e:
         logger.error(f"FAILED: Failed to create test intermediate schema engine: {e}")
         raise
@@ -251,22 +198,13 @@ def test_intermediate_engine(test_settings):
 @pytest.fixture
 def test_marts_engine(test_settings):
     """
-    Provides test marts schema engine using explicit test connection method.
-    
-    Usage:
-        def test_marts_schema(test_marts_engine):
-            # ... test logic with marts schema ...
+    Provides test marts schema engine using unified connection method.
     """
     try:
-        # Use the basic test analytics connection and specify marts schema
-        engine = ConnectionFactory.get_postgres_analytics_test_connection(test_settings)
-        
-        logger.info("SUCCESS: Created test marts schema engine using explicit test connection method")
-        
+        engine = ConnectionFactory.get_analytics_marts_connection(test_settings)
+        logger.info("SUCCESS: Created test marts schema engine using unified connection method")
         yield engine
-        
         engine.dispose()
-        
     except Exception as e:
         logger.error(f"FAILED: Failed to create test marts schema engine: {e}")
         raise
