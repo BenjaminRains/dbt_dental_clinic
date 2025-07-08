@@ -91,8 +91,8 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
         # Initialize pipeline orchestrator with test settings if available
         if _test_settings is not None:
             # Use injected test settings
-            orchestrator = PipelineOrchestrator(config_path=config, environment='test')
-            orchestrator.settings = _test_settings
+            # Note: Test config reader should be injected via fixtures
+            orchestrator = PipelineOrchestrator(config_path=config, environment='test', settings=_test_settings)
         else:
             # Use default settings
             orchestrator = PipelineOrchestrator(config_path=config)
