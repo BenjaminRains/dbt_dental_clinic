@@ -244,9 +244,9 @@ def status(config: str, format: str, table: Optional[str], watch: bool, output: 
             config_data = yaml.safe_load(f)
         
         # Initialize components with analytics engine for persistence
-        connection_factory = ConnectionFactory()
-        analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
-        monitor = UnifiedMetricsCollector(analytics_engine=analytics_engine)
+        settings = get_settings()
+        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
+        monitor = UnifiedMetricsCollector(analytics_engine=analytics_engine, settings=settings)
         
         # Get pipeline status
         status_data = monitor.get_pipeline_status(table=table)
@@ -318,17 +318,12 @@ def _display_status(status_data: Dict[str, Any], format: str) -> None:
 def test_connections() -> None:
     """Test all database connections."""
     try:
-        # Use the same pool settings as the pipeline
-        pool_settings = {
-            'pool_size': 5,
-            'max_overflow': 10,
-            'pool_timeout': 30,
-            'pool_recycle': 1800  # 30 minutes
-        }
+        # Get settings for connection configuration
+        settings = get_settings()
         
         # Test OpenDental source connection
         logger.debug("Testing OpenDental source connection...")
-        source_engine = ConnectionFactory.get_opendental_source_connection()
+        source_engine = ConnectionFactory.get_source_connection(settings)
         # Actually attempt to connect
         logger.debug("Attempting to connect to OpenDental source...")
         with source_engine.connect() as conn:
@@ -338,7 +333,7 @@ def test_connections() -> None:
         
         # Test MySQL replication connection
         logger.debug("Testing MySQL replication connection...")
-        repl_engine = ConnectionFactory.get_mysql_replication_connection()
+        repl_engine = ConnectionFactory.get_replication_connection(settings)
         # Actually attempt to connect
         logger.debug("Attempting to connect to MySQL replication...")
         with repl_engine.connect() as conn:
@@ -348,7 +343,7 @@ def test_connections() -> None:
         
         # Test PostgreSQL analytics connection
         logger.debug("Testing PostgreSQL analytics connection...")
-        analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
         # Actually attempt to connect
         logger.debug("Attempting to connect to PostgreSQL analytics...")
         with analytics_engine.connect() as conn:
