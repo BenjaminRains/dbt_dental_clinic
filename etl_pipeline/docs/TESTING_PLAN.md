@@ -10,12 +10,15 @@ This is the **COMPREHENSIVE TESTING CHECKLIST** for the ETL pipeline covering al
 
 ## 🎯 **THREE-TIER TESTING STRATEGY WITH ORDER MARKERS**
 
-### **Modern Architecture Overview** ✅ **STATIC CONFIGURATION APPROACH**
+### **Modern Architecture Overview** ✅ **STATIC CONFIGURATION APPROACH WITH PROVIDER PATTERN**
 
-The ETL pipeline uses a **modern static configuration approach** with **no dynamic schema discovery**:
+The ETL pipeline uses a **modern static configuration approach** with **provider pattern dependency injection**:
 - **Static Configuration**: All configuration from `tables.yml` - no database queries during ETL
+- **Provider Pattern**: Dependency injection for configuration sources (FileConfigProvider/DictConfigProvider)
 - **5-10x Performance**: Faster than dynamic schema discovery approaches
 - **Explicit Environment Separation**: Clear production/test environment handling
+- **Test Isolation**: Complete configuration isolation between production and test environments
+- **Type Safety**: Enums for database types and schema names prevent runtime errors
 - **No Legacy Code**: All compatibility methods removed
 
 ### **3-File Testing Pattern** ✅ **VALIDATED & SUCCESSFUL**
@@ -23,33 +26,37 @@ The ETL pipeline uses a **modern static configuration approach** with **no dynam
 We use a **three-tier testing approach** with **three test files per component** for maximum confidence and coverage, plus **order markers** for proper integration test execution:
 
 #### **1. Unit Tests** (`test_[component]_unit.py`)
-- **Purpose**: Pure unit tests with comprehensive mocking
+- **Purpose**: Pure unit tests with comprehensive mocking and provider pattern
 - **Scope**: Fast execution, isolated component behavior, no real connections
 - **Coverage**: Core logic and edge cases for all methods
 - **Execution**: < 1 second per component
-- **Environment**: No production connections, full mocking
+- **Environment**: No production connections, full mocking with DictConfigProvider
+- **Provider Usage**: DictConfigProvider for injected test configuration
 
 #### **2. Comprehensive Tests** (`test_[component].py`) 
-- **Purpose**: Full functionality testing with mocked dependencies
+- **Purpose**: Full functionality testing with mocked dependencies and provider pattern
 - **Scope**: Complete component behavior, error handling, all methods
 - **Coverage**: 90%+ target coverage (main test suite)
 - **Execution**: < 5 seconds per component
-- **Environment**: Mocked dependencies, no real connections
+- **Environment**: Mocked dependencies, no real connections with DictConfigProvider
+- **Provider Usage**: DictConfigProvider for comprehensive test scenarios
 
 #### **3. Integration Tests** (`test_[component]_integration.py`) ✅ **ORDER MARKERS IMPLEMENTED**
-- **Purpose**: Real database integration with test environment
+- **Purpose**: Real database integration with test environment and provider pattern
 - **Scope**: Safety, error handling, actual data flow, all methods
 - **Coverage**: Integration scenarios and edge cases
 - **Execution**: < 10 seconds per component
-- **Environment**: Real test databases, no production connections
+- **Environment**: Real test databases, no production connections with FileConfigProvider
 - **Order Markers**: Proper test execution order for data flow validation
+- **Provider Usage**: FileConfigProvider with real test configuration files
 
 #### **4. End-to-End Tests** (`test_e2e_[component].py`)
-- **Purpose**: Production connection testing with test data
+- **Purpose**: Production connection testing with test data and provider pattern
 - **Scope**: Full pipeline validation with real production connections
 - **Coverage**: Complete workflow validation
 - **Execution**: < 30 seconds per component
-- **Environment**: Production connections with test data only
+- **Environment**: Production connections with test data only using FileConfigProvider
+- **Provider Usage**: FileConfigProvider with production configuration files
 
 ### **Updated Directory Structure** ✅ **COMPREHENSIVE**
 ```
@@ -83,6 +90,42 @@ tests/
     └── full_pipeline/
 ```
 
+### **Provider Pattern Benefits** ✅ **DEPENDENCY INJECTION & TEST ISOLATION**
+
+**Status**: 🟢 **COMPLETE** - Provider pattern fully implemented with dependency injection
+
+#### **Provider Pattern Architecture**
+```
+Settings → Provider → Configuration Sources
+                ↓
+        ┌─────────────────┐
+        │ FileConfigProvider │ (Production/Integration)
+        │ - pipeline.yml   │
+        │ - tables.yml     │
+        │ - os.environ     │
+        └─────────────────┘
+                ↓
+        ┌─────────────────┐
+        │ DictConfigProvider │ (Unit/Comprehensive Testing)
+        │ - Injected configs │
+        │ - Mock env vars   │
+        └─────────────────┘
+```
+
+#### **Provider Pattern Benefits**
+1. **Dependency Injection**: Easy to swap configuration sources without code changes
+2. **Test Isolation**: Tests use completely isolated configuration (no environment pollution)
+3. **Type Safety**: Enums ensure only valid database types and schema names are used
+4. **Configuration Flexibility**: Support for multiple configuration sources
+5. **No Environment Pollution**: Tests don't affect real environment variables
+6. **Consistent API**: Same interface for production and test configuration
+
+#### **Provider Usage by Test Type**
+- **Unit Tests**: DictConfigProvider with injected test configuration
+- **Comprehensive Tests**: DictConfigProvider with comprehensive test scenarios
+- **Integration Tests**: FileConfigProvider with real test configuration files
+- **E2E Tests**: FileConfigProvider with production configuration files
+
 ### **Integration Test Order Markers** ✅ **FULLY IMPLEMENTED**
 
 **Status**: 🟢 **COMPLETE** - All integration tests have proper order markers implemented
@@ -109,13 +152,49 @@ tests/
 - **Purpose**: Test monitoring and metrics collection
 - **File**: `monitoring/test_unified_metrics_integration.py`
 
+### **Type Safety with Enums** ✅ **COMPILE-TIME VALIDATION**
+
+**Status**: 🟢 **COMPLETE** - Enums provide type safety for database types and schemas
+
+#### **Database Type Enums**
+```python
+class DatabaseType(Enum):
+    SOURCE = "source"           # OpenDental MySQL (readonly)
+    REPLICATION = "replication" # Local MySQL copy  
+    ANALYTICS = "analytics"     # PostgreSQL warehouse
+
+class PostgresSchema(Enum):
+    RAW = "raw"
+    STAGING = "staging" 
+    INTERMEDIATE = "intermediate"
+    MARTS = "marts"
+```
+
+#### **Type Safety Benefits**
+1. **Compile-time Validation**: Prevents invalid database types and schema names
+2. **IDE Support**: Autocomplete and refactoring support
+3. **Documentation**: Self-documenting code showing available options
+4. **Error Prevention**: Impossible to pass invalid strings as database types
+5. **Maintainability**: Centralized definition of valid database types and schemas
+
+#### **Enum Usage in Testing**
+```python
+# ✅ CORRECT - Using enum values
+settings.get_database_config(DatabaseType.SOURCE)
+settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
+
+# ❌ WRONG - Using raw strings (will cause errors)
+settings.get_database_config("source")  # Type error
+settings.get_database_config("analytics", "raw")  # Type error
+```
+
 ### **Complete Ecosystem Overview** ✅ **13 COMPONENTS, 150 METHODS**
 
 **Nightly ETL Components (10 components, 123 methods)**:
 - **PipelineOrchestrator**: Main orchestration (6 methods)
 - **TableProcessor**: Core ETL engine (9 methods)
 - **PriorityProcessor**: Batch processing (5 methods)
-- **Settings**: Modern configuration (20 methods)
+- **Settings**: Modern configuration with provider pattern (20 methods)
 - **ConfigReader**: Static configuration (12 methods)
 - **ConnectionFactory**: Database connections (25 methods)
 - **PostgresSchema**: Schema conversion (10 methods)
@@ -632,16 +711,48 @@ cp .env.template tests/.env.test
 
 **File**: `tests/unit/config/test_logging_unit.py`
 
-**First Test to Write**:
+**First Test to Write** (with Provider Pattern):
 ```python
 import pytest
 from unittest.mock import MagicMock, patch
+from etl_pipeline.config.providers import DictConfigProvider
 
 @pytest.mark.unit
-def test_setup_logging():
-    """Test logging setup with valid parameters"""
-    # TODO: Implement this test following three-tier approach
+def test_setup_logging_with_provider():
+    """Test logging setup with provider pattern dependency injection"""
+    # Create test provider with injected configuration
+    test_provider = DictConfigProvider(
+        pipeline={'logging': {'level': 'DEBUG', 'file': {'path': 'test.log'}}},
+        env={'ETL_ENVIRONMENT': 'test'}
+    )
+    
+    # Test with provider-injected configuration
+    # TODO: Implement this test following three-tier approach with provider pattern
     pass
+```
+
+**Provider-Based Testing Examples**:
+```python
+# Unit Test with DictConfigProvider
+def test_database_config_with_provider():
+    """Test database configuration using provider pattern."""
+    test_provider = DictConfigProvider(
+        env={
+            'OPENDENTAL_SOURCE_HOST': 'test-host',
+            'OPENDENTAL_SOURCE_DB': 'test_db',
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-prefixed-host'
+        }
+    )
+    
+    settings = Settings(environment='test', provider=test_provider)
+    config = settings.get_source_connection_config()
+    assert config['host'] == 'test-prefixed-host'  # Uses TEST_ prefix
+
+# Integration Test with FileConfigProvider
+def test_real_config_loading():
+    """Test loading configuration from real files."""
+    settings = Settings(environment='production')  # Uses FileConfigProvider
+    assert settings.validate_configs() is True
 ```
 
 ### **STEP 3: Run Three-Tier Tests**
@@ -843,11 +954,15 @@ grep -r "@pytest.mark.order" tests/integration/ | cut -d: -f2 | sort | uniq -c
 ### **Modern Architecture Benefits**
 
 1. **Static Configuration**: All configuration from `tables.yml` - no database queries during ETL
-2. **5-10x Performance**: Faster than dynamic schema discovery approaches
-3. **Explicit Environment Separation**: Clear production/test environment handling
-4. **No Legacy Code**: All compatibility methods removed
-5. **Predictable Performance**: Consistent execution times with static configuration
-6. **Better Reliability**: No dependency on live database state during ETL
+2. **Provider Pattern**: Dependency injection for configuration sources (FileConfigProvider/DictConfigProvider)
+3. **5-10x Performance**: Faster than dynamic schema discovery approaches
+4. **Explicit Environment Separation**: Clear production/test environment handling
+5. **Test Isolation**: Complete configuration isolation between production and test environments
+6. **Type Safety**: Enums for database types and schema names prevent runtime errors
+7. **No Legacy Code**: All compatibility methods removed
+8. **Predictable Performance**: Consistent execution times with static configuration
+9. **Better Reliability**: No dependency on live database state during ETL
+10. **Dependency Injection**: Easy to swap configuration sources without code changes
 
 ### **Integration Test Order Markers Benefits**
 
@@ -876,25 +991,59 @@ grep -r "@pytest.mark.order" tests/integration/ | cut -d: -f2 | sort | uniq -c
 - `orchestration/test_pipeline_orchestrator_real_integration.py` - Already had order=5
 - `monitoring/test_unified_metrics_integration.py` - Already had order=6
 
-### **Test Structure Template (Three-Tier Approach)**
+### **Test Structure Template (Three-Tier Approach with Provider Pattern)**
 
 ```python
 import pytest
 from unittest.mock import MagicMock, patch
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.config.settings import DatabaseType, PostgresSchema
 
 @pytest.mark.unit  # or @pytest.mark.integration or @pytest.mark.e2e
-def test_method_name_scenario():
-    """Test description - what method is being tested"""
-    # Arrange - Set up test data and mocks
-    mock_data = {...}
-    mock_connection = MagicMock()
+def test_method_name_with_provider_pattern():
+    """Test description - what method is being tested with provider pattern"""
+    # Arrange - Set up test provider with injected configuration
+    test_provider = DictConfigProvider(
+        pipeline={'connections': {'source': {'pool_size': 5}}},
+        tables={'tables': {'patient': {'batch_size': 1000}}},
+        env={
+            'OPENDENTAL_SOURCE_HOST': 'test-host',
+            'OPENDENTAL_SOURCE_DB': 'test_db',
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-prefixed-host'
+        }
+    )
+    
+    # Create component with provider-injected configuration
+    settings = Settings(environment='test', provider=test_provider)
     
     # Act - Execute the method being tested
-    result = component.method_name(mock_data)
+    config = settings.get_database_config(DatabaseType.SOURCE)  # Using enums for type safety
     
     # Assert - Verify the expected behavior
-    assert result is True
-    assert mock_connection.called
+    assert config['host'] == 'test-prefixed-host'
+    assert config['pool_size'] == 5
+```
+
+**Provider Pattern Testing Examples**:
+```python
+# Unit Test with DictConfigProvider
+def test_database_config_unit():
+    """Unit test with provider pattern dependency injection."""
+    test_provider = DictConfigProvider(env={'OPENDENTAL_SOURCE_HOST': 'test-host'})
+    settings = Settings(environment='test', provider=test_provider)
+    # Test with injected configuration
+
+# Integration Test with FileConfigProvider
+def test_database_config_integration():
+    """Integration test with real configuration files."""
+    settings = Settings(environment='test')  # Uses FileConfigProvider
+    # Test with real configuration files
+
+# E2E Test with Production Configuration
+def test_database_config_e2e():
+    """E2E test with production configuration files."""
+    settings = Settings(environment='production')  # Uses FileConfigProvider
+    # Test with production configuration files
 ```
 
 ### **Test Naming Convention (Three-Tier Approach)**
