@@ -42,8 +42,8 @@ class PostgresSchema:
         self.settings = settings or get_settings()
         
         # Get database connections using new ConnectionFactory (unified API)
-        self.mysql_engine = ConnectionFactory.get_mysql_replication_connection()
-        self.postgres_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
+        self.mysql_engine = ConnectionFactory.get_replication_connection(self.settings)
+        self.postgres_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
         
         # Get database names from settings
         mysql_config = self.settings.get_replication_connection_config()
