@@ -35,5 +35,5 @@ __all__ = [
     'ConfigReader'
 ]
 
-# Note: No default settings instance exported to avoid backward compatibility
+# Note: No default settings instance exported to avoid implicit dependencies
 # ETL scripts should explicitly import and use settings as needed
