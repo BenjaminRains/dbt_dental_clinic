@@ -99,7 +99,7 @@ class PipelineOrchestrator:
         self.priority_processor = None
         
         # Initialize metrics
-        self.metrics = UnifiedMetricsCollector(use_test_connections=(environment == 'test'))
+        self.metrics = UnifiedMetricsCollector(use_test_connections=(environment == 'test'), settings=self.settings)
         
         # Track initialization state
         self._initialized = False
