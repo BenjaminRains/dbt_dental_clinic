@@ -7,6 +7,7 @@ This module contains fixtures related to:
 - Settings creation and management
 - Configuration validation
 - Database type and schema enums
+- Provider pattern implementation for dependency injection
 """
 
 import os
@@ -22,6 +23,7 @@ from etl_pipeline.config import (
     reset_settings,
     create_test_settings
 )
+from etl_pipeline.config.providers import DictConfigProvider
 
 
 @pytest.fixture
@@ -94,27 +96,205 @@ def test_tables_config():
 
 
 @pytest.fixture
-def complete_config_environment():
-    """Fixture providing a complete configuration environment."""
-    env_vars = {
-        'OPENDENTAL_SOURCE_HOST': 'source_host',
+def test_env_vars():
+    """Test environment variables following connection architecture naming convention.
+    
+    This fixture provides test environment variables that conform to the connection architecture:
+    - Uses TEST_ prefix for test environment variables
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_test file structure
+    - Supports the provider pattern for dependency injection
+    """
+    return {
+        # Environment declaration (required for fail-fast validation)
+        'ETL_ENVIRONMENT': 'test',
+        
+        # OpenDental Source (Test) - following architecture naming
+        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+        'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+        'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
+        
+        # MySQL Replication (Test) - following architecture naming
+        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+        'TEST_MYSQL_REPLICATION_PORT': '3306',
+        'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+        'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+        
+        # PostgreSQL Analytics (Test) - following architecture naming
+        'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+        'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+        'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+        'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+        'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+    }
+
+
+@pytest.fixture
+def production_env_vars():
+    """Production environment variables following connection architecture naming convention.
+    
+    This fixture provides production environment variables that conform to the connection architecture:
+    - Uses non-prefixed variables for production environment
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_production file structure
+    - Supports the provider pattern for dependency injection
+    """
+    return {
+        # Environment declaration (required for fail-fast validation)
+        'ETL_ENVIRONMENT': 'production',
+        
+        # OpenDental Source (Production) - following architecture naming
+        'OPENDENTAL_SOURCE_HOST': 'prod-source-host',
         'OPENDENTAL_SOURCE_PORT': '3306',
-        'OPENDENTAL_SOURCE_DB': 'source_db',
+        'OPENDENTAL_SOURCE_DB': 'opendental',
         'OPENDENTAL_SOURCE_USER': 'source_user',
         'OPENDENTAL_SOURCE_PASSWORD': 'source_pass',
-        'MYSQL_REPLICATION_HOST': 'repl_host',
+        
+        # MySQL Replication (Production) - following architecture naming
+        'MYSQL_REPLICATION_HOST': 'prod-repl-host',
         'MYSQL_REPLICATION_PORT': '3306',
-        'MYSQL_REPLICATION_DB': 'repl_db',
+        'MYSQL_REPLICATION_DB': 'opendental_replication',
         'MYSQL_REPLICATION_USER': 'repl_user',
         'MYSQL_REPLICATION_PASSWORD': 'repl_pass',
-        'POSTGRES_ANALYTICS_HOST': 'analytics_host',
+        
+        # PostgreSQL Analytics (Production) - following architecture naming
+        'POSTGRES_ANALYTICS_HOST': 'prod-analytics-host',
         'POSTGRES_ANALYTICS_PORT': '5432',
-        'POSTGRES_ANALYTICS_DB': 'analytics_db',
+        'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
         'POSTGRES_ANALYTICS_SCHEMA': 'raw',
         'POSTGRES_ANALYTICS_USER': 'analytics_user',
         'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
     }
-    return env_vars
+
+
+@pytest.fixture
+def test_config_provider(test_pipeline_config, test_tables_config, test_env_vars):
+    """Test configuration provider following the provider pattern for dependency injection.
+    
+    This fixture implements the DictConfigProvider pattern as specified in the connection architecture:
+    - Uses DictConfigProvider for testing (as recommended)
+    - Provides injected configuration for clean test isolation
+    - Supports dependency injection for easy configuration swapping
+    - Follows the provider pattern for configuration loading
+    """
+    return DictConfigProvider(
+        pipeline=test_pipeline_config,
+        tables=test_tables_config,
+        env=test_env_vars
+    )
+
+
+@pytest.fixture
+def production_config_provider(valid_pipeline_config, complete_tables_config, production_env_vars):
+    """Production configuration provider following the provider pattern.
+    
+    This fixture implements the DictConfigProvider pattern for production-like testing:
+    - Uses DictConfigProvider with production-like configuration
+    - Provides injected configuration for integration testing
+    - Supports dependency injection for configuration swapping
+    """
+    return DictConfigProvider(
+        pipeline=valid_pipeline_config,
+        tables=complete_tables_config,
+        env=production_env_vars
+    )
+
+
+@pytest.fixture
+def test_settings(test_config_provider):
+    """Test settings with provider injection following connection architecture.
+    
+    This fixture implements the Settings injection pattern as specified in the architecture:
+    - Uses Settings with provider injection for environment-agnostic operation
+    - Uses DictConfigProvider for testing (as recommended)
+    - Supports dependency injection for clean test isolation
+    - Follows the unified interface pattern
+    """
+    return Settings(environment='test', provider=test_config_provider)
+
+
+@pytest.fixture
+def production_settings(production_config_provider):
+    """Production settings with provider injection following connection architecture.
+    
+    This fixture implements the Settings injection pattern for production-like testing:
+    - Uses Settings with provider injection for environment-agnostic operation
+    - Uses DictConfigProvider with production-like configuration
+    - Supports dependency injection for integration testing
+    """
+    return Settings(environment='production', provider=production_config_provider)
+
+
+@pytest.fixture
+def test_settings_with_enums(test_config_provider):
+    """Create test settings using enums for database configuration testing.
+    
+    This fixture uses the factory function pattern as recommended in the architecture:
+    - Uses create_test_settings() factory function
+    - Provides enum support for type safety
+    - Uses provider pattern for dependency injection
+    """
+    return create_test_settings(
+        pipeline_config=test_config_provider.get_config('pipeline'),
+        tables_config=test_config_provider.get_config('tables'),
+        env_vars=test_config_provider.get_config('env')
+    )
+
+
+@pytest.fixture
+def source_database_environment():
+    """Fixture providing source database environment variables following architecture.
+    
+    This fixture provides environment variables specifically for source database testing,
+    following the connection architecture naming convention.
+    """
+    return {
+        'ETL_ENVIRONMENT': 'test',
+        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+        'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+        'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass'
+    }
+
+
+@pytest.fixture
+def replication_database_environment():
+    """Fixture providing replication database environment variables following architecture.
+    
+    This fixture provides environment variables specifically for replication database testing,
+    following the connection architecture naming convention.
+    """
+    return {
+        'ETL_ENVIRONMENT': 'test',
+        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+        'TEST_MYSQL_REPLICATION_PORT': '3306',
+        'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+        'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass'
+    }
+
+
+@pytest.fixture
+def analytics_database_environment():
+    """Fixture providing analytics database environment variables following architecture.
+    
+    This fixture provides environment variables specifically for analytics database testing,
+    following the connection architecture naming convention.
+    """
+    return {
+        'ETL_ENVIRONMENT': 'test',
+        'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+        'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+        'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+        'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+        'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+    }
 
 
 @pytest.fixture
@@ -267,7 +447,11 @@ def complete_tables_config():
 
 @pytest.fixture
 def mock_settings_environment():
-    """Fixture providing a context manager for mocking Settings environment."""
+    """Fixture providing a context manager for mocking Settings environment.
+    
+    This fixture provides a context manager for mocking the Settings environment
+    while maintaining the provider pattern for dependency injection.
+    """
     def _mock_settings_environment(env_vars=None, pipeline_config=None, tables_config=None):
         """Create a context manager for mocking Settings environment."""
         patches = []
@@ -300,18 +484,12 @@ def mock_settings_environment():
 
 
 @pytest.fixture
-def test_settings_with_enums(test_env_vars, test_pipeline_config, test_tables_config):
-    """Create test settings using enums for database configuration testing."""
-    return create_test_settings(
-        pipeline_config=test_pipeline_config,
-        tables_config=test_tables_config,
-        env_vars=test_env_vars
-    )
-
-
-@pytest.fixture
 def database_config_test_cases():
-    """Test cases for database configuration using enums."""
+    """Test cases for database configuration using enums.
+    
+    This fixture provides test cases that use enums for type safety
+    as specified in the connection architecture.
+    """
     return [
         # (db_type, schema, expected_config_keys)
         (DatabaseType.SOURCE, None, ['host', 'port', 'database', 'user', 'password']),
@@ -325,7 +503,11 @@ def database_config_test_cases():
 
 @pytest.fixture
 def schema_specific_configs():
-    """Schema-specific configuration test cases."""
+    """Schema-specific configuration test cases.
+    
+    This fixture provides schema-specific configurations that use enums
+    for type safety as specified in the connection architecture.
+    """
     return {
         'raw': {
             'schema': 'raw',
@@ -348,7 +530,11 @@ def schema_specific_configs():
 
 @pytest.fixture
 def connection_config_validation_cases():
-    """Test cases for connection configuration validation."""
+    """Test cases for connection configuration validation.
+    
+    This fixture provides test cases that use enums for type safety
+    and follow the connection architecture validation patterns.
+    """
     return [
         # Valid configurations
         {
