@@ -87,7 +87,7 @@ function Initialize-DBTEnvironment {
     }
 
     # Load environment variables
-    @(".env", ".dbt-env") | ForEach-Object {
+    @(".env_production", ".dbt-env") | ForEach-Object {
         $envFile = "$ProjectPath\$_"
         if (Test-Path $envFile) {
             Get-Content $envFile | ForEach-Object {
@@ -211,10 +211,32 @@ function Initialize-ETLEnvironment {
     Pop-Location
 
     # Load environment variables
-    if (Test-Path "$ProjectPath\.env") {
-        Get-Content "$ProjectPath\.env" | ForEach-Object {
-            if ($_ -match '^([^#][^=]+)=(.*)$') {
-                [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process')
+    # First load project root .env_production if it exists
+    if (Test-Path "$ProjectPath\.env_production") {
+        Write-Host "📄 Loading project root .env_production file..." -ForegroundColor Yellow
+        Get-Content "$ProjectPath\.env_production" | ForEach-Object {
+            if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
+                $name = $matches[1].Trim()
+                $value = $matches[2].Trim()
+                [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+                Write-Host "  Loaded: $name" -ForegroundColor Gray
+            }
+        }
+    }
+    
+    # Load ETL-specific environment files from etl_pipeline directory
+    $etlPath = "$ProjectPath\etl_pipeline"
+    @(".env_test", ".env_production") | ForEach-Object {
+        $envFile = "$etlPath\$_"
+        if (Test-Path $envFile) {
+            Write-Host "📄 Loading ETL environment file: $_" -ForegroundColor Yellow
+            Get-Content $envFile | ForEach-Object {
+                if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
+                    $name = $matches[1].Trim()
+                    $value = $matches[2].Trim()
+                    [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+                    Write-Host "  Loaded: $name" -ForegroundColor Gray
+                }
             }
         }
     }
