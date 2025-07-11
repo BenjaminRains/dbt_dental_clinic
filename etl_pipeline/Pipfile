@@ -30,6 +30,8 @@ pylint = "==3.0.3"
 pytest = "*"
 pytest-cov = "*"
 pytest-order = "*"
+pytest-timeout = "*"
+etl_pipeline = {editable = true, path = "."}
 
 [requires]
 python_version = "3.11"
