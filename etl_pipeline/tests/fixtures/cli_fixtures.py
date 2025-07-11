@@ -118,30 +118,29 @@ def cli_test_config():
 
 @pytest.fixture
 def cli_test_env_vars():
-    """Test environment variables for CLI testing."""
+    """Test environment variables for CLI testing using unified interface."""
     return {
-        # Test environment variables for database connections
-        'TEST_OPENDENTAL_SOURCE_HOST': 'test-opendental-host',
+        # Environment detection
+        'ETL_ENVIRONMENT': 'test',
+        # Source database (OpenDental) - TEST_ prefixed for test environment
+        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
         'TEST_OPENDENTAL_SOURCE_PORT': '3306',
         'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
         'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_password',
-        
-        'TEST_MYSQL_REPLICATION_HOST': 'test-replication-host',
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+        # Replication database (MySQL) - TEST_ prefixed for test environment
+        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
         'TEST_MYSQL_REPLICATION_PORT': '3306',
         'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
         'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
-        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_password',
-        
+        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+        # Analytics database (PostgreSQL) - TEST_ prefixed for test environment
         'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
         'TEST_POSTGRES_ANALYTICS_PORT': '5432',
         'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
         'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
         'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_password',
-        
-        # Environment detection
-        'ETL_ENVIRONMENT': 'test'
+        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
     }
 
 
@@ -250,10 +249,7 @@ def mock_cli_database_connections():
         mock_factory.get_replication_connection.return_value = MagicMock()
         mock_factory.get_analytics_raw_connection.return_value = MagicMock()
         
-        # Mock test connection methods
-        mock_factory.get_opendental_source_test_connection.return_value = MagicMock()
-        mock_factory.get_mysql_replication_test_connection.return_value = MagicMock()
-        mock_factory.get_opendental_analytics_test_connection.return_value = MagicMock()
+
         
         yield mock_factory
 
@@ -284,7 +280,7 @@ def cli_expected_outputs():
         'dry_run': {
             'header': ['DRY RUN MODE - No changes will be made'],
             'processing': ['Would process all tables by priority', 'Would process specific tables'],
-            'table_counts': ['CRITICAL:', 'IMPORTANT:', 'REFERENCE:'],
+            'table_counts': ['IMPORTANT:', 'AUDIT:'],
             'strategy': ['Parallel processing', 'Sequential processing'],
             'footer': ['Dry run completed - no changes made']
         },
@@ -383,9 +379,10 @@ def cli_output_validators():
                 assert table in output
         else:
             assert "Would process all tables by priority" in output
-            assert "CRITICAL:" in output
+            # Check for actual importance levels in the real config file
+            # The real config has: standard, important, audit
             assert "IMPORTANT:" in output
-            assert "REFERENCE:" in output
+            assert "AUDIT:" in output
         
         assert "Dry run completed - no changes made" in output
     
