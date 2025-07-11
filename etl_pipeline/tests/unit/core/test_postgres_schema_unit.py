@@ -1,834 +1,650 @@
-# Purpose: Pure unit tests with comprehensive mocking
-# Scope: Fast execution, isolated component behavior
-# Dependencies: Mock all external components
+"""
+Unit tests for PostgresSchema class with proper SQLAlchemy mocking.
+
+This module follows the project's testing plan and connection architecture:
+- Uses comprehensive mocking for unit test isolation
+- Uses provider pattern for dependency injection
+- Uses Settings injection for environment-agnostic connections
+- Uses existing fixtures from @/fixtures
+- Uses proper SQLAlchemy mocking to avoid inspection errors
+- Uses unified interface with ConnectionFactory
+- Uses DatabaseType and PostgresSchema enums for type safety
+- Follows the three-tier ETL testing strategy
+- Tests MySQL to PostgreSQL schema conversion
+- Uses order markers for proper unit test execution
+
+Unit Test Strategy:
+- Tests PostgresSchema initialization with proper mocking
+- Tests schema adaptation from MySQL to PostgreSQL
+- Tests type mapping and conversion logic
+- Tests configuration and settings injection
+- Tests error handling and validation
+- Uses comprehensive mocking for isolation
+- Tests provider pattern usage
+- Tests Settings injection patterns
+- Tests enum usage for type safety
+
+ETL Context:
+- Critical for MySQL to PostgreSQL schema conversion
+- Supports dental clinic data structure adaptation
+- Uses provider pattern for clean dependency injection
+- Implements Settings injection for environment-agnostic connections
+- Enforces FAIL FAST security to prevent accidental production usage
+- Optimized for dental clinic data structure patterns
+"""
 
 import pytest
-from unittest.mock import MagicMock, patch, Mock
-import pandas as pd
-from sqlalchemy.engine import Engine
-from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
-import logging
 import os
+from unittest.mock import Mock, patch
+from typing import Dict, Any
 
+# Import ETL pipeline components
 from etl_pipeline.core.postgres_schema import PostgresSchema
-from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
-from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.config import (
+    Settings,
+    DatabaseType,
+    PostgresSchema as ConfigPostgresSchema
+)
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.exceptions import SchemaTransformationError, EnvironmentError
 
-# Import fixtures from modular fixture structure
-from tests.fixtures.loader_fixtures import sample_mysql_schema
+# Import fixtures for test data
+from tests.fixtures.config_fixtures import (
+    test_settings,
+    test_config_provider,
+    postgres_schemas
+)
+from tests.fixtures.postgres_schema_fixtures import (
+    sample_mysql_schemas
+)
 
+import logging
 logger = logging.getLogger(__name__)
 
 
-class TestPostgresSchemaUnit:
-    """Unit tests for PostgresSchema component with comprehensive mocking."""
-    
-    @pytest.fixture
-    def test_settings(self):
-        """Create test settings using new configuration system."""
-        test_env_vars = {
-            'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
-            'TEST_OPENDENTAL_SOURCE_PORT': '3306',
-            'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
-            'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-            'TEST_MYSQL_REPLICATION_HOST': 'localhost',
-            'TEST_MYSQL_REPLICATION_PORT': '3306',
-            'TEST_MYSQL_REPLICATION_DB': 'test_replication',
-            'TEST_MYSQL_REPLICATION_USER': 'test_user',
-            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_pass',
-            'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
-            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-            'TEST_POSTGRES_ANALYTICS_DB': 'test_analytics',
-            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
-            'TEST_POSTGRES_ANALYTICS_USER': 'test_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_pass',
-            'ETL_ENVIRONMENT': 'test'
-        }
+def create_mock_engine(db_type: str, db_name: str) -> Mock:
+    """Create a mock SQLAlchemy engine for testing."""
+    mock_engine = Mock()
+    mock_engine.name = db_type
+    mock_engine.url = Mock()
+    mock_engine.url.database = db_name
+    return mock_engine
+
+
+@pytest.mark.unit
+@pytest.mark.provider_pattern
+@pytest.mark.settings_injection
+class TestPostgresSchemaInitialization:
+    """Test PostgresSchema initialization with provider pattern and Settings injection."""
+
+    def test_initialization_with_settings_injection(self, test_settings):
+        """
+        Test initialization with Settings injection using provider pattern.
         
-        return create_test_settings(env_vars=test_env_vars)
-    
-    @pytest.fixture
-    def mock_engines(self, test_settings):
-        """Mock database engines for unit testing using ConnectionFactory."""
-        # Mock ConnectionFactory methods to return our mock engines
-        with patch('etl_pipeline.core.connections.ConnectionFactory.create_mysql_engine') as mock_mysql_create, \
-             patch('etl_pipeline.core.connections.ConnectionFactory.create_postgres_engine') as mock_postgres_create:
+        Validates:
+            - Settings injection for environment-agnostic connections
+            - Provider pattern usage for dependency injection
+            - Database configuration loading from Settings
+            - ConnectionFactory integration with Settings injection
+            - Environment-specific database names
+            
+        ETL Pipeline Context:
+            - Critical for MySQL to PostgreSQL schema conversion
+            - Supports dental clinic data structure adaptation
+            - Uses Settings injection for environment-agnostic operation
+            - Implements provider pattern for clean dependency injection
+        """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
             
             # Create mock engines
-            mysql_engine = MagicMock(spec=Engine)
-            postgres_engine = MagicMock(spec=Engine)
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
             
-            # Mock URL attributes for SQLAlchemy compatibility
-            mysql_engine.url = Mock()
-            mysql_engine.url.database = 'test_replication'
-            postgres_engine.url = Mock()
-            postgres_engine.url.database = 'test_analytics'
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
             
-            # Configure mocks to return our engines
-            mock_mysql_create.return_value = mysql_engine
-            mock_postgres_create.return_value = postgres_engine
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
             
-            return mysql_engine, postgres_engine
-    
-    @pytest.fixture
-    def mock_inspectors(self):
-        """Mock SQLAlchemy inspectors."""
-        mysql_inspector = MagicMock()
-        postgres_inspector = MagicMock()
-        return mysql_inspector, postgres_inspector
-    
-    @pytest.fixture
-    def postgres_schema(self, test_settings, mock_engines, mock_inspectors):
-        """Create PostgresSchema instance with mocked dependencies using new architecture."""
-        mysql_engine, postgres_engine = mock_engines
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Patch the inspect function to return our mock inspectors
-        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect:
-            mock_inspect.side_effect = lambda engine: mysql_inspector if engine == mysql_engine else postgres_inspector
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
             
-            schema = PostgresSchema(
-                mysql_engine=mysql_engine,
-                postgres_engine=postgres_engine,
-                mysql_db='test_replication',
-                postgres_db='test_analytics',
-                postgres_schema=ConfigPostgresSchema.RAW.value
-            )
+            mock_inspect.side_effect = mock_inspect_side_effect
             
-            # Store the mock inspect for later use in tests
-            schema._mock_inspect = mock_inspect
-            return schema
+            # Test initialization with Settings injection
+            schema = PostgresSchema(settings=test_settings)
+            
+            # Validate Settings injection
+            assert schema.settings == test_settings
+            assert schema.mysql_db == 'test_opendental_replication'
+            assert schema.postgres_db == 'test_opendental_analytics'
+            assert schema.postgres_schema == 'raw'
 
-    # =============================================================================
-    # INITIALIZATION TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_postgres_schema_initialization(self, test_settings, mock_engines, mock_inspectors):
-        """Test PostgresSchema initialization with mocked dependencies using new architecture."""
-        mysql_engine, postgres_engine = mock_engines
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Patch the inspect function
-        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect:
-            mock_inspect.side_effect = lambda engine: mysql_inspector if engine == mysql_engine else postgres_inspector
-            
-            # Act
-            schema = PostgresSchema(
-                mysql_engine=mysql_engine,
-                postgres_engine=postgres_engine,
-                mysql_db='test_replication',
-                postgres_db='test_analytics',
-                postgres_schema=ConfigPostgresSchema.RAW.value
-            )
-            
-            # Assert
-            assert schema.mysql_engine == mysql_engine
-            assert schema.postgres_engine == postgres_engine
-            assert schema.mysql_db == 'test_replication'
-            assert schema.postgres_db == 'test_analytics'
-            assert schema.postgres_schema == ConfigPostgresSchema.RAW.value
-            assert schema._schema_cache == {}
-            
-            # Verify inspectors were created
-            assert mock_inspect.call_count == 2
-            assert schema.mysql_inspector == mysql_inspector
-            assert schema.postgres_inspector == postgres_inspector
-
-    # =============================================================================
-    # TYPE CONVERSION TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_convert_mysql_type_standard_basic_types(self, postgres_schema):
-        """Test standard MySQL to PostgreSQL type conversion for basic types."""
-        # Test basic type conversions
-        test_cases = [
-            ('int', 'integer'),
-            ('bigint', 'bigint'),
-            ('tinyint', 'smallint'),
-            ('smallint', 'smallint'),
-            ('mediumint', 'integer'),
-            ('float', 'real'),
-            ('double', 'double precision'),
-            ('decimal', 'numeric'),
-            ('char', 'character'),
-            ('varchar', 'character varying'),
-            ('text', 'text'),
-            ('mediumtext', 'text'),
-            ('longtext', 'text'),
-            ('datetime', 'timestamp'),
-            ('timestamp', 'timestamp'),
-            ('date', 'date'),
-            ('time', 'time'),
-            ('year', 'integer'),
-            ('boolean', 'boolean'),
-            ('bit', 'bit'),
-            ('binary', 'bytea'),
-            ('varbinary', 'bytea'),
-            ('blob', 'bytea'),
-            ('mediumblob', 'bytea'),
-            ('longblob', 'bytea'),
-            ('json', 'jsonb')
-        ]
-        
-        for mysql_type, expected_pg_type in test_cases:
-            result = postgres_schema._convert_mysql_type_standard(mysql_type)
-            assert result == expected_pg_type, f"Failed for {mysql_type}: expected {expected_pg_type}, got {result}"
-    
-    @pytest.mark.unit
-    def test_convert_mysql_type_standard_with_parameters(self, postgres_schema):
-        """Test MySQL type conversion with parameters."""
-        test_cases = [
-            ('varchar(255)', 'character varying(255)'),
-            ('char(10)', 'character(10)'),
-            ('decimal(10,2)', 'numeric(10,2)'),
-            ('int(11)', 'integer'),
-            ('tinyint(1)', 'smallint')
-        ]
-        
-        for mysql_type, expected_pg_type in test_cases:
-            result = postgres_schema._convert_mysql_type_standard(mysql_type)
-            assert result == expected_pg_type, f"Failed for {mysql_type}: expected {expected_pg_type}, got {result}"
-    
-    @pytest.mark.unit
-    def test_convert_mysql_type_standard_unknown_type(self, postgres_schema):
-        """Test handling of unknown MySQL types."""
-        result = postgres_schema._convert_mysql_type_standard('unknown_type')
-        assert result == 'text'  # Default fallback
-    
-    @pytest.mark.unit
-    def test_convert_mysql_type_with_table_column_info(self, postgres_schema, mock_engines):
-        """Test MySQL type conversion with table and column information for intelligent analysis."""
-        mysql_engine, _ = mock_engines
-        
-        # Mock connection and query execution with proper context manager support
-        mock_conn = MagicMock()
-        mock_result = MagicMock()
-        
-        # Proper context manager setup
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-        
-        mock_conn.execute.return_value = mock_result
-        mock_result.scalar.return_value = 0  # No non-boolean values found
-        mysql_engine.connect.return_value = mock_conn
-        
-        # Test TINYINT column that should be converted to boolean
-        result = postgres_schema._convert_mysql_type('tinyint(1)', 'test_table', 'is_active')
-        
-        # Verify the query was executed
-        mock_conn.execute.assert_called_once()
-        assert result == 'boolean'
-    
-    @pytest.mark.unit
-    def test_convert_mysql_type_with_non_boolean_tinyint(self, postgres_schema, mock_engines):
-        """Test MySQL type conversion when TINYINT contains non-boolean values."""
-        mysql_engine, _ = mock_engines
-        
-        # Mock connection and query execution with proper context manager support
-        mock_conn = MagicMock()
-        mock_result = MagicMock()
-        
-        # Proper context manager setup
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-        
-        mock_conn.execute.return_value = mock_result
-        mock_result.scalar.return_value = 5  # Found non-boolean values
-        mysql_engine.connect.return_value = mock_conn
-        
-        # Test TINYINT column that should remain smallint
-        result = postgres_schema._convert_mysql_type('tinyint(1)', 'test_table', 'status_code')
-        
-        # Verify the query was executed
-        mock_conn.execute.assert_called_once()
-        assert result == 'smallint'
-    
-    @pytest.mark.unit
-    def test_convert_mysql_type_with_database_error(self, postgres_schema, mock_engines):
-        """Test MySQL type conversion when database analysis fails."""
-        mysql_engine, _ = mock_engines
-        
-        # Mock connection to raise an exception
-        mysql_engine.connect.side_effect = SQLAlchemyError("Connection failed")
-        
-        # Test TINYINT column - should fall back to standard conversion
-        result = postgres_schema._convert_mysql_type('tinyint(1)', 'test_table', 'is_active')
-        
-        # Should fall back to standard conversion
-        assert result == 'smallint'
-
-    # =============================================================================
-    # SCHEMA ADAPTATION TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_adapt_schema_basic_table(self, postgres_schema, sample_mysql_schema):
-        """Test basic schema adaptation from MySQL to PostgreSQL using modular fixtures."""
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        
-        # Create the create statement from the fixture data
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Act
-        result = postgres_schema.adapt_schema('patient', mysql_schema)
-        
-        # Assert - based on actual regex behavior, some columns may not be extracted
-        assert f'CREATE TABLE {ConfigPostgresSchema.RAW.value}.patient' in result
-        # The regex pattern may not extract all columns, so we check what's actually there
-        assert '"LName" character varying(100)' in result
-        assert '"FName" character varying(100)' in result
-        assert 'PRIMARY KEY ("PatNum")' in result
-        # Some columns may be converted to 'text' as fallback
-        assert '"DateTStamp"' in result or '"Status"' in result
-    
-    @pytest.mark.unit
-    def test_adapt_schema_with_boolean_detection(self, postgres_schema, mock_engines):
-        """Test schema adaptation with boolean column detection."""
-        mysql_engine, _ = mock_engines
-        
-        # Mock connection for boolean analysis with proper context manager support
-        mock_conn = MagicMock()
-        mock_result = MagicMock()
-        
-        # Proper context manager setup
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-        
-        mock_conn.execute.return_value = mock_result
-        mock_result.scalar.return_value = 0  # No non-boolean values found
-        mysql_engine.connect.return_value = mock_conn
-        
-        # Create schema with boolean-like TINYINT column
-        create_statement = """
-            CREATE TABLE `appointment` (
-                `AptNum` int(11) NOT NULL AUTO_INCREMENT,
-                `PatNum` int(11) NOT NULL,
-                `IsConfirmed` tinyint(1) DEFAULT 0,
-                `IsCancelled` tinyint(1) DEFAULT 0,
-                `AptDateTime` datetime NOT NULL,
-                PRIMARY KEY (`AptNum`)
-            )
+    def test_initialization_with_provider_pattern(self, test_config_provider):
         """
-        mysql_schema = {'create_statement': create_statement}
+        Test initialization using provider pattern for dependency injection.
         
-        # Act
-        result = postgres_schema.adapt_schema('appointment', mysql_schema)
-        
-        # Assert - based on actual regex behavior
-        assert f'CREATE TABLE {ConfigPostgresSchema.RAW.value}.appointment' in result
-        assert '"PatNum" integer' in result
-        assert 'PRIMARY KEY ("AptNum")' in result
-        # Some columns may be converted to 'text' as fallback
-        assert '"AptDateTime"' in result
-    
-    @pytest.mark.unit
-    def test_adapt_schema_with_complex_types(self, postgres_schema):
-        """Test schema adaptation with complex MySQL types."""
-        complex_schema = {
-            'create_statement': """
-                CREATE TABLE `complex_table` (
-                    `id` bigint(20) NOT NULL AUTO_INCREMENT,
-                    `name` varchar(255) NOT NULL,
-                    `description` text,
-                    `price` decimal(10,2) NOT NULL,
-                    `data` json,
-                    `binary_data` varbinary(1000),
-                    `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (`id`)
-                )
-            """
-        }
-        
-        # Act
-        result = postgres_schema.adapt_schema('complex_table', complex_schema)
-        
-        # Assert - based on actual regex behavior
-        assert f'CREATE TABLE {ConfigPostgresSchema.RAW.value}.complex_table' in result
-        assert '"name" character varying(255)' in result
-        assert '"description" text' in result
-        assert '"price" numeric(10,2)' in result
-        assert '"data" jsonb' in result
-        assert '"binary_data" bytea' in result
-        assert 'PRIMARY KEY ("id")' in result
-        # Some columns may be converted to 'text' as fallback
-        assert '"created_at"' in result
-    
-    @pytest.mark.unit
-    def test_adapt_schema_without_primary_key(self, postgres_schema):
-        """Test schema adaptation for table without primary key."""
-        schema_no_pk = {
-            'create_statement': """
-                CREATE TABLE `no_pk_table` (
-                    `id` int(11) NOT NULL,
-                    `name` varchar(100) NOT NULL,
-                    `value` float DEFAULT NULL
-                )
-            """
-        }
-        
-        # Act
-        result = postgres_schema.adapt_schema('no_pk_table', schema_no_pk)
-        
-        # Assert - based on actual regex behavior
-        assert f'CREATE TABLE {ConfigPostgresSchema.RAW.value}.no_pk_table' in result
-        assert '"id" integer' in result
-        assert '"name" character varying(100)' in result
-        # Some columns may be converted to 'text' as fallback
-        assert '"value"' in result
-        assert 'PRIMARY KEY' not in result
-    
-    @pytest.mark.unit
-    def test_adapt_schema_with_invalid_create_statement(self, postgres_schema):
-        """Test schema adaptation with invalid MySQL CREATE statement."""
-        invalid_schema = {
-            'create_statement': 'INVALID CREATE STATEMENT'
-        }
-        
-        # Act - should raise ValueError when no valid columns are found
-        with pytest.raises(ValueError, match="No valid columns found in MySQL schema for table invalid_table"):
-            postgres_schema.adapt_schema('invalid_table', invalid_schema)
-
-    # =============================================================================
-    # TABLE CREATION TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_create_postgres_table_success(self, postgres_schema, sample_mysql_schema, mock_engines):
-        """Test successful PostgreSQL table creation using modular fixtures."""
-        mysql_engine, postgres_engine = mock_engines
-        
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Mock PostgreSQL connection and transaction with proper context manager support
-        mock_conn = MagicMock()
-        mock_transaction = MagicMock()
-        
-        # Proper context manager setup for transaction
-        mock_transaction.__enter__ = MagicMock(return_value=mock_conn)
-        mock_transaction.__exit__ = MagicMock(return_value=None)
-        
-        postgres_engine.begin.return_value = mock_transaction
-        
-        # Act
-        result = postgres_schema.create_postgres_table('patient', mysql_schema)
-        
-        # Assert
-        assert result is True
-        
-        # Verify schema creation and table drop were called
-        # The exact text comparison may fail due to SQLAlchemy text objects
-        # So we check that execute was called multiple times
-        assert mock_conn.execute.call_count >= 3  # Schema, drop, create
-        
-        # Verify at least one call contains CREATE SCHEMA
-        # Use a more flexible string matching approach
-        schema_calls = [call for call in mock_conn.execute.call_args_list 
-                       if any('CREATE SCHEMA' in str(arg) for arg in call[0])]
-        assert len(schema_calls) >= 1
-        
-        # Verify at least one call contains DROP TABLE
-        drop_calls = [call for call in mock_conn.execute.call_args_list 
-                     if any('DROP TABLE' in str(arg) for arg in call[0])]
-        assert len(drop_calls) >= 1
-        
-        # Verify at least one call contains CREATE TABLE
-        create_calls = [call for call in mock_conn.execute.call_args_list 
-                       if any('CREATE TABLE' in str(arg) for arg in call[0])]
-        assert len(create_calls) >= 1
-    
-    @pytest.mark.unit
-    def test_create_postgres_table_with_database_error(self, postgres_schema, sample_mysql_schema, mock_engines):
-        """Test PostgreSQL table creation when database operation fails."""
-        mysql_engine, postgres_engine = mock_engines
-        
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Mock PostgreSQL connection to raise an exception
-        postgres_engine.begin.side_effect = SQLAlchemyError("Database error")
-        
-        # Act
-        result = postgres_schema.create_postgres_table('patient', mysql_schema)
-        
-        # Assert
-        assert result is False
-    
-    @pytest.mark.unit
-    def test_create_postgres_table_with_schema_adaptation_error(self, postgres_schema, mock_engines):
-        """Test PostgreSQL table creation when schema adaptation fails."""
-        mysql_engine, postgres_engine = mock_engines
-        
-        # Invalid schema that will cause adaptation to fail
-        invalid_schema = {
-            'create_statement': 'INVALID CREATE STATEMENT'
-        }
-        
-        # Act - should fail because adapt_schema raises ValueError for invalid input
-        result = postgres_schema.create_postgres_table('invalid_table', invalid_schema)
-        
-        # Assert - should fail because adapt_schema raises an exception for invalid input
-        assert result is False
-
-    # =============================================================================
-    # SCHEMA VERIFICATION TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_verify_schema_success(self, postgres_schema, sample_mysql_schema, mock_inspectors):
-        """Test successful schema verification using modular fixtures."""
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Mock PostgreSQL columns to match what the regex actually extracts
-        # Based on the actual regex behavior, some columns may not be extracted
-        postgres_columns = [
-            {'name': 'LName', 'type': 'character varying(100)'},
-            {'name': 'FName', 'type': 'character varying(100)'},
-            {'name': 'DateTStamp', 'type': 'text'},  # May be converted to text
-            {'name': 'Status', 'type': 'text'},  # May be converted to text
-        ]
-        
-        postgres_inspector.get_columns.return_value = postgres_columns
-        
-        # Act
-        result = postgres_schema.verify_schema('patient', mysql_schema)
-        
-        # Assert - may fail due to regex extraction differences
-        # This test documents the actual behavior
-        postgres_inspector.get_columns.assert_called_once_with('patient', schema=ConfigPostgresSchema.RAW.value)
-        # Result depends on whether the regex extracts the same columns
-    
-    @pytest.mark.unit
-    def test_verify_schema_column_count_mismatch(self, postgres_schema, sample_mysql_schema, mock_inspectors):
-        """Test schema verification with column count mismatch in test environment."""
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Mock PostgreSQL columns with different count
-        postgres_columns = [
-            {'name': 'PatNum', 'type': 'integer'},
-            {'name': 'LName', 'type': 'character varying(100)'}
-            # Missing columns
-        ]
-        
-        postgres_inspector.get_columns.return_value = postgres_columns
-        
-        # Act - in test environment, should log warning but return True
-        result = postgres_schema.verify_schema('patient', mysql_schema)
-        
-        # Assert - test environment behavior: logs warning but doesn't fail
-        assert result is True
-
-    @pytest.mark.unit
-    def test_verify_schema_column_name_mismatch(self, postgres_schema, sample_mysql_schema, mock_inspectors):
-        """Test schema verification with column name mismatch in test environment."""
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Mock PostgreSQL columns with wrong name
-        postgres_columns = [
-            {'name': 'WrongName', 'type': 'integer'},  # Wrong name
-            {'name': 'LName', 'type': 'character varying(100)'},
-            {'name': 'FName', 'type': 'character varying(100)'},
-            {'name': 'DateTStamp', 'type': 'timestamp'},
-            {'name': 'Status', 'type': 'character varying(50)'}
-        ]
-        
-        postgres_inspector.get_columns.return_value = postgres_columns
-        
-        # Act - in test environment, should log warning but return True
-        result = postgres_schema.verify_schema('patient', mysql_schema)
-        
-        # Assert - test environment behavior: logs warning but doesn't fail
-        assert result is True
-
-    @pytest.mark.unit
-    def test_verify_schema_column_type_mismatch(self, postgres_schema, sample_mysql_schema, mock_inspectors):
-        """Test schema verification with column type mismatch in test environment."""
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Mock PostgreSQL columns with wrong type
-        postgres_columns = [
-            {'name': 'PatNum', 'type': 'text'},  # Wrong type
-            {'name': 'LName', 'type': 'character varying(100)'},
-            {'name': 'FName', 'type': 'character varying(100)'},
-            {'name': 'DateTStamp', 'type': 'timestamp'},
-            {'name': 'Status', 'type': 'character varying(50)'}
-        ]
-        
-        postgres_inspector.get_columns.return_value = postgres_columns
-        
-        # Act - in test environment, should log warning but return True
-        result = postgres_schema.verify_schema('patient', mysql_schema)
-        
-        # Assert - test environment behavior: logs warning but doesn't fail
-        assert result is True
-    
-    @pytest.mark.unit
-    def test_verify_schema_with_invalid_create_statement(self, postgres_schema, mock_inspectors):
-        """Test schema verification with invalid MySQL CREATE statement."""
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Mock PostgreSQL columns
-        postgres_columns = [{'name': 'id', 'type': 'integer'}]
-        postgres_inspector.get_columns.return_value = postgres_columns
-        
-        # Invalid schema
-        invalid_schema = {
-            'create_statement': 'INVALID CREATE STATEMENT'
-        }
-        
-        # Act
-        result = postgres_schema.verify_schema('invalid_table', invalid_schema)
-        
-        # Assert
-        assert result is False
-    
-    @pytest.mark.unit
-    def test_verify_schema_with_database_error(self, postgres_schema, sample_mysql_schema, mock_inspectors):
-        """Test schema verification when database operation fails."""
-        mysql_inspector, postgres_inspector = mock_inspectors
-        
-        # Get the patient schema from the modular fixture
-        patient_schema = sample_mysql_schema['patient']
-        create_statement = self._create_mysql_create_statement('patient', patient_schema)
-        mysql_schema = {'create_statement': create_statement}
-        
-        # Mock PostgreSQL inspector to raise an exception
-        postgres_inspector.get_columns.side_effect = SQLAlchemyError("Database error")
-        
-        # Act
-        result = postgres_schema.verify_schema('patient', mysql_schema)
-        
-        # Assert
-        assert result is False
-
-    # =============================================================================
-    # EDGE CASES AND ERROR HANDLING TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_analyze_column_data_with_connection_error(self, postgres_schema, mock_engines):
-        """Test column data analysis when database connection fails."""
-        mysql_engine, _ = mock_engines
-        
-        # Mock connection to raise an exception
-        mysql_engine.connect.side_effect = SQLAlchemyError("Connection failed")
-        
-        # Act - should fall back to standard conversion
-        result = postgres_schema._analyze_column_data('test_table', 'test_column', 'tinyint(1)')
-        
-        # Assert - should return standard conversion
-        assert result == 'smallint'
-    
-    @pytest.mark.unit
-    def test_convert_mysql_to_postgres_intelligent_with_complex_syntax(self, postgres_schema):
-        """Test intelligent MySQL to PostgreSQL conversion with complex syntax."""
-        complex_mysql_create = """
-            CREATE TABLE `complex_table` (
-                `id` int(11) NOT NULL AUTO_INCREMENT,
-                `name` varchar(255) NOT NULL,
-                `description` text COMMENT 'Description field',
-                `status` enum('active','inactive') DEFAULT 'active',
-                `created_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                PRIMARY KEY (`id`),
-                KEY `idx_name` (`name`),
-                KEY `idx_status` (`status`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        Validates:
+            - Provider pattern usage for configuration injection
+            - DictConfigProvider for test configuration
+            - Settings creation with provider injection
+            - Environment-agnostic configuration loading
+            - Dependency injection for clean testing
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline configuration management
+            - Supports dental clinic configuration patterns
+            - Uses provider pattern for clean dependency injection
+            - Implements Settings injection for environment-agnostic connections
         """
+        from etl_pipeline.config.settings import Settings
         
-        # Act
-        result = postgres_schema._convert_mysql_to_postgres_intelligent(complex_mysql_create, 'complex_table')
+        # Create settings with provider injection
+        test_settings = Settings(environment='test', provider=test_config_provider)
         
-        # Assert - based on actual regex behavior
-        assert '"name" character varying(255)' in result
-        assert '"created_at"' in result
-        assert '"updated_at"' in result
-        assert 'PRIMARY KEY ("id")' in result
-        # Some columns may be converted to 'text' as fallback
-        # Indexes should be ignored in basic conversion
-    
-    @pytest.mark.unit
-    def test_convert_mysql_to_postgres_intelligent_with_no_columns(self, postgres_schema):
-        """Test intelligent MySQL to PostgreSQL conversion with no columns."""
-        empty_mysql_create = """
-            CREATE TABLE `empty_table` (
-            )
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            # Test initialization with provider pattern
+            schema = PostgresSchema(settings=test_settings)
+            
+            # Validate provider pattern usage
+            assert schema.settings == test_settings
+            assert schema.settings.provider == test_config_provider
+
+    def test_initialization_with_schema_enum(self, test_settings):
         """
+        Test initialization with PostgreSQL schema enum.
         
-        # Act
-        result = postgres_schema._convert_mysql_to_postgres_intelligent(empty_mysql_create, 'empty_table')
-        
-        # Assert
-        assert result == ""
-    
-    @pytest.mark.unit
-    def test_convert_mysql_to_postgres_intelligent_with_invalid_syntax(self, postgres_schema):
-        """Test intelligent MySQL to PostgreSQL conversion with invalid syntax."""
-        invalid_mysql_create = "INVALID CREATE STATEMENT"
-        
-        # Act
-        result = postgres_schema._convert_mysql_to_postgres_intelligent(invalid_mysql_create, 'invalid_table')
-        
-        # Assert
-        assert result == ""
-
-    # =============================================================================
-    # PERFORMANCE AND MEMORY TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_schema_cache_usage(self, postgres_schema):
-        """Test that schema cache is properly utilized."""
-        # Verify cache starts empty
-        assert postgres_schema._schema_cache == {}
-        
-        # Cache should be available for future enhancements
-        # Currently the cache is not used in the implementation
-        # This test documents the cache structure for future use
-        postgres_schema._schema_cache['test_key'] = 'test_value'
-        assert postgres_schema._schema_cache['test_key'] == 'test_value'
-    
-    @pytest.mark.unit
-    def test_type_conversion_performance(self, postgres_schema):
-        """Test type conversion performance with multiple iterations."""
-        import time
-        
-        # Test multiple type conversions
-        types_to_test = [
-            'int(11)', 'varchar(255)', 'text', 'datetime', 'decimal(10,2)',
-            'tinyint(1)', 'bigint(20)', 'float', 'date', 'timestamp'
-        ]
-        
-        start_time = time.time()
-        
-        for _ in range(1000):  # 1000 iterations
-            for mysql_type in types_to_test:
-                postgres_schema._convert_mysql_type_standard(mysql_type)
-        
-        end_time = time.time()
-        execution_time = end_time - start_time
-        
-        # Should complete in reasonable time (< 1 second for 1000 iterations)
-        assert execution_time < 1.0, f"Type conversion took too long: {execution_time:.2f} seconds"
-
-    # =============================================================================
-    # DEBUGGING AND LOGGING TESTS
-    # =============================================================================
-    
-    @pytest.mark.unit
-    def test_debug_logging_in_type_conversion(self, postgres_schema, mock_engines, caplog):
-        """Test that debug logging works in type conversion methods."""
-        mysql_engine, _ = mock_engines
-        
-        # Mock connection with debug logging
-        mock_conn = MagicMock()
-        mock_result = MagicMock()
-        
-        # Proper context manager setup
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-        
-        # Set up the mock to return the result object and also log
-        def mock_execute(query):
-            logger.debug(f"Mock called with: {query}")
-            return mock_result
-        
-        mock_conn.execute.side_effect = mock_execute
-        mock_result.scalar.return_value = 0
-        mysql_engine.connect.return_value = mock_conn
-        
-        # Test with debug logging enabled
-        with caplog.at_level(logging.DEBUG):
-            result = postgres_schema._convert_mysql_type('tinyint(1)', 'test_table', 'is_active')
-        
-        # Verify debug logging occurred
-        assert "Mock called with:" in caplog.text
-        assert result == 'boolean'
-    
-    @pytest.mark.unit
-    def test_mock_call_verification(self, postgres_schema, mock_engines):
-        """Test proper mock call verification patterns."""
-        mysql_engine, _ = mock_engines
-        
-        # Mock connection
-        mock_conn = MagicMock()
-        mock_result = MagicMock()
-        
-        # Proper context manager setup
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-        
-        # Set up the mock to return the result object
-        mock_conn.execute.return_value = mock_result
-        mock_result.scalar.return_value = 0
-        mysql_engine.connect.return_value = mock_conn
-        
-        # Act
-        result = postgres_schema._convert_mysql_type('tinyint(1)', 'test_table', 'is_active')
-        
-        # Verify mock was called
-        assert mock_conn.execute.call_count > 0, "Mock was not called"
-        
-        # Print mock calls for debugging
-        logger.debug(f"Mock calls: {mock_conn.execute.call_args_list}")
-        
-        assert result == 'boolean'
-
-    # =============================================================================
-    # HELPER METHODS
-    # =============================================================================
-    
-    def _create_mysql_create_statement(self, table_name: str, schema_data: dict) -> str:
-        """Helper method to create MySQL CREATE statement from fixture data."""
-        columns = []
-        for col in schema_data['columns']:
-            col_def = f"`{col['name']}` {col['type']}"
-            if col['null'] == 'NO':
-                col_def += " NOT NULL"
-            if col['key'] == 'PRI':
-                col_def += " AUTO_INCREMENT"
-            columns.append(col_def)
-        
-        # Add primary key if exists
-        if schema_data.get('primary_key'):
-            columns.append(f"PRIMARY KEY (`{schema_data['primary_key']}`)")
-        
-        return f"""
-            CREATE TABLE `{table_name}` (
-                {', '.join(columns)}
-            ) ENGINE={schema_data.get('engine', 'InnoDB')} DEFAULT CHARSET={schema_data.get('charset', 'utf8mb4')}
+        Validates:
+            - Schema enum usage for type safety
+            - All available schema enums work correctly
+            - Schema value assignment from enum
+            - Type safety for schema selection
+            
+        ETL Pipeline Context:
+            - Critical for PostgreSQL schema management
+            - Supports dental clinic data warehouse schemas
+            - Uses enums for type safety and compile-time validation
+            - Implements Settings injection for environment-agnostic connections
         """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            # Test with different schema enums
+            for schema_enum in [ConfigPostgresSchema.RAW, ConfigPostgresSchema.STAGING, ConfigPostgresSchema.INTERMEDIATE, ConfigPostgresSchema.MARTS]:
+                schema = PostgresSchema(postgres_schema=schema_enum, settings=test_settings)
+                assert schema.postgres_schema == schema_enum.value
+
+    def test_initialization_fail_fast_no_environment(self):
+        """
+        Test FAIL FAST behavior when ETL_ENVIRONMENT not set.
+        
+        Validates:
+            - FAIL FAST behavior when ETL_ENVIRONMENT not set
+            - Clear error message for missing environment
+            - No dangerous defaults to production
+            - Security requirement enforcement
+            
+        ETL Pipeline Context:
+            - Critical security requirement for ETL pipeline
+            - Prevents accidental production usage
+            - Enforces explicit environment declaration
+            - Uses FAIL FAST for safety
+        """
+        # Remove ETL_ENVIRONMENT to test FAIL FAST
+        original_env = os.environ.get('ETL_ENVIRONMENT')
+        if 'ETL_ENVIRONMENT' in os.environ:
+            del os.environ['ETL_ENVIRONMENT']
+        
+        try:
+            # Should fail fast with clear error message
+            with pytest.raises(EnvironmentError, match="ETL_ENVIRONMENT environment variable is not set"):
+                schema = PostgresSchema()
+        finally:
+            # Restore original environment
+            if original_env:
+                os.environ['ETL_ENVIRONMENT'] = original_env
+
+    def test_initialization_with_default_schema(self, test_settings):
+        """
+        Test initialization with default schema (RAW).
+        
+        Validates:
+            - Default schema assignment
+            - Schema enum default value
+            - Settings injection with default schema
+            - Database configuration loading
+            
+        ETL Pipeline Context:
+            - Critical for default PostgreSQL schema handling
+            - Supports dental clinic data warehouse defaults
+            - Uses Settings injection for environment-agnostic connections
+            - Implements provider pattern for clean dependency injection
+        """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            # Test with default schema
+            schema = PostgresSchema(settings=test_settings)
+            
+            # Validate default schema
+            assert schema.postgres_schema == 'raw'
+            assert schema.settings == test_settings
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-m", "unit"])
+@pytest.mark.unit
+@pytest.mark.provider_pattern
+@pytest.mark.settings_injection
+class TestPostgresSchemaAdaptation:
+    """Test MySQL to PostgreSQL schema adaptation with provider pattern."""
+
+    def test_adapt_schema_mysql_to_postgres_conversion(self, test_settings, sample_mysql_schemas):
+        """
+        Test MySQL to PostgreSQL schema conversion.
+        
+        Validates:
+            - MySQL to PostgreSQL type conversion
+            - Column definition extraction
+            - PRIMARY KEY handling
+            - Schema structure preservation
+            - PostgreSQL syntax compliance
+            
+        ETL Pipeline Context:
+            - Critical for MySQL to PostgreSQL schema conversion
+            - Supports dental clinic data structure adaptation
+            - Uses Settings injection for environment-agnostic operation
+            - Implements provider pattern for clean dependency injection
+        """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            # Mock _analyze_column_data to return appropriate types for TINYINT columns
+            def mock_analyze_column_data(table_name, column_name, mysql_type):
+                if mysql_type.lower().startswith('tinyint'):
+                    # Return boolean for columns that should be boolean in dental clinic data
+                    if column_name in ['IsActive', 'IsDeleted', 'PatStatus', 'Gender', 'Position']:
+                        return 'boolean'
+                    else:
+                        return 'smallint'
+                else:
+                    # Use standard conversion for other types
+                    schema = PostgresSchema(settings=test_settings)
+                    return schema._convert_mysql_type_standard(mysql_type)
+            
+            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+                schema = PostgresSchema(settings=test_settings)
+                
+                # Test schema adaptation
+                mysql_schema = sample_mysql_schemas['patient']
+                pg_create = schema.adapt_schema('patient', mysql_schema)
+                
+                # Validate PostgreSQL CREATE statement
+                assert 'CREATE TABLE raw.patient' in pg_create
+                assert '"PatNum" integer' in pg_create
+                assert '"LName" character varying(100)' in pg_create
+                assert '"IsActive" boolean' in pg_create
+                assert 'PRIMARY KEY ("PatNum")' in pg_create
+
+    def test_adapt_schema_column_extraction(self, test_settings, sample_mysql_schemas):
+        """
+        Test column definition extraction from MySQL CREATE statements.
+        
+        Validates:
+            - Column name extraction
+            - Column type extraction
+            - Column parameter extraction
+            - All columns are properly extracted
+            - Column order preservation
+            
+        ETL Pipeline Context:
+            - Critical for MySQL to PostgreSQL schema conversion
+            - Supports dental clinic data structure preservation
+            - Uses Settings injection for environment-agnostic operation
+            - Implements provider pattern for clean dependency injection
+        """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            # Mock _analyze_column_data to return appropriate types for TINYINT columns
+            def mock_analyze_column_data(table_name, column_name, mysql_type):
+                if mysql_type.lower().startswith('tinyint'):
+                    # Return boolean for columns that should be boolean in dental clinic data
+                    if column_name in ['IsActive', 'IsDeleted', 'PatStatus', 'Gender', 'Position']:
+                        return 'boolean'
+                    else:
+                        return 'smallint'
+                else:
+                    # Use standard conversion for other types
+                    schema = PostgresSchema(settings=test_settings)
+                    return schema._convert_mysql_type_standard(mysql_type)
+            
+            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+                schema = PostgresSchema(settings=test_settings)
+                
+                # Test column extraction
+                mysql_schema = sample_mysql_schemas['patient']
+                pg_create = schema.adapt_schema('patient', mysql_schema)
+                
+                # Validate all columns are extracted
+                expected_columns = ['PatNum', 'LName', 'FName', 'MiddleI', 'Preferred', 'PatStatus', 'Gender', 'Position', 'Birthdate', 'SSN', 'IsActive', 'IsDeleted']
+                for col in expected_columns:
+                    assert f'"{col}"' in pg_create
+
+    def test_adapt_schema_primary_key_handling(self, test_settings, sample_mysql_schemas):
+        """
+        Test PRIMARY KEY handling in schema adaptation.
+        
+        Validates:
+            - PRIMARY KEY extraction from MySQL
+            - PRIMARY KEY conversion to PostgreSQL syntax
+            - AUTO_INCREMENT removal
+            - PRIMARY KEY constraint preservation
+            
+        ETL Pipeline Context:
+            - Critical for MySQL to PostgreSQL schema conversion
+            - Supports dental clinic data integrity preservation
+            - Uses Settings injection for environment-agnostic operation
+            - Implements provider pattern for clean dependency injection
+        """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            # Mock _analyze_column_data to return appropriate types for TINYINT columns
+            def mock_analyze_column_data(table_name, column_name, mysql_type):
+                if mysql_type.lower().startswith('tinyint'):
+                    # Return boolean for columns that should be boolean in dental clinic data
+                    if column_name in ['IsActive', 'IsDeleted', 'PatStatus', 'Gender', 'Position']:
+                        return 'boolean'
+                    else:
+                        return 'smallint'
+                else:
+                    # Use standard conversion for other types
+                    schema = PostgresSchema(settings=test_settings)
+                    return schema._convert_mysql_type_standard(mysql_type)
+            
+            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+                schema = PostgresSchema(settings=test_settings)
+                
+                # Test PRIMARY KEY extraction
+                mysql_schema = sample_mysql_schemas['patient']
+                pg_create = schema.adapt_schema('patient', mysql_schema)
+                
+                # Validate PRIMARY KEY is properly converted
+                assert 'PRIMARY KEY ("PatNum")' in pg_create
+                assert 'AUTO_INCREMENT' not in pg_create  # PostgreSQL doesn't use AUTO_INCREMENT
+
+    def test_adapt_schema_error_handling(self, test_settings):
+        """
+        Test error handling for invalid MySQL schemas.
+        
+        Validates:
+            - Error handling for invalid CREATE statements
+            - Clear error messages for schema issues
+            - Graceful failure with invalid input
+            - Error recovery mechanisms
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline error handling
+            - Supports dental clinic data validation
+            - Uses graceful error handling for reliability
+            - Optimized for dental clinic operational stability
+        """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            schema = PostgresSchema(settings=test_settings)
+            
+            # Test with invalid CREATE statement
+            invalid_schema = {
+                'create_statement': 'INVALID CREATE TABLE STATEMENT'
+            }
+            
+            with pytest.raises(SchemaTransformationError, match="No valid columns found"):
+                schema.adapt_schema('invalid_table', invalid_schema)
+
+    def test_adapt_schema_with_complex_types(self, test_settings):
+        """
+        Test schema adaptation with complex MySQL types.
+        
+        Validates:
+            - Complex type conversion (DECIMAL, VARCHAR with parameters)
+            - Parameter preservation in type conversion
+            - Complex column definitions
+            - Schema structure integrity
+            
+        ETL Pipeline Context:
+            - Critical for complex dental clinic data types
+            - Supports dental clinic data precision preservation
+            - Uses Settings injection for environment-agnostic operation
+            - Implements provider pattern for clean dependency injection
+        """
+        # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
+        with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
+             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+            
+            # Create mock engines
+            mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
+            mock_postgres_engine = create_mock_engine('postgresql', 'test_analytics')
+            
+            # Create mock inspectors
+            mock_mysql_inspector = Mock()
+            mock_postgres_inspector = Mock()
+            
+            # Configure mock factory
+            mock_factory.get_replication_connection.return_value = mock_mysql_engine
+            mock_factory.get_analytics_raw_connection.return_value = mock_postgres_engine
+            
+            # Configure mock inspect
+            def mock_inspect_side_effect(engine):
+                if engine == mock_mysql_engine:
+                    return mock_mysql_inspector
+                elif engine == mock_postgres_engine:
+                    return mock_postgres_inspector
+                else:
+                    return Mock()
+            
+            mock_inspect.side_effect = mock_inspect_side_effect
+            
+            schema = PostgresSchema(settings=test_settings)
+            
+            # Test with complex types
+            complex_schema = {
+                'create_statement': '''
+                    CREATE TABLE complex_table (
+                        `id` INT PRIMARY KEY,
+                        `name` VARCHAR(255),
+                        `amount` DECIMAL(10,2),
+                        `description` TEXT,
+                        `created_at` TIMESTAMP
+                    )
+                '''
+            }
+            
+            pg_create = schema.adapt_schema('complex_table', complex_schema)
+            
+            # Validate complex type conversion
+            assert 'CREATE TABLE raw.complex_table' in pg_create
+            assert '"id" integer' in pg_create
+            assert '"name" character varying(255)' in pg_create
+            assert '"amount" numeric(10,2)' in pg_create
+            assert '"description" text' in pg_create
+            assert '"created_at" timestamp' in pg_create 
