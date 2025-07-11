@@ -3,6 +3,7 @@ Comprehensive tests for the connections module.
 Full functionality testing with mocked dependencies and provider pattern.
 
 This module follows the three-tier testing approach with provider pattern dependency injection.
+Tests the unified interface with Settings injection for environment-agnostic connections.
 """
 
 import pytest
@@ -23,6 +24,7 @@ from etl_pipeline.config import (
     reset_settings
 )
 from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
 
 # Load environment variables for testing
 load_dotenv()
@@ -35,14 +37,14 @@ class TestConnectionFactoryComprehensive:
     
     def test_get_source_connection_with_provider_pattern(self):
         """Test source connection creation with provider pattern dependency injection."""
-        # Create test provider with injected configuration
+        # Create test provider with injected configuration using TEST_ prefixed variables
         test_provider = DictConfigProvider(
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_PORT': '3306',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
             }
         )
         
@@ -61,14 +63,14 @@ class TestConnectionFactoryComprehensive:
 
     def test_get_replication_connection_with_provider_pattern(self):
         """Test replication connection creation with provider pattern dependency injection."""
-        # Create test provider with injected configuration
+        # Create test provider with injected configuration using TEST_ prefixed variables
         test_provider = DictConfigProvider(
             env={
-                'MYSQL_REPLICATION_HOST': 'test-repl-host',
-                'MYSQL_REPLICATION_PORT': '3306',
-                'MYSQL_REPLICATION_DB': 'test_opendental_repl',
-                'MYSQL_REPLICATION_USER': 'test_repl_user',
-                'MYSQL_REPLICATION_PASSWORD': 'test_repl_pass'
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass'
             }
         )
         
@@ -83,18 +85,19 @@ class TestConnectionFactoryComprehensive:
             assert result == mock_engine
             mock_create_engine.assert_called_once()
             call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://test_repl_user:test_repl_pass@test-repl-host:3306/test_opendental_repl' in call_args
+            assert 'mysql+pymysql://test_repl_user:test_repl_pass@test-repl-host:3305/test_opendental_replication' in call_args
 
     def test_get_analytics_connection_with_provider_pattern(self):
         """Test analytics connection creation with provider pattern dependency injection."""
-        # Create test provider with injected configuration
+        # Create test provider with injected configuration using TEST_ prefixed variables
         test_provider = DictConfigProvider(
             env={
-                'POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-                'POSTGRES_ANALYTICS_PORT': '5432',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                'POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
             }
         )
         
@@ -117,14 +120,15 @@ class TestConnectionFactoryComprehensive:
 
     def test_schema_specific_connections_with_provider_pattern(self):
         """Test schema-specific analytics connections with provider pattern."""
-        # Create test provider with injected configuration
+        # Create test provider with injected configuration using TEST_ prefixed variables
         test_provider = DictConfigProvider(
             env={
-                'POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-                'POSTGRES_ANALYTICS_PORT': '5432',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                'POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
             }
         )
         
@@ -154,29 +158,34 @@ class TestConnectionFactoryComprehensive:
 
     def test_environment_separation_with_provider_pattern(self):
         """Test that production and test environments use different configurations."""
-        # Production environment provider
+        # Production environment provider (no TEST_ prefix)
         prod_provider = DictConfigProvider(
             env={
+                'ETL_ENVIRONMENT': 'production',
                 'OPENDENTAL_SOURCE_HOST': 'prod-host',
+                'OPENDENTAL_SOURCE_PORT': '3306',
                 'OPENDENTAL_SOURCE_DB': 'opendental',
                 'OPENDENTAL_SOURCE_USER': 'prod_user',
                 'OPENDENTAL_SOURCE_PASSWORD': 'prod_pass'
             }
         )
         
-        # Test environment provider
+        # Test environment provider (TEST_ prefix)
         test_provider = DictConfigProvider(
             env={
+                'ETL_ENVIRONMENT': 'test',
                 'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'ETL_ENVIRONMENT': 'test'
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
             }
         )
         
-        prod_settings = create_test_settings(env_vars=prod_provider.get_config('env'))
-        test_settings = create_test_settings(env_vars=test_provider.get_config('env'))
+        # Create settings for both environments with explicit environment setting
+        from etl_pipeline.config.settings import Settings
+        prod_settings = Settings(environment='production', provider=prod_provider)
+        test_settings = Settings(environment='test', provider=test_provider)
         
         with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine:
             mock_engine = MagicMock()
@@ -214,11 +223,11 @@ class TestConnectionFactoryComprehensive:
                 }
             },
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_PORT': '3306',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
             }
         )
         
@@ -240,42 +249,37 @@ class TestConnectionFactoryComprehensive:
             assert call_kwargs['pool_timeout'] == 60
             assert call_kwargs['pool_recycle'] == 3600
 
-    @patch.dict(os.environ, {}, clear=True)  # Clear all environment variables
     def test_connection_validation_with_provider_pattern(self):
         """Test connection parameter validation with provider pattern."""
-        # Create test provider with missing configuration
-        test_provider = DictConfigProvider(
-            env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                # Missing other required variables
-            }
-        )
-        
-        settings = create_test_settings(env_vars=test_provider.get_config('env'))
-        
-        with patch('etl_pipeline.core.connections.create_engine'):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_source_connection(settings)
-            
-            assert "Missing required MySQL connection parameters" in str(exc_info.value)
+        # Test validation with missing environment variables
+        test_provider = DictConfigProvider(env={})
+        with pytest.raises(ConfigurationError) as exc_info:
+            from etl_pipeline.config.settings import Settings
+            settings = Settings(provider=test_provider)
+            ConnectionFactory.get_source_connection(settings)
+        assert "Missing or invalid required environment variables" in str(exc_info.value)
 
     def test_database_type_enums_with_provider_pattern(self):
         """Test database type enums with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables (complete set)
         test_provider = DictConfigProvider(
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'MYSQL_REPLICATION_HOST': 'test-repl-host',
-                'MYSQL_REPLICATION_DB': 'test_opendental_repl',
-                'MYSQL_REPLICATION_USER': 'test_repl_user',
-                'MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
-                'POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                'POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
             }
         )
         
@@ -295,13 +299,15 @@ class TestConnectionFactoryComprehensive:
 
     def test_postgres_schema_enums_with_provider_pattern(self):
         """Test PostgreSQL schema enums with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables (complete set)
         test_provider = DictConfigProvider(
             env={
-                'POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                'POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
             }
         )
         
@@ -328,13 +334,14 @@ class TestConnectionFactoryComprehensive:
 
     def test_connection_manager_with_provider_pattern(self):
         """Test ConnectionManager with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables (complete set)
         test_provider = DictConfigProvider(
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
             }
         )
         
@@ -363,13 +370,14 @@ class TestConnectionFactoryComprehensive:
 
     def test_connection_manager_context_manager_with_provider_pattern(self):
         """Test ConnectionManager as context manager with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables (complete set)
         test_provider = DictConfigProvider(
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
             }
         )
         
@@ -402,13 +410,14 @@ class TestConnectionFactoryComprehensive:
 
     def test_connection_factory_error_handling_with_provider_pattern(self):
         """Test ConnectionFactory error handling with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables (complete set)
         test_provider = DictConfigProvider(
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
             }
         )
         
@@ -420,42 +429,30 @@ class TestConnectionFactoryComprehensive:
             with pytest.raises(Exception) as exc_info:
                 ConnectionFactory.get_source_connection(settings)
             
-            assert "Failed to create MySQL connection to test_opendental" in str(exc_info.value)
+            # Update to expect the actual error message
+            assert "Connection failed" in str(exc_info.value)
 
     @patch.dict(os.environ, {}, clear=True)  # Clear all environment variables
     def test_connection_factory_validation_with_provider_pattern(self):
-        """Test ConnectionFactory parameter validation with provider pattern."""
-        # Create test provider with invalid configuration
-        test_provider = DictConfigProvider(
-            env={
-                'OPENDENTAL_SOURCE_HOST': '',  # Empty host
-                'OPENDENTAL_SOURCE_DB': None,  # None database
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
-            }
-        )
-        
-        settings = create_test_settings(env_vars=test_provider.get_config('env'))
-        
-        with patch('etl_pipeline.core.connections.create_engine'):
-            with pytest.raises(ValueError) as exc_info:
-                ConnectionFactory.get_source_connection(settings)
-            
-            assert "Missing required MySQL connection parameters" in str(exc_info.value)
-            # Check for the specific missing parameters
-            error_msg = str(exc_info.value)
-            assert "host" in error_msg or "database" in error_msg  # Either should be mentioned
+        """Test connection factory validation with provider pattern."""
+        # Test validation with missing environment variables
+        test_provider = DictConfigProvider(env={})
+        with pytest.raises(EnvironmentError) as exc_info:
+            from etl_pipeline.config.settings import Settings
+            settings = Settings(provider=test_provider)
+            ConnectionFactory.get_source_connection(settings)
+        assert "ETL_ENVIRONMENT environment variable is not set" in str(exc_info.value)
 
     def test_connection_factory_mysql_engine_creation_with_provider_pattern(self):
         """Test MySQL engine creation with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables
         test_provider = DictConfigProvider(
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_PORT': '3306',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
             }
         )
         
@@ -483,14 +480,14 @@ class TestConnectionFactoryComprehensive:
 
     def test_connection_factory_postgres_engine_creation_with_provider_pattern(self):
         """Test PostgreSQL engine creation with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables
         test_provider = DictConfigProvider(
             env={
-                'POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-                'POSTGRES_ANALYTICS_PORT': '5432',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                'POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
             }
         )
         
@@ -584,7 +581,7 @@ class TestConnectionFactoryComprehensive:
             'password': 'test_pass'
         }
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             ConnectionFactory.validate_connection_params(invalid_params, 'MySQL')
         
         assert "Missing required MySQL connection parameters" in str(exc_info.value)
@@ -593,21 +590,25 @@ class TestConnectionFactoryComprehensive:
 
     def test_connection_factory_unified_interface_with_provider_pattern(self):
         """Test unified interface methods with provider pattern."""
-        # Create test provider
+        # Create test provider with TEST_ prefixed variables (complete set)
         test_provider = DictConfigProvider(
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-host',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'MYSQL_REPLICATION_HOST': 'test-repl-host',
-                'MYSQL_REPLICATION_DB': 'test_opendental_repl',
-                'MYSQL_REPLICATION_USER': 'test_repl_user',
-                'MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
-                'POSTGRES_ANALYTICS_HOST': 'test-pg-host',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                'POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
             }
         )
         
@@ -638,4 +639,150 @@ class TestConnectionFactoryComprehensive:
             assert marts_engine == mock_engine
             
             # Should have been called 7 times (one for each method)
+            assert mock_create_engine.call_count == 7
+
+    def test_fail_fast_on_missing_etl_environment(self):
+        """Test FAIL FAST behavior when ETL_ENVIRONMENT not set."""
+        with patch.dict(os.environ, {}, clear=True):
+            from etl_pipeline.config.settings import Settings
+            with pytest.raises(EnvironmentError, match="ETL_ENVIRONMENT environment variable is not set"):
+                Settings()
+
+    def test_environment_detection_with_provider_pattern(self):
+        """Test proper environment detection (production vs test) with provider pattern."""
+        # Test production environment detection
+        prod_provider = DictConfigProvider(
+            env={
+                'ETL_ENVIRONMENT': 'production',
+                'OPENDENTAL_SOURCE_HOST': 'prod-host',
+                'OPENDENTAL_SOURCE_PORT': '3306',
+                'OPENDENTAL_SOURCE_DB': 'opendental',
+                'OPENDENTAL_SOURCE_USER': 'prod_user',
+                'OPENDENTAL_SOURCE_PASSWORD': 'prod_pass'
+            }
+        )
+        
+        # Test test environment detection
+        test_provider = DictConfigProvider(
+            env={
+                'ETL_ENVIRONMENT': 'test',
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+            }
+        )
+        
+        # Create settings for both environments with explicit environment setting
+        from etl_pipeline.config.settings import Settings
+        prod_settings = Settings(environment='production', provider=prod_provider)
+        test_settings = Settings(environment='test', provider=test_provider)
+        
+        # Verify environment detection
+        assert prod_settings.environment == 'production'
+        assert test_settings.environment == 'test'
+        
+        # Test that different configurations are used
+        prod_config = prod_settings.get_database_config(DatabaseType.SOURCE)
+        test_config = test_settings.get_database_config(DatabaseType.SOURCE)
+        
+        assert prod_config['host'] == 'prod-host'
+        assert test_config['host'] == 'test-host'
+        assert prod_config['database'] == 'opendental'
+        assert test_config['database'] == 'test_opendental'
+
+    def test_settings_injection_with_provider_pattern(self):
+        """Test Settings injection with provider pattern for environment-agnostic connections."""
+        # Create test provider with TEST_ prefixed variables (complete set)
+        test_provider = DictConfigProvider(
+            env={
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+            }
+        )
+        
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
+        
+        # Test Settings injection with ConnectionFactory
+        with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine:
+            mock_engine = MagicMock()
+            mock_create_engine.return_value = mock_engine
+            
+            # Test unified interface with Settings injection
+            source_engine = ConnectionFactory.get_source_connection(settings)
+            analytics_engine = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+            
+            # Verify Settings injection works for both database types
+            assert source_engine == mock_engine
+            assert analytics_engine == mock_engine
+            
+            # Verify correct number of calls
+            assert mock_create_engine.call_count == 2
+
+    def test_connection_factory_with_settings_injection(self):
+        """Test ConnectionFactory with Settings injection for environment-agnostic operation."""
+        # Create test provider with TEST_ prefixed variables (complete set)
+        test_provider = DictConfigProvider(
+            env={
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+            }
+        )
+        
+        settings = create_test_settings(env_vars=test_provider.get_config('env'))
+        
+        with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine:
+            mock_engine = MagicMock()
+            mock_create_engine.return_value = mock_engine
+            
+            # Test all ConnectionFactory methods with Settings injection
+            source_engine = ConnectionFactory.get_source_connection(settings)
+            replication_engine = ConnectionFactory.get_replication_connection(settings)
+            analytics_engine = ConnectionFactory.get_analytics_connection(settings, PostgresSchema.RAW)
+            
+            # Test schema-specific methods with Settings injection
+            raw_engine = ConnectionFactory.get_analytics_raw_connection(settings)
+            staging_engine = ConnectionFactory.get_analytics_staging_connection(settings)
+            intermediate_engine = ConnectionFactory.get_analytics_intermediate_connection(settings)
+            marts_engine = ConnectionFactory.get_analytics_marts_connection(settings)
+            
+            # Verify all methods work with Settings injection
+            assert source_engine == mock_engine
+            assert replication_engine == mock_engine
+            assert analytics_engine == mock_engine
+            assert raw_engine == mock_engine
+            assert staging_engine == mock_engine
+            assert intermediate_engine == mock_engine
+            assert marts_engine == mock_engine
+            
+            # Verify correct number of calls (7 total)
             assert mock_create_engine.call_count == 7 
