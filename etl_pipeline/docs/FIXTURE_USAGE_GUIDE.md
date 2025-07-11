@@ -380,10 +380,12 @@ def test_mock_connection_factory_with_settings(mock_connection_factory, test_set
     """Test mock connection factory with settings."""
     # Mock the connection factory
     with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
-        mock_factory.get_opendental_source_test_connection.return_value = mock_connection_factory.get_connection('source')
+        mock_factory.get_source_connection.return_value = mock_connection_factory.get_connection('source')
         
         # Test connection creation
-        engine = mock_factory.get_opendental_source_test_connection()
+        from etl_pipeline.config import create_test_settings
+        test_settings = create_test_settings()
+        engine = mock_factory.get_source_connection(test_settings)
         assert engine.name == 'mysql'
 ```
 
@@ -434,8 +436,8 @@ def test_replicator_with_mocks(mock_settings, standard_patient_test_data):
         mock_source_engine = MagicMock()
         mock_target_engine = MagicMock()
         
-        mock_factory.get_opendental_source_test_connection.return_value = mock_source_engine
-        mock_factory.get_mysql_replication_test_connection.return_value = mock_target_engine
+        mock_factory.get_source_connection.return_value = mock_source_engine
+        mock_factory.get_replication_connection.return_value = mock_target_engine
         
         # Create replicator
         replicator = SimpleMySQLReplicator(settings=mock_settings)
@@ -598,7 +600,7 @@ ETL_ENVIRONMENT=test pytest tests/
 ### Configuration Fixtures
 - `test_pipeline_config`: Test pipeline configuration
 - `test_tables_config`: Test tables configuration
-- `complete_config_environment`: Complete configuration environment
+- `test_config_environment`: Test environment configuration
 - `mock_settings_environment`: Mock settings environment
 
 ### Database Connection Fixtures
