@@ -21,7 +21,7 @@ USAGE:
     # Production usage with Settings injection (unified interface)
     from etl_pipeline.config import get_settings
     settings = get_settings()
-    metrics = create_production_metrics_collector(settings)
+    metrics = create_metrics_collector(settings)
     metrics.start_pipeline()
     metrics.record_table_processed('patient', 1000, 30.5, True)
     metrics.end_pipeline()
@@ -29,14 +29,14 @@ USAGE:
     # Test usage with Settings injection (unified interface)
     from etl_pipeline.config import create_test_settings
     test_settings = create_test_settings()
-    metrics = create_test_metrics_collector(test_settings)
+    metrics = create_metrics_collector(test_settings)
     metrics.start_pipeline()
     metrics.record_table_processed('patient', 100, 5.2, True)
     metrics.end_pipeline()
     
     # Direct usage with Settings injection (unified interface)
     settings = get_settings()
-    metrics = UnifiedMetricsCollector(settings=settings)  # Production/Test based on settings
+    metrics = UnifiedMetricsCollector(settings=settings)  # Environment determined by settings
     
     # Status reporting
     status = metrics.get_pipeline_status()
@@ -51,10 +51,10 @@ import logging
 import time
 import json
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
+
 
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config.settings import Settings
@@ -69,37 +69,24 @@ class UnifiedMetricsCollector:
     Follows connection architecture guidelines with explicit environment separation.
     """
     
-    def __init__(self, analytics_engine: Optional[Engine] = None, 
-                 enable_persistence: bool = True,
-                 use_test_connections: bool = False,
-                 settings: Optional['Settings'] = None):
+    def __init__(self, settings: Settings, 
+                 enable_persistence: bool = True):
         """
         Initialize unified metrics collector.
         
         Args:
-            analytics_engine: SQLAlchemy engine for analytics database (optional)
+            settings: Settings instance for connection configuration (required)
             enable_persistence: Whether to enable database persistence
-            use_test_connections: Whether to use test connections (explicit environment separation)
-            settings: Settings instance for connection configuration (required if analytics_engine not provided)
         """
-        self.use_test_connections = use_test_connections
         self.settings = settings
         
         # Get analytics engine using ConnectionFactory (following architecture guidelines)
-        if analytics_engine is None:
-            if settings is None:
-                raise ValueError("Settings parameter is required when analytics_engine is not provided. Use the unified interface with Settings injection.")
-            
-            # Use unified interface with settings injection
-            try:
-                self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
-                logger.info("Using unified analytics connection for metrics persistence")
-            except Exception as e:
-                logger.error(f"Failed to create analytics connection: {str(e)}")
-                self.analytics_engine = None
-        else:
-            self.analytics_engine = analytics_engine
-            logger.info("Using provided analytics engine for metrics persistence")
+        try:
+            self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
+            logger.info("Using unified analytics connection for metrics persistence")
+        except Exception as e:
+            logger.error(f"Failed to create analytics connection: {str(e)}")
+            self.analytics_engine = None
         
         self.enable_persistence = enable_persistence and self.analytics_engine is not None
         
@@ -120,9 +107,6 @@ class UnifiedMetricsCollector:
         Raises:
             ValueError: If unable to create analytics connection
         """
-        if self.settings is None:
-            raise ValueError("Settings parameter is required. Use the unified interface with Settings injection.")
-        
         try:
             # Use unified interface with settings injection
             return ConnectionFactory.get_analytics_raw_connection(self.settings)
@@ -504,34 +488,6 @@ def create_metrics_collector(settings: Settings, enable_persistence: bool = True
         UnifiedMetricsCollector instance with appropriate connection
     """
     return UnifiedMetricsCollector(
-        analytics_engine=None,  # Let the collector get the appropriate connection
-        enable_persistence=enable_persistence,
-        use_test_connections=(settings.environment == 'test'),
-        settings=settings
-    )
-
-def create_production_metrics_collector(settings: Settings, enable_persistence: bool = True) -> UnifiedMetricsCollector:
-    """
-    Create a metrics collector for production environment (explicit).
-    
-    Args:
-        settings: Settings instance for production environment
-        enable_persistence: Whether to enable database persistence
-        
-    Returns:
-        UnifiedMetricsCollector instance with production connection
-    """
-    return create_metrics_collector(settings, enable_persistence)
-
-def create_test_metrics_collector(settings: Settings, enable_persistence: bool = True) -> UnifiedMetricsCollector:
-    """
-    Create a metrics collector for test environment (explicit).
-    
-    Args:
-        settings: Settings instance for test environment
-        enable_persistence: Whether to enable database persistence
-        
-    Returns:
-        UnifiedMetricsCollector instance with test connection
-    """
-    return create_metrics_collector(settings, enable_persistence) 
+        settings=settings,
+        enable_persistence=enable_persistence
+    ) 
