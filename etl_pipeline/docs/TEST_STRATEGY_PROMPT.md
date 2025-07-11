@@ -9,10 +9,12 @@ You are a senior test engineer working on a dental clinic ETL pipeline that proc
 The ETL pipeline uses a **modern static configuration approach** with **provider pattern dependency injection**:
 - **Static Configuration**: All configuration from `tables.yml` - no database queries during ETL
 - **Provider Pattern**: Dependency injection for configuration sources (FileConfigProvider/DictConfigProvider)
+- **Settings Injection**: Environment-agnostic connections using Settings objects
 - **5-10x Performance**: Faster than dynamic schema discovery approaches
-- **Explicit Environment Separation**: Clear production/test environment handling
+- **Explicit Environment Separation**: Clear production/test environment handling with FAIL FAST
 - **Test Isolation**: Complete configuration isolation between production and test environments
 - **Type Safety**: Enums for database types and schema names prevent runtime errors
+- **FAIL FAST**: System fails immediately if ETL_ENVIRONMENT not explicitly set
 
 ### **3-File Testing Pattern**
 We use a **three-tier testing approach** with **three test files per component** for maximum confidence and coverage:
@@ -23,6 +25,8 @@ We use a **three-tier testing approach** with **three test files per component**
 - **Coverage**: Core logic and edge cases for all methods
 - **Execution**: < 1 second per component
 - **Provider Usage**: DictConfigProvider for injected test configuration
+- **Settings Injection**: Uses Settings with injected provider for environment-agnostic testing
+- **FAIL FAST Testing**: Validates system fails when ETL_ENVIRONMENT not set
 - **Markers**: `@pytest.mark.unit`
 
 #### **2. Comprehensive Tests** (`test_[component].py`) 
@@ -31,6 +35,8 @@ We use a **three-tier testing approach** with **three test files per component**
 - **Coverage**: 90%+ target coverage (main test suite)
 - **Execution**: < 5 seconds per component
 - **Provider Usage**: DictConfigProvider for comprehensive test scenarios
+- **Settings Injection**: Uses Settings with injected provider for complete test scenarios
+- **Environment Separation**: Tests production/test environment handling
 - **Markers**: `@pytest.mark.unit` (default)
 
 #### **3. Integration Tests** (`test_[component]_integration.py`)
@@ -40,7 +46,9 @@ We use a **three-tier testing approach** with **three test files per component**
 - **Execution**: < 10 seconds per component
 - **Environment**: Real test databases, no production connections with FileConfigProvider
 - **Order Markers**: Proper test execution order for data flow validation
-- **Provider Usage**: FileConfigProvider with real test configuration files
+- **Provider Usage**: FileConfigProvider with real test configuration files (.env_test)
+- **Settings Injection**: Uses Settings with FileConfigProvider for real test environment
+- **Environment Separation**: Uses .env_test file for test environment isolation
 - **Markers**: `@pytest.mark.integration`
 
 #### **4. End-to-End Tests** (`test_e2e_[component].py`)
@@ -49,7 +57,9 @@ We use a **three-tier testing approach** with **three test files per component**
 - **Coverage**: Complete workflow validation
 - **Execution**: < 30 seconds per component
 - **Environment**: Production connections with test data only using FileConfigProvider
-- **Provider Usage**: FileConfigProvider with production configuration files
+- **Provider Usage**: FileConfigProvider with production configuration files (.env_production)
+- **Settings Injection**: Uses Settings with FileConfigProvider for production environment
+- **Environment Separation**: Uses .env_production file for production environment
 - **Markers**: `@pytest.mark.e2e`
 
 ### **Directory Structure**
@@ -64,7 +74,7 @@ tests/
 ## 📚 **SUPPORTING DOCUMENTATION REFERENCES**
 
 ### **Core Architecture Documents**
-- **[Testing Plan](TESTING_PLAN.md)**: Comprehensive testing checklist with 150 methods to test
+- **[Testing Plan](TESTING_PLAN.md)**: Comprehensive testing checklist with provider pattern
 - **[Connection Architecture](connection_architecture.md)**: Complete connection handling system with provider pattern
 - **[Data Flow Diagram](DATA_FLOW_DIAGRAM.md)**: Complete pipeline ecosystem with 150 methods across 13 components
 - **[ETL Pipeline Methods](etl_pipeline_methods.md)**: Complete method documentation for all components
@@ -73,7 +83,7 @@ tests/
 **IMPORTANT**: Retrieve detailed information from these documents when building tests. They contain:
 - Complete method lists and signatures
 - Architecture patterns and best practices
-- Connection management strategies
+- Connection management strategies with provider pattern
 - Data flow diagrams and dependencies
 - Fixture definitions and usage patterns
 
@@ -95,6 +105,8 @@ markers =
     slow: Tests that take longer to run
     idempotency: Idempotency and incremental load tests
     critical: Critical tests that must pass for production
+    provider_pattern: Tests using provider pattern dependency injection
+    settings_injection: Tests using Settings injection for environment-agnostic connections
 
 # Test Execution Configuration
 addopts = 
@@ -112,23 +124,42 @@ addopts =
 # Unit Test with DictConfigProvider
 def test_database_config_with_provider():
     """Test database configuration using provider pattern."""
+    from etl_pipeline.config.providers import DictConfigProvider
+    from etl_pipeline.config.settings import Settings, DatabaseType
+    
     test_provider = DictConfigProvider(
         env={
-            'OPENDENTAL_SOURCE_HOST': 'test-host',
-            'OPENDENTAL_SOURCE_DB': 'test_db',
-            'TEST_OPENDENTAL_SOURCE_HOST': 'test-prefixed-host'
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+            'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
+            'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
         }
     )
     
     settings = Settings(environment='test', provider=test_provider)
     config = settings.get_database_config(DatabaseType.SOURCE)  # Using enums
-    assert config['host'] == 'test-prefixed-host'
+    assert config['host'] == 'test-host'
 
 # Integration Test with FileConfigProvider
 def test_real_config_loading():
     """Test loading configuration from real files."""
-    settings = Settings(environment='production')  # Uses FileConfigProvider
+    from etl_pipeline.config.settings import Settings, DatabaseType
+    
+    settings = Settings(environment='test')  # Uses FileConfigProvider with .env_test
     assert settings.validate_configs() is True
+    
+    config = settings.get_database_config(DatabaseType.SOURCE)
+    assert config['host'] is not None
+
+# Settings Injection for Environment-Agnostic Connections
+def test_connection_with_settings_injection():
+    """Test environment-agnostic connections using Settings injection."""
+    from etl_pipeline.config import get_settings
+    from etl_pipeline.core import ConnectionFactory
+    
+    settings = get_settings()  # Environment determined by ETL_ENVIRONMENT
+    source_engine = ConnectionFactory.get_source_connection(settings)
+    analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
 ```
 
 ## 🎯 **TESTING PHILOSOPHY**
@@ -140,7 +171,7 @@ def test_real_config_loading():
 4. **Verify error handling and recovery**
 5. **Ensure idempotent operations**
 6. **Use three-tier approach for comprehensive coverage**
-7. **Follow explicit environment separation**
+7. **Follow explicit environment separation with FAIL FAST**
 8. **Test all methods from methods documentation**
 9. **Use order markers for integration test execution**
 10. **Leverage static configuration for predictable testing**
@@ -149,6 +180,8 @@ def test_real_config_loading():
 13. **Use enums for type safety in database operations**
 14. **Leverage FileConfigProvider for integration/E2E tests**
 15. **Maintain configuration isolation between test types**
+16. **Use Settings injection for environment-agnostic connections**
+17. **Validate FAIL FAST behavior when ETL_ENVIRONMENT not set**
 
 ## 🚀 **TEST BUILDING PROMPT TEMPLATE**
 
@@ -168,12 +201,14 @@ I need to build [UNIT/COMPREHENSIVE/INTEGRATION/E2E] tests for [COMPONENT_NAME] 
 **Requirements:**
 1. Follow the three-tier testing approach
 2. Use appropriate fixtures from the fixture system
-3. Follow connection architecture patterns
-4. Implement proper environment separation
+3. Follow connection architecture patterns with provider pattern
+4. Implement proper environment separation with FAIL FAST
 5. Test all methods listed above
 6. Include error handling scenarios
 7. Use realistic test data
 8. Follow naming conventions
+9. Use Settings injection for environment-agnostic connections
+10. Use DictConfigProvider for unit/comprehensive tests, FileConfigProvider for integration/E2E tests
 
 **Supporting Documentation:**
 - Testing Plan: [TESTING_PLAN.md]
@@ -195,6 +230,9 @@ Please create the test file with comprehensive coverage of all methods.
 5. **Handle Complex Dependencies**: Mock entire classes for complex initialization
 6. **Check Environment Separation**: Verify test vs production connections
 7. **Validate Fixture Usage**: Ensure correct fixture dependencies
+8. **Check Provider Pattern**: Verify DictConfigProvider vs FileConfigProvider usage
+9. **Validate Settings Injection**: Ensure environment-agnostic connections
+10. **Test FAIL FAST**: Verify system fails when ETL_ENVIRONMENT not set
 
 ### **Common Patterns**
 ```python
@@ -207,8 +245,18 @@ mock_func.side_effect = lambda **kwargs: logger.debug(f"Called with: {kwargs}")
 # CORRECT: Full class mock for complex components
 @patch('etl_pipeline.core.mysql_replicator.SimpleMySQLReplicator')
 
-# CORRECT: Environment separation
-test_engine = ConnectionFactory.get_opendental_source_test_connection()
+# CORRECT: Environment separation with provider pattern
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.config.settings import Settings, DatabaseType
+
+test_provider = DictConfigProvider(env={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'})
+test_settings = Settings(environment='test', provider=test_provider)
+test_engine = ConnectionFactory.get_source_connection(test_settings)
+
+# CORRECT: Settings injection for environment-agnostic connections
+from etl_pipeline.config import get_settings
+settings = get_settings()  # Environment determined by ETL_ENVIRONMENT
+engine = ConnectionFactory.get_analytics_raw_connection(settings)
 ```
 
 ## 📋 **VERIFICATION CHECKLIST**
@@ -228,6 +276,8 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - [ ] Plan provider pattern usage (DictConfigProvider for unit/comprehensive, FileConfigProvider for integration/E2E)
 - [ ] Identify enum usage for type safety (DatabaseType, PostgresSchema)
 - [ ] Plan test isolation strategy with provider pattern
+- [ ] Plan Settings injection for environment-agnostic connections
+- [ ] Plan FAIL FAST testing for ETL_ENVIRONMENT validation
 
 ### **After Writing Tests**
 - [ ] Verify tests cover actual business logic
@@ -246,6 +296,8 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - [ ] Verify test isolation with provider pattern
 - [ ] Confirm no environment pollution in tests
 - [ ] Validate dependency injection works correctly
+- [ ] Test Settings injection for environment-agnostic connections
+- [ ] Verify FAIL FAST behavior when ETL_ENVIRONMENT not set
 
 ## 🎯 **SUCCESS METRICS**
 
@@ -292,11 +344,14 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 5. **Document test scenarios**: Clear test descriptions and purposes
 6. **Use three-tier approach**: Three test files per component for maximum confidence
 7. **Leverage infrastructure**: Use pytest.ini and conftest.py effectively
-8. **Follow environment separation**: Clear production/test boundaries
+8. **Follow environment separation**: Clear production/test boundaries with FAIL FAST
 9. **Test all methods**: 100% method coverage from methods documentation (150 methods)
 10. **Use supporting documentation**: Reference all architecture documents
 11. **Use order markers**: Proper integration test execution order
 12. **Leverage static configuration**: Predictable test behavior
+13. **Use provider pattern**: DictConfigProvider for unit/comprehensive, FileConfigProvider for integration/E2E
+14. **Use Settings injection**: Environment-agnostic connections using Settings objects
+15. **Test FAIL FAST**: Validate system fails when ETL_ENVIRONMENT not explicitly set
 
 ### **When in Doubt**
 - **Add debug logging**: Use logger.debug() liberally
@@ -311,5 +366,8 @@ test_engine = ConnectionFactory.get_opendental_source_test_connection()
 - **Test all methods**: Ensure 100% method coverage (150 methods)
 - **Use order markers**: Ensure proper integration test execution
 - **Leverage static configuration**: Use predictable test behavior
+- **Use provider pattern**: DictConfigProvider for testing, FileConfigProvider for real connections
+- **Use Settings injection**: Environment-agnostic connections with Settings objects
+- **Test FAIL FAST**: Ensure system fails when ETL_ENVIRONMENT not set
 
-This test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 150 methods across the three-tier testing approach.
+This test strategy provides a complete framework for building efficient, maintainable tests for the ETL pipeline with full coverage of all 150 methods across the three-tier testing approach, using provider pattern dependency injection and Settings injection for environment-agnostic connections.
