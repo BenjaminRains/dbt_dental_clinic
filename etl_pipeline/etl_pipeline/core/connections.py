@@ -9,7 +9,11 @@ import logging
 from typing import Optional, Dict
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from etl_pipeline.config.settings import get_settings, PostgresSchema, DatabaseType
+from ..config.settings import get_settings, PostgresSchema, DatabaseType
+
+# Import custom exceptions for structured error handling
+from ..exceptions.database import DatabaseConnectionError, DatabaseQueryError
+from ..exceptions.configuration import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,11 @@ class ConnectionFactory:
         """Validate that all required connection parameters are present and non-empty."""
         missing_params = [k for k, v in params.items() if not v]
         if missing_params:
-            raise ValueError(f"Missing required {connection_type} connection parameters: {', '.join(missing_params)}")
+            raise ConfigurationError(
+                message=f"Missing required {connection_type} connection parameters",
+                missing_keys=missing_params,
+                details={"connection_type": connection_type, "params": params}
+            )
     
     @staticmethod
     def _build_mysql_connection_string(config: Dict) -> str:
@@ -104,9 +112,19 @@ class ConnectionFactory:
             return engine
             
         except Exception as e:
-            error_msg = f"Failed to create MySQL connection to {database}: {str(e)}"
-            logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise DatabaseConnectionError(
+                message=f"Failed to create MySQL connection to {database}",
+                database_type="mysql",
+                connection_params=params,
+                details={
+                    "error": str(e),
+                    "pool_size": pool_size,
+                    "max_overflow": max_overflow,
+                    "pool_timeout": pool_timeout,
+                    "pool_recycle": pool_recycle
+                },
+                original_exception=e
+            )
     
     @staticmethod
     def create_postgres_engine(
@@ -159,9 +177,20 @@ class ConnectionFactory:
             return engine
             
         except Exception as e:
-            error_msg = f"Failed to create PostgreSQL connection to {database}.{schema}: {str(e)}"
-            logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise DatabaseConnectionError(
+                message=f"Failed to create PostgreSQL connection to {database}.{schema}",
+                database_type="postgresql",
+                connection_params=params,
+                details={
+                    "error": str(e),
+                    "schema": schema,
+                    "pool_size": pool_size,
+                    "max_overflow": max_overflow,
+                    "pool_timeout": pool_timeout,
+                    "pool_recycle": pool_recycle
+                },
+                original_exception=e
+            )
 
 # ============================================================================
 # UNIFIED INTERFACE METHODS WITH SETTINGS INJECTION (Recommended Approach)
@@ -278,7 +307,26 @@ class ConnectionManager:
                     # Close connection and retry with fresh one
                     self.close_connection()
                 else:
-                    raise
+                    # Determine database type from engine URL
+                    database_type = "unknown"
+                    if hasattr(self.engine, 'url'):
+                        if 'mysql' in str(self.engine.url):
+                            database_type = "mysql"
+                        elif 'postgresql' in str(self.engine.url):
+                            database_type = "postgresql"
+                    
+                    raise DatabaseQueryError(
+                        message="Query execution failed after retries",
+                        query=query,
+                        database_type=database_type,
+                        details={
+                            "attempts": self.max_retries,
+                            "params": params,
+                            "rate_limit": rate_limit,
+                            "error": str(e)
+                        },
+                        original_exception=e
+                    )
     
     def __enter__(self):
         """Context manager entry."""
