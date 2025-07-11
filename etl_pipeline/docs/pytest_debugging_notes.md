@@ -125,6 +125,66 @@ def test_component_integration(test_source_engine, test_target_engine):
     # Real component with real test database connections
 ```
 
+### 3.3 MySQL Primary Key Regex and Type Detection Patterns
+
+**Problem**:  
+- Tests fail to detect primary keys or correct types when using MySQL CREATE TABLE statements with inline `PRIMARY KEY` or when relying on intelligent type detection with mocked DB connections.
+
+**Context**:  
+- Unit tests for schema conversion (MySQL → Postgres) using mocked database connections.
+
+**Error Pattern**:  
+- `assert 'PRIMARY KEY ("PatNum")' in pg_create` fails, or boolean columns are mapped as `smallint` instead of `boolean`.
+
+**Solutions**:
+
+#### 3.3.1 Table-Level Primary Key Pattern
+```python
+# ❌ WRONG - Inline PK (not detected by pipeline regex)
+CREATE TABLE patient (
+    `PatNum` INT AUTO_INCREMENT PRIMARY KEY,
+    ...
+)
+
+# ✅ CORRECT - Table-level PK (detected by pipeline regex)
+CREATE TABLE patient (
+    `PatNum` INT AUTO_INCREMENT,
+    ...
+    PRIMARY KEY (`PatNum`)
+)
+```
+
+#### 3.3.2 Patching Type Detection for TINYINT/Boolean
+```python
+# ❌ WRONG - No patch, pipeline falls back to smallint
+schema = PostgresSchema(settings=test_settings)
+pg_create = schema.adapt_schema('patient', mysql_schema)
+assert '"IsActive" boolean' in pg_create  # FAILS
+
+# ✅ CORRECT - Patch _analyze_column_data to simulate boolean detection
+def mock_analyze_column_data(table_name, column_name, mysql_type):
+    if mysql_type.lower().startswith('tinyint'):
+        if column_name in ['IsActive', 'IsDeleted', 'PatStatus', 'Gender', 'Position']:
+            return 'boolean'
+        else:
+            return 'smallint'
+    else:
+        return schema._convert_mysql_type_standard(mysql_type)
+
+with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+    schema = PostgresSchema(settings=test_settings)
+    pg_create = schema.adapt_schema('patient', mysql_schema)
+    assert '"IsActive" boolean' in pg_create  # PASSES
+```
+
+**Key Principle**:  
+- Always match your test fixture and patching strategy to the actual parsing and type detection logic in the pipeline.  
+- If the pipeline uses regexes or DB queries, your test data and mocks must align with those expectations.
+
+**Related Sections**: [3.2 Inspection Errors](#32-inspection-errors), [4.1 Testing Real Logic vs Mocks](#41-testing-real-logic-vs-mocks)
+
+---
+
 ## 4. Test Design Patterns
 
 ### 4.1 Testing Real Logic vs Mocks
@@ -187,13 +247,15 @@ def test_load_table_integration(test_analytics_engine, sample_patient_data):
 ```python
 # ✅ Use real test connections for integration tests
 # Test connections (for integration tests)
-test_source_engine = ConnectionFactory.get_opendental_source_test_connection()
-test_replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
-test_analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+from etl_pipeline.config import create_test_settings
+test_settings = create_test_settings()
+test_source_engine = ConnectionFactory.get_source_connection(test_settings)
+test_replication_engine = ConnectionFactory.get_replication_connection(test_settings)
+test_analytics_engine = ConnectionFactory.get_analytics_connection(test_settings)
 
 # Schema-specific test connections
-test_raw_engine = ConnectionFactory.get_opendental_analytics_raw_test_connection()
-test_staging_engine = ConnectionFactory.get_opendental_analytics_staging_test_connection()
+test_raw_engine = ConnectionFactory.get_analytics_raw_connection(test_settings)
+test_staging_engine = ConnectionFactory.get_analytics_staging_connection(test_settings)
 ```
 
 ## 6. Common Mock Patterns
@@ -298,9 +360,11 @@ replication_engine = ConnectionFactory.get_mysql_replication_connection()
 analytics_engine = ConnectionFactory.get_opendental_analytics_raw_connection()
 
 # Test connections (integration tests)
-test_source_engine = ConnectionFactory.get_opendental_source_test_connection()
-test_replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
-test_analytics_engine = ConnectionFactory.get_postgres_analytics_test_connection()
+from etl_pipeline.config import create_test_settings
+test_settings = create_test_settings()
+test_source_engine = ConnectionFactory.get_source_connection(test_settings)
+test_replication_engine = ConnectionFactory.get_replication_connection(test_settings)
+test_analytics_engine = ConnectionFactory.get_analytics_connection(test_settings)
 ```
 
 ### 9.3 CLI Integration Testing with Real Configuration
@@ -629,6 +693,55 @@ def cli_with_injected_config_and_reader(cli_test_settings, cli_test_config_reade
 **Key Principle**: Test real configuration loading with test data, not mocked configuration
 
 **Related Sections**: [9.3](#93-cli-integration-testing-with-real-configuration), [10.1.1](#1011-fix-file-dependencies), [4.1](#41-testing-real-logic-vs-mocks)
+
+## 13. Fail-Fast Environment Tests: Correct Pattern
+
+**Problem:**
+- Unit tests for fail-fast environment logic (e.g., ETL_ENVIRONMENT not set) are unreliable or overly complex when using patching or mocking of `get_settings`.
+
+**Correct Pattern:**
+- **Directly manipulate the environment** by removing `ETL_ENVIRONMENT` from `os.environ`.
+- **Do not patch** `get_settings` for this scenario; let the real function run.
+- **Expect the real error type**:
+  - If calling a component that checks the environment directly (e.g., `Settings()` or `get_settings()`), expect `EnvironmentError`.
+  - If calling a component that tries to use test settings (e.g., `PostgresLoader(use_test_environment=True)`), expect `ConfigurationError` due to missing required test environment variables.
+
+**Example:**
+```python
+import os
+import pytest
+from etl_pipeline.loaders.postgres_loader import PostgresLoader
+from etl_pipeline.exceptions.configuration import EnvironmentError, ConfigurationError
+
+def test_fail_fast_error_messages():
+    original_env = os.environ.get('ETL_ENVIRONMENT')
+    try:
+        if 'ETL_ENVIRONMENT' in os.environ:
+            del os.environ['ETL_ENVIRONMENT']
+        with pytest.raises(EnvironmentError, match="ETL_ENVIRONMENT environment variable is not set"):
+            PostgresLoader()
+    finally:
+        if original_env:
+            os.environ['ETL_ENVIRONMENT'] = original_env
+
+def test_fail_fast_provider_integration():
+    original_env = os.environ.get('ETL_ENVIRONMENT')
+    try:
+        if 'ETL_ENVIRONMENT' in os.environ:
+            del os.environ['ETL_ENVIRONMENT']
+        with pytest.raises(ConfigurationError, match="Missing or invalid required environment variables"):
+            PostgresLoader(use_test_environment=True)
+    finally:
+        if original_env:
+            os.environ['ETL_ENVIRONMENT'] = original_env
+```
+
+**Why this works:**
+- The ETL pipeline's fail-fast logic is implemented in the real `get_settings()` and `Settings` code, not in the loader itself.
+- Patching `get_settings` is unnecessary and can lead to brittle or ineffective tests due to import timing and binding.
+- Manipulating the environment directly matches the real-world failure scenario and is robust across all test types (unit, comprehensive, integration).
+
+**Related Sections:** See also section 10.1.4 (mock bypassing validation), and patterns in `test_connections_unit.py` and `test_cli_unit.py`.
 
 ## 11. Debugging Strategies
 
