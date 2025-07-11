@@ -37,6 +37,27 @@ from .config_fixtures import (
     test_tables_config
 )
 
+from .config_reader_fixtures import (
+    valid_tables_config,
+    minimal_tables_config,
+    invalid_tables_config,
+    empty_tables_config,
+    malformed_yaml_config,
+    temp_config_file,
+    temp_invalid_config_file,
+    temp_empty_config_file,
+    mock_config_reader,
+    mock_config_reader_with_invalid_config,
+    mock_config_reader_with_empty_config,
+    mock_file_system,
+    mock_yaml_loading,
+    config_reader_test_cases,
+    config_reader_error_cases,
+    config_reader_validation_cases,
+    config_reader_performance_data,
+    config_reader_dependency_test_data
+)
+
 from .cli_fixtures import (
     cli_runner,
     cli_test_config,
@@ -91,6 +112,26 @@ __all__ = [
     # Config fixtures
     'test_pipeline_config',
     'test_tables_config',
+    
+    # ConfigReader fixtures
+    'valid_tables_config',
+    'minimal_tables_config',
+    'invalid_tables_config',
+    'empty_tables_config',
+    'malformed_yaml_config',
+    'temp_config_file',
+    'temp_invalid_config_file',
+    'temp_empty_config_file',
+    'mock_config_reader',
+    'mock_config_reader_with_invalid_config',
+    'mock_config_reader_with_empty_config',
+    'mock_file_system',
+    'mock_yaml_loading',
+    'config_reader_test_cases',
+    'config_reader_error_cases',
+    'config_reader_validation_cases',
+    'config_reader_performance_data',
+    'config_reader_dependency_test_data',
     
     # CLI fixtures
     'cli_runner',
