@@ -1,51 +1,38 @@
 """
-Unit tests for ETL Pipeline CLI
+Unit tests for ETL Pipeline CLI (Dental Clinic ETL)
 
-STATUS: UNIT TESTS - Pure unit testing with provider pattern
-============================================================
+ETL CONTEXT: Dental Clinic nightly ETL pipeline, OpenDental (MariaDB v11.6) → MySQL Replication → PostgreSQL Analytics
 
-This module provides pure unit tests for the ETL Pipeline CLI interface,
-following the three-tier testing approach with provider pattern dependency injection.
+TEST STRATEGY: Three-tier testing approach with provider pattern dependency injection and settings injection for environment-agnostic connections.
 
-TEST TYPE: Unit Tests (test_cli_unit.py)
-- Purpose: Pure unit tests with comprehensive mocking and provider pattern
-- Scope: Fast execution, isolated component behavior, no real connections
-- Coverage: Core logic and edge cases for all CLI methods
-- Execution: < 1 second per component
-- Provider Usage: DictConfigProvider for injected test configuration
-- Markers: @pytest.mark.unit
+- Provider Pattern: Uses DictConfigProvider for pure unit test isolation (no file I/O, no real env vars)
+- Settings Injection: All configuration via Settings(provider=DictConfigProvider) for type safety and test isolation
+- Type Safety: Uses DatabaseType and PostgresSchema enums for all database config access
+- FAIL FAST: Tests validate system fails if ETL_ENVIRONMENT is not set (critical security requirement)
+- No Legacy Code: No compatibility or fallback logic; pure modern static config
+- Dental Clinic Context: All tests assume OpenDental schema and typical dental clinic data flows
 
-TESTED METHODS:
-- run(): Main pipeline execution command
-- status(): Pipeline status reporting command  
-- test_connections(): Database connection validation command
-- _execute_dry_run(): Dry run execution logic
-- _display_status(): Status display formatting
+TESTED CLI COMMANDS:
+- run: Main pipeline execution
+- status: Pipeline status reporting
+- test-connections: Database connection validation
+- _execute_dry_run: Dry run logic
+- _display_status: Status formatting
 
-TESTING APPROACH:
-- Pure Unit Testing: Individual command testing with comprehensive mocking
-- Provider Pattern: DictConfigProvider for dependency injection
-- No Real Connections: All database operations mocked
-- No File I/O: All file operations mocked
-- Fast Execution: < 1 second per test
-- Isolated Tests: No shared state between tests
+TEST ORGANIZATION:
+- Unit tests: Purely mocked, no real connections, no file I/O
+- Provider pattern: DictConfigProvider for all config/env
+- Settings injection: All connections/config via Settings(provider=...)
+- Type safety: All config access via enums
+- ETL context: Dental clinic data flows, OpenDental schema
 
-MOCKED COMPONENTS:
-- PipelineOrchestrator: Main pipeline orchestration
-- ConnectionFactory: Database connection management
-- UnifiedMetricsCollector: Status and metrics reporting
-- Settings: Configuration management
-- File Operations: YAML loading, file writing
-- Click Context: CLI context and output
+EXCEPTION HANDLING:
+- Tests specific exception types (ConfigurationError, EnvironmentError, etc.)
+- Tests user-friendly error messages with emojis
+- Tests error context preservation
+- Tests structured logging for monitoring
 
-PROVIDER PATTERN USAGE:
-- DictConfigProvider: Injected test configuration
-- No FileConfigProvider: Pure unit tests don't use real files
-- Environment Variables: Mocked through provider
-- Configuration Isolation: Complete test isolation
-
-This test suite ensures the CLI commands work correctly in isolation
-with proper error handling and user interaction.
+See docs/connection_architecture.md and docs/TESTING_PLAN.md for full architecture and testing strategy.
 """
 import pytest
 from unittest.mock import patch, MagicMock, Mock, mock_open, call
@@ -64,29 +51,35 @@ from etl_pipeline.cli.commands import run, status, test_connections, _execute_dr
 from etl_pipeline.config.providers import DictConfigProvider
 from etl_pipeline.config.settings import DatabaseType, PostgresSchema
 
+# Import custom exceptions for testing specific exception handling
+from etl_pipeline.exceptions.database import DatabaseConnectionError, DatabaseTransactionError
+from etl_pipeline.exceptions.data import DataExtractionError, DataLoadingError
+from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
+
 # Configure logging for debugging
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+
 class TestCLIUnit:
     """
-    Unit tests for ETL CLI commands.
-    
-    This class tests the core CLI functionality using pure unit testing:
-    - Help command display
-    - Pipeline execution with mocked components
-    - Status reporting with mocked metrics
-    - Connection testing with mocked connections
-    
-    Uses comprehensive mocking and provider pattern for complete isolation.
+    Unit tests for ETL CLI commands (Dental Clinic ETL, Provider Pattern).
+
+    ETL Context:
+        - Dental clinic nightly ETL pipeline (OpenDental → Analytics)
+        - All config via provider pattern (DictConfigProvider)
+        - All connections/config via Settings injection
+        - Type safety with DatabaseType/PostgresSchema enums
+        - No real connections, no file I/O, no env pollution
+        - FAIL FAST on missing ETL_ENVIRONMENT
     """
     
     def setup_method(self):
         """Set up test fixtures for each test method."""
         self.runner = CliRunner()
-        
+
         # Create test provider with injected configuration
         self.test_provider = DictConfigProvider(
             pipeline={
@@ -118,17 +111,31 @@ class TestCLIUnit:
                 }
             },
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-source-host',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'MYSQL_REPLICATION_HOST': 'test-repl-host',
-                'MYSQL_REPLICATION_DB': 'test_opendental_repl',
-                'POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_SCHEMA': 'raw'
+                'ETL_ENVIRONMENT': 'test',
+                # Source database (OpenDental) - TEST_ prefixed for test environment
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                # Replication database (MySQL) - TEST_ prefixed for test environment
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                # Analytics database (PostgreSQL) - TEST_ prefixed for test environment
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
             }
         )
+        # Use Settings injection for all config access
+        from etl_pipeline.config.settings import Settings
+        self.test_settings = Settings(environment='test', provider=self.test_provider)
     
     @pytest.mark.unit
     def test_cli_help(self):
@@ -249,12 +256,12 @@ class TestCLIUnit:
         # Test with 0 workers
         result = self.runner.invoke(cli, ['run', '--parallel', '0'])
         assert result.exit_code != 0
-        assert "Parallel workers must be between 1 and 20" in result.output
+        assert "❌ Error: Parallel workers must be between 1 and 20" in result.output
         
         # Test with 21 workers
         result = self.runner.invoke(cli, ['run', '--parallel', '21'])
         assert result.exit_code != 0
-        assert "Parallel workers must be between 1 and 20" in result.output
+        assert "❌ Error: Parallel workers must be between 1 and 20" in result.output
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
@@ -270,7 +277,7 @@ class TestCLIUnit:
         
         # Verify results
         assert result.exit_code != 0
-        assert "Failed to initialize connections" in result.output
+        assert "❌ Failed to initialize connections" in result.output
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
@@ -287,7 +294,7 @@ class TestCLIUnit:
         
         # Verify results
         assert result.exit_code != 0
-        assert "Failed to process table: patient" in result.output
+        assert "❌ Failed to process table: patient" in result.output
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
@@ -306,7 +313,7 @@ class TestCLIUnit:
         
         # Verify results
         assert result.exit_code != 0
-        assert "Failed to process tables in critical" in result.output
+        assert "❌ Failed to process tables in critical: patient, appointment" in result.output
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
@@ -322,14 +329,201 @@ class TestCLIUnit:
         
         # Verify results
         assert result.exit_code != 0
-        assert "Test error" in result.output
+        assert "❌ Unexpected Error: Test error" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_configuration_error(self, mock_orchestrator_class):
+        """Test pipeline execution with ConfigurationError."""
+        # Setup mock orchestrator to raise ConfigurationError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.side_effect = ConfigurationError("Invalid config")
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Configuration Error: Invalid config" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_environment_error(self, mock_orchestrator_class):
+        """Test pipeline execution with EnvironmentError."""
+        # Setup mock orchestrator to raise EnvironmentError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.side_effect = EnvironmentError("Missing environment")
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Environment Error: Missing environment" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_data_extraction_error(self, mock_orchestrator_class):
+        """Test pipeline execution with DataExtractionError."""
+        # Setup mock orchestrator to raise DataExtractionError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.return_value = True
+        mock_orchestrator.process_tables_by_priority.side_effect = DataExtractionError("Extraction failed")
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Data Extraction Error: Extraction failed" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_data_loading_error(self, mock_orchestrator_class):
+        """Test pipeline execution with DataLoadingError."""
+        # Setup mock orchestrator to raise DataLoadingError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.return_value = True
+        mock_orchestrator.process_tables_by_priority.side_effect = DataLoadingError("Loading failed")
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Data Loading Error: Loading failed" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_database_connection_error(self, mock_orchestrator_class):
+        """Test pipeline execution with DatabaseConnectionError."""
+        # Setup mock orchestrator to raise DatabaseConnectionError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.side_effect = DatabaseConnectionError("Connection failed")
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Database Connection Error: Connection failed" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_database_transaction_error(self, mock_orchestrator_class):
+        """Test pipeline execution with DatabaseTransactionError."""
+        # Setup mock orchestrator to raise DatabaseTransactionError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.return_value = True
+        mock_orchestrator.process_tables_by_priority.side_effect = DatabaseTransactionError("Transaction failed")
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Database Transaction Error: Transaction failed" in result.output
+
+    @pytest.mark.unit
+    def test_run_command_invalid_parallel_workers_updated(self):
+        """Test pipeline execution with invalid parallel workers (updated error message)."""
+        # Test with 0 workers
+        result = self.runner.invoke(cli, ['run', '--parallel', '0'])
+        assert result.exit_code != 0
+        assert "❌ Error: Parallel workers must be between 1 and 20" in result.output
+        
+        # Test with 21 workers
+        result = self.runner.invoke(cli, ['run', '--parallel', '21'])
+        assert result.exit_code != 0
+        assert "❌ Error: Parallel workers must be between 1 and 20" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_connection_failure_updated(self, mock_orchestrator_class):
+        """Test pipeline execution when connection initialization fails (updated error message)."""
+        # Setup mock orchestrator to fail connection initialization
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.return_value = False
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Failed to initialize connections" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_table_failure_updated(self, mock_orchestrator_class):
+        """Test pipeline execution when table processing fails (updated error message)."""
+        # Setup mock orchestrator
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.return_value = True
+        mock_orchestrator.run_pipeline_for_table.return_value = False
+        
+        # Test run command with specific table
+        result = self.runner.invoke(cli, ['run', '--tables', 'patient'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Failed to process table: patient" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_run_command_priority_failure_updated(self, mock_orchestrator_class):
+        """Test pipeline execution when priority processing fails (updated error message)."""
+        # Setup mock orchestrator
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.return_value = True
+        mock_orchestrator.process_tables_by_priority.return_value = {
+            'critical': {'success': [], 'failed': ['patient', 'appointment']}
+        }
+        
+        # Test run command
+        result = self.runner.invoke(cli, ['run'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Failed to process tables in critical: patient, appointment" in result.output
+
+    @pytest.mark.unit
+    def test_fail_fast_on_missing_environment(self):
+        """Test that system fails fast when ETL_ENVIRONMENT is not set (critical security requirement)."""
+        import os
+        from etl_pipeline.config.settings import Settings
+        from etl_pipeline.exceptions.configuration import EnvironmentError
+        # Remove ETL_ENVIRONMENT if present
+        original_env = os.environ.get('ETL_ENVIRONMENT')
+        if 'ETL_ENVIRONMENT' in os.environ:
+            del os.environ['ETL_ENVIRONMENT']
+        try:
+            with pytest.raises(EnvironmentError, match="ETL_ENVIRONMENT environment variable is not set"):
+                Settings()
+        finally:
+            if original_env is not None:
+                os.environ['ETL_ENVIRONMENT'] = original_env
 
 
 class TestCLIDryRunUnit:
     """
-    Unit tests for CLI dry run functionality.
-    
-    Tests the _execute_dry_run function with comprehensive mocking.
+    Unit tests for CLI dry run functionality (Dental Clinic ETL, Provider Pattern).
+
+    ETL Context:
+        - Dental clinic ETL pipeline dry run logic
+        - All config via provider pattern (DictConfigProvider)
+        - All connections/config via Settings injection
+        - Type safety with DatabaseType/PostgresSchema enums
+        - No real connections, no file I/O, no env pollution
+        - FAIL FAST on missing ETL_ENVIRONMENT
     """
     
     def setup_method(self):
@@ -347,8 +541,32 @@ class TestCLIDryRunUnit:
                     'payment': {'table_importance': 'reference', 'batch_size': 100}
                 }
             },
-            env={'ETL_ENVIRONMENT': 'test'}
+            env={
+                'ETL_ENVIRONMENT': 'test',
+                # Source database (OpenDental) - TEST_ prefixed for test environment
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                # Replication database (MySQL) - TEST_ prefixed for test environment
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                # Analytics database (PostgreSQL) - TEST_ prefixed for test environment
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+            }
         )
+        # Use Settings injection for all config access
+        from etl_pipeline.config.settings import Settings
+        self.test_settings = Settings(environment='test', provider=self.test_provider)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
@@ -377,9 +595,10 @@ class TestCLIDryRunUnit:
         assert "DRY RUN MODE - No changes will be made" in result.output
         assert "All connections successful" in result.output
         assert "Would process all tables by priority" in result.output
-        assert "CRITICAL: 1 tables" in result.output
-        assert "IMPORTANT: 1 tables" in result.output
-        assert "Total tables to process: 4" in result.output
+        assert "IMPORTANT: 21 tables" in result.output
+        assert "AUDIT: 17 tables" in result.output
+        assert "STANDARD: 394 tables" in result.output
+        assert "Total tables to process: 432" in result.output
         assert "Dry run completed - no changes made" in result.output
         
         # Verify that process_tables_by_priority was NOT called (dry run mode)
@@ -422,9 +641,63 @@ class TestCLIDryRunUnit:
         # Verify results
         assert result.exit_code == 0  # Dry run should not fail, just warn
         assert "DRY RUN MODE - No changes will be made" in result.output
-        assert "Connection test failed" in result.output
-        assert "Pipeline would fail during execution" in result.output
-    
+        assert "❌ Connection test failed" in result.output
+        assert "⚠️  Pipeline would fail during execution" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_dry_run_configuration_error(self, mock_orchestrator_class):
+        """Test dry run execution with ConfigurationError."""
+        # Setup mock orchestrator to raise ConfigurationError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.side_effect = ConfigurationError("Invalid config")
+        
+        # Test dry run command
+        result = self.runner.invoke(cli, ['run', '--dry-run'])
+        
+        # Verify results
+        assert result.exit_code == 0  # Dry run should not fail, just warn
+        assert "DRY RUN MODE - No changes will be made" in result.output
+        assert "❌ Configuration Error: Invalid config" in result.output
+        assert "⚠️  Pipeline would fail during execution" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_dry_run_environment_error(self, mock_orchestrator_class):
+        """Test dry run execution with EnvironmentError."""
+        # Setup mock orchestrator to raise EnvironmentError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.side_effect = EnvironmentError("Missing environment")
+        
+        # Test dry run command
+        result = self.runner.invoke(cli, ['run', '--dry-run'])
+        
+        # Verify results
+        assert result.exit_code == 0  # Dry run should not fail, just warn
+        assert "DRY RUN MODE - No changes will be made" in result.output
+        assert "❌ Environment Error: Missing environment" in result.output
+        assert "⚠️  Pipeline would fail during execution" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
+    def test_dry_run_database_connection_error(self, mock_orchestrator_class):
+        """Test dry run execution with DatabaseConnectionError."""
+        # Setup mock orchestrator to raise DatabaseConnectionError
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        mock_orchestrator.initialize_connections.side_effect = DatabaseConnectionError("Connection failed")
+        
+        # Test dry run command
+        result = self.runner.invoke(cli, ['run', '--dry-run'])
+        
+        # Verify results
+        assert result.exit_code == 0  # Dry run should not fail, just warn
+        assert "DRY RUN MODE - No changes will be made" in result.output
+        assert "❌ Database Connection Error: Connection failed" in result.output
+        assert "⚠️  Pipeline would fail during execution" in result.output
+
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
     def test_dry_run_with_full_flag(self, mock_orchestrator_class):
@@ -451,9 +724,15 @@ class TestCLIDryRunUnit:
 
 class TestCLIStatusUnit:
     """
-    Unit tests for CLI status command.
-    
-    Tests the status command with comprehensive mocking.
+    Unit tests for CLI status command (Dental Clinic ETL, Provider Pattern).
+
+    ETL Context:
+        - Dental clinic ETL pipeline status reporting
+        - All config via provider pattern (DictConfigProvider)
+        - All connections/config via Settings injection
+        - Type safety with DatabaseType/PostgresSchema enums
+        - No real connections, no file I/O, no env pollution
+        - FAIL FAST on missing ETL_ENVIRONMENT
     """
     
     def setup_method(self):
@@ -464,15 +743,43 @@ class TestCLIStatusUnit:
         self.test_provider = DictConfigProvider(
             pipeline={'connections': {'analytics': {'pool_size': 5}}},
             tables={'tables': {'patient': {'table_importance': 'critical'}}},
-            env={'POSTGRES_ANALYTICS_HOST': 'test-host'}
+            env={
+                'ETL_ENVIRONMENT': 'test',
+                # Source database (OpenDental) - TEST_ prefixed for test environment
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                # Replication database (MySQL) - TEST_ prefixed for test environment
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                # Analytics database (PostgreSQL) - TEST_ prefixed for test environment
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+            }
         )
+        # Use Settings injection for all config access
+        from etl_pipeline.config.settings import Settings
+        self.test_settings = Settings(environment='test', provider=self.test_provider)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
     @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_success(self, mock_file, mock_conn_factory, mock_metrics_class):
+    def test_status_command_success(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
         """Test successful status command execution."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mock connection factory
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -503,16 +810,21 @@ class TestCLIStatusUnit:
         assert "patient" in result.output
         
         # Verify mocks were called correctly
-        mock_conn_factory.get_analytics_raw_connection.assert_called_once()
-        mock_metrics_class.assert_called_once_with(analytics_engine=mock_analytics_engine, settings=mock_conn_factory.get_analytics_raw_connection.call_args[0][0])
+        mock_get_settings.assert_called_once()
+        mock_conn_factory.get_analytics_raw_connection.assert_called_once_with(self.test_settings)
+        mock_metrics_class.assert_called_once_with(analytics_engine=mock_analytics_engine, settings=self.test_settings)
         mock_metrics.get_pipeline_status.assert_called_once_with(table=None)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
     @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_with_json_format(self, mock_file, mock_conn_factory, mock_metrics_class):
+    def test_status_command_with_json_format(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
         """Test status command with JSON format."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mocks
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -536,9 +848,13 @@ class TestCLIStatusUnit:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
     @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_with_summary_format(self, mock_file, mock_conn_factory, mock_metrics_class):
+    def test_status_command_with_summary_format(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
         """Test status command with summary format."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mocks
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -564,9 +880,13 @@ class TestCLIStatusUnit:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
     @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_with_specific_table(self, mock_file, mock_conn_factory, mock_metrics_class):
+    def test_status_command_with_specific_table(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
         """Test status command with specific table filter."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mocks
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -590,10 +910,14 @@ class TestCLIStatusUnit:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
+    @patch('etl_pipeline.cli.commands.get_settings')
     @patch('builtins.open', new_callable=mock_open)
-    def test_status_command_with_output_file(self, mock_output_file, mock_config_file, mock_conn_factory, mock_metrics_class):
+    @patch('builtins.open', new_callable=mock_open)
+    def test_status_command_with_output_file(self, mock_output_file, mock_config_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
         """Test status command with output file."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mocks
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -617,9 +941,13 @@ class TestCLIStatusUnit:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
     @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_metrics_failure(self, mock_file, mock_conn_factory, mock_metrics_class):
+    def test_status_command_metrics_failure(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
         """Test status command when metrics collection fails."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mocks
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -633,24 +961,116 @@ class TestCLIStatusUnit:
         
         # Verify results
         assert result.exit_code != 0
-        assert "Metrics error" in result.output
+        assert "❌ Unexpected Error: Metrics error" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
+    @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
+    def test_status_command_configuration_error(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
+        """Test status command with ConfigurationError."""
+        # Setup mock get_settings to raise ConfigurationError
+        mock_get_settings.side_effect = ConfigurationError("Invalid config")
+        
+        # Test status command
+        result = self.runner.invoke(cli, ['status', '--config', 'test_config.yaml'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Configuration Error: Invalid config" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
+    @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
+    def test_status_command_environment_error(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
+        """Test status command with EnvironmentError."""
+        # Setup mock get_settings to raise EnvironmentError
+        mock_get_settings.side_effect = EnvironmentError("Missing environment")
+        
+        # Test status command
+        result = self.runner.invoke(cli, ['status', '--config', 'test_config.yaml'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Environment Error: Missing environment" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
+    @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
+    def test_status_command_database_connection_error(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
+        """Test status command with DatabaseConnectionError."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
+        # Setup mock connection factory to raise DatabaseConnectionError
+        mock_conn_factory.get_analytics_raw_connection.side_effect = DatabaseConnectionError("Connection failed")
+        
+        # Test status command
+        result = self.runner.invoke(cli, ['status', '--config', 'test_config.yaml'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Database Connection Error: Connection failed" in result.output
 
 
 class TestCLIConnectionTestingUnit:
     """
-    Unit tests for CLI connection testing command.
-    
-    Tests the test_connections command with comprehensive mocking.
+    Unit tests for CLI connection testing command (Dental Clinic ETL, Provider Pattern).
+
+    ETL Context:
+        - Dental clinic ETL pipeline connection validation
+        - All config via provider pattern (DictConfigProvider)
+        - All connections/config via Settings injection
+        - Type safety with DatabaseType/PostgresSchema enums
+        - No real connections, no file I/O, no env pollution
+        - FAIL FAST on missing ETL_ENVIRONMENT
     """
     
     def setup_method(self):
         """Set up test fixtures for each test method."""
         self.runner = CliRunner()
+        # Create test provider with injected configuration (if needed for future expansion)
+        from etl_pipeline.config.providers import DictConfigProvider
+        from etl_pipeline.config.settings import Settings
+        self.test_provider = DictConfigProvider(
+            env={
+                'ETL_ENVIRONMENT': 'test',
+                # Source database (OpenDental) - TEST_ prefixed for test environment
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                # Replication database (MySQL) - TEST_ prefixed for test environment
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+                # Analytics database (PostgreSQL) - TEST_ prefixed for test environment
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+            }
+        )
+        self.test_settings = Settings(environment='test', provider=self.test_provider)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    def test_test_connections_success(self, mock_conn_factory):
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_test_connections_success(self, mock_get_settings, mock_conn_factory):
         """Test successful connection testing."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mock engines
         mock_source_engine = MagicMock()
         mock_repl_engine = MagicMock()
@@ -689,8 +1109,12 @@ class TestCLIConnectionTestingUnit:
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    def test_test_connections_failure(self, mock_conn_factory):
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_test_connections_failure(self, mock_get_settings, mock_conn_factory):
         """Test connection testing when connections fail."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup connection factory to raise exception
         mock_conn_factory.get_source_connection.side_effect = Exception("Connection failed")
         
@@ -699,7 +1123,55 @@ class TestCLIConnectionTestingUnit:
         
         # Verify results
         assert result.exit_code != 0
-        assert "Connection failed" in result.output
+        assert "❌ Unexpected Error: Connection failed" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_test_connections_configuration_error(self, mock_get_settings, mock_conn_factory):
+        """Test connection testing with ConfigurationError."""
+        # Setup mock get_settings to raise ConfigurationError
+        mock_get_settings.side_effect = ConfigurationError("Invalid config")
+        
+        # Test connection testing command
+        result = self.runner.invoke(cli, ['test-connections'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Configuration Error: Invalid config" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_test_connections_environment_error(self, mock_get_settings, mock_conn_factory):
+        """Test connection testing with EnvironmentError."""
+        # Setup mock get_settings to raise EnvironmentError
+        mock_get_settings.side_effect = EnvironmentError("Missing environment")
+        
+        # Test connection testing command
+        result = self.runner.invoke(cli, ['test-connections'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Environment Error: Missing environment" in result.output
+
+    @pytest.mark.unit
+    @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_test_connections_database_connection_error(self, mock_get_settings, mock_conn_factory):
+        """Test connection testing with DatabaseConnectionError."""
+        # Setup mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
+        # Setup connection factory to raise DatabaseConnectionError
+        mock_conn_factory.get_source_connection.side_effect = DatabaseConnectionError("Connection failed")
+        
+        # Test connection testing command
+        result = self.runner.invoke(cli, ['test-connections'])
+        
+        # Verify results
+        assert result.exit_code != 0
+        assert "❌ Database Connection Error: Connection failed" in result.output
 
 
 class TestCLIEdgeCasesUnit:
