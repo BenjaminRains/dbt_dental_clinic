@@ -374,7 +374,9 @@ def test_connection_factory_methods(mock_connection_factory_methods):
     assert staging_engine is not None
     
     # Test test connection methods
-    test_source_engine = factory.get_opendental_source_test_connection()
+    from etl_pipeline.config import create_test_settings
+test_settings = create_test_settings()
+test_source_engine = factory.get_source_connection(test_settings)
     assert test_source_engine is not None
 ```
 
@@ -437,7 +439,7 @@ def test_with_populated_databases(populated_test_databases):
 The fixtures now properly support the explicit environment separation:
 
 - **Production Methods**: `get_opendental_source_connection()`, `get_mysql_replication_connection()`, etc.
-- **Test Methods**: `get_opendental_source_test_connection()`, `get_mysql_replication_test_connection()`, etc.
+- **Test Methods**: `get_source_connection(settings)`, `get_replication_connection(settings)`, etc.
 
 ### 2. Enum-Based Type Safety
 
@@ -472,9 +474,11 @@ factory.get_opendental_analytics_intermediate_connection()
 factory.get_opendental_analytics_marts_connection()
 
 # Test connections
-factory.get_opendental_source_test_connection()
-factory.get_mysql_replication_test_connection()
-factory.get_postgres_analytics_test_connection()
+from etl_pipeline.config import create_test_settings
+test_settings = create_test_settings()
+factory.get_source_connection(test_settings)
+factory.get_replication_connection(test_settings)
+factory.get_analytics_connection(test_settings)
 ```
 
 ### 4. Settings Integration
