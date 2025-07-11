@@ -11,6 +11,7 @@ PLANNED CHANGES:
 - ✅ UPDATED: Maintains current parallel/sequential processing logic
 - ✅ UPDATED: Compatible with refactored TableProcessor
 - ✅ UPDATED: Preserves process_table() interface compatibility
+- ✅ UPDATED: Follows connection architecture with proper Settings injection
 
 TIMELINE: Phase 4 of refactoring plan
 STATUS: ✅ REFACTORED - Integrated approach implemented
@@ -34,6 +35,8 @@ CURRENT STATE:
 - ✅ RESOURCE MANAGEMENT: ThreadPoolExecutor for parallel processing
 - ✅ INTEGRATED APPROACH: Uses SimpleMySQLReplicator and PostgresLoader via TableProcessor
 - ✅ STATIC CONFIGURATION: Uses ConfigReader for table configuration
+- ✅ CONNECTION ARCHITECTURE: Follows unified interface with Settings injection
+- ✅ ENVIRONMENT VALIDATION: Validates environment configuration before processing
 - ❌ UNTESTED: No comprehensive testing of parallel processing
 
 ACTIVE USAGE:
@@ -45,7 +48,8 @@ DEPENDENCIES:
 - TableProcessor: Processes individual tables using integrated approach
 - ThreadPoolExecutor: Manages parallel processing
 - ConfigReader: Uses static configuration for table priority lookup
-- Settings: Uses Settings class for table priority lookup
+- Settings: Uses Settings class for table priority lookup with proper environment detection
+- ConnectionFactory: Uses unified interface for database connections
 
 PROCESSING LOGIC:
 1. Priority Levels: critical, important, audit, reference
@@ -53,12 +57,14 @@ PROCESSING LOGIC:
 3. Other Tables: Processed sequentially to manage resources
 4. Failure Handling: Stops processing if critical tables fail
 5. Resource Management: Configurable max_workers for parallel processing
+6. Environment Validation: Validates configuration before processing
 
 INTEGRATION POINTS:
 - PipelineOrchestrator: Main integration point for batch processing
 - TableProcessor: Delegates individual table processing using integrated approach
 - ConfigReader: Uses static configuration for table priority lookup
-- Settings: Uses modern Settings system for table priority lookup
+- Settings: Uses modern Settings system for table priority lookup with environment detection
+- ConnectionFactory: Uses unified interface for database connections
 - Logging: Comprehensive logging for monitoring and debugging
 
 CRITICAL ISSUES:
@@ -76,41 +82,92 @@ DEVELOPMENT NEEDS:
 TESTING REQUIREMENTS:
 1. Parallel Processing: Test with various worker counts and table sets
 2. Sequential Processing: Test sequential processing logic
-3. Error Scenarios: Test failure handling and propagation
+3. Error Scenarios: Test failure handling and error propagation
 4. Resource Management: Test thread pool cleanup and resource usage
 5. Performance: Test processing time with different configurations
 6. Integration: Test integration with TableProcessor and PipelineOrchestrator
+7. Environment Validation: Test environment configuration validation
 
 This component is critical for efficient batch processing and has been refactored
-to use the integrated approach with static configuration.
+to use the integrated approach with static configuration and proper connection architecture.
 """
 
 import logging
 from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .table_processor import TableProcessor
-from ..config.settings import Settings
-from ..config import ConfigReader
+from ..config import get_settings, ConfigReader
+
+# Import custom exceptions for structured error handling
+from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError
+from ..exceptions.data import DataExtractionError, DataLoadingError
+from ..exceptions.configuration import ConfigurationError, EnvironmentError
 
 logger = logging.getLogger(__name__)
 
 class PriorityProcessor:
-    def __init__(self, config_reader: ConfigReader, settings: Optional[Settings] = None):
+    def __init__(self, config_reader: ConfigReader):
         """
         Initialize the priority processor.
         
         REFACTORED: Now uses integrated approach with SimpleMySQLReplicator and PostgresLoader.
         This provides 5-10x faster performance by eliminating dynamic schema discovery.
         
+        CONNECTION ARCHITECTURE COMPLIANCE:
+        - Uses get_settings() for proper environment detection and validation
+        - Follows unified interface with Settings injection
+        - Validates environment configuration before processing
+        - Uses provider pattern for configuration management
+        
         Args:
             config_reader: ConfigReader instance (REQUIRED for table configuration)
-            settings: Settings instance for table configuration (defaults to global settings)
         """
-        if not isinstance(config_reader, ConfigReader):
-            raise ValueError("ConfigReader instance is required")
-        
-        self.config_reader = config_reader
-        self.settings = settings or Settings()
+        try:
+            if not isinstance(config_reader, ConfigReader):
+                raise ConfigurationError(
+                    message="ConfigReader instance is required",
+                    missing_keys=["config_reader"],
+                    details={"provided_type": type(config_reader).__name__}
+                )
+            
+            self.config_reader = config_reader
+            
+            # ✅ CONNECTION ARCHITECTURE: Always use get_settings() for proper environment detection
+            self.settings = get_settings()
+            
+            # ✅ CONNECTION ARCHITECTURE: Validate environment configuration
+            self._validate_environment()
+            
+        except ConfigurationError as e:
+            logger.error(f"Configuration error in PriorityProcessor initialization: {e}")
+            raise
+        except EnvironmentError as e:
+            logger.error(f"Environment error in PriorityProcessor initialization: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in PriorityProcessor initialization: {str(e)}")
+            raise
+    
+    def _validate_environment(self):
+        """Validate environment configuration before processing."""
+        try:
+            # Validate that all required configurations are present
+            if not self.settings.validate_configs():
+                raise EnvironmentError(
+                    message=f"Configuration validation failed for {self.settings.environment} environment",
+                    environment=self.settings.environment,
+                    details={
+                        "config_file": f".env_{self.settings.environment}",
+                        "critical": True
+                    }
+                )
+            logger.info(f"Environment validation passed for {self.settings.environment} environment")
+        except EnvironmentError as e:
+            logger.error(f"Environment validation failed: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during environment validation: {str(e)}")
+            raise
     
     def process_by_priority(self, importance_levels: Optional[List[str]] = None,
                           max_workers: int = 5,
@@ -121,10 +178,16 @@ class PriorityProcessor:
         REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
         via TableProcessor for improved performance and reliability.
         
+        CONNECTION ARCHITECTURE COMPLIANCE:
+        - Uses Settings injection for environment-agnostic operation
+        - Validates environment configuration before processing
+        - Uses unified interface for database connections via TableProcessor
+        
         PROCESSING STRATEGY:
         - Critical tables: Processed in parallel for speed
         - Other tables: Processed sequentially to manage resources
         - Failure handling: Stops processing if critical tables fail
+        - Environment validation: Validates configuration before processing
         
         Args:
             importance_levels: List of importance levels to process
@@ -134,48 +197,69 @@ class PriorityProcessor:
         Returns:
             Dict with success/failure lists for each importance level
         """
-        if importance_levels is None:
-            importance_levels = ['critical', 'important', 'audit', 'reference']
+        try:
+            # ✅ CONNECTION ARCHITECTURE: Validate environment before processing
+            self._validate_environment()
             
-        results = {}
-        
-        for importance in importance_levels:
-            # Use Settings class for table priority lookup
-            tables = self.settings.get_tables_by_importance(importance)
-            if not tables:
-                logger.info(f"No tables found for importance level: {importance}")
-                continue
+            if importance_levels is None:
+                # Real config has: important, audit, standard (no critical)
+                importance_levels = ['important', 'audit', 'standard']
                 
-            logger.info(f"Processing {len(tables)} {importance} tables using integrated approach")
+            results = {}
             
-            if importance == 'critical' and len(tables) > 1:
-                # Process critical tables in parallel for speed
-                success_tables, failed_tables = self._process_parallel(
-                    tables,
-                    max_workers,
-                    force_full
-                )
-            else:
-                # Process other tables sequentially to manage resources
-                success_tables, failed_tables = self._process_sequential(
-                    tables,
-                    force_full
-                )
+            for importance in importance_levels:
+                # Use Settings class for table priority lookup
+                tables = self.settings.get_tables_by_importance(importance)
+                if not tables:
+                    logger.info(f"No tables found for importance level: {importance}")
+                    continue
+                    
+                logger.info(f"Processing {len(tables)} {importance} tables using integrated approach")
+                
+                if importance == 'important' and len(tables) > 1:
+                    # Process important tables in parallel for speed (since no critical tables exist)
+                    success_tables, failed_tables = self._process_parallel(
+                        tables,
+                        max_workers,
+                        force_full
+                    )
+                else:
+                    # Process other tables sequentially to manage resources
+                    success_tables, failed_tables = self._process_sequential(
+                        tables,
+                        force_full
+                    )
+                
+                results[importance] = {
+                    'success': success_tables,
+                    'failed': failed_tables,
+                    'total': len(tables)
+                }
+                
+                logger.info(f"{importance.capitalize()} tables: {len(success_tables)}/{len(tables)} successful")
+                
+                # Stop processing if important tables failed (since no critical tables exist)
+                if importance == 'important' and failed_tables:
+                    logger.error("Important table failures detected. Stopping pipeline.")
+                    break
             
-            results[importance] = {
-                'success': success_tables,
-                'failed': failed_tables,
-                'total': len(tables)
-            }
+            return results
             
-            logger.info(f"{importance.capitalize()} tables: {len(success_tables)}/{len(tables)} successful")
-            
-            # Stop processing if critical tables failed
-            if importance == 'critical' and failed_tables:
-                logger.error("Critical table failures detected. Stopping pipeline.")
-                break
-        
-        return results
+        except DataExtractionError as e:
+            logger.error(f"Data extraction failed during priority processing: {e}")
+            return {}
+        except DataLoadingError as e:
+            logger.error(f"Data loading failed during priority processing: {e}")
+            return {}
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed during priority processing: {e}")
+            return {}
+        except ConfigurationError as e:
+            logger.error(f"Configuration error during priority processing: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error during priority processing: {str(e)}")
+            return {}
         
     def _process_parallel(self, tables: List[str],
                          max_workers: int,
@@ -185,35 +269,53 @@ class PriorityProcessor:
         
         REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
         via TableProcessor for each parallel task.
+        
+        CONNECTION ARCHITECTURE COMPLIANCE:
+        - Uses Settings injection for environment-agnostic operation
+        - Each TableProcessor uses unified ConnectionFactory interface
         """
         success_tables = []
         failed_tables = []
         
         logger.info(f"Processing {len(tables)} tables in parallel (max workers: {max_workers})")
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks - create TableProcessor for each task
-            future_to_table = {
-                executor.submit(self._process_single_table, table, force_full): table 
-                for table in tables
-            }
-            
-            # Process completed tasks
-            for future in as_completed(future_to_table):
-                table = future_to_table[future]
-                try:
-                    success = future.result()
-                    if success:
-                        success_tables.append(table)
-                        logger.info(f"✓ Successfully processed {table} in parallel")
-                    else:
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks - create TableProcessor for each task
+                future_to_table = {
+                    executor.submit(self._process_single_table, table, force_full): table 
+                    for table in tables
+                }
+                
+                # Process completed tasks
+                for future in as_completed(future_to_table):
+                    table = future_to_table[future]
+                    try:
+                        success = future.result()
+                        if success:
+                            success_tables.append(table)
+                            logger.info(f"✓ Successfully processed {table} in parallel")
+                        else:
+                            failed_tables.append(table)
+                            logger.error(f"✗ Failed to process {table} in parallel")
+                    except DataExtractionError as e:
+                        logger.error(f"Data extraction failed for {table} in parallel: {e}")
                         failed_tables.append(table)
-                        logger.error(f"✗ Failed to process {table} in parallel")
-                except Exception as e:
-                    logger.error(f"Exception in parallel processing for {table}: {str(e)}")
-                    failed_tables.append(table)
-        
-        return success_tables, failed_tables
+                    except DataLoadingError as e:
+                        logger.error(f"Data loading failed for {table} in parallel: {e}")
+                        failed_tables.append(table)
+                    except DatabaseConnectionError as e:
+                        logger.error(f"Database connection failed for {table} in parallel: {e}")
+                        failed_tables.append(table)
+                    except Exception as e:
+                        logger.error(f"Exception in parallel processing for {table}: {str(e)}")
+                        failed_tables.append(table)
+            
+            return success_tables, failed_tables
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in parallel processing: {str(e)}")
+            return [], tables  # Mark all tables as failed
         
     def _process_sequential(self, tables: List[str],
                           force_full: bool) -> Tuple[List[str], List[str]]:
@@ -222,6 +324,10 @@ class PriorityProcessor:
         
         REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
         via TableProcessor for each sequential task.
+        
+        CONNECTION ARCHITECTURE COMPLIANCE:
+        - Uses Settings injection for environment-agnostic operation
+        - Each TableProcessor uses unified ConnectionFactory interface
         """
         success_tables = []
         failed_tables = []
@@ -237,6 +343,15 @@ class PriorityProcessor:
                 else:
                     failed_tables.append(table)
                     logger.error(f"✗ Failed to process {table} sequentially")
+            except DataExtractionError as e:
+                logger.error(f"Data extraction failed for {table} sequentially: {e}")
+                failed_tables.append(table)
+            except DataLoadingError as e:
+                logger.error(f"Data loading failed for {table} sequentially: {e}")
+                failed_tables.append(table)
+            except DatabaseConnectionError as e:
+                logger.error(f"Database connection failed for {table} sequentially: {e}")
+                failed_tables.append(table)
             except Exception as e:
                 logger.error(f"Exception in sequential processing for {table}: {str(e)}")
                 failed_tables.append(table)
@@ -249,15 +364,20 @@ class PriorityProcessor:
         
         REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
         via TableProcessor for improved performance and reliability.
+        
+        CONNECTION ARCHITECTURE COMPLIANCE:
+        - Uses Settings injection for environment-agnostic operation
+        - TableProcessor uses unified ConnectionFactory interface
+        - Validates environment configuration before processing
         """
         try:
             # Create TableProcessor with ConfigReader
-            table_processor = TableProcessor(config_reader=self.config_reader)
+            table_processor = TableProcessor(
+                config_reader=self.config_reader
+            )
             
-            # Initialize connections
-            if not table_processor.initialize_connections():
-                logger.error(f"Failed to initialize connections for {table_name}")
-                return False
+            # ✅ MODERN ARCHITECTURE: No connection initialization needed
+            # TableProcessor uses Settings injection and components handle their own connections
             
             # Process the table using integrated approach
             success = table_processor.process_table(table_name, force_full)
@@ -269,6 +389,15 @@ class PriorityProcessor:
             
             return success
             
+        except DataExtractionError as e:
+            logger.error(f"Data extraction error processing table {table_name}: {e}")
+            return False
+        except DataLoadingError as e:
+            logger.error(f"Data loading error processing table {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error processing table {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error processing table {table_name}: {str(e)}")
+            logger.error(f"Unexpected error processing table {table_name}: {str(e)}")
             return False 
