@@ -17,18 +17,20 @@ Key Features:
 import yaml
 import logging
 from typing import Dict, List, Optional, Any
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy import text
 import time
 import os
-from pathlib import Path
-from datetime import datetime
 
 # Import ETL pipeline configuration and connections
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from etl_pipeline.config import get_settings, Settings, DatabaseType
+from etl_pipeline.config import get_settings, Settings
 from etl_pipeline.core.connections import ConnectionFactory
+
+# Import custom exceptions for structured error handling
+from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError, DatabaseQueryError
+from ..exceptions.data import DataExtractionError
+from ..exceptions.configuration import ConfigurationError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +39,13 @@ logger = logging.getLogger(__name__)
 class SimpleMySQLReplicator:
     """
     Simple MySQL replicator that copies data using the new Settings-centric architecture.
+    
+    Connection Architecture Compliance:
+    - ✅ Uses Settings injection for environment-agnostic operation
+    - ✅ Uses unified ConnectionFactory API with Settings injection
+    - ✅ Uses Settings-based configuration methods
+    - ✅ No direct environment variable access
+    - ✅ Environment-agnostic (works for both production and test)
     
     Copy Strategies:
     - SMALL (< 1MB): Direct INSERT ... SELECT
@@ -52,43 +61,59 @@ class SimpleMySQLReplicator:
         """
         Initialize the simple replicator using the new Settings-centric architecture.
         
+        Connection Architecture:
+        - Uses Settings injection for environment-agnostic database connections
+        - Uses unified ConnectionFactory API with Settings injection
+        - Automatically uses correct environment (production/test) based on Settings
+        - Uses Settings-based configuration methods for database info
+        
         Args:
             settings: Settings instance (uses global if None, mainly for table config)
             tables_config_path: Path to tables.yml (uses default if None)
         """
-        # Use provided settings or get global settings (for table configuration)
-        self.settings = settings or get_settings()
-        
-        # Set tables config path
-        if tables_config_path is None:
-            tables_config_path = os.path.join(
-                os.path.dirname(__file__), 
-                '..', 
-                'etl_pipeline', 
-                'config', 
-                'tables.yml'
-            )
-        self.tables_config_path = tables_config_path
-        
-        # Get database connections using explicit production methods
-        self.source_engine = ConnectionFactory.get_source_connection(self.settings)
-        self.target_engine = ConnectionFactory.get_replication_connection(self.settings)
-        
-        # Load configuration
-        self.table_configs = self._load_configuration()
-        
-        # Debug logging only (not used in production)
-        if logger.isEnabledFor(logging.DEBUG):
-            # Get connection info from settings for debug logging
-            source_config = self.settings.get_source_connection_config()
-            target_config = self.settings.get_replication_connection_config()
+        try:
+            # Use provided settings or get global settings (for table configuration)
+            self.settings = settings or get_settings()
             
-            logger.debug(f"SimpleMySQLReplicator initialized")
-            logger.debug(f"Source: {source_config.get('host')}:{source_config.get('port')}/{source_config.get('database')}")
-            logger.debug(f"Target: {target_config.get('host')}:{target_config.get('port')}/{target_config.get('database')}")
-            logger.debug(f"Loaded {len(self.table_configs)} table configurations")
-        else:
-            logger.info(f"SimpleMySQLReplicator initialized with {len(self.table_configs)} table configurations")
+            # Set tables config path
+            if tables_config_path is None:
+                tables_config_path = os.path.join(
+                    os.path.dirname(__file__), 
+                    '..', 
+                    'config', 
+                    'tables.yml'
+                )
+            self.tables_config_path = tables_config_path
+            
+            # Get database connections using unified ConnectionFactory API with Settings injection
+            self.source_engine = ConnectionFactory.get_source_connection(self.settings)
+            self.target_engine = ConnectionFactory.get_replication_connection(self.settings)
+            
+            # Load configuration
+            self.table_configs = self._load_configuration()
+            
+            # Debug logging only (not used in production)
+            if logger.isEnabledFor(logging.DEBUG):
+                # Get connection info from settings for debug logging
+                source_config = self.settings.get_source_connection_config()
+                target_config = self.settings.get_replication_connection_config()
+                
+                logger.debug(f"SimpleMySQLReplicator initialized")
+                logger.debug(f"Source: {source_config.get('host')}:{source_config.get('port')}/{source_config.get('database')}")
+                logger.debug(f"Target: {target_config.get('host')}:{target_config.get('port')}/{target_config.get('database')}")
+                logger.debug(f"Loaded {len(self.table_configs)} table configurations")
+            else:
+                logger.info(f"SimpleMySQLReplicator initialized with {len(self.table_configs)} table configurations")
+                
+        except ConfigurationError as e:
+            logger.error(f"Configuration error in SimpleMySQLReplicator initialization: {e}")
+            raise
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error in SimpleMySQLReplicator initialization: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in SimpleMySQLReplicator initialization: {str(e)}")
+            raise
     
     def _load_configuration(self) -> Dict:
         """Load table configuration from tables.yml."""
@@ -101,11 +126,17 @@ class SimpleMySQLReplicator:
             return tables
             
         except FileNotFoundError:
-            logger.error(f"Configuration file not found: {self.tables_config_path}")
-            raise
+            raise ConfigurationError(
+                message=f"Configuration file not found: {self.tables_config_path}",
+                config_file=self.tables_config_path,
+                details={"error_type": "file_not_found"}
+            )
         except Exception as e:
-            logger.error(f"Failed to load configuration from {self.tables_config_path}: {e}")
-            raise
+            raise ConfigurationError(
+                message=f"Failed to load configuration from {self.tables_config_path}",
+                config_file=self.tables_config_path,
+                details={"error": str(e)}
+            )
     
     def get_copy_strategy(self, table_name: str) -> str:
         """
@@ -192,8 +223,17 @@ class SimpleMySQLReplicator:
                 logger.error(f"Failed to copy table: {table_name}")
                 return False
                 
+        except DataExtractionError as e:
+            logger.error(f"Data extraction error copying table {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error copying table {table_name}: {e}")
+            return False
+        except DatabaseQueryError as e:
+            logger.error(f"Database query error copying table {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error copying table {table_name}: {e}")
+            logger.error(f"Unexpected error copying table {table_name}: {str(e)}")
             return False
     
 
@@ -226,8 +266,17 @@ class SimpleMySQLReplicator:
             # Copy new records
             return self._copy_new_records(table_name, incremental_column, last_processed, batch_size)
             
+        except DataExtractionError as e:
+            logger.error(f"Data extraction error in incremental copy for {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error in incremental copy for {table_name}: {e}")
+            return False
+        except DatabaseQueryError as e:
+            logger.error(f"Database query error in incremental copy for {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error in incremental copy for {table_name}: {e}")
+            logger.error(f"Unexpected error in incremental copy for {table_name}: {str(e)}")
             return False
     
     def _get_last_processed_value(self, table_name: str, incremental_column: str) -> Any:
@@ -251,8 +300,14 @@ class SimpleMySQLReplicator:
                 logger.info(f"Last processed value for {table_name}.{incremental_column}: {max_value}")
                 return max_value
                 
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error getting last processed value for {table_name}: {e}")
+            return None
+        except DatabaseQueryError as e:
+            logger.error(f"Database query error getting last processed value for {table_name}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Error getting last processed value for {table_name}: {e}")
+            logger.error(f"Unexpected error getting last processed value for {table_name}: {str(e)}")
             return None
     
     def _get_new_records_count(self, table_name: str, incremental_column: str, last_processed: Any) -> int:
@@ -269,12 +324,23 @@ class SimpleMySQLReplicator:
                 count = result.scalar()
                 return count or 0
                 
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error getting new records count for {table_name}: {e}")
+            return 0
+        except DatabaseQueryError as e:
+            logger.error(f"Database query error getting new records count for {table_name}: {e}")
+            return 0
         except Exception as e:
-            logger.error(f"Error getting new records count for {table_name}: {e}")
+            logger.error(f"Unexpected error getting new records count for {table_name}: {str(e)}")
             return 0
     
     def _copy_new_records(self, table_name: str, incremental_column: str, last_processed: Any, batch_size: int) -> bool:
-        """Copy new records in batches."""
+        """
+        Copy new records in batches.
+        
+        Note: This method uses direct engine connections. For production use,
+        consider using ConnectionManager for better connection pooling and retry logic.
+        """
         try:
             with self.source_engine.connect() as source_conn:
                 with self.target_engine.connect() as target_conn:
@@ -321,8 +387,17 @@ class SimpleMySQLReplicator:
                     logger.info(f"Completed incremental copy: {total_copied} records for {table_name}")
                     return True
                     
+        except DataExtractionError as e:
+            logger.error(f"Data extraction error copying new records for {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error copying new records for {table_name}: {e}")
+            return False
+        except DatabaseQueryError as e:
+            logger.error(f"Database query error copying new records for {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error copying new records for {table_name}: {e}")
+            logger.error(f"Unexpected error copying new records for {table_name}: {str(e)}")
             return False
     
  
