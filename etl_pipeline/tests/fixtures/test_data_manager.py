@@ -10,6 +10,13 @@ The manager handles:
 - Cleaning up test data after tests
 - Managing test data across multiple database types
 - Providing test data for different scenarios (minimal, full, incremental)
+
+Connection Architecture Compliance:
+- ✅ Uses Settings injection for environment-agnostic operation
+- ✅ Uses unified ConnectionFactory API with Settings injection
+- ✅ Uses enum-based database type specification
+- ✅ Supports provider pattern for dependency injection
+- ✅ Environment-agnostic (works for both production and test)
 """
 
 import logging
@@ -17,12 +24,12 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy import text, bindparam
 from sqlalchemy.engine import Engine
 
-from etl_pipeline.config import DatabaseType, PostgresSchema
+# Import connection architecture components
+from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
 from etl_pipeline.core.connections import ConnectionFactory
 from .test_data_definitions import (
     get_test_patient_data,
-    get_test_appointment_data,
-    get_test_data_for_table
+    get_test_appointment_data
 )
 
 logger = logging.getLogger(__name__)
@@ -32,47 +39,77 @@ class IntegrationTestDataManager:
     Manages test data for integration tests using standardized data and new architecture.
     
     This class provides a unified interface for:
-    - Setting up test data in test databases
+    - Setting up test data in test databases using Settings injection
     - Cleaning up test data after tests
-    - Managing test data across different database types
+    - Managing test data across different database types using enums
     - Providing consistent test data that matches real schemas
+    
+    Connection Architecture Compliance:
+    - ✅ Uses Settings injection for environment-agnostic operation
+    - ✅ Uses unified ConnectionFactory API with Settings injection
+    - ✅ Uses enum-based database type specification
+    - ✅ Supports provider pattern for dependency injection
+    - ✅ Environment-agnostic (works for both production and test)
     """
     
-    def __init__(self, settings):
+    def __init__(self, settings: Settings):
         """
-        Initialize the test data manager.
+        Initialize the test data manager with Settings injection.
+        
+        Connection Architecture:
+        - Uses Settings injection for environment-agnostic database connections
+        - Uses unified ConnectionFactory API with Settings injection
+        - Automatically uses correct environment (production/test) based on Settings
+        - Uses Settings-based configuration methods for database info
         
         Args:
-            settings: Settings instance for database configuration
+            settings: Settings instance for database configuration and environment detection
         """
         self.settings = settings
         self.logger = logging.getLogger(__name__)
         self._setup_connections()
     
     def _setup_connections(self):
-        """Set up database connections using new ConnectionFactory."""
-        # Only use ConnectionFactory methods, no fallback logic
+        """Set up database connections using unified ConnectionFactory API with Settings injection."""
+        # Only use ConnectionFactory methods with Settings injection, no fallback logic
         # Source database (OpenDental MySQL)
         self.source_engine = ConnectionFactory.get_source_connection(self.settings)
         # Replication database (Local MySQL)
         self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
-        # Analytics database (PostgreSQL)
+        # Analytics database (PostgreSQL) - using unified interface
         self.analytics_engine = ConnectionFactory.get_analytics_connection(self.settings)
-        # Raw schema connection
+        # Raw schema connection - using enum for type safety
         self.raw_engine = ConnectionFactory.get_analytics_connection(self.settings, PostgresSchema.RAW)
-        logger.info("Successfully set up test database connections")
+        
+        # Log connection info for debugging (using Settings-based configuration)
+        if logger.isEnabledFor(logging.DEBUG):
+            source_config = self.settings.get_source_connection_config()
+            replication_config = self.settings.get_replication_connection_config()
+            analytics_config = self.settings.get_analytics_connection_config(PostgresSchema.RAW)
+            
+            logger.debug(f"Test data manager initialized with Settings injection")
+            logger.debug(f"Source: {source_config.get('host')}:{source_config.get('port')}/{source_config.get('database')}")
+            logger.debug(f"Replication: {replication_config.get('host')}:{replication_config.get('port')}/{replication_config.get('database')}")
+            logger.debug(f"Analytics: {analytics_config.get('host')}:{analytics_config.get('port')}/{analytics_config.get('database')}")
+        else:
+            logger.info("Successfully set up test database connections using Settings injection")
     
     def setup_patient_data(self, 
                           include_all_fields: bool = True,
                           database_types: Optional[List[DatabaseType]] = None) -> None:
         """
-        Set up standardized patient test data in specified databases.
+        Set up standardized patient test data in specified databases using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
         
         Args:
             include_all_fields: If True, insert complete patient records with all fields.
                                If False, insert minimal records with only required fields.
-            database_types: List of database types to insert data into.
-                           If None, inserts into all databases (source, replication, analytics).
+            database_types: List of DatabaseType enums to insert data into.
+                           If None, inserts into all databases (SOURCE, REPLICATION, ANALYTICS).
         """
         if database_types is None:
             database_types = [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS]
@@ -82,11 +119,13 @@ class IntegrationTestDataManager:
         for db_type in database_types:
             try:
                 if db_type == DatabaseType.SOURCE:
-                    self._insert_patient_data_mysql(self.source_engine, patient_data, "source")
+                    self._insert_patient_data_mysql(self.source_engine, patient_data, db_type.value)
                 elif db_type == DatabaseType.REPLICATION:
-                    self._insert_patient_data_mysql(self.replication_engine, patient_data, "replication")
+                    self._insert_patient_data_mysql(self.replication_engine, patient_data, db_type.value)
                 elif db_type == DatabaseType.ANALYTICS:
-                    self._insert_patient_data_postgres(self.raw_engine, patient_data, "analytics")
+                    self._insert_patient_data_postgres(self.raw_engine, patient_data, db_type.value)
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
                 
                 logger.info(f"Inserted {len(patient_data)} patient records into {db_type.value} database")
                 
@@ -97,10 +136,15 @@ class IntegrationTestDataManager:
     def setup_appointment_data(self, 
                               database_types: Optional[List[DatabaseType]] = None) -> None:
         """
-        Set up standardized appointment test data in specified databases.
+        Set up standardized appointment test data in specified databases using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
         
         Args:
-            database_types: List of database types to insert data into.
+            database_types: List of DatabaseType enums to insert data into.
                            If None, inserts into all databases.
         """
         if database_types is None:
@@ -111,11 +155,13 @@ class IntegrationTestDataManager:
         for db_type in database_types:
             try:
                 if db_type == DatabaseType.SOURCE:
-                    self._insert_appointment_data_mysql(self.source_engine, appointment_data, "source")
+                    self._insert_appointment_data_mysql(self.source_engine, appointment_data, db_type.value)
                 elif db_type == DatabaseType.REPLICATION:
-                    self._insert_appointment_data_mysql(self.replication_engine, appointment_data, "replication")
+                    self._insert_appointment_data_mysql(self.replication_engine, appointment_data, db_type.value)
                 elif db_type == DatabaseType.ANALYTICS:
-                    self._insert_appointment_data_postgres(self.raw_engine, appointment_data, "analytics")
+                    self._insert_appointment_data_postgres(self.raw_engine, appointment_data, db_type.value)
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
                 
                 logger.info(f"Inserted {len(appointment_data)} appointment records into {db_type.value} database")
                 
@@ -263,10 +309,15 @@ class IntegrationTestDataManager:
     
     def cleanup_patient_data(self, database_types: Optional[List[DatabaseType]] = None) -> None:
         """
-        Clean up patient test data from specified databases.
+        Clean up patient test data from specified databases using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
         
         Args:
-            database_types: List of database types to clean up.
+            database_types: List of DatabaseType enums to clean up.
                            If None, cleans up all databases.
         """
         if database_types is None:
@@ -275,11 +326,13 @@ class IntegrationTestDataManager:
         for db_type in database_types:
             try:
                 if db_type == DatabaseType.SOURCE:
-                    self._cleanup_patient_data_mysql(self.source_engine, "source")
+                    self._cleanup_patient_data_mysql(self.source_engine, db_type.value)
                 elif db_type == DatabaseType.REPLICATION:
-                    self._cleanup_patient_data_mysql(self.replication_engine, "replication")
+                    self._cleanup_patient_data_mysql(self.replication_engine, db_type.value)
                 elif db_type == DatabaseType.ANALYTICS:
-                    self._cleanup_patient_data_postgres(self.raw_engine, "analytics")
+                    self._cleanup_patient_data_postgres(self.raw_engine, db_type.value)
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
                 
                 logger.info(f"Cleaned up patient data from {db_type.value} database")
                 
@@ -289,10 +342,15 @@ class IntegrationTestDataManager:
     
     def cleanup_appointment_data(self, database_types: Optional[List[DatabaseType]] = None) -> None:
         """
-        Clean up appointment test data from specified databases.
+        Clean up appointment test data from specified databases using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
         
         Args:
-            database_types: List of database types to clean up.
+            database_types: List of DatabaseType enums to clean up.
                            If None, cleans up all databases.
         """
         if database_types is None:
@@ -301,11 +359,13 @@ class IntegrationTestDataManager:
         for db_type in database_types:
             try:
                 if db_type == DatabaseType.SOURCE:
-                    self._cleanup_appointment_data_mysql(self.source_engine, "source")
+                    self._cleanup_appointment_data_mysql(self.source_engine, db_type.value)
                 elif db_type == DatabaseType.REPLICATION:
-                    self._cleanup_appointment_data_mysql(self.replication_engine, "replication")
+                    self._cleanup_appointment_data_mysql(self.replication_engine, db_type.value)
                 elif db_type == DatabaseType.ANALYTICS:
-                    self._cleanup_appointment_data_postgres(self.raw_engine, "analytics")
+                    self._cleanup_appointment_data_postgres(self.raw_engine, db_type.value)
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
                 
                 logger.info(f"Cleaned up appointment data from {db_type.value} database")
                 
@@ -366,8 +426,8 @@ class IntegrationTestDataManager:
             conn.commit()
     
     def cleanup_all_test_data(self) -> None:
-        """Clean up all test data from all databases."""
-        logger.info("Cleaning up all test data...")
+        """Clean up all test data from all databases using Settings injection."""
+        logger.info("Cleaning up all test data using Settings injection...")
         
         try:
             self.cleanup_patient_data()
@@ -379,13 +439,21 @@ class IntegrationTestDataManager:
     
     def get_patient_count(self, database_type: DatabaseType) -> int:
         """
-        Get the count of patients in the specified database.
+        Get the count of patients in the specified database using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
         
         Args:
-            database_type: The database to check
+            database_type: The DatabaseType enum to check
             
         Returns:
             Number of patients in the database
+            
+        Raises:
+            ValueError: If database_type is not supported
         """
         try:
             if database_type == DatabaseType.SOURCE:
@@ -410,13 +478,21 @@ class IntegrationTestDataManager:
     
     def get_appointment_count(self, database_type: DatabaseType) -> int:
         """
-        Get the count of appointments in the specified database.
+        Get the count of appointments in the specified database using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
         
         Args:
-            database_type: The database to check
+            database_type: The DatabaseType enum to check
             
         Returns:
             Number of appointments in the database
+            
+        Raises:
+            ValueError: If database_type is not supported
         """
         try:
             if database_type == DatabaseType.SOURCE:
@@ -440,13 +516,13 @@ class IntegrationTestDataManager:
             raise
     
     def dispose(self) -> None:
-        """Dispose of all database connections."""
+        """Dispose of all database connections using Settings injection."""
         try:
             self.source_engine.dispose()
             self.replication_engine.dispose()
             self.analytics_engine.dispose()
             self.raw_engine.dispose()
-            logger.info("Disposed of all database connections")
+            logger.info("Disposed of all database connections using Settings injection")
         except Exception as e:
             logger.error(f"Failed to dispose connections: {e}")
             raise 
