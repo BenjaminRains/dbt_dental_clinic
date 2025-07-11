@@ -6,16 +6,49 @@ This module contains:
 - Reusable mock builders
 - Mock utilities
 - Testing helpers
+
+Follows the connection architecture patterns where appropriate:
+- Uses provider pattern for dependency injection
+- Uses Settings injection for environment-agnostic mocks
+- Uses environment separation for test vs production mocks
+- Uses unified interface with ConnectionFactory
 """
 
 import pytest
 from unittest.mock import MagicMock, Mock, patch, mock_open
-from typing import Dict, List, Any, Callable
+from typing import Dict, List, Any, Callable, Optional
 from functools import wraps
+
+from etl_pipeline.config import create_test_settings
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.core import ConnectionFactory
+
+
+def mock_database_connection_with_settings():
+    """Decorator to mock database connections using Settings injection."""
+    def decorator(func):
+        @wraps(func)
+        @patch('etl_pipeline.core.connections.ConnectionFactory')
+        @patch('sqlalchemy.create_engine')
+        def wrapper(mock_create_engine, mock_connection_factory, *args, **kwargs):
+            # Mock the connection factory with Settings injection
+            mock_factory = MagicMock()
+            mock_factory.get_source_connection.return_value = create_mock_engine('mysql', 'test_opendental')
+            mock_factory.get_replication_connection.return_value = create_mock_engine('mysql', 'test_opendental_replication')
+            mock_factory.get_analytics_raw_connection.return_value = create_mock_engine('postgresql', 'test_opendental_analytics')
+            mock_connection_factory.return_value = mock_factory
+            
+            # Mock the engine creation
+            mock_engine = MagicMock()
+            mock_create_engine.return_value = mock_engine
+            
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def mock_database_connection():
-    """Decorator to mock database connections."""
+    """Decorator to mock database connections (legacy version)."""
     def decorator(func):
         @wraps(func)
         @patch('etl_pipeline.core.connections.ConnectionFactory')
@@ -92,11 +125,11 @@ def mock_environment_variables():
         @wraps(func)
         @patch.dict('os.environ', {
             'ETL_ENVIRONMENT': 'test',
-            'OPENDENTAL_SOURCE_HOST': 'localhost',
-            'OPENDENTAL_SOURCE_PORT': '3306',
-            'OPENDENTAL_SOURCE_DB': 'test_opendental',
-            'OPENDENTAL_SOURCE_USER': 'test_user',
-            'OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+            'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
+            'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+            'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+            'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
         })
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
@@ -133,8 +166,59 @@ def create_mock_result_set(data=None):
     return result
 
 
+def create_mock_settings_with_provider(environment='test'):
+    """Create mock settings object using provider pattern."""
+    # Create test provider with injected configuration
+    test_provider = DictConfigProvider(
+        pipeline={
+            'connections': {
+                'source': {'pool_size': 5, 'connect_timeout': 10},
+                'replication': {'pool_size': 10, 'max_overflow': 20},
+                'analytics': {'application_name': 'etl_pipeline_test'}
+            }
+        },
+        tables={
+            'tables': {
+                'patient': {
+                    'incremental_column': 'DateModified',
+                    'batch_size': 1000,
+                    'extraction_strategy': 'incremental'
+                }
+            }
+        },
+        env={
+            # Test environment variables (TEST_ prefixed)
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+            'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+            'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+            'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
+            
+            'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+            'TEST_MYSQL_REPLICATION_PORT': '3306',
+            'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+            'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+            
+            'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+        }
+    )
+    
+    # Create test settings with provider injection
+    return create_test_settings(
+        pipeline_config=test_provider.configs['pipeline'],
+        tables_config=test_provider.configs['tables'],
+        env_vars=test_provider.configs['env']
+    )
+
+
 def create_mock_settings(environment='test'):
-    """Create mock settings object."""
+    """Create mock settings object (legacy version)."""
     settings = MagicMock()
     settings.environment = environment
     settings.source_host = 'localhost'
@@ -155,7 +239,7 @@ def create_mock_config():
     return config
 
 
-def create_mock_dataframe(columns=None, data=None):
+def create_mock_dataframe(columns: Optional[List[str]] = None, data: Optional[List[List[Any]]] = None):
     """Create a mock pandas DataFrame."""
     import pandas as pd
     
@@ -169,7 +253,10 @@ def create_mock_dataframe(columns=None, data=None):
             [3, 'test3', 300]
         ]
     
-    return pd.DataFrame(data, columns=columns)
+    # Fix the type issue by ensuring columns is properly typed
+    df = pd.DataFrame(data)
+    df.columns = columns
+    return df
 
 
 def create_mock_error_response(error_type='ConnectionError', message='Test error'):
@@ -182,8 +269,20 @@ def create_mock_error_response(error_type='ConnectionError', message='Test error
     return MockError(message)
 
 
+def create_mock_metrics_collector_with_settings():
+    """Create a mock metrics collector using Settings injection."""
+    collector = MagicMock()
+    collector.settings = create_mock_settings_with_provider()
+    collector.collect_metrics.return_value = {
+        'cpu_usage': 45.2,
+        'memory_usage': 67.8,
+        'processing_time': 1800.5
+    }
+    return collector
+
+
 def create_mock_metrics_collector():
-    """Create a mock metrics collector."""
+    """Create a mock metrics collector (legacy version)."""
     collector = MagicMock()
     collector.collect_metrics.return_value = {
         'cpu_usage': 45.2,
@@ -314,4 +413,43 @@ def create_mock_process_pool():
     pool.map.return_value = [MagicMock()]
     pool.close.return_value = None
     pool.join.return_value = None
-    return pool 
+    return pool
+
+
+def create_mock_connection_factory_with_settings():
+    """Create a mock ConnectionFactory using Settings injection."""
+    factory = MagicMock()
+    factory.get_source_connection.return_value = create_mock_engine('mysql', 'test_opendental')
+    factory.get_replication_connection.return_value = create_mock_engine('mysql', 'test_opendental_replication')
+    factory.get_analytics_raw_connection.return_value = create_mock_engine('postgresql', 'test_opendental_analytics')
+    factory.get_analytics_staging_connection.return_value = create_mock_engine('postgresql', 'test_opendental_analytics')
+    factory.get_analytics_intermediate_connection.return_value = create_mock_engine('postgresql', 'test_opendental_analytics')
+    factory.get_analytics_marts_connection.return_value = create_mock_engine('postgresql', 'test_opendental_analytics')
+    return factory
+
+
+def create_mock_provider():
+    """Create a mock provider for testing provider pattern integration."""
+    provider = MagicMock()
+    provider.get_config.return_value = {
+        'pipeline': {
+            'connections': {
+                'source': {'pool_size': 5},
+                'replication': {'pool_size': 10},
+                'analytics': {'application_name': 'etl_pipeline_test'}
+            }
+        },
+        'tables': {
+            'tables': {
+                'patient': {
+                    'incremental_column': 'DateModified',
+                    'batch_size': 1000
+                }
+            }
+        },
+        'env': {
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+            'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental'
+        }
+    }
+    return provider 
