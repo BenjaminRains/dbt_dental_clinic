@@ -2,11 +2,11 @@
 Connection fixtures for ETL pipeline tests.
 
 This module contains fixtures related to:
-- Database connection mocks
-- Connection factory mocks
+- Database connection mocks with Settings injection
+- Connection factory mocks following unified interface
 - Engine mocks for different database types
-- Connection utilities
-- ConnectionFactory method mocks
+- Connection utilities with provider pattern integration
+- ConnectionFactory method mocks with Settings injection
 """
 
 import pytest
@@ -16,7 +16,8 @@ from sqlalchemy import create_engine, text
 from typing import Dict, Any
 
 # Import new configuration system components
-from etl_pipeline.config import DatabaseType, PostgresSchema
+from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
+from etl_pipeline.config.providers import DictConfigProvider
 
 
 @pytest.fixture
@@ -62,7 +63,7 @@ def mock_replication_engine():
     engine.name = 'mysql'
     # Create a mock URL object
     mock_url = MagicMock()
-    mock_url.database = 'test_replication'
+    mock_url.database = 'test_opendental_replication'
     mock_url.host = 'localhost'
     mock_url.port = 3306
     engine.url = mock_url
@@ -76,7 +77,7 @@ def mock_analytics_engine():
     engine.name = 'postgresql'
     # Create a mock URL object
     mock_url = MagicMock()
-    mock_url.database = 'test_analytics'
+    mock_url.database = 'test_opendental_analytics'
     mock_url.host = 'localhost'
     mock_url.port = 5432
     engine.url = mock_url
@@ -84,11 +85,239 @@ def mock_analytics_engine():
 
 
 @pytest.fixture
-def mock_connection_factory():
-    """Mock connection factory for testing."""
+def test_connection_config():
+    """Test connection configuration following connection architecture naming convention.
+    
+    This fixture provides test connection configuration that conforms to the connection architecture:
+    - Uses TEST_ prefix for test environment variables
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_test file structure
+    - Supports the provider pattern for dependency injection
+    """
+    return {
+        'source': {
+            'host': 'test-source-host',
+            'port': 3306,
+            'database': 'test_opendental',
+            'user': 'test_source_user',
+            'password': 'test_source_pass',
+            'pool_size': 5,
+            'max_overflow': 10,
+            'connect_timeout': 30
+        },
+        'replication': {
+            'host': 'test-repl-host',
+            'port': 3306,
+            'database': 'test_opendental_replication',
+            'user': 'test_repl_user',
+            'password': 'test_repl_pass',
+            'pool_size': 3,
+            'max_overflow': 5,
+            'connect_timeout': 30
+        },
+        'analytics': {
+            'host': 'test-analytics-host',
+            'port': 5432,
+            'database': 'test_opendental_analytics',
+            'user': 'test_analytics_user',
+            'password': 'test_analytics_pass',
+            'pool_size': 4,
+            'max_overflow': 8,
+            'connect_timeout': 30
+        }
+    }
+
+
+@pytest.fixture
+def production_connection_config():
+    """Production connection configuration following connection architecture naming convention.
+    
+    This fixture provides production connection configuration that conforms to the connection architecture:
+    - Uses non-prefixed variables for production environment
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_production file structure
+    - Supports the provider pattern for dependency injection
+    """
+    return {
+        'source': {
+            'host': 'prod-source-host',
+            'port': 3306,
+            'database': 'opendental',
+            'user': 'source_user',
+            'password': 'source_pass',
+            'pool_size': 6,
+            'max_overflow': 12,
+            'connect_timeout': 60
+        },
+        'replication': {
+            'host': 'prod-repl-host',
+            'port': 3306,
+            'database': 'opendental_replication',
+            'user': 'repl_user',
+            'password': 'repl_pass',
+            'pool_size': 6,
+            'max_overflow': 12,
+            'connect_timeout': 60
+        },
+        'analytics': {
+            'host': 'prod-analytics-host',
+            'port': 5432,
+            'database': 'opendental_analytics',
+            'user': 'analytics_user',
+            'password': 'analytics_pass',
+            'pool_size': 6,
+            'max_overflow': 12,
+            'connect_timeout': 60
+        }
+    }
+
+
+@pytest.fixture
+def test_connection_provider(test_connection_config):
+    """Test connection configuration provider following the provider pattern.
+    
+    This fixture implements the DictConfigProvider pattern for connection testing:
+    - Uses DictConfigProvider for testing (as recommended)
+    - Provides injected configuration for clean test isolation
+    - Supports dependency injection for easy configuration swapping
+    - Follows the provider pattern for configuration loading
+    """
+    return DictConfigProvider(
+        pipeline={'connections': test_connection_config},
+        tables={'tables': {}},
+        env={'ETL_ENVIRONMENT': 'test'}
+    )
+
+
+@pytest.fixture
+def production_connection_provider(production_connection_config):
+    """Production connection configuration provider following the provider pattern.
+    
+    This fixture implements the DictConfigProvider pattern for production-like connection testing:
+    - Uses DictConfigProvider with production-like configuration
+    - Provides injected configuration for integration testing
+    - Supports dependency injection for configuration swapping
+    """
+    return DictConfigProvider(
+        pipeline={'connections': production_connection_config},
+        tables={'tables': {}},
+        env={'ETL_ENVIRONMENT': 'production'}
+    )
+
+
+@pytest.fixture
+def test_connection_settings(test_connection_provider):
+    """Test connection settings with provider injection following connection architecture.
+    
+    This fixture implements the Settings injection pattern as specified in the architecture:
+    - Uses Settings with provider injection for environment-agnostic operation
+    - Uses DictConfigProvider for testing (as recommended)
+    - Supports dependency injection for clean test isolation
+    - Follows the unified interface pattern
+    """
+    return Settings(environment='test', provider=test_connection_provider)
+
+
+@pytest.fixture
+def production_connection_settings(production_connection_provider):
+    """Production connection settings with provider injection following connection architecture.
+    
+    This fixture implements the Settings injection pattern for production-like connection testing:
+    - Uses Settings with provider injection for environment-agnostic operation
+    - Uses DictConfigProvider with production-like configuration
+    - Supports dependency injection for integration testing
+    """
+    return Settings(environment='production', provider=production_connection_provider)
+
+
+@pytest.fixture
+def mock_connection_factory_with_settings():
+    """Mock connection factory with Settings injection following connection architecture.
+    
+    This fixture implements the unified interface pattern as specified in the architecture:
+    - Uses Settings injection for all connection methods
+    - Follows the unified interface pattern (same methods for all environments)
+    - Supports environment-agnostic operation through Settings injection
+    - Uses provider pattern for configuration loading
+    """
     factory = MagicMock()
     
-    # Mock the get_connection method
+    # Unified interface methods with Settings injection
+    def mock_get_source_connection(settings: Settings):
+        """Mock source connection with Settings injection."""
+        engine = MagicMock(spec=Engine)
+        engine.name = 'mysql'
+        mock_url = MagicMock()
+        mock_url.database = settings.get_database_config(DatabaseType.SOURCE).get('database', 'test_opendental')
+        mock_url.host = settings.get_database_config(DatabaseType.SOURCE).get('host', 'localhost')
+        mock_url.port = settings.get_database_config(DatabaseType.SOURCE).get('port', 3306)
+        engine.url = mock_url
+        return engine
+    
+    def mock_get_replication_connection(settings: Settings):
+        """Mock replication connection with Settings injection."""
+        engine = MagicMock(spec=Engine)
+        engine.name = 'mysql'
+        mock_url = MagicMock()
+        mock_url.database = settings.get_database_config(DatabaseType.REPLICATION).get('database', 'test_opendental_replication')
+        mock_url.host = settings.get_database_config(DatabaseType.REPLICATION).get('host', 'localhost')
+        mock_url.port = settings.get_database_config(DatabaseType.REPLICATION).get('port', 3306)
+        engine.url = mock_url
+        return engine
+    
+    def mock_get_analytics_connection(settings: Settings, schema: PostgresSchema = PostgresSchema.RAW):
+        """Mock analytics connection with Settings injection."""
+        engine = MagicMock(spec=Engine)
+        engine.name = 'postgresql'
+        mock_url = MagicMock()
+        config = settings.get_database_config(DatabaseType.ANALYTICS, schema)
+        mock_url.database = config.get('database', 'test_opendental_analytics')
+        mock_url.host = config.get('host', 'localhost')
+        mock_url.port = config.get('port', 5432)
+        engine.url = mock_url
+        return engine
+    
+    # Schema-specific convenience methods with Settings injection
+    def mock_get_analytics_raw_connection(settings: Settings):
+        """Mock analytics raw connection with Settings injection."""
+        return mock_get_analytics_connection(settings, PostgresSchema.RAW)
+    
+    def mock_get_analytics_staging_connection(settings: Settings):
+        """Mock analytics staging connection with Settings injection."""
+        return mock_get_analytics_connection(settings, PostgresSchema.STAGING)
+    
+    def mock_get_analytics_intermediate_connection(settings: Settings):
+        """Mock analytics intermediate connection with Settings injection."""
+        return mock_get_analytics_connection(settings, PostgresSchema.INTERMEDIATE)
+    
+    def mock_get_analytics_marts_connection(settings: Settings):
+        """Mock analytics marts connection with Settings injection."""
+        return mock_get_analytics_connection(settings, PostgresSchema.MARTS)
+    
+    # Assign methods to factory
+    factory.get_source_connection = mock_get_source_connection
+    factory.get_replication_connection = mock_get_replication_connection
+    factory.get_analytics_connection = mock_get_analytics_connection
+    factory.get_analytics_raw_connection = mock_get_analytics_raw_connection
+    factory.get_analytics_staging_connection = mock_get_analytics_staging_connection
+    factory.get_analytics_intermediate_connection = mock_get_analytics_intermediate_connection
+    factory.get_analytics_marts_connection = mock_get_analytics_marts_connection
+    
+    return factory
+
+
+@pytest.fixture
+def mock_connection_factory():
+    """Mock connection factory for testing (legacy compatibility).
+    
+    This fixture provides backward compatibility while supporting the new architecture:
+    - Maintains compatibility with existing tests
+    - Supports both old and new connection patterns
+    - Can be used with Settings injection when needed
+    """
+    factory = MagicMock()
+    
+    # Mock the get_connection method (legacy pattern)
     def mock_get_connection(db_type, **kwargs):
         mock_engine = MagicMock(spec=Engine)
         # Create a mock URL object
@@ -98,10 +327,10 @@ def mock_connection_factory():
             mock_url.database = 'test_opendental'
         elif db_type == 'replication':
             mock_engine.name = 'mysql'
-            mock_url.database = 'test_replication'
+            mock_url.database = 'test_opendental_replication'
         elif db_type == 'analytics':
             mock_engine.name = 'postgresql'
-            mock_url.database = 'test_analytics'
+            mock_url.database = 'test_opendental_analytics'
         mock_engine.url = mock_url
         return mock_engine
     
@@ -111,26 +340,22 @@ def mock_connection_factory():
 
 @pytest.fixture
 def mock_connection_factory_methods():
-    """Mock ConnectionFactory methods following new architecture."""
+    """Mock ConnectionFactory methods following new architecture with Settings injection.
+    
+    This fixture implements the unified interface pattern as specified in the architecture:
+    - Uses Settings injection for all connection methods
+    - Follows the unified interface pattern (same methods for all environments)
+    - Supports environment-agnostic operation through Settings injection
+    - Uses provider pattern for configuration loading
+    """
     factory = MagicMock()
     
-    # Production connection methods
+    # Unified interface methods with Settings injection
     factory.get_source_connection = MagicMock(return_value=MagicMock(spec=Engine))
     factory.get_replication_connection = MagicMock(return_value=MagicMock(spec=Engine))
     factory.get_analytics_connection = MagicMock(return_value=MagicMock(spec=Engine))
     
-    # Schema-specific production analytics connections
-    factory.get_analytics_raw_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_analytics_staging_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_analytics_intermediate_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_analytics_marts_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    
-    # Test connection methods (use same methods with test settings)
-    factory.get_source_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_replication_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    factory.get_analytics_connection = MagicMock(return_value=MagicMock(spec=Engine))
-    
-    # Schema-specific test analytics connections (use same methods with test settings)
+    # Schema-specific analytics connections with Settings injection
     factory.get_analytics_raw_connection = MagicMock(return_value=MagicMock(spec=Engine))
     factory.get_analytics_staging_connection = MagicMock(return_value=MagicMock(spec=Engine))
     factory.get_analytics_intermediate_connection = MagicMock(return_value=MagicMock(spec=Engine))
@@ -187,17 +412,23 @@ def mock_connection_pool():
 
 @pytest.fixture
 def mock_database_urls():
-    """Mock database URLs for testing."""
+    """Mock database URLs for testing following connection architecture naming."""
     return {
-        'source': 'mysql://test_user:test_pass@localhost:3306/test_opendental',
-        'replication': 'mysql://test_user:test_pass@localhost:3306/test_replication',
-        'analytics': 'postgresql://test_user:test_pass@localhost:5432/test_analytics'
+        'source': 'mysql://test_source_user:test_source_pass@test-source-host:3306/test_opendental',
+        'replication': 'mysql://test_repl_user:test_repl_pass@test-repl-host:3306/test_opendental_replication',
+        'analytics': 'postgresql://test_analytics_user:test_analytics_pass@test-analytics-host:5432/test_opendental_analytics'
     }
 
 
 @pytest.fixture
 def mock_connection_config():
-    """Mock connection configuration for testing."""
+    """Mock connection configuration for testing (legacy compatibility).
+    
+    This fixture provides backward compatibility while supporting the new architecture:
+    - Maintains compatibility with existing tests
+    - Uses environment-specific naming where possible
+    - Can be used with provider pattern when needed
+    """
     return {
         'source': {
             'host': 'localhost',
@@ -212,7 +443,7 @@ def mock_connection_config():
         'replication': {
             'host': 'localhost',
             'port': 3306,
-            'database': 'test_replication',
+            'database': 'test_opendental_replication',
             'username': 'test_user',
             'password': 'test_pass',
             'pool_size': 3,
@@ -222,7 +453,7 @@ def mock_connection_config():
         'analytics': {
             'host': 'localhost',
             'port': 5432,
-            'database': 'test_analytics',
+            'database': 'test_opendental_analytics',
             'username': 'test_user',
             'password': 'test_pass',
             'pool_size': 4,
@@ -257,108 +488,86 @@ def mock_connection_timeout():
 
 @pytest.fixture
 def connection_factory_test_cases():
-    """Test cases for ConnectionFactory methods."""
+    """Test cases for ConnectionFactory methods with Settings injection.
+    
+    This fixture provides test cases that demonstrate the unified interface pattern:
+    - Uses Settings injection for all connection methods
+    - Follows the unified interface pattern (same methods for all environments)
+    - Supports environment-agnostic operation through Settings injection
+    - Uses enums for type safety as specified in the connection architecture
+    """
     return [
-        # Production connection methods
+        # Test connection methods with Settings injection
         {
             'method': 'get_source_connection',
-            'environment': 'production',
+            'settings': 'test_settings',  # Settings with provider injection
             'db_type': DatabaseType.SOURCE,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
             'method': 'get_replication_connection',
-            'environment': 'production',
+            'settings': 'test_settings',  # Settings with provider injection
             'db_type': DatabaseType.REPLICATION,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
             'method': 'get_analytics_connection',
-            'environment': 'production',
+            'settings': 'test_settings',  # Settings with provider injection
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.RAW,
             'expected_engine_type': 'postgresql'
         },
-        # Schema-specific production analytics connections
+        # Schema-specific test analytics connections with Settings injection
         {
             'method': 'get_analytics_raw_connection',
-            'environment': 'production',
+            'settings': 'test_settings',  # Settings with provider injection
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.RAW,
             'expected_engine_type': 'postgresql'
         },
         {
             'method': 'get_analytics_staging_connection',
-            'environment': 'production',
+            'settings': 'test_settings',  # Settings with provider injection
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.STAGING,
             'expected_engine_type': 'postgresql'
         },
         {
             'method': 'get_analytics_intermediate_connection',
-            'environment': 'production',
+            'settings': 'test_settings',  # Settings with provider injection
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.INTERMEDIATE,
             'expected_engine_type': 'postgresql'
         },
         {
             'method': 'get_analytics_marts_connection',
-            'environment': 'production',
+            'settings': 'test_settings',  # Settings with provider injection
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.MARTS,
             'expected_engine_type': 'postgresql'
         },
-        # Test connection methods
+        # Production connection methods with Settings injection
         {
-            'method': 'get_opendental_source_test_connection',
-            'environment': 'test',
+            'method': 'get_source_connection',
+            'settings': 'production_settings',  # Settings with provider injection
             'db_type': DatabaseType.SOURCE,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
-            'method': 'get_mysql_replication_test_connection',
-            'environment': 'test',
+            'method': 'get_replication_connection',
+            'settings': 'production_settings',  # Settings with provider injection
             'db_type': DatabaseType.REPLICATION,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
-            'method': 'get_postgres_analytics_test_connection',
-            'environment': 'test',
+            'method': 'get_analytics_connection',
+            'settings': 'production_settings',  # Settings with provider injection
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.RAW,
-            'expected_engine_type': 'postgresql'
-        },
-        # Schema-specific test analytics connections
-        {
-            'method': 'get_opendental_analytics_raw_test_connection',
-            'environment': 'test',
-            'db_type': DatabaseType.ANALYTICS,
-            'schema': PostgresSchema.RAW,
-            'expected_engine_type': 'postgresql'
-        },
-        {
-            'method': 'get_opendental_analytics_staging_test_connection',
-            'environment': 'test',
-            'db_type': DatabaseType.ANALYTICS,
-            'schema': PostgresSchema.STAGING,
-            'expected_engine_type': 'postgresql'
-        },
-        {
-            'method': 'get_opendental_analytics_intermediate_test_connection',
-            'environment': 'test',
-            'db_type': DatabaseType.ANALYTICS,
-            'schema': PostgresSchema.INTERMEDIATE,
-            'expected_engine_type': 'postgresql'
-        },
-        {
-            'method': 'get_opendental_analytics_marts_test_connection',
-            'environment': 'test',
-            'db_type': DatabaseType.ANALYTICS,
-            'schema': PostgresSchema.MARTS,
             'expected_engine_type': 'postgresql'
         }
     ]
@@ -366,7 +575,13 @@ def connection_factory_test_cases():
 
 @pytest.fixture
 def mock_connection_manager():
-    """Mock ConnectionManager for testing."""
+    """Mock ConnectionManager for testing.
+    
+    This fixture provides a mock ConnectionManager that supports the connection architecture:
+    - Supports context manager pattern for resource management
+    - Provides retry logic for robust connection handling
+    - Supports Settings injection for configuration
+    """
     manager = MagicMock()
     
     # Mock context manager methods
@@ -383,17 +598,22 @@ def mock_connection_manager():
 
 @pytest.fixture
 def connection_string_test_cases():
-    """Test cases for connection string building."""
+    """Test cases for connection string building with Settings injection.
+    
+    This fixture provides test cases that demonstrate connection string building
+    with Settings injection as specified in the connection architecture.
+    """
     return [
-        # MySQL connection strings
+        # MySQL connection strings with Settings injection
         {
             'db_type': DatabaseType.SOURCE,
+            'settings': 'test_settings',  # Settings with provider injection
             'config': {
-                'host': 'localhost',
+                'host': 'test-source-host',
                 'port': 3306,
-                'database': 'test_db',
-                'user': 'test_user',
-                'password': 'test_pass',
+                'database': 'test_opendental',
+                'user': 'test_source_user',
+                'password': 'test_source_pass',
                 'connect_timeout': 10,
                 'read_timeout': 30,
                 'write_timeout': 30,
@@ -402,15 +622,17 @@ def connection_string_test_cases():
             'expected_prefix': 'mysql+pymysql://',
             'expected_params': ['connect_timeout=10', 'read_timeout=30', 'write_timeout=30', 'charset=utf8mb4']
         },
-        # PostgreSQL connection strings
+        # PostgreSQL connection strings with Settings injection
         {
             'db_type': DatabaseType.ANALYTICS,
+            'settings': 'test_settings',  # Settings with provider injection
+            'schema': PostgresSchema.RAW,
             'config': {
-                'host': 'localhost',
+                'host': 'test-analytics-host',
                 'port': 5432,
-                'database': 'test_analytics',
-                'user': 'test_user',
-                'password': 'test_pass',
+                'database': 'test_opendental_analytics',
+                'user': 'test_analytics_user',
+                'password': 'test_analytics_pass',
                 'schema': 'raw',
                 'connect_timeout': 10,
                 'application_name': 'etl_pipeline'
@@ -423,10 +645,15 @@ def connection_string_test_cases():
 
 @pytest.fixture
 def pool_config_test_cases():
-    """Test cases for connection pool configuration."""
+    """Test cases for connection pool configuration with Settings injection.
+    
+    This fixture provides test cases that demonstrate connection pool configuration
+    with Settings injection as specified in the connection architecture.
+    """
     return [
         {
             'name': 'default_pool',
+            'settings': 'test_settings',  # Settings with provider injection
             'pool_size': 5,
             'max_overflow': 10,
             'pool_timeout': 30,
@@ -440,6 +667,7 @@ def pool_config_test_cases():
         },
         {
             'name': 'custom_pool',
+            'settings': 'production_settings',  # Settings with provider injection
             'pool_size': 10,
             'max_overflow': 20,
             'pool_timeout': 60,
