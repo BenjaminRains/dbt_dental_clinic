@@ -4,6 +4,12 @@ Logging fixtures for ETL pipeline tests.
 This module provides fixtures and utilities for testing logging functionality
 in the ETL pipeline, including mock loggers, logging configuration, and
 logging-related test data.
+
+Follows the connection architecture patterns:
+- Uses provider pattern for dependency injection
+- Uses Settings integration for environment-specific logging
+- Uses environment separation for test vs production logging
+- Uses unified interface with get_logger and ETLLogger
 """
 
 import pytest
@@ -11,10 +17,47 @@ import logging
 from unittest.mock import MagicMock, patch
 from typing import Dict, Any, Optional
 
+from etl_pipeline.config import create_test_settings
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.config.logging import get_logger, ETLLogger
+
 
 @pytest.fixture
-def mock_logger():
-    """Mock logger for testing logging functionality."""
+def test_logging_settings():
+    """Test logging settings using provider pattern for dependency injection."""
+    # Create test provider with injected logging configuration
+    test_provider = DictConfigProvider(
+        pipeline={
+            'logging': {
+                'log_level': 'DEBUG',
+                'log_file': 'test_etl.log',
+                'log_dir': 'test_logs',
+                'format_type': 'detailed',
+                'sql_logging': {
+                    'enabled': True,
+                    'level': 'DEBUG'
+                }
+            }
+        },
+        env={
+            # Test environment variables for logging
+            'TEST_ETL_LOG_LEVEL': 'DEBUG',
+            'TEST_ETL_LOG_PATH': 'test_logs',
+            'TEST_ETL_LOG_FORMAT': 'detailed',
+            'TEST_ETL_SQL_LOGGING': 'true'
+        }
+    )
+    
+    # Create test settings with provider injection
+    return create_test_settings(
+        pipeline_config=test_provider.configs['pipeline'],
+        env_vars=test_provider.configs['env']
+    )
+
+
+@pytest.fixture
+def mock_logger(test_logging_settings):
+    """Mock logger using Settings injection and provider pattern."""
     with patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
@@ -22,19 +65,23 @@ def mock_logger():
 
 
 @pytest.fixture
-def mock_logging_config():
-    """Mock logging configuration for testing."""
+def mock_logging_config(test_logging_settings):
+    """Mock logging configuration using Settings injection."""
     return {
-        'log_level': 'INFO',
-        'log_file': 'test.log',
-        'log_dir': 'logs',
-        'format_type': 'detailed'
+        'log_level': 'DEBUG',
+        'log_file': 'test_etl.log',
+        'log_dir': 'test_logs',
+        'format_type': 'detailed',
+        'sql_logging': {
+            'enabled': True,
+            'level': 'DEBUG'
+        }
     }
 
 
 @pytest.fixture
-def mock_sql_logging_config():
-    """Mock SQL logging configuration for testing."""
+def mock_sql_logging_config(test_logging_settings):
+    """Mock SQL logging configuration using Settings injection."""
     return {
         'enabled': True,
         'level': 'DEBUG'
@@ -105,12 +152,13 @@ def sample_log_messages():
 
 
 @pytest.fixture
-def mock_logging_environment():
-    """Mock environment variables for logging tests."""
+def mock_logging_environment(test_logging_settings):
+    """Mock environment variables for logging tests using Settings injection."""
     return {
-        'ETL_LOG_LEVEL': 'INFO',
-        'ETL_LOG_PATH': 'logs',
-        'ETL_LOG_FORMAT': 'detailed'
+        'TEST_ETL_LOG_LEVEL': 'DEBUG',
+        'TEST_ETL_LOG_PATH': 'test_logs',
+        'TEST_ETL_LOG_FORMAT': 'detailed',
+        'TEST_ETL_SQL_LOGGING': 'true'
     }
 
 
@@ -131,8 +179,8 @@ def mock_logging_basic_config():
 
 
 @pytest.fixture
-def mock_logging_setup():
-    """Comprehensive mock setup for logging tests."""
+def mock_logging_setup(test_logging_settings):
+    """Comprehensive mock setup for logging tests using Settings injection."""
     with patch('logging.getLogger') as mock_get_logger, \
          patch('logging.StreamHandler') as mock_stream_handler, \
          patch('logging.FileHandler') as mock_file_handler, \
@@ -196,17 +244,14 @@ def mock_sql_loggers():
 
 
 @pytest.fixture
-def mock_etl_logger():
-    """Mock ETL logger instance for testing."""
+def mock_etl_logger(test_logging_settings):
+    """Mock ETL logger instance using Settings injection."""
     with patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
         
-        # Mock the ETLLogger class methods
-        from etl_pipeline.config.logging import ETLLogger
-        
-        # Create a mock instance
-        etl_logger = ETLLogger.__new__(ETLLogger)
+        # Create ETLLogger instance with test settings
+        etl_logger = ETLLogger("test_etl_logger", log_level="DEBUG")
         etl_logger.logger = mock_logger
         
         yield etl_logger
@@ -243,8 +288,8 @@ def sample_log_records():
 
 
 @pytest.fixture
-def mock_logging_context():
-    """Context manager for comprehensive logging mocking."""
+def mock_logging_context(test_logging_settings):
+    """Context manager for comprehensive logging mocking using Settings injection."""
     class LoggingContext:
         def __init__(self):
             self.patches = []
@@ -280,4 +325,53 @@ def mock_logging_context():
             for patch_obj in self.patches:
                 patch_obj.stop()
     
-    return LoggingContext() 
+    return LoggingContext()
+
+
+@pytest.fixture
+def logging_configs_with_settings(test_logging_settings):
+    """Test logging configurations using Settings injection."""
+    # Test logging configuration from settings
+    logging_config = test_logging_settings.pipeline_config.get('logging', {})
+    
+    return {
+        'log_level': logging_config.get('log_level', 'DEBUG'),
+        'log_file': logging_config.get('log_file', 'test_etl.log'),
+        'log_dir': logging_config.get('log_dir', 'test_logs'),
+        'format_type': logging_config.get('format_type', 'detailed'),
+        'sql_logging': logging_config.get('sql_logging', {'enabled': True, 'level': 'DEBUG'})
+    }
+
+
+@pytest.fixture
+def etl_logger_with_settings(test_logging_settings):
+    """ETLLogger instance with Settings injection for testing."""
+    with patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        # Create ETLLogger with test settings
+        etl_logger = ETLLogger("test_etl_logger", log_level="DEBUG")
+        etl_logger.logger = mock_logger
+        
+        yield etl_logger
+
+
+@pytest.fixture
+def mock_logging_provider():
+    """Mock logging provider for testing provider pattern integration."""
+    with patch('etl_pipeline.config.logging.DictConfigProvider') as mock_provider:
+        mock_provider_instance = MagicMock()
+        mock_provider.return_value = mock_provider_instance
+        
+        # Configure mock provider with test logging config
+        mock_provider_instance.get_config.return_value = {
+            'logging': {
+                'log_level': 'DEBUG',
+                'log_file': 'test_etl.log',
+                'log_dir': 'test_logs',
+                'format_type': 'detailed'
+            }
+        }
+        
+        yield mock_provider_instance 
