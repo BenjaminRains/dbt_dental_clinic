@@ -6,10 +6,21 @@ All integration tests should use this data to ensure consistency and avoid schem
 
 The test data is designed to work with both MySQL and PostgreSQL databases,
 with proper handling of schema differences between the two systems.
+
+Connection Architecture Compliance:
+- ✅ Environment-specific test data following naming conventions
+- ✅ Test data that supports Settings injection patterns
+- ✅ Test data for provider pattern testing
+- ✅ Test data for unified interface testing
+- ✅ Test data for enum-based database type testing
 """
 
 from typing import List, Dict, Any
 from datetime import datetime, date
+
+# Import connection architecture components
+from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
+from etl_pipeline.config.providers import DictConfigProvider
 
 # Standard test patients that match the real OpenDental schema
 STANDARD_TEST_PATIENTS = [
@@ -301,11 +312,93 @@ STANDARD_TEST_APPOINTMENTS = [
     }
 ]
 
+# Connection architecture specific test data
+CONNECTION_ARCHITECTURE_TEST_DATA = {
+    'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
+    'postgres_schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS],
+    'test_environment': 'test',
+    'production_environment': 'production'
+}
+
+# Environment-specific test data following connection architecture patterns
+TEST_ENVIRONMENT_DATA = {
+    'environment': 'test',
+    'database_prefix': 'TEST_',
+    'source_database': 'test_opendental',
+    'replication_database': 'test_opendental_replication',
+    'analytics_database': 'test_opendental_analytics',
+    'source_host': 'test-source-host',
+    'replication_host': 'test-repl-host',
+    'analytics_host': 'test-analytics-host'
+}
+
+PRODUCTION_ENVIRONMENT_DATA = {
+    'environment': 'production',
+    'database_prefix': '',
+    'source_database': 'opendental',
+    'replication_database': 'opendental_replication',
+    'analytics_database': 'opendental_analytics',
+    'source_host': 'prod-source-host',
+    'replication_host': 'prod-repl-host',
+    'analytics_host': 'prod-analytics-host'
+}
+
+# Settings injection test data
+SETTINGS_INJECTION_TEST_DATA = {
+    'test_settings': {
+        'environment': 'test',
+        'provider_type': 'DictConfigProvider',
+        'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
+        'schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS]
+    },
+    'production_settings': {
+        'environment': 'production',
+        'provider_type': 'FileConfigProvider',
+        'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
+        'schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS]
+    }
+}
+
+# Unified interface test data
+UNIFIED_INTERFACE_TEST_DATA = {
+    'connection_methods': [
+        'get_source_connection(settings)',
+        'get_replication_connection(settings)',
+        'get_analytics_connection(settings, schema)',
+        'get_analytics_raw_connection(settings)',
+        'get_analytics_staging_connection(settings)',
+        'get_analytics_intermediate_connection(settings)',
+        'get_analytics_marts_connection(settings)'
+    ],
+    'settings_methods': [
+        'get_database_config(DatabaseType.SOURCE)',
+        'get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)',
+        'get_source_connection_config()',
+        'get_replication_connection_config()',
+        'get_analytics_connection_config(schema)'
+    ]
+}
+
+# Provider pattern test data
+PROVIDER_PATTERN_TEST_DATA = {
+    'test_provider': {
+        'provider_type': 'DictConfigProvider',
+        'environment': 'test',
+        'config_sources': ['pipeline', 'tables', 'env'],
+        'injected_config': True
+    },
+    'production_provider': {
+        'provider_type': 'FileConfigProvider',
+        'environment': 'production',
+        'config_sources': ['pipeline.yml', 'tables.yml', '.env_production'],
+        'injected_config': False
+    }
+}
 
 
 def get_test_patient_data(include_all_fields: bool = True) -> List[Dict[str, Any]]:
     """
-    Get standardized test patient data.
+    Get standardized test patient data following connection architecture patterns.
     
     Args:
         include_all_fields: Ignored - always returns complete patient records.
@@ -315,18 +408,20 @@ def get_test_patient_data(include_all_fields: bool = True) -> List[Dict[str, Any
     """
     return STANDARD_TEST_PATIENTS.copy()
 
+
 def get_test_appointment_data() -> List[Dict[str, Any]]:
     """
-    Get standardized test appointment data.
+    Get standardized test appointment data following connection architecture patterns.
     
     Returns:
         List of appointment data dictionaries
     """
     return STANDARD_TEST_APPOINTMENTS.copy()
 
+
 def get_test_data_for_table(table_name: str, include_all_fields: bool = True) -> List[Dict[str, Any]]:
     """
-    Get standardized test data for a specific table.
+    Get standardized test data for a specific table following connection architecture patterns.
     
     Args:
         table_name: Name of the table ('patient', 'appointment', etc.)
@@ -343,4 +438,85 @@ def get_test_data_for_table(table_name: str, include_all_fields: bool = True) ->
     elif table_name.lower() == 'appointment':
         return get_test_appointment_data()
     else:
-        raise ValueError(f"Unsupported table: {table_name}. Supported tables: patient, appointment") 
+        raise ValueError(f"Unsupported table: {table_name}. Supported tables: patient, appointment")
+
+
+def get_connection_architecture_test_data() -> Dict[str, Any]:
+    """
+    Get connection architecture test data following connection architecture patterns.
+    
+    Returns:
+        Dictionary containing connection architecture test data
+    """
+    return CONNECTION_ARCHITECTURE_TEST_DATA.copy()
+
+
+def get_environment_test_data(environment: str = 'test') -> Dict[str, Any]:
+    """
+    Get environment-specific test data following connection architecture patterns.
+    
+    Args:
+        environment: Environment name ('test' or 'production')
+    
+    Returns:
+        Dictionary containing environment-specific test data
+    
+    Raises:
+        ValueError: If environment is not supported
+    """
+    if environment.lower() == 'test':
+        return TEST_ENVIRONMENT_DATA.copy()
+    elif environment.lower() == 'production':
+        return PRODUCTION_ENVIRONMENT_DATA.copy()
+    else:
+        raise ValueError(f"Unsupported environment: {environment}. Supported environments: test, production")
+
+
+def get_settings_injection_test_data() -> Dict[str, Any]:
+    """
+    Get Settings injection test data following connection architecture patterns.
+    
+    Returns:
+        Dictionary containing Settings injection test data
+    """
+    return SETTINGS_INJECTION_TEST_DATA.copy()
+
+
+def get_unified_interface_test_data() -> Dict[str, Any]:
+    """
+    Get unified interface test data following connection architecture patterns.
+    
+    Returns:
+        Dictionary containing unified interface test data
+    """
+    return UNIFIED_INTERFACE_TEST_DATA.copy()
+
+
+def get_provider_pattern_test_data() -> Dict[str, Any]:
+    """
+    Get provider pattern test data following connection architecture patterns.
+    
+    Returns:
+        Dictionary containing provider pattern test data
+    """
+    return PROVIDER_PATTERN_TEST_DATA.copy()
+
+
+def get_database_type_enum() -> type[DatabaseType]:
+    """
+    Get DatabaseType enum for testing following connection architecture patterns.
+    
+    Returns:
+        DatabaseType enum class
+    """
+    return DatabaseType
+
+
+def get_postgres_schema_enum() -> type[PostgresSchema]:
+    """
+    Get PostgresSchema enum for testing following connection architecture patterns.
+    
+    Returns:
+        PostgresSchema enum class
+    """
+    return PostgresSchema 
