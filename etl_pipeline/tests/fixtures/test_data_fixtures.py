@@ -3,14 +3,149 @@ Test Data Fixtures
 
 This module contains standardized test data fixtures for integration tests.
 These fixtures provide consistent, reusable test data across all test modules.
+
+Connection Architecture Compliance:
+- ✅ Environment-specific test data following naming conventions
+- ✅ Test data that supports Settings injection patterns
+- ✅ Test data for provider pattern testing
+- ✅ Test data for unified interface testing
+- ✅ Test data for enum-based database type testing
 """
 
 import pytest
+from datetime import datetime, timedelta
+from typing import Dict, List, Any
+
+# Import connection architecture components
+from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
+from etl_pipeline.config.providers import DictConfigProvider
+
+
+@pytest.fixture
+def database_types():
+    """Database type enums for testing."""
+    return DatabaseType
+
+
+@pytest.fixture
+def postgres_schemas():
+    """PostgreSQL schema enums for testing."""
+    return PostgresSchema
+
+
+@pytest.fixture
+def test_environment_vars():
+    """Test environment variables following connection architecture naming convention.
+    
+    This fixture provides test environment variables that conform to the connection architecture:
+    - Uses TEST_ prefix for test environment variables
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_test file structure
+    - Supports the provider pattern for dependency injection
+    """
+    return {
+        # Environment declaration (required for fail-fast validation)
+        'ETL_ENVIRONMENT': 'test',
+        
+        # OpenDental Source (Test) - following architecture naming
+        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+        'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+        'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
+        
+        # MySQL Replication (Test) - following architecture naming
+        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+        'TEST_MYSQL_REPLICATION_PORT': '3306',
+        'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+        'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+        
+        # PostgreSQL Analytics (Test) - following architecture naming
+        'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+        'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+        'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+        'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+        'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+    }
+
+
+@pytest.fixture
+def production_environment_vars():
+    """Production environment variables following connection architecture naming convention.
+    
+    This fixture provides production environment variables that conform to the connection architecture:
+    - Uses non-prefixed variables for production environment
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_production file structure
+    - Supports the provider pattern for dependency injection
+    """
+    return {
+        # Environment declaration (required for fail-fast validation)
+        'ETL_ENVIRONMENT': 'production',
+        
+        # OpenDental Source (Production) - following architecture naming
+        'OPENDENTAL_SOURCE_HOST': 'prod-source-host',
+        'OPENDENTAL_SOURCE_PORT': '3306',
+        'OPENDENTAL_SOURCE_DB': 'opendental',
+        'OPENDENTAL_SOURCE_USER': 'source_user',
+        'OPENDENTAL_SOURCE_PASSWORD': 'source_pass',
+        
+        # MySQL Replication (Production) - following architecture naming
+        'MYSQL_REPLICATION_HOST': 'prod-repl-host',
+        'MYSQL_REPLICATION_PORT': '3306',
+        'MYSQL_REPLICATION_DB': 'opendental_replication',
+        'MYSQL_REPLICATION_USER': 'repl_user',
+        'MYSQL_REPLICATION_PASSWORD': 'repl_pass',
+        
+        # PostgreSQL Analytics (Production) - following architecture naming
+        'POSTGRES_ANALYTICS_HOST': 'prod-analytics-host',
+        'POSTGRES_ANALYTICS_PORT': '5432',
+        'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+        'POSTGRES_ANALYTICS_SCHEMA': 'raw',
+        'POSTGRES_ANALYTICS_USER': 'analytics_user',
+        'POSTGRES_ANALYTICS_PASSWORD': 'analytics_pass'
+    }
+
+
+@pytest.fixture
+def test_settings_provider(test_environment_vars):
+    """Test settings provider following the provider pattern for dependency injection.
+    
+    This fixture implements the DictConfigProvider pattern as specified in the connection architecture:
+    - Uses DictConfigProvider for testing (as recommended)
+    - Provides injected configuration for clean test isolation
+    - Supports dependency injection for easy configuration swapping
+    - Follows the provider pattern for configuration loading
+    """
+    return DictConfigProvider(
+        pipeline={'connections': {
+            'source': {'pool_size': 5, 'connect_timeout': 30},
+            'replication': {'pool_size': 3, 'connect_timeout': 30},
+            'analytics': {'pool_size': 4, 'connect_timeout': 30}
+        }},
+        tables={'tables': {}},
+        env=test_environment_vars
+    )
+
+
+@pytest.fixture
+def test_settings(test_settings_provider):
+    """Test settings following connection architecture patterns.
+    
+    This fixture provides test settings that conform to the connection architecture:
+    - Uses Settings injection for environment-agnostic operation
+    - Uses provider pattern for dependency injection
+    - Supports unified interface for connection creation
+    - Uses enums for type safety
+    """
+    return Settings(environment='test', provider=test_settings_provider)
 
 
 @pytest.fixture
 def standard_patient_test_data():
-    """Standardized patient test data for all integration tests."""
+    """Standardized patient test data for all integration tests following connection architecture patterns."""
     return [
         {'PatNum': 1, 'LName': 'John Doe', 'FName': 'John', 'DateTStamp': '2023-01-01 10:00:00', 'PatStatus': 0},
         {'PatNum': 2, 'LName': 'Jane Smith', 'FName': 'Jane', 'DateTStamp': '2023-01-02 11:00:00', 'PatStatus': 0},
@@ -20,7 +155,7 @@ def standard_patient_test_data():
 
 @pytest.fixture
 def incremental_patient_test_data():
-    """Test data for incremental loading tests."""
+    """Test data for incremental loading tests following connection architecture patterns."""
     return [
         {'PatNum': 4, 'LName': 'New User', 'FName': 'Test', 'DateTStamp': '2023-01-04 13:00:00', 'PatStatus': 0}
     ]
@@ -28,7 +163,7 @@ def incremental_patient_test_data():
 
 @pytest.fixture
 def partial_patient_test_data():
-    """Test data for partial loading tests (2 patients instead of 3)."""
+    """Test data for partial loading tests (2 patients instead of 3) following connection architecture patterns."""
     return [
         {'PatNum': 1, 'LName': 'John Doe', 'FName': 'John', 'DateTStamp': '2023-01-01 10:00:00', 'PatStatus': 0},
         {'PatNum': 2, 'LName': 'Jane Smith', 'FName': 'Jane', 'DateTStamp': '2023-01-02 11:00:00', 'PatStatus': 0}
@@ -37,13 +172,30 @@ def partial_patient_test_data():
 
 @pytest.fixture
 def etl_tracking_test_data():
-    """Standardized ETL tracking test data."""
+    """Standardized ETL tracking test data following connection architecture patterns."""
     return [
         {
             'table_name': 'patient',
             'last_loaded': '2023-01-01 10:00:00',
             'load_status': 'success',
-            'rows_loaded': 3
+            'rows_loaded': 3,
+            'database_type': DatabaseType.SOURCE.value,  # Using enum value
+            'schema_name': None  # No schema for MySQL
+        }
+    ]
+
+
+@pytest.fixture
+def analytics_etl_tracking_test_data():
+    """Analytics ETL tracking test data following connection architecture patterns."""
+    return [
+        {
+            'table_name': 'patient',
+            'last_loaded': '2023-01-01 10:00:00',
+            'load_status': 'success',
+            'rows_loaded': 3,
+            'database_type': DatabaseType.ANALYTICS.value,  # Using enum value
+            'schema_name': PostgresSchema.RAW.value  # Using enum value
         }
     ]
 
@@ -85,8 +237,99 @@ def simple_test_table_data():
 
 
 @pytest.fixture
+def database_connection_test_data():
+    """Test data for database connection testing following connection architecture patterns."""
+    return {
+        'source': {
+            'database_type': DatabaseType.SOURCE,
+            'host': 'test-source-host',
+            'port': 3306,
+            'database': 'test_opendental',
+            'user': 'test_source_user',
+            'password': 'test_source_pass'
+        },
+        'replication': {
+            'database_type': DatabaseType.REPLICATION,
+            'host': 'test-repl-host',
+            'port': 3306,
+            'database': 'test_opendental_replication',
+            'user': 'test_repl_user',
+            'password': 'test_repl_pass'
+        },
+        'analytics_raw': {
+            'database_type': DatabaseType.ANALYTICS,
+            'schema': PostgresSchema.RAW,
+            'host': 'test-analytics-host',
+            'port': 5432,
+            'database': 'test_opendental_analytics',
+            'user': 'test_analytics_user',
+            'password': 'test_analytics_pass'
+        }
+    }
+
+
+@pytest.fixture
+def settings_injection_test_data():
+    """Test data for Settings injection testing following connection architecture patterns."""
+    return {
+        'test_environment': {
+            'environment': 'test',
+            'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
+            'schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS]
+        },
+        'production_environment': {
+            'environment': 'production',
+            'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
+            'schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS]
+        }
+    }
+
+
+@pytest.fixture
+def provider_pattern_test_data():
+    """Test data for provider pattern testing following connection architecture patterns."""
+    return {
+        'test_provider': {
+            'provider_type': 'DictConfigProvider',
+            'environment': 'test',
+            'config_sources': ['pipeline', 'tables', 'env'],
+            'injected_config': True
+        },
+        'production_provider': {
+            'provider_type': 'FileConfigProvider',
+            'environment': 'production',
+            'config_sources': ['pipeline.yml', 'tables.yml', '.env_production'],
+            'injected_config': False
+        }
+    }
+
+
+@pytest.fixture
+def unified_interface_test_data():
+    """Test data for unified interface testing following connection architecture patterns."""
+    return {
+        'connection_methods': [
+            'get_source_connection(settings)',
+            'get_replication_connection(settings)',
+            'get_analytics_connection(settings, schema)',
+            'get_analytics_raw_connection(settings)',
+            'get_analytics_staging_connection(settings)',
+            'get_analytics_intermediate_connection(settings)',
+            'get_analytics_marts_connection(settings)'
+        ],
+        'settings_methods': [
+            'get_database_config(DatabaseType.SOURCE)',
+            'get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)',
+            'get_source_connection_config()',
+            'get_replication_connection_config()',
+            'get_analytics_connection_config(schema)'
+        ]
+    }
+
+
+@pytest.fixture
 def patient_with_all_fields_test_data():
-    """Patient test data with all fields populated for comprehensive testing."""
+    """Patient test data with all fields populated for comprehensive testing following connection architecture patterns."""
     return [
         {
             'PatNum': 9999,
