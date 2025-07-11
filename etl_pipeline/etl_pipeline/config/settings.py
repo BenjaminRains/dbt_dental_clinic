@@ -1,10 +1,8 @@
 """
-Step 1.2: Replace etl_pipeline/config/settings.py
+ETL Pipeline Settings Configuration
 
-BACKUP YOUR EXISTING FILE FIRST!
-cp etl_pipeline/config/settings.py etl_pipeline/config/settings.py.backup
-
-Then replace with this clean implementation.
+This file provides clean configuration management with fail-fast validation
+and support for separate environment files (.env_production, .env_test).
 """
 
 import os
@@ -12,6 +10,9 @@ import logging
 from typing import Dict, Optional, List, Any
 from pathlib import Path
 from enum import Enum
+
+# Import custom exceptions
+from ..exceptions.configuration import EnvironmentError, ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -32,69 +33,134 @@ class PostgresSchema(Enum):
 
 
 class Settings:
-    """Clean configuration settings manager - focused on configuration only."""
+    """Clean configuration settings manager with fail-fast validation."""
     
-    # Environment variable mappings for each database type
+    # Environment variable mappings for each database type and environment
+    # These map to the actual variable names in the .env files
     ENV_MAPPINGS = {
-        DatabaseType.SOURCE: {
-            'host': 'OPENDENTAL_SOURCE_HOST',
-            'port': 'OPENDENTAL_SOURCE_PORT', 
-            'database': 'OPENDENTAL_SOURCE_DB',
-            'user': 'OPENDENTAL_SOURCE_USER',
-            'password': 'OPENDENTAL_SOURCE_PASSWORD'
+        'production': {
+            DatabaseType.SOURCE: {
+                'host': 'OPENDENTAL_SOURCE_HOST',
+                'port': 'OPENDENTAL_SOURCE_PORT',
+                'database': 'OPENDENTAL_SOURCE_DB',
+                'user': 'OPENDENTAL_SOURCE_USER',
+                'password': 'OPENDENTAL_SOURCE_PASSWORD'
+            },
+            DatabaseType.REPLICATION: {
+                'host': 'MYSQL_REPLICATION_HOST',
+                'port': 'MYSQL_REPLICATION_PORT',
+                'database': 'MYSQL_REPLICATION_DB',
+                'user': 'MYSQL_REPLICATION_USER',
+                'password': 'MYSQL_REPLICATION_PASSWORD'
+            },
+            DatabaseType.ANALYTICS: {
+                'host': 'POSTGRES_ANALYTICS_HOST',
+                'port': 'POSTGRES_ANALYTICS_PORT',
+                'database': 'POSTGRES_ANALYTICS_DB',
+                'schema': 'POSTGRES_ANALYTICS_SCHEMA',
+                'user': 'POSTGRES_ANALYTICS_USER',
+                'password': 'POSTGRES_ANALYTICS_PASSWORD'
+            }
         },
-        DatabaseType.REPLICATION: {
-            'host': 'MYSQL_REPLICATION_HOST',
-            'port': 'MYSQL_REPLICATION_PORT',
-            'database': 'MYSQL_REPLICATION_DB', 
-            'user': 'MYSQL_REPLICATION_USER',
-            'password': 'MYSQL_REPLICATION_PASSWORD'
-        },
-        DatabaseType.ANALYTICS: {
-            'host': 'POSTGRES_ANALYTICS_HOST',
-            'port': 'POSTGRES_ANALYTICS_PORT',
-            'database': 'POSTGRES_ANALYTICS_DB',
-            'schema': 'POSTGRES_ANALYTICS_SCHEMA',
-            'user': 'POSTGRES_ANALYTICS_USER', 
-            'password': 'POSTGRES_ANALYTICS_PASSWORD'
+        'test': {
+            DatabaseType.SOURCE: {
+                'host': 'TEST_OPENDENTAL_SOURCE_HOST',
+                'port': 'TEST_OPENDENTAL_SOURCE_PORT',
+                'database': 'TEST_OPENDENTAL_SOURCE_DB',
+                'user': 'TEST_OPENDENTAL_SOURCE_USER',
+                'password': 'TEST_OPENDENTAL_SOURCE_PASSWORD'
+            },
+            DatabaseType.REPLICATION: {
+                'host': 'TEST_MYSQL_REPLICATION_HOST',
+                'port': 'TEST_MYSQL_REPLICATION_PORT',
+                'database': 'TEST_MYSQL_REPLICATION_DB',
+                'user': 'TEST_MYSQL_REPLICATION_USER',
+                'password': 'TEST_MYSQL_REPLICATION_PASSWORD'
+            },
+            DatabaseType.ANALYTICS: {
+                'host': 'TEST_POSTGRES_ANALYTICS_HOST',
+                'port': 'TEST_POSTGRES_ANALYTICS_PORT',
+                'database': 'TEST_POSTGRES_ANALYTICS_DB',
+                'schema': 'TEST_POSTGRES_ANALYTICS_SCHEMA',
+                'user': 'TEST_POSTGRES_ANALYTICS_USER',
+                'password': 'TEST_POSTGRES_ANALYTICS_PASSWORD'
+            }
         }
     }
     
+    # Required variable structure for each database type
+    REQUIRED_VARS = {
+        DatabaseType.SOURCE: ['host', 'port', 'database', 'user', 'password'],
+        DatabaseType.REPLICATION: ['host', 'port', 'database', 'user', 'password'],
+        DatabaseType.ANALYTICS: ['host', 'port', 'database', 'schema', 'user', 'password']
+    }
+    
     def __init__(self, environment: Optional[str] = None, provider = None):
-        """Initialize settings."""
+        """Initialize settings with fail-fast validation."""
         self.environment = environment or self._detect_environment()
-        self.env_prefix = "TEST_" if self.environment == 'test' else ""
         
-        # Provider setup
+        # Provider setup with environment support
         if provider is None:
             from .providers import FileConfigProvider
-            provider = FileConfigProvider(Path(__file__).parent)
+            # Use the etl_pipeline/config directory for .env files and config files
+            # settings.py is in etl_pipeline/etl_pipeline/config/settings.py
+            # .env_test is in etl_pipeline/.env_test
+            # pipeline.yml and tables.yml are in etl_pipeline/etl_pipeline/config/
+            # So we need to go up 3 levels: config -> etl_pipeline -> etl_pipeline -> etl_pipeline
+            config_dir = Path(__file__).parent.parent.parent  # etl_pipeline directory
+            provider = FileConfigProvider(config_dir, self.environment)
+        else:
+            # Ensure provider knows the environment for mapping
+            if hasattr(provider, 'environment'):
+                provider.environment = self.environment
+        
         self.provider = provider
         
-        # Load configurations
+        # Load configurations from environment-specific files
         self.pipeline_config = self.provider.get_config('pipeline')
         self.tables_config = self.provider.get_config('tables') 
         self._env_vars = self.provider.get_config('env')
         
         # Cache
         self._connection_cache = {}
+        
+        # Only validate environment if using FileConfigProvider (production/integration)
+        # Skip validation for DictConfigProvider (testing) to allow injected configuration
+        if provider is None or not hasattr(provider, 'configs'):
+            self._validate_environment()
     
     @staticmethod
     def _detect_environment() -> str:
         """Detect environment from environment variables."""
-        environment = (
-            os.getenv('ETL_ENVIRONMENT') or
-            os.getenv('ENVIRONMENT') or
-            os.getenv('APP_ENV') or
-            'production'
-        )
-        
-        valid_environments = ['production', 'test', 'development']
+        environment = os.getenv('ETL_ENVIRONMENT')
+        if not environment:
+            raise EnvironmentError(
+                message="ETL_ENVIRONMENT environment variable is not set",
+                environment=None,
+                missing_variables=["ETL_ENVIRONMENT"],
+                details={"critical": True}
+            )
+        valid_environments = ['production', 'test']
         if environment not in valid_environments:
-            logger.warning(f"Invalid environment '{environment}', using 'production'")
-            environment = 'production'
-        
+            raise ConfigurationError(
+                message=f"Invalid environment '{environment}'. Must be one of: {valid_environments}",
+                invalid_values={"ETL_ENVIRONMENT": environment},
+                details={"valid_environments": valid_environments}
+            )
         return environment
+    
+    def _validate_environment(self):
+        """Fail-fast validation of environment configuration."""
+        logger.info(f"Validating environment: {self.environment}")
+        validation_result = self.validate_configs()
+        logger.info(f"Validation result: {validation_result}")
+        if not validation_result:
+            logger.error("Validation failed, raising ConfigurationError")
+            raise ConfigurationError(
+                message=f"Configuration validation failed for {self.environment} environment.",
+                config_file=f".env_{self.environment}",
+                details={"environment": self.environment}
+            )
     
     def get_database_config(self, 
                           db_type: DatabaseType, 
@@ -155,35 +221,34 @@ class Settings:
         """Get PostgreSQL analytics marts schema connection configuration."""
         return self.get_analytics_connection_config(PostgresSchema.MARTS)
     
-
-    
     def _get_base_config(self, db_type: DatabaseType) -> Dict:
-        """Get base configuration from environment variables."""
-        env_mapping = self.ENV_MAPPINGS[db_type]
+        """Get base configuration from environment variables using actual variable names."""
+        env_mapping = self.ENV_MAPPINGS[self.environment][db_type]
         config = {}
+        missing_keys = []
+        invalid_values = {}
         
-        for key, env_var in env_mapping.items():
-            # Try prefixed variable first, then base
-            prefixed_var = f"{self.env_prefix}{env_var}"
-            
-            # Use provider's environment variables first, fallback to os.getenv
-            value = self._env_vars.get(prefixed_var) or self._env_vars.get(env_var)
-            if value is None:
-                value = os.getenv(prefixed_var) or os.getenv(env_var)
-            
-            if key == 'port' and value:
+        for config_key, env_var in env_mapping.items():
+            value = self._env_vars.get(env_var)
+            if not value:
+                missing_keys.append(env_var)
+                continue
+            if config_key == 'port' and value:
                 try:
                     value = int(value)
                 except ValueError:
-                    logger.warning(f"Invalid port value for {env_var}: {value}")
-                    # Set default ports based on database type
-                    if db_type in [DatabaseType.SOURCE, DatabaseType.REPLICATION]:
-                        value = 3306  # MySQL default
-                    else:
-                        value = 5432  # PostgreSQL default
-            
-            config[key] = value
+                    invalid_values[env_var] = value
+                    continue
+            config[config_key] = value
         
+        if missing_keys or invalid_values:
+            raise ConfigurationError(
+                message=f"Missing or invalid required environment variables for {db_type.value} database in {self.environment} environment.",
+                config_file=f".env_{self.environment}",
+                missing_keys=missing_keys if missing_keys else None,
+                invalid_values=invalid_values if invalid_values else None,
+                details={"db_type": db_type.value, "environment": self.environment}
+            )
         return config
     
     def _add_connection_defaults(self, config: Dict, db_type: DatabaseType):
@@ -202,29 +267,19 @@ class Settings:
         """Validate that all required configurations are present."""
         missing_vars = []
         
-        for db_type, env_mapping in self.ENV_MAPPINGS.items():
-            for key, env_var in env_mapping.items():
-                if key == 'schema':  # Schema is optional for PostgreSQL
-                    continue
-                
-                # Check environment-specific variables
-                prefixed_var = f"{self.env_prefix}{env_var}"
-                
-                # Use provider's environment variables first, fallback to os.getenv
-                value = self._env_vars.get(prefixed_var) or self._env_vars.get(env_var)
-                if value is None:
-                    value = os.getenv(prefixed_var) or os.getenv(env_var)
+        for db_type, env_mapping in self.ENV_MAPPINGS[self.environment].items():
+            for env_var in env_mapping.values():
+                # Use the variable name as defined in the loaded .env file
+                value = self._env_vars.get(env_var)
                 
                 if not value:
-                    if self.environment == 'test':
-                        missing_vars.append(f"{db_type.value}: {prefixed_var} or {env_var}")
-                    else:
-                        missing_vars.append(f"{db_type.value}: {env_var}")
+                    missing_vars.append(f"{db_type.value}: {env_var}")
         
         if missing_vars:
             logger.error(f"Missing required variables for {self.environment} environment:")
             for var in missing_vars:
                 logger.error(f"  - {var}")
+            logger.error(f"Please check your .env_{self.environment} file")
             return False
         
         return True
@@ -320,8 +375,10 @@ def create_settings(environment: Optional[str] = None,
     else:
         from .providers import FileConfigProvider
         if config_dir is None:
-            config_dir = Path(__file__).parent
-        provider = FileConfigProvider(config_dir)
+            # Point to etl_pipeline root directory where .env files are located
+            config_dir = Path(__file__).parent.parent
+        # Explicitly pass environment to ensure correct .env file loading
+        provider = FileConfigProvider(config_dir, environment)
     
     return Settings(environment=environment, provider=provider)
 
