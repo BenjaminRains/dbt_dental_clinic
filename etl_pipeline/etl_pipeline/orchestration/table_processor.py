@@ -69,153 +69,86 @@ from ..core.connections import ConnectionFactory
 from ..monitoring.unified_metrics import UnifiedMetricsCollector
 from ..config.logging import get_logger
 from ..core.postgres_schema import PostgresSchema
-from ..config import Settings, DatabaseType, PostgresSchema as ConfigPostgresSchema, ConfigReader
+from ..config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema, ConfigReader
+
+# Import custom exceptions for structured error handling
+from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError
+from ..exceptions.data import DataExtractionError, DataLoadingError
+from ..exceptions.configuration import ConfigurationError, EnvironmentError
 
 logger = logging.getLogger(__name__)
 
 class TableProcessor:
-    def __init__(self, config_reader: Optional[ConfigReader] = None, config_path: Optional[str] = None, environment: str = 'production'):
+    def __init__(self, config_reader: Optional[ConfigReader] = None, config_path: Optional[str] = None):
         """
         Initialize the table processor.
         
-        REFACTORED: Now uses integrated approach with SimpleMySQLReplicator and PostgresLoader.
-        This provides 5-10x faster performance by eliminating dynamic schema discovery.
+        MODERN ARCHITECTURE: Uses Settings injection and unified interface.
+        Components handle their own connections - no direct connection management.
+        
+        CONNECTION ARCHITECTURE COMPLIANCE:
+        - Uses Settings injection for environment-agnostic operation
+        - Follows unified interface with Settings injection
+        - Validates environment configuration before processing
+        - Uses provider pattern for configuration management
+        - No direct connection management - components handle their own connections
         
         Args:
             config_reader: ConfigReader instance (optional, will be created if not provided)
             config_path: Path to the configuration file (used for ConfigReader)
-            environment: Environment name ('production', 'test') for database connections
         """
-        self.settings = Settings(environment=environment)
+        # ✅ MODERN ARCHITECTURE: Use Settings injection for environment-agnostic operation
+        self.settings = get_settings()
         self.config_path = config_path or "etl_pipeline/config/tables.yml"
-        self.metrics = UnifiedMetricsCollector(use_test_connections=(environment == 'test'), settings=self.settings)
+        self.metrics = UnifiedMetricsCollector(settings=self.settings)
+        
+        # ✅ MODERN ARCHITECTURE: Validate environment configuration
+        self._validate_environment()
         
         # Create ConfigReader immediately if not provided
         if config_reader is None:
-            self.config_reader = ConfigReader(self.config_path)
+            # Use auto-detected path or provided path
+            if config_path:
+                self.config_reader = ConfigReader(config_path)
+            else:
+                self.config_reader = ConfigReader()
         else:
             self.config_reader = config_reader
         
-        # Connection state
-        self.opendental_source_engine = None
-        self.mysql_replication_engine = None
-        self.postgres_analytics_engine = None
-        
-        # Cache database configs to avoid repeated lookups
-        self._source_db = None
-        self._replication_db = None
-        self._analytics_db = None
-        
-        # Track initialization state
-        self._initialized = False
-        
-    def initialize_connections(self, source_engine: Optional[Engine] = None, 
-                             replication_engine: Optional[Engine] = None,
-                             analytics_engine: Optional[Engine] = None):
-        """
-        Initialize database connections.
-        
-        REFACTORED: Simplified connection initialization using integrated approach.
-        ConfigReader is already created in __init__ and doesn't require database connections.
-        
-        Args:
-            source_engine: SQLAlchemy engine for source database
-            replication_engine: SQLAlchemy engine for replication database
-            analytics_engine: SQLAlchemy engine for analytics database
-        """
+        # ✅ MODERN ARCHITECTURE: No direct connection management
+        # Components (SimpleMySQLReplicator, PostgresLoader) handle their own connections
+        # using Settings injection for environment-agnostic operation
+    
+    def _validate_environment(self):
+        """Validate environment configuration before processing."""
         try:
-            logger.info(f"Initializing database connections for environment: {self.settings.environment}")
-            
-            # Use provided engines or create new ones based on environment
-            if source_engine:
-                self.opendental_source_engine = source_engine
-            else:
-                self.opendental_source_engine = ConnectionFactory.get_source_connection(self.settings)
-                
-            if replication_engine:
-                self.mysql_replication_engine = replication_engine
-            else:
-                self.mysql_replication_engine = ConnectionFactory.get_replication_connection(self.settings)
-                
-            if analytics_engine:
-                self.postgres_analytics_engine = analytics_engine
-            else:
-                self.postgres_analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
-            
-            # Cache database names to avoid repeated lookups
-            self._source_db = self.settings.get_database_config(DatabaseType.SOURCE)['database']
-            self._replication_db = self.settings.get_database_config(DatabaseType.REPLICATION)['database']
-            self._analytics_db = self.settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)['database']
-            
-            self._initialized = True
-            logger.info("Successfully initialized all database connections")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize database connections: {str(e)}")
-            self.cleanup()
+            # Validate that all required configurations are present
+            if not self.settings.validate_configs():
+                raise EnvironmentError(
+                    message=f"Configuration validation failed for {self.settings.environment} environment",
+                    environment=self.settings.environment,
+                    missing_variables=[],
+                    details={"critical": True, "error_type": "validation_failed"}
+                )
+            logger.info(f"Environment validation passed for {self.settings.environment} environment")
+        except EnvironmentError:
+            # Re-raise environment errors as-is
             raise
-
-    def cleanup(self):
-        """Clean up database connections."""
-        try:
-            # Clean up source engine
-            if self.opendental_source_engine:
-                try:
-                    self.opendental_source_engine.dispose()
-                    logger.info("Closed source database connection")
-                except Exception as e:
-                    logger.error(f"Error closing source database connection: {str(e)}")
-                finally:
-                    self.opendental_source_engine = None
-            
-            # Clean up replication engine
-            if self.mysql_replication_engine:
-                try:
-                    self.mysql_replication_engine.dispose()
-                    logger.info("Closed replication database connection")
-                except Exception as e:
-                    logger.error(f"Error closing replication database connection: {str(e)}")
-                finally:
-                    self.mysql_replication_engine = None
-            
-            # Clean up analytics engine
-            if self.postgres_analytics_engine:
-                try:
-                    self.postgres_analytics_engine.dispose()
-                    logger.info("Closed analytics database connection")
-                except Exception as e:
-                    logger.error(f"Error closing analytics database connection: {str(e)}")
-                finally:
-                    self.postgres_analytics_engine = None
         except Exception as e:
-            logger.error(f"Error during cleanup: {str(e)}")
-        finally:
-            # Always reset initialization state, even if cleanup fails
-            self._initialized = False
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - ensures connections are cleaned up."""
-        self.cleanup()
-
-    def _connections_available(self) -> bool:
-        """Check if all required database connections are available."""
-        return all([
-            self.opendental_source_engine is not None,
-            self.mysql_replication_engine is not None,
-            self.postgres_analytics_engine is not None
-        ])
-
+            logger.error(f"Environment validation failed: {str(e)}")
+            raise EnvironmentError(
+                message=f"Unexpected error during environment validation",
+                environment=self.settings.environment,
+                details={"error_type": "unexpected", "original_error": str(e)},
+                original_exception=e
+            )
+    
     def process_table(self, table_name: str, force_full: bool = False) -> bool:
         """
         Process a single table through the ETL pipeline.
         
-        REFACTORED ETL PIPELINE: This method uses the integrated approach with
-        SimpleMySQLReplicator and PostgresLoader for improved performance and reliability.
+        MODERN ARCHITECTURE: Uses Settings injection and unified interface.
+        Components handle their own connections using Settings injection.
         
         1. EXTRACT: Copy data from source to replication database using SimpleMySQLReplicator
         2. LOAD: Copy data from replication to analytics database using PostgresLoader
@@ -227,19 +160,8 @@ class TableProcessor:
         Returns:
             bool: True if processing was successful
         """
-        # Check if connections are available first
-        if not self._connections_available():
-            # Only try to initialize if connections aren't already set
-            if not self._initialized:
-                if not self.initialize_connections():
-                    logger.error("Failed to initialize database connections")
-                    return False
-            else:
-                logger.error("Database connections not initialized")
-                return False
-        elif not self._initialized:
-            # Connections are available but not initialized - set the flag
-            self._initialized = True
+        # ✅ MODERN ARCHITECTURE: Validate environment before processing
+        self._validate_environment()
         
         start_time = time.time()
         
@@ -270,22 +192,40 @@ class TableProcessor:
             logger.info(f"Successfully completed ETL pipeline for table: {table_name} in {processing_time:.2f} minutes")
             return True
             
+        except DataExtractionError as e:
+            processing_time = (time.time() - start_time) / 60
+            logger.error(f"Data extraction failed for {table_name} after {processing_time:.2f} minutes: {e}")
+            return False
+        except DataLoadingError as e:
+            processing_time = (time.time() - start_time) / 60
+            logger.error(f"Data loading failed for {table_name} after {processing_time:.2f} minutes: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            processing_time = (time.time() - start_time) / 60
+            logger.error(f"Database connection failed for {table_name} after {processing_time:.2f} minutes: {e}")
+            return False
+        except EnvironmentError as e:
+            processing_time = (time.time() - start_time) / 60
+            logger.error(f"Environment configuration error for {table_name} after {processing_time:.2f} minutes: {e}")
+            return False
         except Exception as e:
             processing_time = (time.time() - start_time) / 60
-            logger.error(f"Error in ETL pipeline for table {table_name} after {processing_time:.2f} minutes: {str(e)}")
+            logger.error(f"Unexpected error in ETL pipeline for table {table_name} after {processing_time:.2f} minutes: {str(e)}")
             return False
             
     def _extract_to_replication(self, table_name: str, force_full: bool) -> bool:
         """
         Extract data from source to replication database using SimpleMySQLReplicator.
         
-        REFACTORED: Uses SimpleMySQLReplicator with correct constructor and static configuration.
+        MODERN ARCHITECTURE: Uses Settings injection for environment-agnostic operation.
+        SimpleMySQLReplicator handles its own connections using Settings injection.
         """
         try:
             # Import SimpleMySQLReplicator from core module
             from ..core.simple_mysql_replicator import SimpleMySQLReplicator
             
-            # Initialize SimpleMySQLReplicator with settings (correct constructor)
+            # ✅ MODERN ARCHITECTURE: Initialize with Settings injection
+            # SimpleMySQLReplicator handles its own connections using Settings injection
             replicator = SimpleMySQLReplicator(settings=self.settings)
             
             # Copy table using SimpleMySQLReplicator
@@ -298,22 +238,28 @@ class TableProcessor:
             logger.info(f"Successfully extracted {table_name} to replication database")
             return True
             
+        except DataExtractionError as e:
+            logger.error(f"Data extraction failed for {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed during extraction for {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error during extraction: {str(e)}")
+            logger.error(f"Unexpected error during extraction for {table_name}: {str(e)}")
             return False
             
     def _load_to_analytics(self, table_name: str, force_full: bool) -> bool:
         """
         Load data from replication to analytics database using PostgresLoader.
         
-        REFACTORED: Uses PostgresLoader with correct method signatures and static configuration.
-        PostgresLoader creates its own connections using the new explicit architecture.
+        MODERN ARCHITECTURE: Uses Settings injection for environment-agnostic operation.
+        PostgresLoader handles its own connections using Settings injection.
         """
         try:
             from ..loaders.postgres_loader import PostgresLoader
             
-            # Initialize PostgresLoader - it creates its own connections using the new architecture
-            # The loader will automatically use the correct environment based on ETL_ENVIRONMENT
+            # ✅ MODERN ARCHITECTURE: Initialize PostgresLoader
+            # PostgresLoader handles its own connections using Settings injection
             loader = PostgresLoader()
             
             # Get table configuration for chunked loading decision
@@ -345,6 +291,15 @@ class TableProcessor:
             logger.info(f"Successfully loaded {table_name} to analytics database")
             return True
             
+        except DataLoadingError as e:
+            logger.error(f"Data loading failed for {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed during loading for {table_name}: {e}")
+            return False
+        except DatabaseTransactionError as e:
+            logger.error(f"Database transaction failed during loading for {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error during loading: {str(e)}")
+            logger.error(f"Unexpected error during loading for {table_name}: {str(e)}")
             return False 
