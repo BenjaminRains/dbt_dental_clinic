@@ -2,7 +2,10 @@
 
 ## Overview
 
-The ETL pipeline uses a clean, modern connection architecture with explicit environment separation, clear separation of concerns, and a robust provider pattern for dependency injection. This document explains the complete connection handling system, including configuration management, connection creation, and usage patterns.
+The ETL pipeline uses a clean, modern connection architecture with explicit environment separation,
+ clear separation of concerns, and a robust provider pattern for dependency injection. This document
+  explains the complete connection handling system, including configuration management, connection
+   creation, and usage patterns.
 
 ## Architecture Principles
 
@@ -47,7 +50,9 @@ class FileConfigProvider(ConfigProvider):
         elif config_type == 'tables':
             return self._load_yaml_config('tables')    # Loads tables.yml
         elif config_type == 'env':
-            return dict(os.environ)                    # Returns real env vars
+            # Load environment variables from appropriate .env file
+            env_file = f".env_{self.environment}" if hasattr(self, 'environment') else ".env"
+            return self._load_env_file(env_file) or dict(os.environ)
 ```
 
 #### DictConfigProvider (Testing)
@@ -75,8 +80,13 @@ class DictConfigProvider(ConfigProvider):
 
 **Environment Detection**:
 ```python
-# Priority order for environment detection
-ETL_ENVIRONMENT > ENVIRONMENT > APP_ENV > 'production' (default)
+# Environment detection - only ETL_ENVIRONMENT variable
+ETL_ENVIRONMENT = 'production' or 'test'
+
+# The get_settings() function automatically detects the environment:
+# - If ETL_ENVIRONMENT=production: Uses production configuration
+# - If ETL_ENVIRONMENT=test: Uses test configuration  
+# - If not set: FAILS FAST with clear error message (no defaults)
 ```
 
 **Database Types**:
@@ -94,7 +104,8 @@ class PostgresSchema(Enum):
 ```
 
 **Purpose of Enums**:
-The enums provide type safety and prevent errors by ensuring only valid database types and schema names are used throughout the codebase. They serve as:
+The enums provide type safety and prevent errors by ensuring only valid database types and schema
+ names are used throughout the codebase. They serve as:
 
 1. **Type Safety**: Prevents passing invalid strings as database types
 2. **Documentation**: Self-documenting code that clearly shows available options
@@ -287,11 +298,19 @@ with create_connection_manager(source_engine) as manager:
     result2 = manager.execute_with_retry("SELECT COUNT(*) FROM appointment")
 ```
 
-## Environment Variables
+## Environment Files and Variables
 
-### Production Environment Variables
+The ETL pipeline uses **separate environment files** for clean environment separation, following the principles outlined in the [Environment Setup Guide](environment_setup.md).
 
+### Environment File Architecture
+
+The system supports two separate environment files for complete isolation:
+
+#### Production Environment File (`.env_production`)
 ```bash
+# Environment declaration
+ETL_ENVIRONMENT=production
+
 # OpenDental Source (Production)
 OPENDENTAL_SOURCE_HOST=prod-dental-server.com
 OPENDENTAL_SOURCE_PORT=3306
@@ -315,9 +334,11 @@ POSTGRES_ANALYTICS_USER=analytics_user
 POSTGRES_ANALYTICS_PASSWORD=analytics_password
 ```
 
-### Test Environment Variables
-
+#### Test Environment File (`.env_test`)
 ```bash
+# Environment declaration
+ETL_ENVIRONMENT=test
+
 # OpenDental Source (Test)
 TEST_OPENDENTAL_SOURCE_HOST=test-dental-server.com
 TEST_OPENDENTAL_SOURCE_PORT=3306
@@ -340,6 +361,108 @@ TEST_POSTGRES_ANALYTICS_SCHEMA=raw
 TEST_POSTGRES_ANALYTICS_USER=test_analytics_user
 TEST_POSTGRES_ANALYTICS_PASSWORD=test_analytics_password
 ```
+
+### Environment File Loading
+
+The system automatically loads the correct environment file based on the `ETL_ENVIRONMENT` variable:
+
+**⚠️ CRITICAL SECURITY REQUIREMENT**: The system will FAIL FAST if `ETL_ENVIRONMENT` is not
+ explicitly set. No defaulting to production is allowed under any circumstances.
+
+1. **Environment Detection**: The system uses only the `ETL_ENVIRONMENT` variable:
+   - `ETL_ENVIRONMENT=production` - Uses production environment
+   - `ETL_ENVIRONMENT=test` - Uses test environment
+
+2. **File Loading**: The `FileConfigProvider` loads the appropriate `.env_{environment}` file:
+   - Production: Loads `.env_production` (contains non-prefixed variables)
+   - Test: Loads `.env_test` (contains TEST_ prefixed variables)
+
+3. **Variable Resolution**: The Settings class automatically handles variable naming:
+   ```python
+   # Settings automatically prefixes variables for test environment
+   settings = get_settings()  # Automatically uses correct environment
+   config = settings.get_source_connection_config()  # Uses correct variable names
+   ```
+   
+   **Variable Resolution Logic**:
+- **Production**: Loads `.env_production` and uses `OPENDENTAL_SOURCE_HOST` from that file
+- **Test**: Loads `.env_test` and uses `TEST_OPENDENTAL_SOURCE_HOST` from that file
+   
+   **⚠️ CRITICAL**: If ETL_ENVIRONMENT is not set, the system will FAIL FAST with a clear error
+    message. No defaulting to production is allowed for security reasons.
+
+### Environment Variable Naming Convention
+
+#### Production Variables
+- **Base names**: `OPENDENTAL_SOURCE_HOST`, `MYSQL_REPLICATION_HOST`, etc.
+- **No prefix**: Used when `ETL_ENVIRONMENT=production`
+- **File**: Defined in `.env_production`
+
+#### Test Variables  
+- **TEST_ prefix**: `TEST_OPENDENTAL_SOURCE_HOST`, `TEST_MYSQL_REPLICATION_HOST`, etc.
+- **TEST_ prefix**: Used when `ETL_ENVIRONMENT=test`
+- **File**: Defined in `.env_test`
+
+**⚠️ CRITICAL**: Each environment file contains ONLY the variables for that environment:
+- `.env_production` contains ONLY non-prefixed variables (OPENDENTAL_SOURCE_HOST, etc.)
+- `.env_test` contains ONLY TEST_ prefixed variables (TEST_OPENDENTAL_SOURCE_HOST, etc.)
+- The system automatically prefixes variables with "TEST_" when loading test environment
+- No fallback logic is needed - each file is the single source of truth for its environment
+
+### Benefits of Separate Environment Files
+
+1. **Complete Isolation**: Production and test configurations are completely separate
+2. **No Environment Pollution**: Test variables don't affect production
+3. **Clear Naming**: TEST_ prefix makes test variables easily identifiable
+4. **Single Source of Truth**: Each environment has its own dedicated file
+5. **Easy Deployment**: Different environments can use different files
+6. **Security**: Test credentials are separate from production credentials
+7. **Simple Variable Resolution**: Each file contains only the variables it needs - no complex fallback logic required
+
+### Provider Integration with Environment Files
+
+The provider pattern works seamlessly with the separate environment files:
+
+#### FileConfigProvider (Production)
+```python
+# Automatically loads .env_production when ETL_ENVIRONMENT=production
+settings = Settings(environment='production')
+# Loads from:
+# - pipeline.yml
+# - tables.yml
+# - .env_production (contains: OPENDENTAL_SOURCE_HOST, MYSQL_REPLICATION_HOST, etc.)
+```
+
+#### FileConfigProvider (Test)
+```python
+# Automatically loads .env_test when ETL_ENVIRONMENT=test
+settings = Settings(environment='test')
+# Loads from:
+# - pipeline.yml
+# - tables.yml
+# - .env_test (contains: TEST_OPENDENTAL_SOURCE_HOST, TEST_MYSQL_REPLICATION_HOST, etc.)
+```
+
+#### DictConfigProvider (Testing)
+```python
+# Uses injected configuration for unit testing
+test_provider = DictConfigProvider(
+    env={'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
+)
+settings = Settings(environment='test', provider=test_provider)
+```
+
+**Variable Resolution in Settings**:
+The Settings class uses environment-specific variable mappings:
+```python
+# Settings knows what variable names to look for in each environment
+env_mapping = self.ENV_MAPPINGS[self.environment][db_type]  # Gets correct mapping for environment
+value = self._env_vars.get(env_var)  # Uses variables from loaded .env file
+```
+
+**Environment-Specific Mappings**:
+- **Production**: Settings looks for `OPENDENTAL_SOURCE_HOST` in `.env_production`
+- **Test**: Settings looks for `TEST_OPENDENTAL_SOURCE_HOST` in `.env_test`
 
 ## Usage Patterns
 
@@ -409,8 +532,8 @@ def test_replicate_table():
 # Integration tests use test environment settings
 def test_real_connection():
     try:
-        # Uses test environment settings automatically
-        settings = get_settings()  # Will use test environment
+        # Uses test environment settings explicitly
+        settings = Settings(environment='test')  # Explicit test environment
         engine = ConnectionFactory.get_source_connection(settings)
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
@@ -503,9 +626,10 @@ test_provider = DictConfigProvider(
     pipeline={'connections': {'source': {'pool_size': 5}}},
     tables={'tables': {'patient': {'batch_size': 1000}}},
     env={
-        'OPENDENTAL_SOURCE_HOST': 'test-host',
-        'OPENDENTAL_SOURCE_DB': 'test_db',
-        'TEST_OPENDENTAL_SOURCE_HOST': 'test-prefixed-host'
+        'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+        'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
+        'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
     }
 )
 
@@ -624,7 +748,8 @@ def test_schema_configs_with_enums(test_settings):
 
 ```python
 try:
-    engine = ConnectionFactory.get_opendental_source_connection()
+    settings = get_settings()
+    engine = ConnectionFactory.get_source_connection(settings)
 except ValueError as e:
     logger.error(f"Configuration error: {e}")
     raise
@@ -713,6 +838,7 @@ if not settings.validate_configs():
 ### 2. Always Use Settings Injection
 - Production code: Use `get_settings()` for production environment
 - Test code: Use `create_test_settings()` for test environment
+- **CRITICAL**: ETL_ENVIRONMENT must be explicitly set - no defaults
 - Never mix environments in the same code path
 
 ### 3. Use Provider-Based Testing
@@ -733,6 +859,7 @@ def test_database_config():
 
 ### 5. Validate Configuration Early
 - Call `settings.validate_configs()` at startup
+- **CRITICAL**: ETL_ENVIRONMENT must be explicitly set - no defaults
 - Fail fast if configuration is incomplete
 - Clear error messages for missing variables
 
@@ -764,19 +891,20 @@ config = test_settings.get_database_config(DatabaseType.SOURCE, PostgresSchema.R
 1. **Clear Separation of Concerns**: Configuration vs. connection logic
 2. **Unified Interface**: Single method per database type, environment-agnostic
 3. **Safety**: Impossible to accidentally use wrong environment through Settings injection
-4. **Performance**: Optimized connection pooling and caching
-5. **Maintainability**: Clean, well-documented architecture with no method proliferation
-6. **Testability**: Easy to mock and test individual components with provider pattern
-7. **Flexibility**: Easy to add new database types without environment-specific methods
-8. **Reliability**: Comprehensive error handling and retry logic
-9. **Type Safety**: Enums prevent invalid database types and schema names
-10. **Developer Experience**: IDE autocomplete and refactoring support for database types
-11. **Dependency Injection**: Provider pattern enables clean testing and configuration swapping
-12. **Configuration Isolation**: Test configuration is completely isolated from production
-13. **No Environment Pollution**: Tests don't affect real environment variables
-14. **Consistent API**: Same interface for production and test configuration
-15. **Extensibility**: Easy to add new provider types (e.g., database, API, etc.)
-16. **No Method Proliferation**: Single method per database type instead of separate production/test methods
+4. **Security**: FAIL FAST if ETL_ENVIRONMENT not set - no dangerous defaults
+5. **Performance**: Optimized connection pooling and caching
+6. **Maintainability**: Clean, well-documented architecture with no method proliferation
+7. **Testability**: Easy to mock and test individual components with provider pattern
+8. **Flexibility**: Easy to add new database types without environment-specific methods
+9. **Reliability**: Comprehensive error handling and retry logic
+10. **Type Safety**: Enums prevent invalid database types and schema names
+11. **Developer Experience**: IDE autocomplete and refactoring support for database types
+12. **Dependency Injection**: Provider pattern enables clean testing and configuration swapping
+13. **Configuration Isolation**: Test configuration is completely isolated from production
+14. **No Environment Pollution**: Tests don't affect real environment variables
+15. **Consistent API**: Same interface for production and test configuration
+16. **Extensibility**: Easy to add new provider types (e.g., database, API, etc.)
+17. **No Method Proliferation**: Single method per database type instead of separate production/test methods
 
 ## Provider Pattern Benefits
 
@@ -800,4 +928,6 @@ config = test_settings.get_database_config(DatabaseType.SOURCE, PostgresSchema.R
 - Compile-time checking prevents runtime errors
 - IDE support for autocomplete and refactoring
 
-This architecture provides a robust, maintainable, and safe foundation for all ETL operations with clear separation between production and test environments, enabled by the provider pattern for clean dependency injection. 
+This architecture provides a robust, maintainable, and safe foundation for all ETL operations with
+ clear separation between production and test environments, enabled by the provider pattern for
+  clean dependency injection. 
