@@ -3,28 +3,38 @@ PostgreSQL Schema fixtures for ETL pipeline tests.
 
 This module contains fixtures related to:
 - PostgreSQL schema testing
-- Schema discovery testing
+- ConfigReader testing (replaces SchemaDiscovery)
 - PostgresSchema class testing
 - Schema conversion testing
+
+Follows the connection architecture patterns where appropriate:
+- Uses provider pattern for dependency injection
+- Uses Settings injection for environment-agnostic schema testing
+- Uses environment separation for test vs production schema testing
+- Uses unified interface with ConnectionFactory
 """
 
 import pytest
 import logging
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 from sqlalchemy.engine import Engine
 from sqlalchemy import text
 from typing import Dict, Any, List
 
+from etl_pipeline.config import create_test_settings
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.core import ConnectionFactory
+
 # Import ETL pipeline components for testing
 try:
     from etl_pipeline.core.postgres_schema import PostgresSchema as PostgresSchemaClass
-    from etl_pipeline.core.schema_discovery import SchemaDiscovery
+    from etl_pipeline.config.config_reader import ConfigReader
     from etl_pipeline.core.connections import ConnectionFactory
     POSTGRES_SCHEMA_AVAILABLE = True
 except ImportError:
     POSTGRES_SCHEMA_AVAILABLE = False
     PostgresSchemaClass = None
-    SchemaDiscovery = None
+    ConfigReader = None
     ConnectionFactory = None
 
 # Import new configuration system
@@ -45,8 +55,85 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
+def test_postgres_schema_settings():
+    """Test PostgreSQL schema settings using provider pattern for dependency injection."""
+    # Create test provider with injected PostgreSQL schema configuration
+    test_provider = DictConfigProvider(
+        pipeline={
+            'postgres_schema': {
+                'default_schema': 'raw',
+                'type_conversion': {
+                    'TINYINT': 'boolean',
+                    'INT': 'integer',
+                    'VARCHAR': 'character varying',
+                    'DATE': 'date',
+                    'DATETIME': 'timestamp without time zone',
+                    'DECIMAL': 'numeric',
+                    'TEXT': 'text'
+                }
+            },
+            'connections': {
+                'source': {'pool_size': 5, 'connect_timeout': 10},
+                'replication': {'pool_size': 10, 'max_overflow': 20},
+                'analytics': {'application_name': 'etl_pipeline_test'}
+            }
+        },
+        tables={
+            'tables': {
+                'patient': {
+                    'priority': 'high',
+                    'incremental_column': 'DateModified',
+                    'batch_size': 1000,
+                    'table_importance': 'critical'
+                },
+                'appointment': {
+                    'priority': 'high',
+                    'incremental_column': 'AptDateTime',
+                    'batch_size': 500,
+                    'table_importance': 'high'
+                },
+                'procedure': {
+                    'priority': 'medium',
+                    'incremental_column': 'ProcDate',
+                    'batch_size': 2000,
+                    'table_importance': 'high'
+                }
+            }
+        },
+        env={
+            # Test environment variables (TEST_ prefixed)
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+            'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+            'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+            'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
+            
+            'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+            'TEST_MYSQL_REPLICATION_PORT': '3306',
+            'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+            'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+            
+            'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+        }
+    )
+    
+    # Create test settings with provider injection
+    return create_test_settings(
+        pipeline_config=test_provider.configs['pipeline'],
+        tables_config=test_provider.configs['tables'],
+        env_vars=test_provider.configs['env']
+    )
+
+
+@pytest.fixture
 def postgres_schema_test_settings():
-    """Create test settings specifically for PostgreSQL schema testing.
+    """Create test settings specifically for PostgreSQL schema testing (legacy version).
     
     This fixture ensures we're using the test environment by:
     1. Setting ETL_ENVIRONMENT=test to ensure test environment detection
@@ -94,68 +181,50 @@ def mock_postgres_schema_engines():
 
 
 @pytest.fixture
-def mock_schema_discovery():
-    """Mock SchemaDiscovery for testing."""
+def mock_config_reader():
+    """Mock ConfigReader for testing (replaces SchemaDiscovery)."""
     if not POSTGRES_SCHEMA_AVAILABLE:
-        pytest.skip("SchemaDiscovery not available")
+        pytest.skip("ConfigReader not available")
     
-    discovery = MagicMock(spec=SchemaDiscovery)
+    config_reader = MagicMock(spec=ConfigReader)
     
-    # Mock get_table_schema method
-    def mock_get_table_schema(table_name):
-        # Return different schemas based on table name
+    # Mock get_table_config method
+    def mock_get_table_config(table_name):
+        # Return different configurations based on table name
         if table_name == 'patient':
             return {
-                'create_statement': '''
-                    CREATE TABLE patient (
-                        PatNum INT AUTO_INCREMENT PRIMARY KEY,
-                        LName VARCHAR(100),
-                        FName VARCHAR(100),
-                        MiddleI VARCHAR(10),
-                        Preferred VARCHAR(100),
-                        PatStatus TINYINT,
-                        Gender TINYINT,
-                        Position TINYINT,
-                        Birthdate DATE,
-                        SSN VARCHAR(20),
-                        IsActive TINYINT,
-                        IsDeleted TINYINT
-                    )
-                '''
+                'priority': 'high',
+                'incremental_column': 'DateModified',
+                'batch_size': 1000,
+                'table_importance': 'critical',
+                'extraction_strategy': 'incremental'
             }
         elif table_name == 'appointment':
             return {
-                'create_statement': '''
-                    CREATE TABLE appointment (
-                        AptNum INT AUTO_INCREMENT PRIMARY KEY,
-                        PatNum INT,
-                        AptDateTime DATETIME,
-                        AptStatus TINYINT,
-                        DateTStamp DATETIME,
-                        Notes TEXT,
-                        IsConfirmed TINYINT,
-                        IsCancelled TINYINT
-                    )
-                '''
+                'priority': 'high',
+                'incremental_column': 'AptDateTime',
+                'batch_size': 500,
+                'table_importance': 'high',
+                'extraction_strategy': 'incremental'
             }
-        elif table_name == 'boolean_test':
+        elif table_name == 'procedure':
             return {
-                'create_statement': '''
-                    CREATE TABLE boolean_test (
-                        ID INT AUTO_INCREMENT PRIMARY KEY,
-                        Name VARCHAR(100),
-                        IsActive TINYINT,
-                        IsDeleted TINYINT,
-                        Status TINYINT,
-                        Priority TINYINT
-                    )
-                '''
+                'priority': 'medium',
+                'incremental_column': 'ProcDate',
+                'batch_size': 2000,
+                'table_importance': 'high',
+                'extraction_strategy': 'incremental'
             }
         else:
-            return None
+            return {}
     
-    discovery.get_table_schema = mock_get_table_schema
-    return discovery
+    config_reader.get_table_config = mock_get_table_config
+    config_reader.get_tables_by_importance.return_value = ['patient', 'appointment']
+    config_reader.get_tables_by_strategy.return_value = ['patient', 'appointment', 'procedure']
+    config_reader.get_large_tables.return_value = ['procedure']
+    config_reader.get_monitored_tables.return_value = ['patient']
+    
+    return config_reader
 
 
 @pytest.fixture
@@ -165,32 +234,33 @@ def sample_mysql_schemas():
         'patient': {
             'create_statement': '''
                 CREATE TABLE patient (
-                    PatNum INT AUTO_INCREMENT PRIMARY KEY,
-                    LName VARCHAR(100),
-                    FName VARCHAR(100),
-                    MiddleI VARCHAR(10),
-                    Preferred VARCHAR(100),
-                    PatStatus TINYINT,
-                    Gender TINYINT,
-                    Position TINYINT,
-                    Birthdate DATE,
-                    SSN VARCHAR(20),
-                    IsActive TINYINT,
-                    IsDeleted TINYINT
+                    `PatNum` INT AUTO_INCREMENT,
+                    `LName` VARCHAR(100),
+                    `FName` VARCHAR(100),
+                    `MiddleI` VARCHAR(10),
+                    `Preferred` VARCHAR(100),
+                    `PatStatus` TINYINT,
+                    `Gender` TINYINT,
+                    `Position` TINYINT,
+                    `Birthdate` DATE,
+                    `SSN` VARCHAR(20),
+                    `IsActive` TINYINT,
+                    `IsDeleted` TINYINT,
+                    PRIMARY KEY (`PatNum`)
                 )
             '''
         },
         'appointment': {
             'create_statement': '''
                 CREATE TABLE appointment (
-                    AptNum INT AUTO_INCREMENT PRIMARY KEY,
-                    PatNum INT,
-                    AptDateTime DATETIME,
-                    AptStatus TINYINT,
-                    DateTStamp DATETIME,
-                    Notes TEXT,
-                    IsConfirmed TINYINT,
-                    IsCancelled TINYINT
+                    `AptNum` INT AUTO_INCREMENT PRIMARY KEY,
+                    `PatNum` INT,
+                    `AptDateTime` DATETIME,
+                    `AptStatus` TINYINT,
+                    `DateTStamp` DATETIME,
+                    `Notes` TEXT,
+                    `IsConfirmed` TINYINT,
+                    `IsCancelled` TINYINT
                 )
             '''
         },
@@ -211,12 +281,12 @@ def sample_mysql_schemas():
         'boolean_test': {
             'create_statement': '''
                 CREATE TABLE boolean_test (
-                    ID INT AUTO_INCREMENT PRIMARY KEY,
-                    Name VARCHAR(100),
-                    IsActive TINYINT,
-                    IsDeleted TINYINT,
-                    Status TINYINT,
-                    Priority TINYINT
+                    `ID` INT AUTO_INCREMENT PRIMARY KEY,
+                    `Name` VARCHAR(100),
+                    `IsActive` TINYINT,
+                    `IsDeleted` TINYINT,
+                    `Status` TINYINT,
+                    `Priority` TINYINT
                 )
             '''
         }
@@ -445,8 +515,8 @@ def mock_postgres_schema_instance(mock_postgres_schema_engines):
 
 
 @pytest.fixture
-def real_postgres_schema_instance(postgres_schema_test_settings):
-    """Real PostgresSchema instance for integration testing using test environment.
+def real_postgres_schema_instance_with_settings(test_postgres_schema_settings):
+    """Real PostgresSchema instance for integration testing using Settings injection.
     
     This fixture uses the test connection methods as specified in the connection
     environment separation documentation to ensure we're connecting to test databases.
@@ -454,39 +524,67 @@ def real_postgres_schema_instance(postgres_schema_test_settings):
     if not POSTGRES_SCHEMA_AVAILABLE or not NEW_CONFIG_AVAILABLE:
         pytest.skip("PostgreSQL schema components or new configuration system not available")
     
-    # Use test connection methods as specified in connection_environment_separation.md
-    # These methods automatically use TEST_* environment variables from .env file
-    mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
-    postgres_engine = ConnectionFactory.get_postgres_analytics_test_connection()
-    
-    # Extract database names from engine URLs
-    mysql_db = mysql_engine.url.database
-    postgres_db = postgres_engine.url.database
-    
-    return PostgresSchemaClass(
-        mysql_engine=mysql_engine,
-        postgres_engine=postgres_engine,
-        mysql_db=mysql_db,
-        postgres_db=postgres_db,
-        postgres_schema='raw'
-    )
+    # Mock ConnectionFactory to avoid real connections
+    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_connection_factory:
+        mock_connection_factory.get_replication_connection.return_value = MagicMock()
+        mock_connection_factory.get_analytics_raw_connection.return_value = MagicMock()
+        
+        # Create PostgresSchema instance with Settings injection
+        if PostgresSchemaClass is not None and PostgresSchema is not None:
+            return PostgresSchemaClass(
+                settings=test_postgres_schema_settings,
+                postgres_schema=PostgresSchema.RAW
+            )
+        else:
+            pytest.skip("PostgresSchemaClass not available")
 
 
 @pytest.fixture
-def real_schema_discovery_instance(postgres_schema_test_settings):
-    """Real SchemaDiscovery instance for integration testing using test environment.
+def real_postgres_schema_instance(postgres_schema_test_settings):
+    """Real PostgresSchema instance for integration testing using test environment (legacy version).
     
     This fixture uses the test connection methods as specified in the connection
     environment separation documentation to ensure we're connecting to test databases.
     """
     if not POSTGRES_SCHEMA_AVAILABLE or not NEW_CONFIG_AVAILABLE:
-        pytest.skip("SchemaDiscovery or new configuration system not available")
+        pytest.skip("PostgreSQL schema components or new configuration system not available")
     
-    # Use test connection method as specified in connection_environment_separation.md
-    # This method automatically uses TEST_* environment variables from .env file
-    mysql_engine = ConnectionFactory.get_mysql_replication_test_connection()
+    # Use unified connection methods with test settings
+    test_settings = create_test_settings()
+    if ConnectionFactory is not None:
+        mysql_engine = ConnectionFactory.get_replication_connection(test_settings)
+        postgres_engine = ConnectionFactory.get_analytics_raw_connection(test_settings)
+    else:
+        pytest.skip("ConnectionFactory not available")
+    
+    # Extract database names from engine URLs
     mysql_db = mysql_engine.url.database
-    return SchemaDiscovery(mysql_engine, mysql_db)
+    postgres_db = postgres_engine.url.database
+    
+    if PostgresSchemaClass is not None and PostgresSchema is not None:
+        return PostgresSchemaClass(
+            settings=test_settings,
+            postgres_schema=PostgresSchema.RAW
+        )
+    else:
+        pytest.skip("PostgresSchemaClass not available")
+
+
+@pytest.fixture
+def real_config_reader_instance(test_postgres_schema_settings):
+    """Real ConfigReader instance for integration testing using Settings injection.
+    
+    This fixture uses the test configuration as specified in the connection
+    environment separation documentation to ensure we're using test configuration.
+    """
+    if not POSTGRES_SCHEMA_AVAILABLE or not NEW_CONFIG_AVAILABLE:
+        pytest.skip("ConfigReader or new configuration system not available")
+    
+    # Create ConfigReader instance with test configuration
+    if ConfigReader is not None:
+        return ConfigReader()
+    else:
+        pytest.skip("ConfigReader not available")
 
 
 @pytest.fixture
@@ -507,4 +605,64 @@ def postgres_schema_error_cases():
         'empty_schema': {
             'create_statement': ''
         }
+    }
+
+
+@pytest.fixture
+def config_reader_with_settings(test_postgres_schema_settings):
+    """ConfigReader with Settings injection for testing."""
+    if not POSTGRES_SCHEMA_AVAILABLE:
+        pytest.skip("ConfigReader not available")
+    
+    # Mock the ConfigReader to avoid real file operations
+    with patch('etl_pipeline.config.config_reader.ConfigReader') as mock_config_reader_class:
+        mock_config_reader = MagicMock()
+        mock_config_reader_class.return_value = mock_config_reader
+        
+        # Configure mock ConfigReader with test data
+        mock_config_reader.get_table_config.return_value = {
+            'priority': 'high',
+            'incremental_column': 'DateModified',
+            'batch_size': 1000,
+            'table_importance': 'critical'
+        }
+        mock_config_reader.get_tables_by_importance.return_value = ['patient', 'appointment']
+        mock_config_reader.get_tables_by_strategy.return_value = ['patient', 'appointment', 'procedure']
+        mock_config_reader.get_large_tables.return_value = ['procedure']
+        mock_config_reader.get_monitored_tables.return_value = ['patient']
+        
+        return mock_config_reader
+
+
+@pytest.fixture
+def connection_factory_with_schema_settings(test_postgres_schema_settings):
+    """ConnectionFactory with Settings injection for PostgreSQL schema testing."""
+    # Mock the ConnectionFactory methods to return mock engines
+    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+        mock_factory.get_replication_connection.return_value = MagicMock()
+        mock_factory.get_analytics_raw_connection.return_value = MagicMock()
+        mock_factory.get_analytics_staging_connection.return_value = MagicMock()
+        mock_factory.get_analytics_intermediate_connection.return_value = MagicMock()
+        mock_factory.get_analytics_marts_connection.return_value = MagicMock()
+        
+        yield mock_factory
+
+
+@pytest.fixture
+def schema_configs_with_settings(test_postgres_schema_settings):
+    """Test PostgreSQL schema configurations using Settings injection."""
+    # Test schema configuration from settings
+    schema_config = test_postgres_schema_settings.pipeline_config.get('postgres_schema', {})
+    
+    return {
+        'default_schema': schema_config.get('default_schema', 'raw'),
+        'type_conversion': schema_config.get('type_conversion', {
+            'TINYINT': 'boolean',
+            'INT': 'integer',
+            'VARCHAR': 'character varying',
+            'DATE': 'date',
+            'DATETIME': 'timestamp without time zone',
+            'DECIMAL': 'numeric',
+            'TEXT': 'text'
+        })
     } 
