@@ -1,0 +1,15 @@
+pipeline:
+  connections:
+    source:
+      pool_size: 5
+    replication:
+      pool_size: 5
+    analytics:
+      application_name: etl_pipeline_test
+  logging:
+    level: DEBUG
+    file:
+      path: test.log
+  performance:
+    max_workers: 4
+    batch_size: 1000 
