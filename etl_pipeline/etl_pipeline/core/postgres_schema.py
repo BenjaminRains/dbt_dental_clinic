@@ -15,6 +15,11 @@ from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.connections import ConnectionFactory
 
+# Import custom exceptions for structured error handling
+from etl_pipeline.exceptions.schema import SchemaTransformationError, SchemaValidationError, TypeConversionError
+from etl_pipeline.exceptions.database import DatabaseConnectionError, DatabaseTransactionError, DatabaseQueryError
+from etl_pipeline.exceptions.data import DataExtractionError
+
 logger = logging.getLogger(__name__)
 
 class PostgresSchema:
@@ -24,18 +29,25 @@ class PostgresSchema:
     This class works with the new Settings-centric architecture and automatically
     uses the correct environment (production/test) based on Settings detection.
     
+    Connection Architecture Compliance:
+    - ✅ Uses Settings injection for environment-agnostic operation
+    - ✅ Uses unified ConnectionFactory API with Settings injection
+    - ✅ Uses Settings-based configuration methods
+    - ✅ No direct environment variable access
+    - ✅ Uses PostgresSchema enum for type safety
+    
     Integration with SimpleMySQLReplicator:
     - Uses static table configuration from tables.yml
     - Generates schema information from MySQL replication database
     - Provides schema conversion for PostgreSQL analytics database
     """
     
-    def __init__(self, postgres_schema: str = 'raw', settings=None):
+    def __init__(self, postgres_schema: ConfigPostgresSchema = ConfigPostgresSchema.RAW, settings=None):
         """
         Initialize PostgreSQL schema adaptation using new Settings-centric architecture.
         
         Args:
-            postgres_schema: PostgreSQL schema name (default: 'raw')
+            postgres_schema: PostgreSQL schema enum (default: PostgresSchema.RAW)
             settings: Settings instance (uses global if None)
         """
         # Use provided settings or get global settings
@@ -47,13 +59,11 @@ class PostgresSchema:
         
         # Get database names from settings
         mysql_config = self.settings.get_replication_connection_config()
-        postgres_config = self.settings.get_analytics_connection_config(
-            ConfigPostgresSchema(postgres_schema)
-        )
+        postgres_config = self.settings.get_analytics_connection_config(postgres_schema)
         
         self.mysql_db = mysql_config.get('database', 'opendental_replication')
         self.postgres_db = postgres_config.get('database', 'opendental_analytics')
-        self.postgres_schema = postgres_schema
+        self.postgres_schema = postgres_schema.value  # Use enum value for string operations
         self._schema_cache = {}
         
         # Initialize inspectors
@@ -61,7 +71,7 @@ class PostgresSchema:
         self.postgres_inspector = inspect(self.postgres_engine)
         
         # Log initialization info
-        logger.info(f"PostgresSchema initialized with schema: {postgres_schema}")
+        logger.info(f"PostgresSchema initialized with schema: {postgres_schema.value}")
         logger.debug(f"MySQL DB: {self.mysql_db}, PostgreSQL DB: {self.postgres_db}")
     
     def get_table_schema_from_mysql(self, table_name: str) -> Dict:
@@ -82,7 +92,11 @@ class PostgresSchema:
                 row = result.fetchone()
                 
                 if not row:
-                    raise ValueError(f"Table {table_name} not found in {self.mysql_db}")
+                    raise SchemaValidationError(
+                        message=f"Table {table_name} not found in {self.mysql_db}",
+                        table_name=table_name,
+                        validation_details={"database": self.mysql_db, "error_type": "table_not_found"}
+                    )
                 
                 create_statement = row[1]
                 
@@ -138,9 +152,33 @@ class PostgresSchema:
                 
                 return schema_info
                 
-        except Exception as e:
-            logger.error(f"Error getting schema for {table_name}: {str(e)}")
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed for {table_name}: {e}")
+            raise DataExtractionError(
+                message=f"Failed to connect to MySQL database for schema extraction",
+                table_name=table_name,
+                details={"database": self.mysql_db, "connection_type": "mysql"},
+                original_exception=e
+            )
+        except DatabaseQueryError as e:
+            logger.error(f"Database query failed for {table_name}: {e}")
+            raise DataExtractionError(
+                message=f"Failed to execute schema extraction queries",
+                table_name=table_name,
+                details={"database": self.mysql_db, "query_type": "schema_metadata"},
+                original_exception=e
+            )
+        except SchemaValidationError:
+            # Re-raise schema validation errors as-is
             raise
+        except Exception as e:
+            logger.error(f"Unexpected error getting schema for {table_name}: {str(e)}")
+            raise DataExtractionError(
+                message=f"Unexpected error during schema extraction",
+                table_name=table_name,
+                details={"database": self.mysql_db, "error_type": "unexpected"},
+                original_exception=e
+            )
     
     def _calculate_schema_hash(self, create_statement: str) -> str:
         """Calculate hash of create statement for change detection."""
@@ -188,8 +226,20 @@ class PostgresSchema:
             logger.debug(f"Column {table_name}.{column_name} ({mysql_type}) converted to {pg_type}")
             return pg_type
             
+        except DatabaseConnectionError as e:
+            logger.warning(f"Database connection failed for column analysis {table_name}.{column_name}: {str(e)}")
+            # Fall back to standard type conversion
+            pg_type = self._convert_mysql_type_standard(mysql_type)
+            logger.debug(f"Fallback conversion for {table_name}.{column_name} ({mysql_type}) to {pg_type}")
+            return pg_type
+        except DatabaseQueryError as e:
+            logger.warning(f"Database query failed for column analysis {table_name}.{column_name}: {str(e)}")
+            # Fall back to standard type conversion
+            pg_type = self._convert_mysql_type_standard(mysql_type)
+            logger.debug(f"Fallback conversion for {table_name}.{column_name} ({mysql_type}) to {pg_type}")
+            return pg_type
         except Exception as e:
-            logger.warning(f"Could not analyze column data for {table_name}.{column_name}: {str(e)}")
+            logger.warning(f"Unexpected error analyzing column data for {table_name}.{column_name}: {str(e)}")
             # Fall back to standard type conversion
             pg_type = self._convert_mysql_type_standard(mysql_type)
             logger.debug(f"Fallback conversion for {table_name}.{column_name} ({mysql_type}) to {pg_type}")
@@ -281,16 +331,30 @@ class PostgresSchema:
             
             # Check if we have any columns
             if not pg_columns.strip():
-                raise ValueError(f"No valid columns found in MySQL schema for table {table_name}")
+                raise SchemaTransformationError(
+                    message=f"No valid columns found in MySQL schema for table {table_name}",
+                    table_name=table_name,
+                    mysql_schema=mysql_schema,
+                    details={"error_type": "no_valid_columns", "schema_type": "mysql"}
+                )
             
             # Create the final CREATE TABLE statement
             pg_create = f"CREATE TABLE {self.postgres_schema}.{table_name} (\n{pg_columns}\n)"
             
             return pg_create
             
-        except Exception as e:
-            logger.error(f"Error adapting schema for {table_name}: {str(e)}")
+        except SchemaTransformationError:
+            # Re-raise schema transformation errors as-is
             raise
+        except Exception as e:
+            logger.error(f"Unexpected error adapting schema for {table_name}: {str(e)}")
+            raise SchemaTransformationError(
+                message=f"Unexpected error during schema transformation",
+                table_name=table_name,
+                mysql_schema=mysql_schema,
+                details={"error_type": "unexpected", "schema_type": "mysql"},
+                original_exception=e
+            )
     
     def _convert_mysql_to_postgres_intelligent(self, mysql_create: str, table_name: str) -> str:
         """Convert MySQL CREATE statement to PostgreSQL syntax with intelligent type analysis."""
@@ -364,8 +428,17 @@ class PostgresSchema:
                 logger.info(f"Created PostgreSQL table {self.postgres_schema}.{table_name}")
                 return True
                 
+        except SchemaTransformationError as e:
+            logger.error(f"Schema transformation failed for {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed for {table_name}: {e}")
+            return False
+        except DatabaseTransactionError as e:
+            logger.error(f"Database transaction failed for {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error creating PostgreSQL table {table_name}: {str(e)}")
+            logger.error(f"Unexpected error creating PostgreSQL table {table_name}: {str(e)}")
             return False
     
     def verify_schema(self, table_name: str, mysql_schema: Dict) -> bool:
@@ -457,6 +530,15 @@ class PostgresSchema:
             
             return True
             
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed for {table_name}: {e}")
+            return False
+        except DatabaseQueryError as e:
+            logger.error(f"Database query failed for {table_name}: {e}")
+            return False
+        except SchemaValidationError as e:
+            logger.error(f"Schema validation failed for {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error verifying schema for {table_name}: {str(e)}")
+            logger.error(f"Unexpected error verifying schema for {table_name}: {str(e)}")
             return False 
