@@ -49,7 +49,7 @@ def load_test_environment():
         print(f"Loaded environment from: {etl_env_path}")
     else:
         print(f"No .env file found at: {etl_env_path}")
-        print("Please create etl_pipeline/.env from etl_pipeline/.env.template")
+        print("Please create etl_pipeline/.env_production from etl_pipeline/docs/env_production.template")
         sys.exit(1)
 
 # Load environment at module import time
