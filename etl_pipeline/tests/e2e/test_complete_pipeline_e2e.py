@@ -34,9 +34,11 @@ class TestCompletePipelineE2E:
         class E2ETestDataManager:
             def __init__(self):
                 # Real connections to all databases in the pipeline (TEST ENVIRONMENT)
-                self.source_engine = ConnectionFactory.get_opendental_source_test_connection()
-                self.replication_engine = ConnectionFactory.get_mysql_replication_test_connection()
-                self.analytics_engine = ConnectionFactory.get_opendental_analytics_raw_test_connection()
+                from etl_pipeline.config import create_test_settings
+                test_settings = create_test_settings()
+                self.source_engine = ConnectionFactory.get_source_connection(test_settings)
+                self.replication_engine = ConnectionFactory.get_replication_connection(test_settings)
+                self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(test_settings)
                 
                 # Test data tracking
                 self.test_patients = []
