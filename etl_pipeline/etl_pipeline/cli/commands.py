@@ -58,6 +58,11 @@ from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config import get_settings
 from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
 
+# Import custom exceptions for structured error handling
+from etl_pipeline.exceptions.database import DatabaseConnectionError, DatabaseTransactionError
+from etl_pipeline.exceptions.data import DataExtractionError, DataLoadingError
+from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
+
 logger = get_logger(__name__)
 
 # Global variable for test settings injection (used by tests)
@@ -85,7 +90,7 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
     try:
         # Validate parallel workers
         if parallel < 1 or parallel > 20:
-            click.echo("Error: Parallel workers must be between 1 and 20")
+            click.echo("❌ Error: Parallel workers must be between 1 and 20")
             raise click.Abort()
         
         # Initialize pipeline orchestrator with test settings if available
@@ -104,7 +109,7 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
         
         # Initialize connections for actual execution
         if not orchestrator.initialize_connections():
-            click.echo("Failed to initialize connections")
+            click.echo("❌ Failed to initialize connections")
             raise click.Abort()
             
         try:
@@ -119,7 +124,7 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
                 for table in tables:
                     success = orchestrator.run_pipeline_for_table(table, force_full=force)
                     if not success:
-                        click.echo(f"Failed to process table: {table}")
+                        click.echo(f"❌ Failed to process table: {table}")
                         raise click.Abort()
             else:
                 # Process all tables by priority
@@ -132,7 +137,7 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
                 # Check results
                 for level, table_results in results.items():
                     if table_results['failed']:
-                        click.echo(f"Failed to process tables in {level}: {', '.join(table_results['failed'])}")
+                        click.echo(f"❌ Failed to process tables in {level}: {', '.join(table_results['failed'])}")
                         raise click.Abort()
                         
             click.echo("✅ Pipeline completed successfully")
@@ -140,9 +145,33 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
         finally:
             orchestrator.cleanup()
             
+    except ConfigurationError as e:
+        logger.error(f"Configuration error in pipeline: {e}")
+        click.echo(f"❌ Configuration Error: {e}")
+        raise click.Abort()
+    except EnvironmentError as e:
+        logger.error(f"Environment error in pipeline: {e}")
+        click.echo(f"❌ Environment Error: {e}")
+        raise click.Abort()
+    except DataExtractionError as e:
+        logger.error(f"Data extraction error in pipeline: {e}")
+        click.echo(f"❌ Data Extraction Error: {e}")
+        raise click.Abort()
+    except DataLoadingError as e:
+        logger.error(f"Data loading error in pipeline: {e}")
+        click.echo(f"❌ Data Loading Error: {e}")
+        raise click.Abort()
+    except DatabaseConnectionError as e:
+        logger.error(f"Database connection error in pipeline: {e}")
+        click.echo(f"❌ Database Connection Error: {e}")
+        raise click.Abort()
+    except DatabaseTransactionError as e:
+        logger.error(f"Database transaction error in pipeline: {e}")
+        click.echo(f"❌ Database Transaction Error: {e}")
+        raise click.Abort()
     except Exception as e:
-        logger.error(f"Pipeline failed: {str(e)}")
-        click.echo(f"Error: {str(e)}")
+        logger.error(f"Unexpected error in pipeline: {str(e)}")
+        click.echo(f"❌ Unexpected Error: {str(e)}")
         raise click.Abort()
 
 
@@ -170,6 +199,18 @@ def _execute_dry_run(orchestrator: PipelineOrchestrator, config: Optional[str],
             click.echo("❌ Connection test failed")
             click.echo("⚠️  Pipeline would fail during execution")
             return
+    except ConfigurationError as e:
+        click.echo(f"❌ Configuration Error: {e}")
+        click.echo("⚠️  Pipeline would fail during execution")
+        return
+    except EnvironmentError as e:
+        click.echo(f"❌ Environment Error: {e}")
+        click.echo("⚠️  Pipeline would fail during execution")
+        return
+    except DatabaseConnectionError as e:
+        click.echo(f"❌ Database Connection Error: {e}")
+        click.echo("⚠️  Pipeline would fail during execution")
+        return
     except Exception as e:
         click.echo(f"❌ Connection test failed: {str(e)}")
         click.echo("⚠️  Pipeline would fail during execution")
@@ -185,7 +226,7 @@ def _execute_dry_run(orchestrator: PipelineOrchestrator, config: Optional[str],
         
         # Get table information from settings
         settings = orchestrator.settings
-        importance_levels = ['critical', 'important', 'audit', 'reference']
+        importance_levels = ['important', 'audit', 'standard']
         
         total_tables = 0
         for importance in importance_levels:
@@ -203,6 +244,10 @@ def _execute_dry_run(orchestrator: PipelineOrchestrator, config: Optional[str],
                         for table in tables_in_level[:3]:
                             click.echo(f"    - {table}")
                         click.echo(f"    ... and {len(tables_in_level) - 3} more")
+            except ConfigurationError as e:
+                click.echo(f"  • {importance.upper()}: Configuration Error - {e}")
+            except EnvironmentError as e:
+                click.echo(f"  • {importance.upper()}: Environment Error - {e}")
             except Exception as e:
                 click.echo(f"  • {importance.upper()}: Error getting tables - {str(e)}")
         
@@ -213,7 +258,7 @@ def _execute_dry_run(orchestrator: PipelineOrchestrator, config: Optional[str],
     if tables:
         click.echo("  • Sequential processing of specified tables")
     else:
-        click.echo("  • Critical tables: Parallel processing for speed")
+        click.echo("  • Important tables: Parallel processing for speed")
         click.echo("  • Other tables: Sequential processing to manage resources")
         click.echo(f"  • Max parallel workers: {parallel}")
     
@@ -243,10 +288,9 @@ def status(config: str, format: str, table: Optional[str], watch: bool, output: 
         with open(config, 'r') as f:
             config_data = yaml.safe_load(f)
         
-        # Initialize components with analytics engine for persistence
+        # Initialize components with settings for persistence
         settings = get_settings()
-        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
-        monitor = UnifiedMetricsCollector(analytics_engine=analytics_engine, settings=settings)
+        monitor = UnifiedMetricsCollector(settings=settings)
         
         # Get pipeline status
         status_data = monitor.get_pipeline_status(table=table)
@@ -275,8 +319,21 @@ def status(config: str, format: str, table: Optional[str], watch: bool, output: 
             except KeyboardInterrupt:
                 click.echo("\nStopped watching.")
                 
+    except ConfigurationError as e:
+        logger.error(f"Configuration error in status command: {e}")
+        click.echo(f"❌ Configuration Error: {e}")
+        raise click.ClickException(str(e))
+    except EnvironmentError as e:
+        logger.error(f"Environment error in status command: {e}")
+        click.echo(f"❌ Environment Error: {e}")
+        raise click.ClickException(str(e))
+    except DatabaseConnectionError as e:
+        logger.error(f"Database connection error in status command: {e}")
+        click.echo(f"❌ Database Connection Error: {e}")
+        raise click.ClickException(str(e))
     except Exception as e:
         logger.error(f"Failed to get pipeline status: {str(e)}")
+        click.echo(f"❌ Unexpected Error: {str(e)}")
         raise click.ClickException(str(e))
 
 def _display_status(status_data: Dict[str, Any], format: str) -> None:
@@ -356,6 +413,19 @@ def test_connections() -> None:
             if engine:
                 engine.dispose()
                 
+    except ConfigurationError as e:
+        logger.error(f"Configuration error in connection test: {e}")
+        click.echo(f"❌ Configuration Error: {e}")
+        raise click.ClickException(str(e))
+    except EnvironmentError as e:
+        logger.error(f"Environment error in connection test: {e}")
+        click.echo(f"❌ Environment Error: {e}")
+        raise click.ClickException(str(e))
+    except DatabaseConnectionError as e:
+        logger.error(f"Database connection error in connection test: {e}")
+        click.echo(f"❌ Database Connection Error: {e}")
+        raise click.ClickException(str(e))
     except Exception as e:
         logger.error(f"Connection test failed: {str(e)}")
+        click.echo(f"❌ Unexpected Error: {str(e)}")
         raise click.ClickException(str(e))
