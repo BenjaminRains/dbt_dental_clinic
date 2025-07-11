@@ -107,12 +107,10 @@ What's Kept:
 
 This simplified version focuses on the actual ETL operations needed by the pipeline.
 """
-import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from sqlalchemy import text, inspect
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
+from sqlalchemy.exc import SQLAlchemyError
 import os
 import yaml
 
@@ -120,6 +118,12 @@ from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as Co
 from etl_pipeline.core.postgres_schema import PostgresSchema
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config.logging import get_logger
+from etl_pipeline.config.settings import Settings
+
+# Import custom exceptions for structured error handling
+from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError, DatabaseQueryError
+from ..exceptions.data import DataLoadingError
+from ..exceptions.configuration import ConfigurationError
 
 logger = get_logger(__name__)
 
@@ -142,63 +146,88 @@ class PostgresLoader:
     - Supports both production and test environments via explicit method calls
     """
     
-    def __init__(self, tables_config_path: Optional[str] = None, use_test_environment: bool = False):
+    def __init__(self, tables_config_path: Optional[str] = None, use_test_environment: bool = False, settings: Optional[Settings] = None):
         """
         Initialize the PostgreSQL loader using new settings-centric architecture.
         
         Args:
             tables_config_path: Path to tables.yml (uses default if None)
             use_test_environment: Whether to use test environment connections (default: False)
+            settings: Optional Settings instance to use (for test injection)
         """
-        # Set test environment if requested
-        if use_test_environment:
-            os.environ['ETL_ENVIRONMENT'] = 'test'
-            logger.info("Set ETL_ENVIRONMENT=test for test database connections")
-        
-        # Set tables config path
-        if tables_config_path is None:
-            tables_config_path = os.path.join(
-                os.path.dirname(__file__), 
-                '..', 
-                'config', 
-                'tables.yml'
+        try:
+            # Use injected settings if provided
+            if settings is not None:
+                self.settings = settings
+                logger.info("Using injected Settings instance for database connections")
+            elif use_test_environment:
+                from etl_pipeline.config import create_test_settings
+                self.settings = create_test_settings()
+                logger.info("Using test environment settings for database connections")
+            else:
+                self.settings = get_settings()
+            
+            # Set tables config path
+            if tables_config_path is None:
+                tables_config_path = os.path.join(
+                    os.path.dirname(__file__), 
+                    '..', 
+                    'config', 
+                    'tables.yml'
+                )
+            self.tables_config_path = tables_config_path
+            
+            # Load table configuration
+            self.table_configs = self._load_configuration()
+            
+            # Get database connections using unified interface with Settings injection
+            self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+            self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
+            
+            # Log which environment we're using
+            environment = self.settings.environment.upper()
+            logger.info(f"PostgresLoader initialized with {environment} environment connections")
+            
+            # Get database configurations from settings
+            replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+            analytics_config = self.settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
+            
+            # Use actual database names from settings (supports both production and test environments)
+            self.replication_db = replication_config.get('database', 'opendental_replication')
+            self.analytics_db = analytics_config.get('database', 'opendental_analytics')
+            self.analytics_schema = analytics_config.get('schema', 'raw')
+            
+            # Initialize schema adapter using new constructor
+            # Convert string schema to enum for PostgresSchema constructor
+            schema_enum = ConfigPostgresSchema.RAW  # Default to RAW
+            if self.analytics_schema == 'raw':
+                schema_enum = ConfigPostgresSchema.RAW
+            elif self.analytics_schema == 'staging':
+                schema_enum = ConfigPostgresSchema.STAGING
+            elif self.analytics_schema == 'intermediate':
+                schema_enum = ConfigPostgresSchema.INTERMEDIATE
+            elif self.analytics_schema == 'marts':
+                schema_enum = ConfigPostgresSchema.MARTS
+            
+            self.schema_adapter = PostgresSchema(
+                postgres_schema=schema_enum,
+                settings=self.settings
             )
-        self.tables_config_path = tables_config_path
-        
-        # Load table configuration
-        self.table_configs = self._load_configuration()
-        
-        # Get settings instance (will automatically detect environment from ETL_ENVIRONMENT)
-        self.settings = get_settings()
-        
-        # Get database connections using unified interface with Settings injection
-        self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
-        self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
-        
-        # Log which environment we're using
-        environment = self.settings.environment.upper()
-        logger.info(f"PostgresLoader initialized with {environment} environment connections")
-        
-        # Get database configurations from settings
-        replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
-        analytics_config = self.settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
-        
-        # Use actual database names from settings (supports both production and test environments)
-        self.replication_db = replication_config.get('database', 'opendental_replication')
-        self.analytics_db = analytics_config.get('database', 'opendental_analytics')
-        self.analytics_schema = analytics_config.get('schema', 'raw')
-        
-        # Initialize schema adapter using new constructor
-        self.schema_adapter = PostgresSchema(
-            postgres_schema=self.analytics_schema,
-            settings=self.settings
-        )
-        
-        self.target_schema = analytics_config.get('schema', 'raw')
-        self.staging_schema = replication_config.get('schema', 'raw')
-        
-        logger.info(f"PostgresLoader initialized with {len(self.table_configs)} table configurations")
-        logger.info(f"Replication DB: {self.replication_db}, Analytics DB: {self.analytics_db}.{self.analytics_schema}")
+            
+            self.target_schema = analytics_config.get('schema', 'raw')
+            self.staging_schema = replication_config.get('schema', 'raw')
+            
+            logger.info(f"PostgresLoader initialized with {len(self.table_configs)} table configurations")
+            
+        except ConfigurationError as e:
+            logger.error(f"Configuration error in PostgresLoader initialization: {e}")
+            raise
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection error in PostgresLoader initialization: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in PostgresLoader initialization: {str(e)}")
+            raise
     
     def _load_configuration(self) -> Dict:
         """Load table configuration from tables.yml."""
@@ -211,23 +240,25 @@ class PostgresLoader:
             return tables
             
         except FileNotFoundError:
-            logger.error(f"Configuration file not found: {self.tables_config_path}")
-            raise
+            raise ConfigurationError(
+                message=f"Configuration file not found: {self.tables_config_path}",
+                config_file=self.tables_config_path,
+                details={"error_type": "file_not_found"}
+            )
         except Exception as e:
-            logger.error(f"Failed to load configuration from {self.tables_config_path}: {e}")
-            raise
+            raise ConfigurationError(
+                message=f"Failed to load configuration from {self.tables_config_path}",
+                config_file=self.tables_config_path,
+                details={"error": str(e)}
+            )
     
     def get_table_config(self, table_name: str) -> Dict:
-        """
-        Get configuration for a specific table.
-        
-        Args:
-            table_name: Name of the table
-            
-        Returns:
-            Dict: Table configuration
-        """
-        return self.table_configs.get(table_name, {})
+        """Get table configuration."""
+        config = self.table_configs.get(table_name, {})
+        if not config:
+            logger.warning(f"No configuration found for table {table_name}")
+            return {}
+        return config
     
     def load_table(self, table_name: str, force_full: bool = False) -> bool:
         """
@@ -306,8 +337,20 @@ class PostgresLoader:
             
             return True
                 
+        except DataLoadingError as e:
+            logger.error(f"Data loading failed for {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed for {table_name}: {e}")
+            return False
+        except DatabaseTransactionError as e:
+            logger.error(f"Database transaction failed for {table_name}: {e}")
+            return False
+        except DatabaseQueryError as e:
+            logger.error(f"Database query failed for {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error loading table {table_name}: {str(e)}")
+            logger.error(f"Unexpected error loading table {table_name}: {str(e)}")
             return False
     
     def load_table_chunked(self, table_name: str, force_full: bool = False, 
@@ -411,8 +454,20 @@ class PostgresLoader:
             logger.info(f"Successfully loaded {total_loaded} rows to {self.analytics_schema}.{table_name}")
             return True
             
+        except DataLoadingError as e:
+            logger.error(f"Data loading failed in chunked load for table {table_name}: {e}")
+            return False
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed in chunked load for table {table_name}: {e}")
+            return False
+        except DatabaseTransactionError as e:
+            logger.error(f"Database transaction failed in chunked load for table {table_name}: {e}")
+            return False
+        except DatabaseQueryError as e:
+            logger.error(f"Database query failed in chunked load for table {table_name}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error in chunked load for table {table_name}: {str(e)}")
+            logger.error(f"Unexpected error in chunked load for table {table_name}: {str(e)}")
             return False
     
     def verify_load(self, table_name: str) -> bool:
@@ -433,18 +488,26 @@ class PostgresLoader:
             with self.analytics_engine.connect() as conn:
                 target_count = conn.execute(text(f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}")).scalar()
             
-            # Compare counts
+            source_count = source_count or 0
+            target_count = target_count or 0
+            
+            logger.info(f"Row count verification for {table_name}: source={source_count}, target={target_count}")
+            
             if source_count != target_count:
-                logger.error(
-                    f"Row count mismatch for table {table_name}: "
-                    f"source={source_count}, target={target_count}"
-                )
+                logger.error(f"Row count mismatch for {table_name}: source={source_count}, target={target_count}")
                 return False
             
+            logger.info(f"Load verification passed for {table_name}")
             return True
             
-        except SQLAlchemyError as e:
-            logger.error(f"Error verifying load for table {table_name}: {str(e)}")
+        except DatabaseConnectionError as e:
+            logger.error(f"Database connection failed during load verification for {table_name}: {e}")
+            return False
+        except DatabaseQueryError as e:
+            logger.error(f"Database query failed during load verification for {table_name}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error during load verification for {table_name}: {str(e)}")
             return False
     
     def _ensure_postgres_table(self, table_name: str, mysql_schema: Dict) -> bool:
@@ -484,8 +547,8 @@ class PostgresLoader:
         Returns:
             str: SQL query
         """
-        # Check if we're in test environment
-        is_test_environment = os.environ.get('ETL_ENVIRONMENT', 'production').lower() == 'test'
+        # Check if we're in test environment using Settings instead of direct env access
+        is_test_environment = self.settings.environment.lower() == 'test'
         
         # Only use column-specific SELECT in test environments
         if is_test_environment:
