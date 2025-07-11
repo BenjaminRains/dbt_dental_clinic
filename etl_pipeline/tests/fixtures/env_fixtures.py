@@ -2,11 +2,11 @@
 Environment fixtures for ETL pipeline tests.
 
 This module contains fixtures related to:
-- Environment variables
-- Test environment setup
-- Global settings management
+- Environment variables following connection architecture
+- Test environment setup with provider pattern
+- Global settings management with Settings injection
 - Pytest configuration
-- Database connection environment variables
+- Database connection environment variables with environment-specific naming
 """
 
 import os
@@ -15,35 +15,15 @@ import logging
 from unittest.mock import patch
 from typing import Dict, Any
 from pathlib import Path
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-def load_test_environment():
-    """Load environment variables from .env file for testing."""
-    # Try to load from etl_pipeline/.env first
-    etl_env_path = Path(__file__).parent.parent.parent / '.env'
-    if etl_env_path.exists():
-        load_dotenv(etl_env_path)
-        print(f"Loaded environment from: {etl_env_path}")
-    else:
-        # Fall back to parent directory .env
-        parent_env_path = Path(__file__).parent.parent.parent.parent / '.env'
-        if parent_env_path.exists():
-            load_dotenv(parent_env_path)
-            print(f"Loaded environment from: {parent_env_path}")
-        else:
-            print("No .env file found")
-
-# Load environment at module import time
-load_test_environment()
 
 # Import new configuration system components
 from etl_pipeline.config import (
     reset_settings,
-    create_test_settings,
+    Settings,
     DatabaseType,
     PostgresSchema
 )
+from etl_pipeline.config.providers import DictConfigProvider
 
 
 @pytest.fixture(autouse=True)
@@ -56,91 +36,197 @@ def reset_global_settings():
 
 @pytest.fixture
 def test_env_vars():
-    """Standard test environment variables for integration tests."""
+    """Test environment variables following connection architecture naming convention.
+    
+    This fixture provides test environment variables that conform to the connection architecture:
+    - Uses TEST_ prefix for test environment variables
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_test file structure
+    - Supports the provider pattern for dependency injection
+    """
     return {
-        # OpenDental Source (Test) - Read from .env file
-        'TEST_OPENDENTAL_SOURCE_HOST': os.getenv('TEST_OPENDENTAL_SOURCE_HOST', 'localhost'),
-        'TEST_OPENDENTAL_SOURCE_PORT': os.getenv('TEST_OPENDENTAL_SOURCE_PORT', '3306'),
-        'TEST_OPENDENTAL_SOURCE_DB': os.getenv('TEST_OPENDENTAL_SOURCE_DB', 'test_opendental'),
-        'TEST_OPENDENTAL_SOURCE_USER': os.getenv('TEST_OPENDENTAL_SOURCE_USER', 'test_user'),
-        'TEST_OPENDENTAL_SOURCE_PASSWORD': os.getenv('TEST_OPENDENTAL_SOURCE_PASSWORD', 'test_pass'),
+        # Environment declaration (required for fail-fast validation)
+        'ETL_ENVIRONMENT': 'test',
         
-        # MySQL Replication (Test) - Read from .env file
-        'TEST_MYSQL_REPLICATION_HOST': os.getenv('TEST_MYSQL_REPLICATION_HOST', 'localhost'),
-        'TEST_MYSQL_REPLICATION_PORT': os.getenv('TEST_MYSQL_REPLICATION_PORT', '3306'),
-        'TEST_MYSQL_REPLICATION_DB': os.getenv('TEST_MYSQL_REPLICATION_DB', 'test_opendental_replication'),
-        'TEST_MYSQL_REPLICATION_USER': os.getenv('TEST_MYSQL_REPLICATION_USER', 'test_user'),
-        'TEST_MYSQL_REPLICATION_PASSWORD': os.getenv('TEST_MYSQL_REPLICATION_PASSWORD', 'test_pass'),
+        # OpenDental Source (Test) - following architecture naming
+        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+        'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+        'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
         
-        # PostgreSQL Analytics (Test) - Read from .env file
-        'TEST_POSTGRES_ANALYTICS_HOST': os.getenv('TEST_POSTGRES_ANALYTICS_HOST', 'localhost'),
-        'TEST_POSTGRES_ANALYTICS_PORT': os.getenv('TEST_POSTGRES_ANALYTICS_PORT', '5432'),
-        'TEST_POSTGRES_ANALYTICS_DB': os.getenv('TEST_POSTGRES_ANALYTICS_DB', 'test_opendental_analytics'),
-        'TEST_POSTGRES_ANALYTICS_SCHEMA': os.getenv('TEST_POSTGRES_ANALYTICS_SCHEMA', 'raw'),
-        'TEST_POSTGRES_ANALYTICS_USER': os.getenv('TEST_POSTGRES_ANALYTICS_USER', 'test_user'),
-        'TEST_POSTGRES_ANALYTICS_PASSWORD': os.getenv('TEST_POSTGRES_ANALYTICS_PASSWORD', 'test_pass'),
+        # MySQL Replication (Test) - following architecture naming
+        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+        'TEST_MYSQL_REPLICATION_PORT': '3306',
+        'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+        'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
         
-        # Environment
-        'ETL_ENVIRONMENT': 'test'
+        # PostgreSQL Analytics (Test) - following architecture naming
+        'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+        'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+        'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+        'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+        'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
     }
 
 
 @pytest.fixture
 def production_env_vars():
-    """Production environment variables for integration tests."""
+    """Production environment variables following connection architecture naming convention.
+    
+    This fixture provides production environment variables that conform to the connection architecture:
+    - Uses non-prefixed variables for production environment
+    - Follows the environment-specific variable naming convention
+    - Matches the .env_production file structure
+    - Supports the provider pattern for dependency injection
+    """
     return {
-        'OPENDENTAL_SOURCE_HOST': os.getenv('OPENDENTAL_SOURCE_HOST', 'localhost'),
+        # Environment declaration (required for fail-fast validation)
+        'ETL_ENVIRONMENT': 'production',
+        
+        # OpenDental Source (Production) - following architecture naming
+        'OPENDENTAL_SOURCE_HOST': os.getenv('OPENDENTAL_SOURCE_HOST', 'prod-source-host'),
         'OPENDENTAL_SOURCE_PORT': os.getenv('OPENDENTAL_SOURCE_PORT', '3306'),
         'OPENDENTAL_SOURCE_DB': os.getenv('OPENDENTAL_SOURCE_DB', 'opendental'),
-        'OPENDENTAL_SOURCE_USER': os.getenv('OPENDENTAL_SOURCE_USER', 'user'),
-        'OPENDENTAL_SOURCE_PASSWORD': os.getenv('OPENDENTAL_SOURCE_PASSWORD', 'password'),
-        'MYSQL_REPLICATION_HOST': os.getenv('MYSQL_REPLICATION_HOST', 'localhost'),
+        'OPENDENTAL_SOURCE_USER': os.getenv('OPENDENTAL_SOURCE_USER', 'source_user'),
+        'OPENDENTAL_SOURCE_PASSWORD': os.getenv('OPENDENTAL_SOURCE_PASSWORD', 'source_pass'),
+        
+        # MySQL Replication (Production) - following architecture naming
+        'MYSQL_REPLICATION_HOST': os.getenv('MYSQL_REPLICATION_HOST', 'prod-repl-host'),
         'MYSQL_REPLICATION_PORT': os.getenv('MYSQL_REPLICATION_PORT', '3306'),
         'MYSQL_REPLICATION_DB': os.getenv('MYSQL_REPLICATION_DB', 'opendental_replication'),
-        'MYSQL_REPLICATION_USER': os.getenv('MYSQL_REPLICATION_USER', 'user'),
-        'MYSQL_REPLICATION_PASSWORD': os.getenv('MYSQL_REPLICATION_PASSWORD', 'password'),
-        'POSTGRES_ANALYTICS_HOST': os.getenv('POSTGRES_ANALYTICS_HOST', 'localhost'),
+        'MYSQL_REPLICATION_USER': os.getenv('MYSQL_REPLICATION_USER', 'repl_user'),
+        'MYSQL_REPLICATION_PASSWORD': os.getenv('MYSQL_REPLICATION_PASSWORD', 'repl_pass'),
+        
+        # PostgreSQL Analytics (Production) - following architecture naming
+        'POSTGRES_ANALYTICS_HOST': os.getenv('POSTGRES_ANALYTICS_HOST', 'prod-analytics-host'),
         'POSTGRES_ANALYTICS_PORT': os.getenv('POSTGRES_ANALYTICS_PORT', '5432'),
         'POSTGRES_ANALYTICS_DB': os.getenv('POSTGRES_ANALYTICS_DB', 'opendental_analytics'),
         'POSTGRES_ANALYTICS_SCHEMA': os.getenv('POSTGRES_ANALYTICS_SCHEMA', 'raw'),
         'POSTGRES_ANALYTICS_USER': os.getenv('POSTGRES_ANALYTICS_USER', 'analytics_user'),
-        'POSTGRES_ANALYTICS_PASSWORD': os.getenv('POSTGRES_ANALYTICS_PASSWORD', 'password'),
-        'ETL_ENVIRONMENT': 'production'
+        'POSTGRES_ANALYTICS_PASSWORD': os.getenv('POSTGRES_ANALYTICS_PASSWORD', 'analytics_pass')
     }
 
 
 @pytest.fixture
-def test_settings(test_env_vars, test_pipeline_config, test_tables_config):
-    """Create isolated test settings using new configuration system."""
-    return create_test_settings(
-        pipeline_config=test_pipeline_config,
-        tables_config=test_tables_config,
-        env_vars=test_env_vars
+def test_env_provider(test_env_vars):
+    """Test environment provider following the provider pattern.
+    
+    This fixture implements the DictConfigProvider pattern for test environment:
+    - Uses DictConfigProvider for testing (as recommended)
+    - Provides injected environment variables for clean test isolation
+    - Supports dependency injection for easy environment swapping
+    - Follows the provider pattern for configuration loading
+    """
+    return DictConfigProvider(
+        pipeline={},
+        tables={'tables': {}},
+        env=test_env_vars
     )
 
 
 @pytest.fixture
-def mock_env_test_settings(test_env_vars):
-    """Create test settings with mocked environment variables."""
-    with patch.dict(os.environ, test_env_vars):
-        from etl_pipeline.config import create_settings
-        yield create_settings(environment='test')
+def production_env_provider(production_env_vars):
+    """Production environment provider following the provider pattern.
+    
+    This fixture implements the DictConfigProvider pattern for production environment:
+    - Uses DictConfigProvider with production environment variables
+    - Provides injected environment variables for integration testing
+    - Supports dependency injection for environment swapping
+    """
+    return DictConfigProvider(
+        pipeline={},
+        tables={'tables': {}},
+        env=production_env_vars
+    )
 
 
 @pytest.fixture
-def production_settings(production_env_vars):
-    """Create production settings for integration tests."""
-    return create_test_settings(
-        env_vars=production_env_vars
+def test_settings(test_env_provider):
+    """Test settings with provider injection following connection architecture.
+    
+    This fixture implements the Settings injection pattern as specified in the architecture:
+    - Uses Settings with provider injection for environment-agnostic operation
+    - Uses DictConfigProvider for testing (as recommended)
+    - Supports dependency injection for clean test isolation
+    - Follows the unified interface pattern
+    """
+    return Settings(environment='test', provider=test_env_provider)
+
+
+@pytest.fixture
+def production_settings(production_env_provider):
+    """Production settings with provider injection following connection architecture.
+    
+    This fixture implements the Settings injection pattern for production environment:
+    - Uses Settings with provider injection for environment-agnostic operation
+    - Uses DictConfigProvider with production environment variables
+    - Supports dependency injection for integration testing
+    """
+    return Settings(environment='production', provider=production_env_provider)
+
+
+@pytest.fixture
+def test_settings_with_config(test_env_vars, test_pipeline_config, test_tables_config):
+    """Create test settings with configuration using provider pattern.
+    
+    This fixture demonstrates the provider pattern for complete configuration:
+    - Uses DictConfigProvider for testing (as recommended)
+    - Provides injected configuration for clean test isolation
+    - Supports dependency injection for easy configuration swapping
+    - Follows the provider pattern for configuration loading
+    """
+    test_provider = DictConfigProvider(
+        pipeline=test_pipeline_config,
+        tables=test_tables_config,
+        env=test_env_vars
     )
+    return Settings(environment='test', provider=test_provider)
+
+
+@pytest.fixture
+def mock_env_test_settings(test_env_provider):
+    """Create test settings with mocked environment variables using provider pattern.
+    
+    This fixture demonstrates Settings injection with provider pattern:
+    - Uses Settings with provider injection for environment-agnostic operation
+    - Uses DictConfigProvider for testing (as recommended)
+    - Supports dependency injection for clean test isolation
+    """
+    return Settings(environment='test', provider=test_env_provider)
+
+
+@pytest.fixture
+def production_settings_with_config(production_env_vars, valid_pipeline_config, complete_tables_config):
+    """Create production settings with configuration using provider pattern.
+    
+    This fixture demonstrates the provider pattern for production configuration:
+    - Uses DictConfigProvider with production-like configuration
+    - Provides injected configuration for integration testing
+    - Supports dependency injection for configuration swapping
+    """
+    production_provider = DictConfigProvider(
+        pipeline=valid_pipeline_config,
+        tables=complete_tables_config,
+        env=production_env_vars
+    )
+    return Settings(environment='production', provider=production_provider)
 
 
 @pytest.fixture(autouse=True)
 def setup_test_environment(monkeypatch, request):
-    """Set up test environment with proper isolation."""
-    # Set test environment variables
+    """Set up test environment with proper isolation following connection architecture.
+    
+    This fixture sets up the test environment following the connection architecture:
+    - Uses ETL_ENVIRONMENT for environment detection
+    - Supports provider pattern for configuration loading
+    - Maintains test isolation through proper cleanup
+    """
+    # Set test environment variables following architecture
     test_env = {
-        'ETL_ENVIRONMENT': 'test',
+        'ETL_ENVIRONMENT': 'test',  # Required for fail-fast validation
         'PYTHONPATH': os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
         'TESTING': 'true'
     }
@@ -164,9 +250,53 @@ def setup_test_environment(monkeypatch, request):
     reset_settings()
 
 
+@pytest.fixture
+def load_test_environment_file():
+    """Load environment variables from .env_test file for integration tests.
+    
+    This fixture loads the actual .env_test file and sets the environment variables
+    in os.environ for integration tests that need real database connections.
+    """
+    from pathlib import Path
+    from dotenv import load_dotenv
+    import os
+    
+    # Find the .env_test file
+    etl_pipeline_dir = Path(__file__).parent.parent.parent  # Go to etl_pipeline root
+    env_test_path = etl_pipeline_dir / '.env_test'
+    
+    if env_test_path.exists():
+        # Load environment variables from .env_test file
+        load_dotenv(env_test_path, override=True)
+        print(f"Loaded environment variables from: {env_test_path}")
+        # Debug print for replication variables
+        print("DEBUG: TEST_MYSQL_REPLICATION_HOST =", os.environ.get("TEST_MYSQL_REPLICATION_HOST"))
+        print("DEBUG: TEST_MYSQL_REPLICATION_PORT =", os.environ.get("TEST_MYSQL_REPLICATION_PORT"))
+        print("DEBUG: TEST_MYSQL_REPLICATION_DB =", os.environ.get("TEST_MYSQL_REPLICATION_DB"))
+        print("DEBUG: TEST_MYSQL_REPLICATION_USER =", os.environ.get("TEST_MYSQL_REPLICATION_USER"))
+        print("DEBUG: TEST_MYSQL_REPLICATION_PASSWORD =", os.environ.get("TEST_MYSQL_REPLICATION_PASSWORD"))
+        # Verify that ETL_ENVIRONMENT is set to 'test'
+        if os.environ.get('ETL_ENVIRONMENT') != 'test':
+            os.environ['ETL_ENVIRONMENT'] = 'test'
+            print("Set ETL_ENVIRONMENT=test for integration tests")
+    else:
+        print(f"Warning: .env_test file not found at {env_test_path}")
+        print("Integration tests may fail due to missing environment variables")
+    
+    yield
+    
+    # No cleanup needed - environment variables persist for the test session
+
+
 @pytest.fixture(scope="session")
 def test_environment():
-    """Session-scoped test environment setup."""
+    """Session-scoped test environment setup following connection architecture.
+    
+    This fixture sets up the session-level test environment following the architecture:
+    - Uses ETL_ENVIRONMENT for environment detection
+    - Supports provider pattern for configuration loading
+    - Maintains proper test isolation
+    """
     # Create test directories if they don't exist
     test_dirs = [
         'logs',
@@ -177,8 +307,8 @@ def test_environment():
     for dir_name in test_dirs:
         os.makedirs(dir_name, exist_ok=True)
     
-    # Set up session-level environment
-    os.environ['ETL_ENVIRONMENT'] = 'test'
+    # Set up session-level environment following architecture
+    os.environ['ETL_ENVIRONMENT'] = 'test'  # Required for fail-fast validation
     os.environ['TESTING'] = 'true'
     
     yield
@@ -240,20 +370,35 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 def environment_detection_test_cases():
-    """Test cases for environment detection."""
+    """Test cases for environment detection following connection architecture.
+    
+    This fixture provides test cases that follow the connection architecture:
+    - Uses ETL_ENVIRONMENT for environment detection
+    - Follows fail-fast validation (no defaults to production)
+    - Supports provider pattern for configuration loading
+    """
     return [
-        # (env_vars, expected_environment, description)
-        ({'ETL_ENVIRONMENT': 'test'}, 'test', 'ETL_ENVIRONMENT takes precedence'),
-        ({'ENVIRONMENT': 'production'}, 'production', 'ENVIRONMENT used when ETL_ENVIRONMENT not set'),
-        ({'APP_ENV': 'development'}, 'development', 'APP_ENV used when others not set'),
-        ({}, 'production', 'Default to production when no environment vars set'),
-        ({'ETL_ENVIRONMENT': 'invalid'}, 'production', 'Invalid environment defaults to production'),
+        # Valid environment detection cases
+        ({'ETL_ENVIRONMENT': 'test'}, 'test', 'ETL_ENVIRONMENT=test'),
+        ({'ETL_ENVIRONMENT': 'production'}, 'production', 'ETL_ENVIRONMENT=production'),
+        
+        # Invalid environment detection cases (should fail fast)
+        ({}, None, 'Missing ETL_ENVIRONMENT should fail fast'),
+        ({'ETL_ENVIRONMENT': 'invalid'}, None, 'Invalid ETL_ENVIRONMENT should fail fast'),
+        ({'ENVIRONMENT': 'production'}, None, 'Other env vars should not override ETL_ENVIRONMENT'),
+        ({'APP_ENV': 'development'}, None, 'Other env vars should not override ETL_ENVIRONMENT'),
     ]
 
 
 @pytest.fixture
 def database_environment_mappings():
-    """Database environment variable mappings for testing."""
+    """Database environment variable mappings for testing following connection architecture.
+    
+    This fixture provides environment variable mappings that follow the architecture:
+    - Uses enums for type safety as specified in the architecture
+    - Follows environment-specific variable naming convention
+    - Supports provider pattern for configuration loading
+    """
     return {
         DatabaseType.SOURCE: {
             'host': 'OPENDENTAL_SOURCE_HOST',
@@ -282,7 +427,13 @@ def database_environment_mappings():
 
 @pytest.fixture
 def test_environment_prefixes():
-    """Test environment prefixes for different database types."""
+    """Test environment prefixes following connection architecture naming convention.
+    
+    This fixture provides environment prefixes that follow the architecture:
+    - Uses TEST_ prefix for test environment variables
+    - Uses non-prefixed variables for production environment
+    - Supports provider pattern for configuration loading
+    """
     return {
         'test': 'TEST_',
         'production': '',
@@ -292,7 +443,13 @@ def test_environment_prefixes():
 
 @pytest.fixture
 def schema_environment_variables():
-    """Schema-specific environment variables for testing."""
+    """Schema-specific environment variables for testing following connection architecture.
+    
+    This fixture provides schema-specific environment variables that follow the architecture:
+    - Uses enums for type safety as specified in the architecture
+    - Follows environment-specific variable naming convention
+    - Supports provider pattern for configuration loading
+    """
     return {
         PostgresSchema.RAW: {
             'schema': 'raw',
@@ -311,3 +468,102 @@ def schema_environment_variables():
             'env_var': 'POSTGRES_ANALYTICS_SCHEMA'
         }
     } 
+
+
+@pytest.fixture
+def comprehensive_test_isolation():
+    """Comprehensive test isolation fixture for complex test scenarios.
+    
+    This fixture provides enhanced isolation for comprehensive tests:
+    - Cleans up mock objects and patches
+    - Manages test resources and connections
+    - Ensures proper teardown of complex test scenarios
+    - Supports provider pattern for dependency injection
+    - Follows the connection architecture for proper isolation
+    """
+    import gc
+    from unittest.mock import patch
+    
+    # Track patches and mocks for cleanup
+    patches = []
+    mocks = []
+    
+    def add_patch(patch_obj):
+        """Add a patch for cleanup."""
+        patches.append(patch_obj)
+        return patch_obj
+    
+    def add_mock(mock_obj):
+        """Add a mock for cleanup."""
+        mocks.append(mock_obj)
+        return mock_obj
+    
+    # Provide the cleanup functions to the test
+    yield {
+        'add_patch': add_patch,
+        'add_mock': add_mock,
+        'patches': patches,
+        'mocks': mocks
+    }
+    
+    # Cleanup: Stop all patches
+    for patch_obj in patches:
+        try:
+            patch_obj.stop()
+        except Exception as e:
+            logging.warning(f"Error stopping patch {patch_obj}: {e}")
+    
+    # Cleanup: Reset all mocks
+    for mock_obj in mocks:
+        try:
+            mock_obj.reset_mock()
+        except Exception as e:
+            logging.warning(f"Error resetting mock {mock_obj}: {e}")
+    
+    # Force garbage collection to clean up any remaining references
+    gc.collect()
+
+
+@pytest.fixture
+def mock_cleanup():
+    """Mock cleanup fixture for comprehensive tests.
+    
+    This fixture provides automatic mock cleanup for comprehensive tests:
+    - Automatically stops patches when they go out of scope
+    - Resets mock state for clean test isolation
+    - Supports context manager pattern for easy cleanup
+    """
+    from unittest.mock import patch
+    
+    class MockCleanup:
+        def __init__(self):
+            self.patches = []
+            self.mocks = []
+        
+        def add_patch(self, patch_obj):
+            """Add a patch for automatic cleanup."""
+            self.patches.append(patch_obj)
+            return patch_obj
+        
+        def add_mock(self, mock_obj):
+            """Add a mock for automatic cleanup."""
+            self.mocks.append(mock_obj)
+            return mock_obj
+        
+        def cleanup(self):
+            """Clean up all patches and mocks."""
+            for patch_obj in self.patches:
+                try:
+                    patch_obj.stop()
+                except Exception as e:
+                    logging.warning(f"Error stopping patch {patch_obj}: {e}")
+            
+            for mock_obj in self.mocks:
+                try:
+                    mock_obj.reset_mock()
+                except Exception as e:
+                    logging.warning(f"Error resetting mock {mock_obj}: {e}")
+    
+    cleanup = MockCleanup()
+    yield cleanup
+    cleanup.cleanup() 
