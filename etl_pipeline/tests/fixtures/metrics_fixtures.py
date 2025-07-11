@@ -6,17 +6,62 @@ This module contains fixtures related to:
 - Performance tracking
 - Unified metrics
 - Metrics utilities
+
+Follows the connection architecture patterns:
+- Uses provider pattern for dependency injection
+- Uses Settings injection for environment-agnostic metrics
+- Uses environment separation for test vs production metrics
+- Uses unified interface with ConnectionFactory
 """
 
 import pytest
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 from typing import Dict, List, Any
 from datetime import datetime, timedelta
 
+from etl_pipeline.config import create_test_settings
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.core import ConnectionFactory
+
 
 @pytest.fixture
-def mock_unified_metrics_connection():
-    """Mock unified metrics connection for testing."""
+def test_metrics_settings():
+    """Test metrics settings using provider pattern for dependency injection."""
+    # Create test provider with injected metrics configuration
+    test_provider = DictConfigProvider(
+        pipeline={
+            'metrics': {
+                'enable_persistence': True,
+                'retention_days': 30,
+                'cleanup_enabled': True,
+                'alert_thresholds': {
+                    'cpu_usage': 80.0,
+                    'memory_usage': 85.0,
+                    'processing_time': 3600.0
+                }
+            }
+        },
+        env={
+            # Test environment variables for metrics
+            'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+        }
+    )
+    
+    # Create test settings with provider injection
+    return create_test_settings(
+        pipeline_config=test_provider.configs['pipeline'],
+        env_vars=test_provider.configs['env']
+    )
+
+
+@pytest.fixture
+def mock_unified_metrics_connection(test_metrics_settings):
+    """Mock unified metrics connection using Settings injection."""
     connection = MagicMock()
     connection.execute.return_value = MagicMock()
     connection.close.return_value = None
@@ -24,16 +69,55 @@ def mock_unified_metrics_connection():
 
 
 @pytest.fixture
-def unified_metrics_collector_no_persistence():
-    """Unified metrics collector without persistence for testing."""
+def unified_metrics_collector_no_persistence(test_metrics_settings):
+    """Unified metrics collector without persistence using Settings injection."""
     try:
         from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
-        collector = UnifiedMetricsCollector(enable_persistence=False)
+        
+        # Create collector with Settings injection
+        collector = UnifiedMetricsCollector(
+            settings=test_metrics_settings,
+            enable_persistence=False
+        )
         return collector
     except ImportError:
         # Fallback mock collector
         collector = MagicMock()
         collector.enable_persistence = False
+        collector.settings = test_metrics_settings
+        collector.metrics = {
+            'status': 'idle',
+            'tables_processed': 0,
+            'total_rows_processed': 0,
+            'errors': [],
+            'table_metrics': {},
+            'pipeline_id': 'test_pipeline_001'
+        }
+        return collector
+
+
+@pytest.fixture
+def unified_metrics_collector_with_persistence(test_metrics_settings):
+    """Unified metrics collector with persistence using Settings injection."""
+    try:
+        from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
+        
+        # Mock the analytics engine to prevent real connections
+        with patch('etl_pipeline.core.connections.ConnectionFactory.get_analytics_raw_connection') as mock_factory:
+            mock_engine = MagicMock()
+            mock_factory.return_value = mock_engine
+            
+            # Create collector with Settings injection
+            collector = UnifiedMetricsCollector(
+                settings=test_metrics_settings,
+                enable_persistence=True
+            )
+            return collector
+    except ImportError:
+        # Fallback mock collector
+        collector = MagicMock()
+        collector.enable_persistence = True
+        collector.settings = test_metrics_settings
         collector.metrics = {
             'status': 'idle',
             'tables_processed': 0,
@@ -133,9 +217,10 @@ def mock_database_metrics():
 
 
 @pytest.fixture
-def mock_metrics_collector():
-    """Mock metrics collector for testing."""
+def mock_metrics_collector(test_metrics_settings):
+    """Mock metrics collector using Settings injection."""
     collector = MagicMock()
+    collector.settings = test_metrics_settings
     collector.collect_system_metrics.return_value = {
         'cpu_usage': 45.2,
         'memory_usage': 67.8,
@@ -155,9 +240,10 @@ def mock_metrics_collector():
 
 
 @pytest.fixture
-def mock_metrics_storage():
-    """Mock metrics storage for testing."""
+def mock_metrics_storage(test_metrics_settings):
+    """Mock metrics storage using Settings injection."""
     storage = MagicMock()
+    storage.settings = test_metrics_settings
     storage.store_metrics.return_value = True
     storage.retrieve_metrics.return_value = {}
     storage.delete_metrics.return_value = True
@@ -165,9 +251,10 @@ def mock_metrics_storage():
 
 
 @pytest.fixture
-def mock_metrics_aggregator():
-    """Mock metrics aggregator for testing."""
+def mock_metrics_aggregator(test_metrics_settings):
+    """Mock metrics aggregator using Settings injection."""
     aggregator = MagicMock()
+    aggregator.settings = test_metrics_settings
     aggregator.aggregate_metrics.return_value = {
         'hourly_avg': {
             'cpu_usage': 42.5,
@@ -184,9 +271,10 @@ def mock_metrics_aggregator():
 
 
 @pytest.fixture
-def mock_metrics_alert():
-    """Mock metrics alert for testing."""
+def mock_metrics_alert(test_metrics_settings):
+    """Mock metrics alert using Settings injection."""
     alert = MagicMock()
+    alert.settings = test_metrics_settings
     alert.check_thresholds.return_value = [
         {
             'metric': 'cpu_usage',
@@ -200,9 +288,10 @@ def mock_metrics_alert():
 
 
 @pytest.fixture
-def mock_metrics_dashboard():
-    """Mock metrics dashboard for testing."""
+def mock_metrics_dashboard(test_metrics_settings):
+    """Mock metrics dashboard using Settings injection."""
     dashboard = MagicMock()
+    dashboard.settings = test_metrics_settings
     dashboard.get_summary_metrics.return_value = {
         'total_pipelines': 25,
         'successful_pipelines': 23,
@@ -251,35 +340,28 @@ def mock_metrics_error():
 
 
 @pytest.fixture
-def metrics_collector_with_settings():
-    """Metrics collector with settings dependency injection support."""
+def metrics_collector_with_settings(test_metrics_settings):
+    """Metrics collector with Settings dependency injection."""
     try:
         from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
-        from tests.fixtures.config_fixtures import test_pipeline_config
-        from tests.fixtures.env_fixtures import test_env_vars
         
-        # Create a mock settings object that would be injected
-        mock_settings = MagicMock()
-        mock_settings.get_database_config.return_value = {
-            'host': 'localhost',
-            'port': 5432,
-            'database': 'test_analytics',
-            'user': 'test_user',
-            'password': 'test_pass'
-        }
-        mock_settings.pipeline_config = test_pipeline_config
-        
-        # Create metrics collector (currently without settings injection, but ready for future)
-        collector = UnifiedMetricsCollector(enable_persistence=False)
-        
-        # Add settings as an attribute for testing purposes
-        collector.settings = mock_settings
-        
-        return collector
+        # Mock the analytics engine to prevent real connections
+        with patch('etl_pipeline.core.connections.ConnectionFactory.get_analytics_raw_connection') as mock_factory:
+            mock_engine = MagicMock()
+            mock_factory.return_value = mock_engine
+            
+            # Create metrics collector with Settings injection
+            collector = UnifiedMetricsCollector(
+                settings=test_metrics_settings,
+                enable_persistence=True
+            )
+            
+            return collector
     except ImportError:
         # Fallback mock collector
         collector = MagicMock()
-        collector.enable_persistence = False
+        collector.enable_persistence = True
+        collector.settings = test_metrics_settings
         collector.metrics = {
             'status': 'idle',
             'tables_processed': 0,
@@ -288,20 +370,19 @@ def metrics_collector_with_settings():
             'table_metrics': {},
             'pipeline_id': 'test_pipeline_001'
         }
-        collector.settings = MagicMock()
         return collector
 
 
 @pytest.fixture
-def mock_analytics_engine_for_metrics():
-    """Mock analytics engine specifically for metrics testing."""
+def mock_analytics_engine_for_metrics(test_metrics_settings):
+    """Mock analytics engine specifically for metrics testing using Settings injection."""
     engine = MagicMock()
     engine.name = 'postgresql'
     
     # Create a mock URL object
     mock_url = MagicMock()
-    mock_url.database = 'test_analytics'
-    mock_url.host = 'localhost'
+    mock_url.database = 'test_opendental_analytics'
+    mock_url.host = 'test-analytics-host'
     mock_url.port = 5432
     engine.url = mock_url
     
@@ -313,4 +394,54 @@ def mock_analytics_engine_for_metrics():
     
     engine.connect.return_value = mock_connection
     
-    return engine 
+    return engine
+
+
+@pytest.fixture
+def metrics_configs_with_settings(test_metrics_settings):
+    """Test metrics configurations using Settings injection."""
+    # Test metrics configuration from settings
+    metrics_config = test_metrics_settings.pipeline_config.get('metrics', {})
+    
+    return {
+        'enable_persistence': metrics_config.get('enable_persistence', True),
+        'retention_days': metrics_config.get('retention_days', 30),
+        'cleanup_enabled': metrics_config.get('cleanup_enabled', True),
+        'alert_thresholds': metrics_config.get('alert_thresholds', {
+            'cpu_usage': 80.0,
+            'memory_usage': 85.0,
+            'processing_time': 3600.0
+        })
+    }
+
+
+@pytest.fixture
+def connection_factory_with_metrics_settings(test_metrics_settings):
+    """ConnectionFactory with Settings injection for metrics testing."""
+    # Mock the ConnectionFactory methods to return mock engines
+    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+        mock_factory.get_analytics_raw_connection.return_value = MagicMock()
+        mock_factory.get_analytics_staging_connection.return_value = MagicMock()
+        mock_factory.get_analytics_intermediate_connection.return_value = MagicMock()
+        mock_factory.get_analytics_marts_connection.return_value = MagicMock()
+        
+        yield mock_factory
+
+
+@pytest.fixture
+def mock_metrics_provider():
+    """Mock metrics provider for testing provider pattern integration."""
+    with patch('etl_pipeline.monitoring.unified_metrics.DictConfigProvider') as mock_provider:
+        mock_provider_instance = MagicMock()
+        mock_provider.return_value = mock_provider_instance
+        
+        # Configure mock provider with test metrics config
+        mock_provider_instance.get_config.return_value = {
+            'metrics': {
+                'enable_persistence': True,
+                'retention_days': 30,
+                'cleanup_enabled': True
+            }
+        }
+        
+        yield mock_provider_instance 
