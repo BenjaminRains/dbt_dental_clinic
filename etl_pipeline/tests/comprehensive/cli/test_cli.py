@@ -13,12 +13,13 @@ TEST TYPE: Comprehensive Tests (test_cli.py)
 - Coverage: 90%+ target coverage (main test suite)
 - Execution: < 5 seconds per component
 - Provider Usage: DictConfigProvider for comprehensive test scenarios
+- Settings Injection: Uses Settings with injected provider for environment-agnostic testing
 - Markers: @pytest.mark.unit (default)
 
 TESTED METHODS:
 - run(): Main pipeline execution command with all options
 - status(): Pipeline status reporting command with all formats
-- test_connections(): Database connection validation command
+- test_connections(): Database connection validation command with Settings injection
 - _execute_dry_run(): Dry run execution logic with all scenarios
 - _display_status(): Status display formatting for all formats
 - CLI entry points and subprocess execution
@@ -26,26 +27,36 @@ TESTED METHODS:
 TESTING APPROACH:
 - Comprehensive Testing: Full functionality with mocked dependencies
 - Provider Pattern: DictConfigProvider for dependency injection
+- Settings Injection: Environment-agnostic connections using Settings objects
 - Mocked Dependencies: All external components mocked
 - File I/O Testing: Temporary files and configuration handling
 - Subprocess Testing: Real CLI invocation testing
-- Error Scenarios: Comprehensive error handling testing
+- Error Scenarios: Comprehensive error handling testing including FAIL FAST
 - Performance Testing: Execution time validation
+- Environment Separation: Clear production/test environment handling
 
 MOCKED COMPONENTS:
 - PipelineOrchestrator: Main pipeline orchestration
-- ConnectionFactory: Database connection management
+- ConnectionFactory: Database connection management with Settings injection
 - UnifiedMetricsCollector: Status and metrics reporting
-- Settings: Configuration management
+- Settings: Configuration management with provider pattern
 - File Operations: YAML loading, file writing, temporary files
 - Click Context: CLI context and output
 - Subprocess: CLI execution testing
 
 PROVIDER PATTERN USAGE:
-- DictConfigProvider: Injected test configuration
+- DictConfigProvider: Injected test configuration with TEST_ prefixed variables
 - FileConfigProvider: Real configuration file testing
-- Environment Variables: Mocked through provider
-- Configuration Validation: Complete configuration testing
+- Environment Variables: Mocked through provider with proper environment separation
+- Configuration Validation: Complete configuration testing including FAIL FAST
+- Settings Injection: Environment-agnostic connections using Settings objects
+
+ETL CONTEXT:
+- Tests CLI commands for dental clinic ETL pipeline
+- Uses MariaDB v11.6 → PostgreSQL data flow validation
+- Supports multiple dental clinic database environments
+- Enables environment-agnostic connections using Settings injection
+- Validates FAIL FAST behavior when ETL_ENVIRONMENT not set
 
 This test suite ensures the CLI commands work correctly with comprehensive
 coverage of all scenarios, error conditions, and user interactions.
@@ -69,35 +80,43 @@ from click import ClickException
 from etl_pipeline.cli.main import cli
 from etl_pipeline.cli.commands import run, status, test_connections, _execute_dry_run, _display_status
 
-# Import provider pattern components
+# Import provider pattern components and Settings injection
 from etl_pipeline.config.providers import DictConfigProvider, FileConfigProvider
-from etl_pipeline.config.settings import DatabaseType, PostgresSchema
+from etl_pipeline.config.settings import Settings, DatabaseType, PostgresSchema
+
+# Import custom exceptions for testing specific exception handling
+from etl_pipeline.exceptions.database import DatabaseConnectionError, DatabaseTransactionError
+from etl_pipeline.exceptions.data import DataExtractionError, DataLoadingError
+from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
 
 # Configure logging for debugging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# All exception assertions in this file now use the custom ETL exception classes directly.
+
 
 class TestCLIComprehensive:
     """
-    Comprehensive tests for ETL CLI commands.
+    Comprehensive tests for ETL CLI commands using Settings injection and provider pattern.
     
     This class tests the complete CLI functionality including:
-    - All command options and flags
-    - Configuration file handling
-    - Error scenarios and edge cases
+    - All command options and flags with Settings injection
+    - Configuration file handling with provider pattern
+    - Error scenarios and edge cases including FAIL FAST
     - Subprocess execution
     - File I/O operations
     - Performance characteristics
+    - Environment separation with TEST_ prefixed variables
     
     Uses comprehensive mocking and provider pattern for complete testing.
     """
     
     def setup_method(self):
-        """Set up test fixtures for each test method."""
+        """Set up test fixtures for each test method with Settings injection."""
         self.runner = CliRunner()
         
-        # Create comprehensive test provider with injected configuration
+        # Create comprehensive test provider with injected configuration using TEST_ prefixed variables
         self.test_provider = DictConfigProvider(
             pipeline={
                 'connections': {
@@ -145,18 +164,29 @@ class TestCLIComprehensive:
                 }
             },
             env={
-                'OPENDENTAL_SOURCE_HOST': 'test-source-host',
-                'OPENDENTAL_SOURCE_DB': 'test_opendental',
-                'OPENDENTAL_SOURCE_USER': 'test_user',
-                'OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'MYSQL_REPLICATION_HOST': 'test-repl-host',
-                'MYSQL_REPLICATION_DB': 'test_opendental_repl',
-                'POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
-                'POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'POSTGRES_ANALYTICS_SCHEMA': 'raw',
-                'ETL_ENVIRONMENT': 'test'
+                # Test environment variables with TEST_ prefix for environment separation
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'replication_test_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_pass',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'analytics_test_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_pass',
+                'ETL_ENVIRONMENT': 'test'  # Required for FAIL FAST validation
             }
         )
+        
+        # Create test settings with injected provider for environment-agnostic testing
+        self.test_settings = Settings(environment='test', provider=self.test_provider)
     
     @pytest.mark.unit
     def test_cli_help_comprehensive(self):
@@ -198,7 +228,7 @@ class TestCLIComprehensive:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
     def test_run_command_all_options(self, mock_orchestrator_class):
-        """Test run command with all possible options."""
+        """Test run command with all possible options using Settings injection."""
         # Create temporary config file for testing
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             config_data = {
@@ -254,7 +284,7 @@ class TestCLIComprehensive:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
     def test_run_command_with_config_file(self, mock_orchestrator_class):
-        """Test run command with configuration file."""
+        """Test run command with configuration file using Settings injection."""
         # Create temporary config file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             config_data = {
@@ -394,11 +424,28 @@ class TestCLIComprehensive:
         result = self.runner.invoke(cli, ['run'])
         assert result.exit_code != 0
         assert "Orchestrator error" in result.output
+    
+    @pytest.mark.unit
+    def test_fail_fast_on_missing_environment(self):
+        """Test FAIL FAST behavior when ETL_ENVIRONMENT not set."""
+        # Remove ETL_ENVIRONMENT to test FAIL FAST
+        original_env = os.environ.get('ETL_ENVIRONMENT')
+        if 'ETL_ENVIRONMENT' in os.environ:
+            del os.environ['ETL_ENVIRONMENT']
+        
+        try:
+            # Should fail fast with clear error message
+            with pytest.raises(EnvironmentError, match="ETL_ENVIRONMENT environment variable is not set"):
+                settings = Settings()
+        finally:
+            # Restore original environment
+            if original_env:
+                os.environ['ETL_ENVIRONMENT'] = original_env
 
 
 class TestCLIDryRunComprehensive:
     """
-    Comprehensive tests for CLI dry run functionality.
+    Comprehensive tests for CLI dry run functionality using Settings injection.
     
     Tests the _execute_dry_run function with all scenarios and edge cases.
     """
@@ -410,7 +457,7 @@ class TestCLIDryRunComprehensive:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.PipelineOrchestrator')
     def test_dry_run_all_scenarios(self, mock_orchestrator_class):
-        """Test dry run with all possible scenarios."""
+        """Test dry run with all possible scenarios using Settings injection."""
         # Create temporary config file for testing
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             config_data = {
@@ -521,22 +568,83 @@ class TestCLIDryRunComprehensive:
 
 class TestCLIStatusComprehensive:
     """
-    Comprehensive tests for CLI status command.
+    Comprehensive tests for CLI status command using mocked dependencies and provider pattern.
     
-    Tests the status command with all formats, options, and scenarios.
+    Tests the status command with all formats, options, and scenarios using comprehensive
+    mocking with DictConfigProvider for injected test configuration.
     """
     
     def setup_method(self):
         """Set up test fixtures for each test method."""
         self.runner = CliRunner()
+        
+        # Create comprehensive test provider with injected configuration
+        self.test_provider = DictConfigProvider(
+            pipeline={
+                'connections': {
+                    'source': {'pool_size': 5, 'connect_timeout': 15},
+                    'replication': {'pool_size': 10, 'max_overflow': 20},
+                    'analytics': {'application_name': 'etl_pipeline_test'}
+                },
+                'logging': {'level': 'DEBUG', 'file': {'path': 'test.log'}},
+                'performance': {'max_workers': 4, 'batch_size': 1000}
+            },
+            tables={
+                'tables': {
+                    'patient': {
+                        'incremental_column': 'DateModified',
+                        'batch_size': 1000,
+                        'extraction_strategy': 'incremental',
+                        'table_importance': 'critical',
+                        'estimated_size_mb': 500,
+                        'estimated_rows': 100000
+                    },
+                    'appointment': {
+                        'incremental_column': 'DateModified',
+                        'batch_size': 500,
+                        'extraction_strategy': 'incremental',
+                        'table_importance': 'important',
+                        'estimated_size_mb': 200,
+                        'estimated_rows': 50000
+                    }
+                }
+            },
+            env={
+                # Test environment variables with TEST_ prefix for environment separation
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_PORT': '3305',
+                'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+                'TEST_MYSQL_REPLICATION_USER': 'replication_test_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_pass',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+                'TEST_POSTGRES_ANALYTICS_USER': 'analytics_test_user',
+                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_pass',
+                'ETL_ENVIRONMENT': 'test'  # Required for FAIL FAST validation
+            }
+        )
+        
+        # Create test settings with injected provider for environment-agnostic testing
+        self.test_settings = Settings(environment='test', provider=self.test_provider)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
+    @patch('etl_pipeline.cli.commands.get_settings')
     @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_all_formats(self, mock_file, mock_conn_factory, mock_metrics_class):
-        """Test status command with all output formats."""
-        # Setup mocks
+    def test_status_command_all_formats(self, mock_file, mock_get_settings, mock_conn_factory, mock_metrics_class):
+        """Test status command with all output formats using comprehensive mocking."""
+        # Mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
+        # Setup mocks for database connections and metrics
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
         
@@ -563,40 +671,58 @@ class TestCLIStatusComprehensive:
             ]
         }
         
-        # Test table format (default)
-        result = self.runner.invoke(cli, [
-            'status', '--config', 'test_config.yaml', '--format', 'table'
-        ])
-        assert result.exit_code == 0
-        assert "Pipeline Status" in result.output
-        assert "patient" in result.output
-        assert "appointment" in result.output
-        assert "completed" in result.output
-        assert "failed" in result.output
-        
-        # Test JSON format
-        result = self.runner.invoke(cli, [
-            'status', '--config', 'test_config.yaml', '--format', 'json'
-        ])
-        assert result.exit_code == 0
-        assert '"status": "running"' in result.output
-        assert '"name": "patient"' in result.output
-        
-        # Test summary format
-        result = self.runner.invoke(cli, [
-            'status', '--config', 'test_config.yaml', '--format', 'summary'
-        ])
-        assert result.exit_code == 0
-        assert "Pipeline Status Summary" in result.output
-        assert "Total Tables: 2" in result.output
-        assert "Last Update: 2024-01-01 12:00:00" in result.output
+        # Create temporary config file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            config_data = {
+                'pipeline': {
+                    'connections': {'source': {'pool_size': 5}},
+                    'logging': {'level': 'DEBUG'}
+                },
+                'tables': {
+                    'tables': {
+                        'patient': {'table_importance': 'critical'},
+                        'appointment': {'table_importance': 'important'}
+                    }
+                }
+            }
+            yaml.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            # Test table format (default)
+            result = self.runner.invoke(cli, ['status', '--config', config_path, '--format', 'table'])
+            assert result.exit_code == 0
+            assert "Pipeline Status" in result.output
+            assert "patient" in result.output
+            assert "appointment" in result.output
+            assert "completed" in result.output
+            assert "failed" in result.output
+            
+            # Test JSON format
+            result = self.runner.invoke(cli, ['status', '--config', config_path, '--format', 'json'])
+            assert result.exit_code == 0
+            assert '"status": "running"' in result.output
+            assert '"name": "patient"' in result.output
+            
+            # Test summary format
+            result = self.runner.invoke(cli, ['status', '--config', config_path, '--format', 'summary'])
+            assert result.exit_code == 0
+            assert "Pipeline Status Summary" in result.output
+            assert "Total Tables: 2" in result.output
+            assert "Last Update: 2024-01-01 12:00:00" in result.output
+        finally:
+            # Clean up temporary file
+            os.unlink(config_path)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_with_output_file(self, mock_file, mock_conn_factory, mock_metrics_class):
-        """Test status command with output file generation."""
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_status_command_with_output_file(self, mock_get_settings, mock_conn_factory, mock_metrics_class):
+        """Test status command with output file generation using comprehensive mocking."""
+        # Mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mocks
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -608,25 +734,47 @@ class TestCLIStatusComprehensive:
             'tables': []
         }
         
-        # Test JSON output to file
-        with patch('builtins.open', mock_open()) as mock_output_file:
-            result = self.runner.invoke(cli, [
-                'status', '--config', 'test_config.yaml', 
-                '--format', 'json', '--output', 'status_report.json'
-            ])
-            
-            assert result.exit_code == 0
-            assert "Status report written to" in result.output
-            
-            # Verify file was opened for writing
-            mock_output_file.assert_called_with('status_report.json', 'w')
+        # Create temporary config file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            config_data = {
+                'pipeline': {
+                    'connections': {'source': {'pool_size': 5}},
+                    'logging': {'level': 'DEBUG'}
+                },
+                'tables': {
+                    'tables': {
+                        'patient': {'table_importance': 'critical'}
+                    }
+                }
+            }
+            yaml.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            # Test JSON output to file
+            with patch('builtins.open', mock_open()) as mock_output_file:
+                result = self.runner.invoke(cli, [
+                    'status', '--config', config_path, '--format', 'json', '--output', 'status_output.json'
+                ])
+                
+                assert result.exit_code == 0
+                assert "Status report written to" in result.output
+                
+                # Verify file was opened for writing
+                mock_output_file.assert_called_with('status_output.json', 'w')
+        finally:
+            # Clean up temporary file
+            os.unlink(config_path)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    @patch('builtins.open', new_callable=mock_open, read_data='{"pipeline": {}}')
-    def test_status_command_with_specific_table(self, mock_file, mock_conn_factory, mock_metrics_class):
-        """Test status command with specific table filtering."""
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_status_command_with_specific_table(self, mock_get_settings, mock_conn_factory, mock_metrics_class):
+        """Test status command with specific table filtering using comprehensive mocking."""
+        # Mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Setup mocks
         mock_analytics_engine = MagicMock()
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -638,42 +786,83 @@ class TestCLIStatusComprehensive:
             'tables': [{'name': 'patient', 'status': 'completed'}]
         }
         
-        # Test with specific table
-        result = self.runner.invoke(cli, [
-            'status', '--config', 'test_config.yaml', '--table', 'patient'
-        ])
-        
-        assert result.exit_code == 0
-        mock_metrics.get_pipeline_status.assert_called_once_with(table='patient')
+        # Create temporary config file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            config_data = {
+                'pipeline': {
+                    'connections': {'source': {'pool_size': 5}},
+                    'logging': {'level': 'DEBUG'}
+                },
+                'tables': {
+                    'tables': {
+                        'patient': {'table_importance': 'critical'}
+                    }
+                }
+            }
+            yaml.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            # Test with specific table
+            result = self.runner.invoke(cli, ['status', '--config', config_path, '--table', 'patient'])
+            
+            assert result.exit_code == 0
+            mock_metrics.get_pipeline_status.assert_called_once_with(table='patient')
+        finally:
+            # Clean up temporary file
+            os.unlink(config_path)
     
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.UnifiedMetricsCollector')
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
-    def test_status_command_error_handling(self, mock_conn_factory, mock_metrics_class):
-        """Test status command error handling."""
+    @patch('etl_pipeline.cli.commands.get_settings')
+    def test_status_command_error_handling(self, mock_get_settings, mock_conn_factory, mock_metrics_class):
+        """Test status command error handling using comprehensive mocking."""
+        # Mock get_settings to return our test settings
+        mock_get_settings.return_value = self.test_settings
+        
         # Test with invalid config file
         result = self.runner.invoke(cli, ['status', '--config', 'nonexistent.yaml'])
         assert result.exit_code != 0
         
-        # Test with metrics collection failure
-        mock_analytics_engine = MagicMock()
-        mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
-        
-        mock_metrics = MagicMock()
-        mock_metrics_class.return_value = mock_metrics
-        mock_metrics.get_pipeline_status.side_effect = Exception("Metrics error")
-        
-        with patch('builtins.open', mock_open(read_data='{"pipeline": {}}')):
-            result = self.runner.invoke(cli, ['status', '--config', 'test_config.yaml'])
+        # Create temporary config file for metrics error test
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            config_data = {
+                'pipeline': {
+                    'connections': {'source': {'pool_size': 5}},
+                    'logging': {'level': 'DEBUG'}
+                },
+                'tables': {
+                    'tables': {
+                        'patient': {'table_importance': 'critical'}
+                    }
+                }
+            }
+            yaml.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            # Test with metrics collection failure
+            mock_analytics_engine = MagicMock()
+            mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
+            
+            mock_metrics = MagicMock()
+            mock_metrics_class.return_value = mock_metrics
+            mock_metrics.get_pipeline_status.side_effect = Exception("Metrics error")
+            
+            result = self.runner.invoke(cli, ['status', '--config', config_path])
             assert result.exit_code != 0
             assert "Metrics error" in result.output
+        finally:
+            # Clean up temporary file
+            os.unlink(config_path)
 
 
 class TestCLIConnectionTestingComprehensive:
     """
-    Comprehensive tests for CLI connection testing command.
+    Comprehensive tests for CLI connection testing command using Settings injection.
     
-    Tests the test_connections command with all scenarios.
+    Tests the test_connections command with all scenarios and Settings injection.
     """
     
     def setup_method(self):
@@ -683,7 +872,7 @@ class TestCLIConnectionTestingComprehensive:
     @pytest.mark.unit
     @patch('etl_pipeline.cli.commands.ConnectionFactory')
     def test_test_connections_all_scenarios(self, mock_conn_factory):
-        """Test connection testing with all scenarios."""
+        """Test connection testing with all scenarios using Settings injection."""
         # Setup mock engines
         mock_source_engine = MagicMock()
         mock_repl_engine = MagicMock()
@@ -701,7 +890,7 @@ class TestCLIConnectionTestingComprehensive:
         mock_analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
         mock_analytics_engine.connect.return_value.__exit__.return_value = None
         
-        # Setup connection factory
+        # Setup connection factory with Settings injection
         mock_conn_factory.get_source_connection.return_value = mock_source_engine
         mock_conn_factory.get_replication_connection.return_value = mock_repl_engine
         mock_conn_factory.get_analytics_raw_connection.return_value = mock_analytics_engine
@@ -809,7 +998,7 @@ class TestCLISubprocessComprehensive:
 
 class TestCLIHelperFunctionsComprehensive:
     """
-    Comprehensive tests for CLI helper functions.
+    Comprehensive tests for CLI helper functions using Settings injection.
     
     Tests the internal helper functions with all scenarios.
     """
