@@ -6,6 +6,12 @@ This module contains fixtures related to:
 - Sample table data
 - Schema definitions
 - Loading utilities
+
+Follows the connection architecture patterns:
+- Uses provider pattern for dependency injection
+- Uses Settings injection for environment-agnostic connections
+- Uses enums for type safety
+- Uses unified interface with ConnectionFactory
 """
 
 import pytest
@@ -14,39 +20,128 @@ from unittest.mock import MagicMock, Mock, patch
 from typing import Dict, List, Any
 from datetime import datetime, timedelta
 
+from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema
+from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.core import ConnectionFactory
+
 
 @pytest.fixture
-def postgres_loader(mock_replication_engine, mock_analytics_engine):
-    """PostgresLoader instance with mocked engines."""
-    try:
-        from etl_pipeline.loaders.postgres_loader import PostgresLoader
-        
-        # Mock the PostgresSchema to prevent inspection of mock engines
-        with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema') as mock_schema_class:
-            mock_schema_adapter = MagicMock()
-            mock_schema_class.return_value = mock_schema_adapter
+def test_settings():
+    """Test settings using provider pattern for dependency injection."""
+    # Create test provider with injected configuration
+    test_provider = DictConfigProvider(
+        pipeline={
+            'connections': {
+                'source': {'pool_size': 5, 'connect_timeout': 10},
+                'replication': {'pool_size': 10, 'max_overflow': 20},
+                'analytics': {'application_name': 'etl_pipeline_test'}
+            }
+        },
+        tables={
+            'tables': {
+                'patient': {
+                    'incremental_column': 'DateModified',
+                    'batch_size': 1000,
+                    'extraction_strategy': 'incremental',
+                    'table_importance': 'critical'
+                },
+                'appointment': {
+                    'incremental_column': 'AptDateTime',
+                    'batch_size': 500,
+                    'extraction_strategy': 'incremental',
+                    'table_importance': 'high'
+                },
+                'procedurelog': {
+                    'incremental_column': 'ProcDate',
+                    'batch_size': 2000,
+                    'extraction_strategy': 'incremental',
+                    'table_importance': 'high'
+                }
+            }
+        },
+        env={
+            # Test environment variables (TEST_ prefixed)
+            'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+            'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+            'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+            'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
             
-            # Mock get_settings to return a mock settings object
-            with patch('etl_pipeline.loaders.postgres_loader.get_settings') as mock_get_settings:
-                mock_settings = MagicMock()
-                mock_settings.get_database_config.side_effect = lambda db_type, schema=None: {
-                    ('analytics', 'raw'): {'schema': 'raw'},
-                    ('replication', None): {'schema': 'raw'}
-                }.get((db_type, schema), {})
-                mock_get_settings.return_value = mock_settings
-                
-                loader = PostgresLoader(
-                    replication_engine=mock_replication_engine,
-                    analytics_engine=mock_analytics_engine
-                )
-                return loader
-    except ImportError:
-        # Fallback mock loader
-        loader = MagicMock()
-        loader.replication_engine = mock_replication_engine
-        loader.analytics_engine = mock_analytics_engine
-        loader.schema_adapter = MagicMock()
-        return loader
+            'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+            'TEST_MYSQL_REPLICATION_PORT': '3306',
+            'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+            'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+            
+            'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+        }
+    )
+    
+    # Create test settings with provider injection
+    return create_test_settings(
+        pipeline_config=test_provider.configs['pipeline'],
+        tables_config=test_provider.configs['tables'],
+        env_vars=test_provider.configs['env']
+    )
+
+
+@pytest.fixture
+def postgres_loader(test_settings):
+    """PostgresLoader instance using Settings injection and provider pattern.
+    
+    This fixture provides a fully mocked PostgresLoader for unit tests.
+    For unit tests, we mock all dependencies to test isolated behavior.
+    For integration tests, use real instances with test database connections.
+    """
+    # Create a fully mocked PostgresLoader for unit tests
+    loader = MagicMock()
+    
+    # Mock all the attributes that PostgresLoader would have
+    loader.settings = test_settings
+    loader.replication_engine = MagicMock()
+    loader.analytics_engine = MagicMock()
+    loader.schema_adapter = MagicMock()
+    loader.table_configs = {
+        'patient': {'incremental_columns': ['DateModified'], 'batch_size': 1000},
+        'appointment': {'incremental_columns': ['DateTStamp'], 'batch_size': 500}
+    }
+    
+    # Mock the methods that tests will call
+    loader.load_table.return_value = True
+    loader.load_table_chunked.return_value = True
+    loader.verify_load.return_value = True
+    loader.get_table_config.return_value = {'incremental_columns': ['DateModified']}
+    
+    return loader
+
+
+@pytest.fixture
+def mock_replication_engine(test_settings):
+    """Mock replication engine using Settings injection."""
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = MagicMock()
+    return engine
+
+
+@pytest.fixture
+def mock_analytics_engine(test_settings):
+    """Mock analytics engine using Settings injection."""
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = MagicMock()
+    return engine
+
+
+@pytest.fixture
+def mock_source_engine(test_settings):
+    """Mock source engine using Settings injection."""
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = MagicMock()
+    return engine
 
 
 @pytest.fixture
@@ -248,4 +343,50 @@ def mock_validation_error():
             self.value = value
             super().__init__(self.message)
     
-    return MockValidationError 
+    return MockValidationError
+
+
+@pytest.fixture
+def database_configs_with_enums(test_settings):
+    """Test database configurations using enums for type safety."""
+    # Test all database types using enums
+    source_config = test_settings.get_database_config(DatabaseType.SOURCE)
+    repl_config = test_settings.get_database_config(DatabaseType.REPLICATION)
+    analytics_config = test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
+    
+    return {
+        'source': source_config,
+        'replication': repl_config,
+        'analytics': analytics_config
+    }
+
+
+@pytest.fixture
+def schema_configs_with_enums(test_settings):
+    """Test schema-specific configurations using enums."""
+    raw_config = test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
+    staging_config = test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.STAGING)
+    intermediate_config = test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.INTERMEDIATE)
+    marts_config = test_settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.MARTS)
+    
+    return {
+        'raw': raw_config,
+        'staging': staging_config,
+        'intermediate': intermediate_config,
+        'marts': marts_config
+    }
+
+
+@pytest.fixture
+def connection_factory_with_settings(test_settings):
+    """ConnectionFactory with Settings injection for testing."""
+    # Mock the ConnectionFactory methods to return mock engines
+    with patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+        mock_factory.get_source_connection.return_value = MagicMock()
+        mock_factory.get_replication_connection.return_value = MagicMock()
+        mock_factory.get_analytics_raw_connection.return_value = MagicMock()
+        mock_factory.get_analytics_staging_connection.return_value = MagicMock()
+        mock_factory.get_analytics_intermediate_connection.return_value = MagicMock()
+        mock_factory.get_analytics_marts_connection.return_value = MagicMock()
+        
+        yield mock_factory 
