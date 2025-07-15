@@ -61,6 +61,46 @@ def test_pipeline_config():
                 'pool_size': 2,
                 'connect_timeout': 30
             }
+        },
+        'stages': {
+            'extract': {
+                'enabled': True,
+                'timeout_minutes': 30,
+                'error_threshold': 0.01
+            },
+            'load': {
+                'enabled': True,
+                'timeout_minutes': 45,
+                'error_threshold': 0.01
+            },
+            'transform': {
+                'enabled': True,
+                'timeout_minutes': 60,
+                'error_threshold': 0.01
+            }
+        },
+        'logging': {
+            'level': 'INFO',
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            'file': {
+                'enabled': True,
+                'path': 'logs/pipeline.log',
+                'max_size_mb': 100,
+                'backup_count': 10
+            },
+            'console': {
+                'enabled': True,
+                'level': 'INFO'
+            }
+        },
+        'error_handling': {
+            'max_consecutive_failures': 3,
+            'failure_notification_threshold': 2,
+            'auto_retry': {
+                'enabled': True,
+                'max_attempts': 3,
+                'delay_minutes': 5
+            }
         }
     }
 
