@@ -17,6 +17,7 @@
 | CLI output validation failures | [12.1](#121-cli-output-validation-patterns) | Match actual CLI output format |
 | Configuration file not found errors | [12.2](#122-configuration-file-testing-patterns) | Create temporary test files |
 | Complex configuration mocking | [12.3](#123-real-configuration-vs-mock-configuration) | Use real config with test data |
+| KeyError in SQLAlchemy execute mocks | [3.4](#34-sqlalchemy-execute-parameter-access) | Check args[1] before kwargs |
 
 ---
 
@@ -182,6 +183,75 @@ with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analy
 - If the pipeline uses regexes or DB queries, your test data and mocks must align with those expectations.
 
 **Related Sections**: [3.2 Inspection Errors](#32-inspection-errors), [4.1 Testing Real Logic vs Mocks](#41-testing-real-logic-vs-mocks)
+
+### 3.4 SQLAlchemy Execute Parameter Access
+
+**Problem**:  
+- Tests fail with `KeyError` when trying to access parameters from `kwargs` in SQLAlchemy `execute` calls
+- Mock captures show empty `kwargs` even when parameters are passed
+
+**Context**:  
+- Unit tests for database operations that mock SQLAlchemy `execute()` calls
+- Testing persistence operations like metrics saving
+
+**Error Pattern**:  
+- `KeyError: 'pipeline_id'` when `params = kwargs` but `kwargs` is empty
+- `AssertionError: 'pipeline_id' not in params` when parameters exist but are in wrong location
+
+**Root Cause**:  
+SQLAlchemy's `execute()` method uses positional arguments, not keyword arguments:
+```python
+# Real code:
+conn.execute(text("INSERT INTO table..."), {'pipeline_id': 'abc', 'status': 'failed'})
+
+# Mock captures:
+args = (text("INSERT INTO table..."), {'pipeline_id': 'abc', 'status': 'failed'})
+kwargs = {}  # Empty because no keyword arguments were used
+```
+
+**Solutions**:
+
+#### 3.4.1 Check Positional Arguments First
+```python
+# ❌ WRONG - Only check kwargs
+for call in execute_calls:
+    args, kwargs = call
+    params = kwargs  # Empty dict!
+    assert params['pipeline_id'] == expected_id  # KeyError!
+
+# ✅ CORRECT - Check positional arguments first
+for call in execute_calls:
+    args, kwargs = call
+    params = args[1] if len(args) > 1 else kwargs
+    assert params['pipeline_id'] == expected_id  # Works!
+```
+
+#### 3.4.2 Robust Parameter Access Pattern
+```python
+# ✅ CORRECT - Handle both positional and keyword arguments
+def get_execute_parameters(call):
+    """Extract parameters from SQLAlchemy execute call."""
+    args, kwargs = call
+    # SQLAlchemy execute uses: execute(sql_text, parameters_dict)
+    if len(args) > 1:
+        return args[1]  # Parameters dict is second positional argument
+    elif kwargs:
+        return kwargs  # Fallback for keyword arguments
+    else:
+        return {}  # No parameters
+
+for call in execute_calls:
+    params = get_execute_parameters(call)
+    if 'INSERT INTO etl_pipeline_metrics' in str(call[0][0]):
+        assert params['pipeline_id'] == collector.metrics['pipeline_id']
+```
+
+**Key Principle**:  
+- SQLAlchemy `execute()` uses positional arguments: `execute(sql_text, parameters_dict)`
+- Always check `args[1]` for parameters before falling back to `kwargs`
+- This pattern applies to any SQLAlchemy operation that takes parameters as positional arguments
+
+**Related Sections**: [3.1 Engine URL Attribute](#31-engine-url-attribute), [4.1 Testing Real Logic vs Mocks](#41-testing-real-logic-vs-mocks), [31 Test Expectations vs Real Behavior](#31-test-expectations-vs-real-behavior)
 
 ---
 
