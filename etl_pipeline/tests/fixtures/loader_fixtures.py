@@ -31,10 +31,59 @@ def test_settings():
     # Create test provider with injected configuration
     test_provider = DictConfigProvider(
         pipeline={
+            'general': {
+                'pipeline_name': 'dental_clinic_etl',
+                'environment': 'test',
+                'timezone': 'UTC',
+                'max_retries': 3,
+                'retry_delay_seconds': 300,
+                'batch_size': 25000,
+                'parallel_jobs': 6
+            },
             'connections': {
                 'source': {'pool_size': 5, 'connect_timeout': 10},
                 'replication': {'pool_size': 10, 'max_overflow': 20},
                 'analytics': {'application_name': 'etl_pipeline_test'}
+            },
+            'stages': {
+                'extract': {
+                    'enabled': True,
+                    'timeout_minutes': 30,
+                    'error_threshold': 0.01
+                },
+                'load': {
+                    'enabled': True,
+                    'timeout_minutes': 45,
+                    'error_threshold': 0.01
+                },
+                'transform': {
+                    'enabled': True,
+                    'timeout_minutes': 60,
+                    'error_threshold': 0.01
+                }
+            },
+            'logging': {
+                'level': 'INFO',
+                'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                'file': {
+                    'enabled': True,
+                    'path': 'logs/pipeline.log',
+                    'max_size_mb': 100,
+                    'backup_count': 10
+                },
+                'console': {
+                    'enabled': True,
+                    'level': 'INFO'
+                }
+            },
+            'error_handling': {
+                'max_consecutive_failures': 3,
+                'failure_notification_threshold': 2,
+                'auto_retry': {
+                    'enabled': True,
+                    'max_attempts': 3,
+                    'delay_minutes': 5
+                }
             }
         },
         tables={
@@ -61,6 +110,7 @@ def test_settings():
         },
         env={
             # Test environment variables (TEST_ prefixed)
+            'ETL_ENVIRONMENT': 'test',
             'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
             'TEST_OPENDENTAL_SOURCE_PORT': '3306',
             'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
