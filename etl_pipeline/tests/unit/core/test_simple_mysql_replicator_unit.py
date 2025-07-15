@@ -233,8 +233,13 @@ class TestSimpleMySQLReplicatorInitialization:
         """
         Test SimpleMySQLReplicator initialization with missing configuration file.
         
+        AAA Pattern:
+            Arrange: Set up test provider and settings with missing config file
+            Act: Attempt to create SimpleMySQLReplicator instance
+            Assert: Verify ConfigurationError is raised with proper message
+            
         Validates:
-            - FileNotFoundError handling for missing tables.yml
+            - ConfigurationError handling for missing tables.yml
             - Error propagation with provider pattern
             - Settings injection error handling
             - Clear error messages for configuration issues
@@ -244,6 +249,7 @@ class TestSimpleMySQLReplicatorInitialization:
             - Prevents silent failures in configuration loading
             - Maintains provider pattern error handling
         """
+        # Arrange: Set up test provider and settings with missing config file
         test_provider = DictConfigProvider(
             env={'ETL_ENVIRONMENT': 'test', 'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'}
         )
@@ -257,9 +263,10 @@ class TestSimpleMySQLReplicatorInitialization:
             mock_source.return_value = mock_source_engine
             mock_target.return_value = mock_target_engine
             
-            # Mock file not found
+            # Act: Attempt to create SimpleMySQLReplicator instance
             with patch('builtins.open', side_effect=FileNotFoundError("Configuration file not found")):
-                with pytest.raises(FileNotFoundError, match="Configuration file not found"):
+                # Assert: Verify ConfigurationError is raised with proper message
+                with pytest.raises(ConfigurationError, match="Configuration file not found"):
                     SimpleMySQLReplicator(settings=settings)
 
     def test_initialization_invalid_yaml_configuration(self):
