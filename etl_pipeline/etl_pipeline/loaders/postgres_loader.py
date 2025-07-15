@@ -22,7 +22,7 @@ DATA FLOW ARCHITECTURE
 
 ARCHITECTURAL ROLE:
 This is a PURE DATA MOVEMENT LAYER that moves data from MySQL replication to PostgreSQL raw schema.
-It performs minimal transformations (only data type conversion) and focuses on infrastructure operations.
+It focuses exclusively on data movement and delegates all transformation logic to PostgresSchema.
 
 DATA FLOW:
 MySQL OpenDental (Source Database)
@@ -31,11 +31,15 @@ SimpleMySQLReplicator (MySQL to MySQL copy)
     ↓
 opendental_replication (MySQL Replication Database)
     ↓
-PostgresLoader (ETL Infrastructure Layer)
-    ├── Schema Conversion (MySQL → PostgreSQL types)
+PostgresLoader (ETL Data Movement Layer)
     ├── Data Extraction (with incremental support)
     ├── Data Loading (bulk/chunked operations)
     └── Load Verification (row count validation)
+    ↓
+PostgresSchema (Transformation Layer)
+    ├── Schema Conversion (MySQL → PostgreSQL types)
+    ├── Data Type Conversion (MySQL → PostgreSQL values)
+    └── Type Validation and Normalization
     ↓
 opendental_analytics.raw (PostgreSQL Raw Schema)
 
@@ -43,13 +47,13 @@ KEY ARCHITECTURAL PRINCIPLES:
 
 1. PURE DATA MOVEMENT LAYER
    - Purpose: Move data from MySQL replication to PostgreSQL raw schema
-   - Transformation: MINIMAL - only data type conversion (MySQL → PostgreSQL)
+   - Transformation: DELEGATED - all transformation logic handled by PostgresSchema
    - No Business Logic: No field mappings, calculations, or business rules
 
-2. CONFIGURATION-DRIVEN TYPE CONVERSION
-   - Source: MySQL data types from PostgresSchema.get_table_schema_from_mysql()
-   - Target: PostgreSQL data types via PostgresSchema
-   - Standardization: Consistent type mapping across all tables
+2. TRANSFORMATION DELEGATION
+   - Schema Conversion: PostgresSchema.adapt_schema() and create_postgres_table()
+   - Data Type Conversion: PostgresSchema.convert_row_data_types()
+   - Type Validation: PostgresSchema.verify_schema()
 
 3. INCREMENTAL LOADING SUPPORT
    - Strategy: Time-based incremental loading using incremental_columns from tables.yml
@@ -70,15 +74,21 @@ WHAT POSTGRESLOADER SHOULD NOT DO:
 - Business Logic Transformations (field name changes, calculations)
 - Data Quality Rules (complex validation, business-specific checks)
 - Analytics Preparation (data enrichment, metadata standardization)
+- Schema Analysis or Conversion (delegated to PostgresSchema)
+- Data Type Conversions (delegated to PostgresSchema)
+- Table Creation or Modification (delegated to PostgresSchema)
 
 WHAT POSTGRESLOADER SHOULD DO:
-- Infrastructure Operations (schema conversion, data extraction/loading)
+- Data Movement Operations (extraction, loading, verification)
 - Configuration Integration (tables.yml, PostgresSchema)
-- Pipeline Mechanics (incremental loading, chunking, verification)
+- Pipeline Mechanics (incremental loading, chunking, transaction management)
+- Query Building for Data Extraction
+- Load Verification and Error Handling
 
 This creates a clean separation where:
 - SimpleMySQLReplicator = MySQL to MySQL data movement
-- PostgresLoader = MySQL to PostgreSQL data movement
+- PostgresLoader = MySQL to PostgreSQL data movement (pure movement)
+- PostgresSchema = Schema conversion and data transformation
 - dbt models = Business Logic & Analytics
 
 SIMPLIFIED VERSION - CORE LOADING FUNCTIONALITY ONLY
@@ -129,21 +139,34 @@ logger = get_logger(__name__)
 
 class PostgresLoader:
     """
-    PostgreSQL loader for loading data from MySQL replication to PostgreSQL analytics.
+    PURE DATA MOVEMENT LAYER for loading data from MySQL replication to PostgreSQL analytics.
     
     This class integrates with SimpleMySQLReplicator and uses static configuration
     from tables.yml, eliminating the need for dynamic SchemaDiscovery during ETL operations.
     
-    Integration with SimpleMySQLReplicator:
-    - Works with data copied by SimpleMySQLReplicator to MySQL replication database
-    - Uses static table configuration from tables.yml for incremental loading
-    - Generates schema information directly from MySQL replication database
-    - Provides data movement to PostgreSQL analytics database
+    ARCHITECTURAL ROLE: PURE DATA MOVEMENT LAYER
+    - Focuses exclusively on data extraction, loading, and pipeline mechanics
+    - Delegates all transformation logic to PostgresSchema
+    - Handles incremental loading, chunking, and load verification
+    - Manages database connections and transaction handling
+    - No schema analysis, conversion, or data transformation
     
-    NEW ARCHITECTURE:
-    - Uses ConnectionFactory for explicit environment separation
-    - Uses Settings as single source of truth for configuration
-    - Supports both production and test environments via explicit method calls
+    DATA MOVEMENT RESPONSIBILITIES:
+    - Data extraction from MySQL replication database
+    - Data loading to PostgreSQL analytics database
+    - Incremental loading logic and query building
+    - Chunked processing for large datasets
+    - Load verification and transaction management
+    - Configuration management (tables.yml)
+    
+    DELEGATION TO POSTGRESSCHEMA:
+    - Schema extraction: schema_adapter.get_table_schema_from_mysql()
+    - Table creation: schema_adapter.ensure_table_exists()
+    - Data transformation: schema_adapter.convert_row_data_types()
+    
+    SEPARATION OF CONCERNS:
+    - PostgresLoader: Data movement, pipeline mechanics, load verification
+    - PostgresSchema: Schema conversion, data transformation, type mapping
     """
     
     def __init__(self, tables_config_path: Optional[str] = None, use_test_environment: bool = False, settings: Optional[Settings] = None):
@@ -283,7 +306,7 @@ class PostgresLoader:
             mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
             
             # Create or verify PostgreSQL table
-            if not self._ensure_postgres_table(table_name, mysql_schema):
+            if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
                 return False
             
             # Get incremental columns from configuration
@@ -309,8 +332,12 @@ class PostgresLoader:
                 
                 logger.info(f"Fetched {len(rows)} rows from {table_name}")
             
-            # Prepare data for PostgreSQL insertion
-            rows_data = [dict(zip(column_names, row)) for row in rows]
+            # Prepare data for PostgreSQL insertion with type conversion
+            rows_data = []
+            for row in rows:
+                row_dict = dict(zip(column_names, row))
+                converted_row = self.schema_adapter.convert_row_data_types(table_name, row_dict)
+                rows_data.append(converted_row)
             
             # Handle PostgreSQL insertion with proper transaction management
             with self.analytics_engine.begin() as target_conn:
@@ -377,7 +404,7 @@ class PostgresLoader:
             mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
             
             # Create or verify PostgreSQL table
-            if not self._ensure_postgres_table(table_name, mysql_schema):
+            if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
                 return False
             
             # Get incremental columns from configuration
@@ -428,7 +455,7 @@ class PostgresLoader:
                     rows_data = []
                     for row in rows:
                         row_dict = dict(zip(column_names, row))
-                        converted_row = self._convert_row_data_types(table_name, row_dict)
+                        converted_row = self.schema_adapter.convert_row_data_types(table_name, row_dict)
                         rows_data.append(converted_row)
                 
                 # Insert chunk
@@ -510,30 +537,7 @@ class PostgresLoader:
             logger.error(f"Unexpected error during load verification for {table_name}: {str(e)}")
             return False
     
-    def _ensure_postgres_table(self, table_name: str, mysql_schema: Dict) -> bool:
-        """
-        Ensure PostgreSQL table exists and matches schema.
-        
-        Args:
-            table_name: Name of the table
-            mysql_schema: MySQL schema information from PostgresSchema.get_table_schema_from_mysql()
-            
-        Returns:
-            bool: True if table exists and matches schema
-        """
-        try:
-            # Check if table exists
-            inspector = inspect(self.analytics_engine)
-            if not inspector.has_table(table_name, schema='raw'):
-                # Create table
-                return self.schema_adapter.create_postgres_table(table_name, mysql_schema)
-            
-            # Verify schema
-            return self.schema_adapter.verify_schema(table_name, mysql_schema)
-            
-        except Exception as e:
-            logger.error(f"Error ensuring PostgreSQL table {table_name}: {str(e)}")
-            return False
+
     
     def _build_load_query(self, table_name: str, incremental_columns: List[str], force_full: bool = False) -> str:
         """
@@ -659,42 +663,4 @@ class PostgresLoader:
             logger.error(f"Error getting last load for {table_name}: {str(e)}")
             return None
     
-    def _convert_row_data_types(self, table_name: str, row_data: Dict) -> Dict:
-        """
-        Convert row data types to match PostgreSQL schema.
-        
-        Args:
-            table_name: Name of the table
-            row_data: Dictionary of column names and values
-            
-        Returns:
-            Dict: Converted row data
-        """
-        try:
-            # Get PostgreSQL column types
-            with self.analytics_engine.connect() as conn:
-                inspector = inspect(self.analytics_engine)
-                columns = inspector.get_columns(table_name, schema=self.analytics_schema)
-                
-                # Create type mapping
-                type_map = {col['name']: col['type'].python_type for col in columns}
-                
-                # Convert values
-                converted_data = {}
-                for col_name, value in row_data.items():
-                    if col_name in type_map:
-                        target_type = type_map[col_name]
-                        
-                        # Handle boolean conversion
-                        if target_type == bool and value is not None:
-                            converted_data[col_name] = bool(value)
-                        else:
-                            converted_data[col_name] = value
-                    else:
-                        converted_data[col_name] = value
-                
-                return converted_data
-                
-        except Exception as e:
-            logger.error(f"Error converting data types for {table_name}: {str(e)}")
-            return row_data 
+ 
