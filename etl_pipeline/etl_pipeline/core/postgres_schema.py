@@ -24,10 +24,16 @@ logger = logging.getLogger(__name__)
 
 class PostgresSchema:
     """
-    Handles schema adaptation from MySQL to PostgreSQL with improved type mapping.
+    PURE TRANSFORMATION LAYER for schema and data conversion from MySQL to PostgreSQL.
     
     This class works with the new Settings-centric architecture and automatically
     uses the correct environment (production/test) based on Settings detection.
+    
+    ARCHITECTURAL ROLE: PURE TRANSFORMATION LAYER
+    - Focuses exclusively on schema conversion and data transformation
+    - Handles all MySQL to PostgreSQL type mapping and conversion
+    - Provides schema validation and table creation services
+    - No data movement or pipeline mechanics
     
     Connection Architecture Compliance:
     - ✅ Uses Settings injection for environment-agnostic operation
@@ -36,10 +42,17 @@ class PostgresSchema:
     - ✅ No direct environment variable access
     - ✅ Uses PostgresSchema enum for type safety
     
-    Integration with SimpleMySQLReplicator:
-    - Uses static table configuration from tables.yml
-    - Generates schema information from MySQL replication database
-    - Provides schema conversion for PostgreSQL analytics database
+    TRANSFORMATION RESPONSIBILITIES:
+    - Schema extraction and analysis from MySQL
+    - Schema conversion (MySQL → PostgreSQL types)
+    - Table creation and schema validation
+    - Data type conversion during ETL operations
+    - Type validation and normalization
+    - Encoding and format handling
+    
+    SEPARATION OF CONCERNS:
+    - PostgresSchema: Schema conversion, data transformation, type mapping
+    - PostgresLoader: Data movement, pipeline mechanics, load verification
     """
     
     def __init__(self, postgres_schema: ConfigPostgresSchema = ConfigPostgresSchema.RAW, settings=None):
@@ -441,6 +454,31 @@ class PostgresSchema:
             logger.error(f"Unexpected error creating PostgreSQL table {table_name}: {str(e)}")
             return False
     
+    def ensure_table_exists(self, table_name: str, mysql_schema: Dict) -> bool:
+        """
+        Ensure PostgreSQL table exists and matches schema.
+        
+        Args:
+            table_name: Name of the table
+            mysql_schema: MySQL schema information from get_table_schema_from_mysql()
+            
+        Returns:
+            bool: True if table exists and matches schema
+        """
+        try:
+            # Check if table exists
+            inspector = inspect(self.postgres_engine)
+            if not inspector.has_table(table_name, schema=self.postgres_schema):
+                # Create table
+                return self.create_postgres_table(table_name, mysql_schema)
+            
+            # Verify schema
+            return self.verify_schema(table_name, mysql_schema)
+            
+        except Exception as e:
+            logger.error(f"Error ensuring PostgreSQL table {table_name}: {str(e)}")
+            return False
+
     def verify_schema(self, table_name: str, mysql_schema: Dict) -> bool:
         """
         Verify that PostgreSQL table matches adapted MySQL schema.
@@ -542,3 +580,253 @@ class PostgresSchema:
         except Exception as e:
             logger.error(f"Unexpected error verifying schema for {table_name}: {str(e)}")
             return False 
+
+    def convert_row_data_types(self, table_name: str, row_data: Dict) -> Dict:
+        """
+        Convert row data types to match PostgreSQL schema with comprehensive MySQL to PostgreSQL conversion.
+        
+        Args:
+            table_name: Name of the table
+            row_data: Dictionary of column names and values
+            
+        Returns:
+            Dict: Converted row data
+        """
+        try:
+            # Get PostgreSQL column types and metadata
+            with self.postgres_engine.connect() as conn:
+                inspector = inspect(self.postgres_engine)
+                columns = inspector.get_columns(table_name, schema=self.postgres_schema)
+                
+                # Create comprehensive type mapping with SQLAlchemy types
+                type_info = {}
+                for col in columns:
+                    type_info[col['name']] = {
+                        'python_type': col['type'].python_type,
+                        'sqlalchemy_type': col['type'],
+                        'nullable': col.get('nullable', True)
+                    }
+                
+                # Convert values with comprehensive type handling
+                converted_data = {}
+                for col_name, value in row_data.items():
+                    if col_name in type_info:
+                        converted_data[col_name] = self._convert_single_value(
+                            value, 
+                            type_info[col_name], 
+                            col_name, 
+                            table_name
+                        )
+                    else:
+                        # Column not found in target schema - log warning and pass through
+                        logger.warning(f"Column {col_name} not found in PostgreSQL schema for table {table_name}")
+                        converted_data[col_name] = value
+                
+                return converted_data
+                
+        except Exception as e:
+            logger.error(f"Error converting data types for {table_name}: {str(e)}")
+            return row_data
+    
+    def _convert_single_value(self, value, type_info: Dict, col_name: str, table_name: str):
+        """
+        Convert a single value based on PostgreSQL target type.
+        
+        Args:
+            value: The value to convert
+            type_info: Dictionary with python_type, sqlalchemy_type, nullable
+            col_name: Column name for logging
+            table_name: Table name for logging
+            
+        Returns:
+            Converted value
+        """
+        try:
+            # Handle NULL values
+            if value is None:
+                return None
+            
+            python_type = type_info['python_type']
+            sqlalchemy_type = type_info['sqlalchemy_type']
+            nullable = type_info['nullable']
+            
+            # Handle MySQL empty strings vs PostgreSQL nulls
+            if isinstance(value, str) and value.strip() == '' and nullable:
+                # Convert empty strings to NULL for nullable columns
+                return None
+            
+            # Boolean conversion (MySQL TINYINT 0/1 → PostgreSQL boolean)
+            if python_type == bool:
+                if isinstance(value, (int, float)):
+                    return bool(value)
+                elif isinstance(value, str):
+                    return value.lower() in ('1', 'true', 'yes', 'on')
+                else:
+                    return bool(value)
+            
+            # Integer conversions with range validation
+            elif python_type == int:
+                if isinstance(value, str) and value.strip() == '':
+                    return None if nullable else 0
+                
+                try:
+                    int_value = int(float(value))  # Handle decimal strings like "123.0"
+                    
+                    # Validate integer ranges for PostgreSQL
+                    if hasattr(sqlalchemy_type, 'python_type'):
+                        if 'SMALLINT' in str(sqlalchemy_type).upper():
+                            if not (-32768 <= int_value <= 32767):
+                                logger.warning(f"SMALLINT out of range for {table_name}.{col_name}: {int_value}")
+                        elif 'INTEGER' in str(sqlalchemy_type).upper():
+                            if not (-2147483648 <= int_value <= 2147483647):
+                                logger.warning(f"INTEGER out of range for {table_name}.{col_name}: {int_value}")
+                    
+                    return int_value
+                except (ValueError, TypeError):
+                    logger.warning(f"Could not convert '{value}' to integer for {table_name}.{col_name}")
+                    return None if nullable else 0
+            
+            # Float/Decimal conversions
+            elif python_type == float:
+                if isinstance(value, str) and value.strip() == '':
+                    return None if nullable else 0.0
+                
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    logger.warning(f"Could not convert '{value}' to float for {table_name}.{col_name}")
+                    return None if nullable else 0.0
+            
+            # Decimal/Numeric conversions (high precision)
+            elif hasattr(sqlalchemy_type, 'python_type') and 'NUMERIC' in str(sqlalchemy_type).upper():
+                if isinstance(value, str) and value.strip() == '':
+                    return None if nullable else 0
+                
+                try:
+                    from decimal import Decimal, InvalidOperation
+                    return Decimal(str(value))
+                except (InvalidOperation, ValueError, TypeError):
+                    logger.warning(f"Could not convert '{value}' to decimal for {table_name}.{col_name}")
+                    return None if nullable else 0
+            
+            # DateTime conversions (MySQL datetime → PostgreSQL timestamp)
+            elif python_type == datetime:
+                if isinstance(value, str):
+                    if value.strip() == '' or value == '0000-00-00 00:00:00':
+                        return None if nullable else datetime.min
+                    
+                    try:
+                        # Handle various MySQL datetime formats
+                        from dateutil import parser
+                        parsed_dt = parser.parse(value)
+                        return parsed_dt
+                    except (ValueError, TypeError):
+                        logger.warning(f"Could not parse datetime '{value}' for {table_name}.{col_name}")
+                        return None if nullable else datetime.min
+                elif isinstance(value, datetime):
+                    return value
+                else:
+                    logger.warning(f"Unexpected datetime type '{type(value)}' for {table_name}.{col_name}")
+                    return None if nullable else datetime.min
+            
+            # String conversions with encoding and length validation
+            elif python_type == str:
+                if value is None:
+                    return None
+                
+                str_value = str(value)
+                
+                # Handle MySQL charset encoding issues
+                try:
+                    # Ensure proper UTF-8 encoding
+                    if isinstance(str_value, bytes):
+                        str_value = str_value.decode('utf-8', errors='replace')
+                    else:
+                        # Re-encode to handle any encoding issues
+                        str_value = str_value.encode('utf-8', errors='replace').decode('utf-8')
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    logger.warning(f"Encoding issue for {table_name}.{col_name}, using replacement characters")
+                    str_value = str(value).encode('utf-8', errors='replace').decode('utf-8')
+                
+                # Validate string length if column has length constraint
+                if hasattr(sqlalchemy_type, 'length') and sqlalchemy_type.length:
+                    max_length = sqlalchemy_type.length
+                    if len(str_value) > max_length:
+                        logger.warning(f"String truncated for {table_name}.{col_name}: length {len(str_value)} > {max_length}")
+                        str_value = str_value[:max_length]
+                
+                return str_value
+            
+            # Date conversions (MySQL date → PostgreSQL date)
+            elif hasattr(sqlalchemy_type, 'python_type') and 'DATE' in str(sqlalchemy_type).upper():
+                if isinstance(value, str):
+                    if value.strip() == '' or value == '0000-00-00':
+                        return None if nullable else datetime.min.date()
+                    
+                    try:
+                        from dateutil import parser
+                        parsed_dt = parser.parse(value)
+                        return parsed_dt.date()
+                    except (ValueError, TypeError):
+                        logger.warning(f"Could not parse date '{value}' for {table_name}.{col_name}")
+                        return None if nullable else datetime.min.date()
+                elif hasattr(value, 'date'):
+                    return value.date() if hasattr(value, 'date') else value
+                else:
+                    return value
+            
+            # Time conversions (MySQL time → PostgreSQL time)
+            elif hasattr(sqlalchemy_type, 'python_type') and 'TIME' in str(sqlalchemy_type).upper():
+                if isinstance(value, str):
+                    if value.strip() == '':
+                        return None if nullable else datetime.min.time()
+                    
+                    try:
+                        from dateutil import parser
+                        parsed_dt = parser.parse(value)
+                        return parsed_dt.time()
+                    except (ValueError, TypeError):
+                        logger.warning(f"Could not parse time '{value}' for {table_name}.{col_name}")
+                        return None if nullable else datetime.min.time()
+                elif hasattr(value, 'time'):
+                    return value.time() if hasattr(value, 'time') else value
+                else:
+                    return value
+            
+            # Binary data conversions (MySQL BLOB → PostgreSQL bytea)
+            elif python_type == bytes:
+                if isinstance(value, str):
+                    return value.encode('utf-8')
+                elif isinstance(value, bytes):
+                    return value
+                else:
+                    return bytes(str(value), 'utf-8')
+            
+            # JSON conversions (MySQL JSON → PostgreSQL jsonb)
+            elif 'JSON' in str(sqlalchemy_type).upper():
+                if isinstance(value, str):
+                    try:
+                        import json
+                        # Validate JSON format
+                        json.loads(value)
+                        return value
+                    except json.JSONDecodeError:
+                        logger.warning(f"Invalid JSON for {table_name}.{col_name}: {value}")
+                        return None if nullable else '{}'
+                else:
+                    return value
+            
+            # Default case - pass through with type coercion attempt
+            else:
+                if python_type and value is not None:
+                    try:
+                        return python_type(value)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Could not convert '{value}' to {python_type} for {table_name}.{col_name}")
+                        return None if nullable else python_type()
+                else:
+                    return value
+                    
+        except Exception as e:
+            logger.error(f"Error converting value '{value}' for {table_name}.{col_name}: {str(e)}")
+            return value 
