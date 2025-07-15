@@ -136,7 +136,7 @@ class Settings:
         if not environment:
             raise EnvironmentError(
                 message="ETL_ENVIRONMENT environment variable is not set",
-                environment=None,
+                environment="unknown",  # Indicate that environment detection failed
                 missing_variables=["ETL_ENVIRONMENT"],
                 details={"critical": True}
             )
