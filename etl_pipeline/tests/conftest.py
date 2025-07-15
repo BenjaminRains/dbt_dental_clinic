@@ -26,6 +26,7 @@ from tests.fixtures.env_fixtures import (
 
 # Import integration fixtures for integration tests
 from tests.fixtures.integration_fixtures import (
+    validate_test_databases,
     test_data_manager,
     populated_test_databases,
     test_database_engines,
