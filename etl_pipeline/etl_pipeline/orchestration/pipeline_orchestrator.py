@@ -127,12 +127,6 @@ class PipelineOrchestrator:
             logger.error(f"Unexpected error in PipelineOrchestrator initialization: {str(e)}")
             raise
     
-    # Test configuration creation moved to fixtures
-    # This method is deprecated and will be removed
-    def _create_test_config_reader(self):
-        """DEPRECATED: Use dependency injection instead."""
-        raise NotImplementedError("Test configuration should be injected via fixtures")
-        
     def initialize_connections(self) -> bool:
         """
         Initialize all database connections and components.
