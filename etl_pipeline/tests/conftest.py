@@ -250,8 +250,10 @@ from tests.fixtures.cli_fixtures import (
 
 # Import metrics fixtures for monitoring tests (actually used)
 from tests.fixtures.metrics_fixtures import (
+    test_metrics_settings,
     mock_unified_metrics_connection,
     unified_metrics_collector_no_persistence,
+    unified_metrics_collector_with_persistence,
     mock_metrics_data,
     mock_performance_metrics,
     mock_pipeline_metrics,
