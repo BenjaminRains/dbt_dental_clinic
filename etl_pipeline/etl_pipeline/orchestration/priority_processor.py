@@ -294,10 +294,10 @@ class PriorityProcessor:
                         success = future.result()
                         if success:
                             success_tables.append(table)
-                            logger.info(f"✓ Successfully processed {table} in parallel")
+                            logger.info(f"SUCCESS: Successfully processed {table} in parallel")
                         else:
                             failed_tables.append(table)
-                            logger.error(f"✗ Failed to process {table} in parallel")
+                            logger.error(f"X Failed to process {table} in parallel")
                     except DataExtractionError as e:
                         logger.error(f"Data extraction failed for {table} in parallel: {e}")
                         failed_tables.append(table)
@@ -339,7 +339,7 @@ class PriorityProcessor:
                 success = self._process_single_table(table, force_full)
                 if success:
                     success_tables.append(table)
-                    logger.info(f"✓ Successfully processed {table} sequentially")
+                    logger.info(f"SUCCESS: Successfully processed {table} sequentially")
                 else:
                     failed_tables.append(table)
                     logger.error(f"✗ Failed to process {table} sequentially")
