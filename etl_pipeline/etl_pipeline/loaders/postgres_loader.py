@@ -206,6 +206,7 @@ class PostgresLoader:
             # Get database connections using unified interface with Settings injection
             self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
             self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
+            print(f"[ETL DEBUG] PostgresLoader analytics_engine id: {id(self.analytics_engine)}")
             
             # Log which environment we're using
             environment = self.settings.environment.upper()
