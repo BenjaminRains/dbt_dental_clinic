@@ -168,7 +168,7 @@ class TestPostgresLoaderComprehensive:
         # Verify ETL_ENVIRONMENT is set to 'test'
         assert os.environ.get('ETL_ENVIRONMENT') == 'test', "ETL_ENVIRONMENT must be set to 'test' for testing"
         
-        self.logger.info("✓ All required environment variables are loaded and verified")
+        self.logger.info("SUCCESS: All required environment variables are loaded and verified")
     
     def test_required_env_vars_present(self, test_env_vars):
         """
@@ -202,7 +202,7 @@ class TestPostgresLoaderComprehensive:
             else:
                 assert value == validation, f"Environment variable {var_name} should be '{validation}', got '{value}'"
         
-        self.logger.info("✓ All required environment variables are present and valid")
+        self.logger.info("SUCCESS: All required environment variables are present and valid")
     
     def test_fail_fast_on_missing_etl_environment(self):
         """
@@ -264,7 +264,7 @@ class TestPostgresLoaderComprehensive:
                         assert loader.settings.environment == 'test'
                         assert loader.table_configs is not None
                     
-        self.logger.info("✓ Settings initialization successful")
+        self.logger.info("SUCCESS: Settings initialization successful")
     
     # ===========================================
     # PHASE 2: CORE POSTGRESQL LOADER LOGIC
@@ -367,7 +367,7 @@ class TestPostgresLoaderComprehensive:
             # Assert: Verify result matches expectation
             assert result == scenario['expected_result'], f"Failed scenario: {scenario['description']}"
             
-        self.logger.info("✓ load_table scenarios tested successfully with realistic data")
+        self.logger.info("SUCCESS: load_table scenarios tested successfully with realistic data")
     
     def test_load_table_chunked_scenarios(self, postgres_loader, sample_table_data, sample_mysql_schema):
         """
@@ -450,7 +450,7 @@ class TestPostgresLoaderComprehensive:
             else:
                 assert result is True, f"Empty table chunked loading failed for scenario: {scenario}"
             
-        self.logger.info("✓ load_table_chunked scenarios tested successfully with realistic data")
+        self.logger.info("SUCCESS: load_table_chunked scenarios tested successfully with realistic data")
     
     def test_verify_load_scenarios(self, postgres_loader, sample_table_data):
         """
@@ -495,7 +495,7 @@ class TestPostgresLoaderComprehensive:
             # Assert: Verify result matches expectation
             assert result == scenario['expected_result'], f"Verification failed for scenario: {scenario}"
             
-        self.logger.info("✓ verify_load scenarios tested successfully with realistic data")
+        self.logger.info("SUCCESS: verify_load scenarios tested successfully with realistic data")
 
     # ===========================================
     # PHASE 3: QUERY BUILDING AND SCHEMA OPERATIONS
@@ -569,7 +569,7 @@ class TestPostgresLoaderComprehensive:
             assert 'SELECT COUNT(*)' in count_query
             assert 'FROM patient' in count_query
             
-        self.logger.info("✓ Query building logic tested successfully with realistic schema data")
+        self.logger.info("SUCCESS: Query building logic tested successfully with realistic schema data")
     
     def test_schema_operations(self, postgres_loader, sample_mysql_schema):
         """
@@ -611,7 +611,7 @@ class TestPostgresLoaderComprehensive:
                 'patient', mysql_schema
             )
             
-        self.logger.info("✓ Schema operations tested successfully with realistic schema data")
+        self.logger.info("SUCCESS: Schema operations tested successfully with realistic schema data")
     
     # ===========================================
     # PHASE 4: CONFIGURATION AND ERROR HANDLING
@@ -679,7 +679,7 @@ class TestPostgresLoaderComprehensive:
                             assert loader.table_configs['appointment']['batch_size'] == 500
                             assert loader.table_configs['procedurelog']['batch_size'] == 2000
                         
-        self.logger.info("✓ Configuration loading tested successfully with realistic dental clinic table configurations")
+        self.logger.info("SUCCESS: Configuration loading tested successfully with realistic dental clinic table configurations")
     
     def test_error_handling_scenarios(self, postgres_loader, sample_table_data):
         """
@@ -739,7 +739,7 @@ class TestPostgresLoaderComprehensive:
                 # Assert: Should return False for connection error
                 assert result == scenario['expected_result']
                 
-        self.logger.info("✓ Error handling scenarios tested successfully with realistic table names")
+        self.logger.info("SUCCESS: Error handling scenarios tested successfully with realistic table names")
     
     def test_provider_pattern_integration(self, test_settings):
         """
@@ -774,4 +774,4 @@ class TestPostgresLoaderComprehensive:
                         assert loader.settings.environment == 'test'
                         assert loader.table_configs is not None
                         
-        self.logger.info("✓ Provider pattern integration tested successfully")
+        self.logger.info("SUCCESS: Provider pattern integration tested successfully")
