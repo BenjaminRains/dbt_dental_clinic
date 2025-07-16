@@ -759,7 +759,7 @@ class TestSimpleMySQLReplicatorAdvancedIntegration:
                             result = conn.execute(text(f"SHOW COLUMNS FROM {table_name} LIKE '{incremental_column}'"))
                             columns = result.fetchall()
                             assert len(columns) > 0, f"Incremental column {incremental_column} not found in table {table_name}"
-                            logger.info(f"✓ Validated incremental column '{incremental_column}' for table '{table_name}'")
+                            logger.info(f"SUCCESS: Validated incremental column '{incremental_column}' for table '{table_name}'")
                         else:
                             # Table doesn't exist in test database, skip validation
                             logger.info(f"Table {table_name} not found in test database, skipping column validation")
@@ -814,4 +814,4 @@ class TestSimpleMySQLReplicatorAdvancedIntegration:
             table_importance = config.get('table_importance')
             assert table_importance in ['important', 'standard', 'audit'], f"Invalid table_importance for {table_name}"
         
-        logger.info(f"✓ Validated configuration structure for {len(replicator.table_configs)} tables") 
+        logger.info(f"SUCCESS: Validated configuration structure for {len(replicator.table_configs)} tables") 
