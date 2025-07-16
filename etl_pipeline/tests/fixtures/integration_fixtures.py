@@ -335,3 +335,48 @@ def setup_etl_tracking(test_analytics_engine):
     with test_analytics_engine.connect() as conn:
         conn.execute(text("DELETE FROM etl_tracking"))
         conn.commit() 
+
+@pytest.fixture(autouse=True)
+def reset_analytics_tables(test_raw_engine):
+    """
+    Truncate raw.patient and raw.appointment tables in the analytics database before each test.
+    Ensures test isolation and prevents unique constraint violations.
+    """
+    print(f"[pytest fixture] Truncating raw.patient and raw.appointment before test (engine id: {id(test_raw_engine)})")
+    
+    # First, verify the tables exist and get their current row counts
+    with test_raw_engine.connect() as conn:
+        # Check if tables exist and get row counts
+        try:
+            patient_count = conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
+            appointment_count = conn.execute(text('SELECT COUNT(*) FROM raw.appointment')).scalar()
+            print(f"[pytest fixture] Before truncation - patient: {patient_count}, appointment: {appointment_count}")
+        except Exception as e:
+            print(f"[pytest fixture] Error checking table counts: {e}")
+            # Tables might not exist yet, which is fine for new tests
+            pass
+    
+    # Truncate the tables with explicit transaction handling
+    with test_raw_engine.begin() as conn:
+        try:
+            conn.execute(text('TRUNCATE TABLE raw.patient RESTART IDENTITY CASCADE;'))
+            conn.execute(text('TRUNCATE TABLE raw.appointment RESTART IDENTITY CASCADE;'))
+            print("[pytest fixture] Successfully truncated tables")
+        except Exception as e:
+            print(f"[pytest fixture] Error truncating tables: {e}")
+            # If tables don't exist, that's fine - they'll be created during the test
+            pass
+    
+    # Verify the tables are empty
+    with test_raw_engine.connect() as conn:
+        try:
+            patient_count = conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
+            appointment_count = conn.execute(text('SELECT COUNT(*) FROM raw.appointment')).scalar()
+            print(f"[pytest fixture] After truncation - patient: {patient_count}, appointment: {appointment_count}")
+        except Exception as e:
+            print(f"[pytest fixture] Error verifying truncation: {e}")
+            pass
+    
+    # Dispose the engine to ensure fresh connections
+    test_raw_engine.dispose()
+    yield 
