@@ -40,16 +40,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Load test environment the same way as the test fixtures
 def load_test_environment():
-    """Load environment variables from .env file for testing."""
-    # Only load from etl_pipeline/.env - don't load from other directories
-    etl_env_path = Path(__file__).parent.parent / '.env'
+    """Load environment variables from .env_test file for testing."""
+    etl_env_path = Path(__file__).parent.parent / '.env_test'
     if etl_env_path.exists():
-        # Use override=True to ensure our .env takes precedence
         load_dotenv(etl_env_path, override=True)
         print(f"Loaded environment from: {etl_env_path}")
     else:
-        print(f"No .env file found at: {etl_env_path}")
-        print("Please create etl_pipeline/.env_production from etl_pipeline/docs/env_production.template")
+        print(f"No .env_test file found at: {etl_env_path}")
+        print("Please create etl_pipeline/.env_test from etl_pipeline/docs/env_test.template")
         sys.exit(1)
 
 # Load environment at module import time
@@ -79,41 +77,27 @@ def validate_test_environment():
     """
     Validate that we're running in a test environment.
     
-    Uses the same environment detection logic as the ETL pipeline settings.
+    Only checks ETL_ENVIRONMENT variable and fails if not set to 'test'.
     
     Returns:
         bool: True if running in test environment, False otherwise
     """
-    # Use the same environment detection logic as settings.py
-    environment = (
-        os.environ.get('ETL_ENVIRONMENT') or
-        os.environ.get('ENVIRONMENT') or
-        os.environ.get('APP_ENV') or
-        'production'  # Default fallback
-    )
+    environment = os.environ.get('ETL_ENVIRONMENT')
     
-    # Validate environment (same logic as settings.py)
-    valid_environments = ['production', 'test']
-    if environment not in valid_environments:
-        logger.warning(f"Invalid environment '{environment}', using 'production'")
-        environment = 'production'
-    
-    is_test_env = environment == 'test'
-    
-    if not is_test_env:
-        logger.error("SAFETY CHECK FAILED: This script can only run in test environments!")
-        logger.error(f"Current environment: '{environment}'")
-        logger.error("Environment variables checked:")
-        logger.error(f"  ETL_ENVIRONMENT='{os.environ.get('ETL_ENVIRONMENT', '')}'")
-        logger.error(f"  ENVIRONMENT='{os.environ.get('ENVIRONMENT', '')}'")
-        logger.error(f"  APP_ENV='{os.environ.get('APP_ENV', '')}'")
-        logger.error("To run this script, set one of these environment variables:")
+    if not environment:
+        logger.error("SAFETY CHECK FAILED: ETL_ENVIRONMENT environment variable is not set!")
+        logger.error("To run this script, set:")
         logger.error("  export ETL_ENVIRONMENT=test")
-        logger.error("  export ENVIRONMENT=test")
-        logger.error("  export APP_ENV=test")
         return False
     
-    logger.info(f"Environment validation passed - running in test mode (detected: {environment})")
+    if environment != 'test':
+        logger.error("SAFETY CHECK FAILED: ETL_ENVIRONMENT must be set to 'test'!")
+        logger.error(f"Current ETL_ENVIRONMENT: '{environment}'")
+        logger.error("To run this script, set:")
+        logger.error("  export ETL_ENVIRONMENT=test")
+        return False
+    
+    logger.info(f"Environment validation passed - running in test mode (ETL_ENVIRONMENT={environment})")
     return True
 
 def validate_database_names():
@@ -245,17 +229,17 @@ def setup_postgresql_test_database():
                     CACHE 1;
             """))
             
-            # Create complete patient table in raw schema matching test_opendental_analytics schema exactly
+            # Create complete patient table in raw schema with correct column types to match ETL expectations
             conn.execute(text(f"""
                 CREATE TABLE raw.patient (
-                    "PatNum" integer NOT NULL DEFAULT nextval('raw."patient_PatNum_seq"'::regclass),
+                    "PatNum" bigint NOT NULL DEFAULT nextval('raw."patient_PatNum_seq"'::regclass),
                     "LName" character varying(100) COLLATE pg_catalog."default",
                     "FName" character varying(100) COLLATE pg_catalog."default",
                     "MiddleI" character varying(100) COLLATE pg_catalog."default",
                     "Preferred" character varying(100) COLLATE pg_catalog."default",
-                    "PatStatus" smallint DEFAULT 0,
-                    "Gender" smallint DEFAULT 0,
-                    "Position" smallint DEFAULT 0,
+                    "PatStatus" boolean DEFAULT false,
+                    "Gender" boolean DEFAULT false,
+                    "Position" boolean DEFAULT false,
                     "Birthdate" date,
                     "SSN" character varying(100) COLLATE pg_catalog."default",
                     "Address" character varying(100) COLLATE pg_catalog."default",
@@ -267,7 +251,7 @@ def setup_postgresql_test_database():
                     "WkPhone" character varying(30) COLLATE pg_catalog."default",
                     "WirelessPhone" character varying(30) COLLATE pg_catalog."default",
                     "Guarantor" bigint,
-                    "CreditType" character varying(1) COLLATE pg_catalog."default",
+                    "CreditType" character(1) COLLATE pg_catalog."default",
                     "Email" character varying(100) COLLATE pg_catalog."default",
                     "Salutation" character varying(100) COLLATE pg_catalog."default",
                     "EstBalance" double precision DEFAULT 0,
@@ -280,7 +264,7 @@ def setup_postgresql_test_database():
                     "FamFinUrgNote" text COLLATE pg_catalog."default",
                     "MedUrgNote" character varying(255) COLLATE pg_catalog."default",
                     "ApptModNote" character varying(255) COLLATE pg_catalog."default",
-                    "StudentStatus" character varying(1) COLLATE pg_catalog."default",
+                    "StudentStatus" character(1) COLLATE pg_catalog."default",
                     "SchoolName" character varying(255) COLLATE pg_catalog."default",
                     "ChartNumber" character varying(100) COLLATE pg_catalog."default",
                     "MedicaidID" character varying(20) COLLATE pg_catalog."default",
@@ -293,21 +277,21 @@ def setup_postgresql_test_database():
                     "EmployerNum" bigint,
                     "EmploymentNote" character varying(255) COLLATE pg_catalog."default",
                     "County" character varying(255) COLLATE pg_catalog."default",
-                    "GradeLevel" smallint DEFAULT 0,
-                    "Urgency" smallint DEFAULT 0,
+                    "GradeLevel" boolean DEFAULT false,
+                    "Urgency" boolean DEFAULT false,
                     "DateFirstVisit" date,
                     "ClinicNum" bigint,
                     "HasIns" character varying(255) COLLATE pg_catalog."default",
                     "TrophyFolder" character varying(255) COLLATE pg_catalog."default",
-                    "PlannedIsDone" smallint,
-                    "Premed" smallint,
+                    "PlannedIsDone" boolean DEFAULT false,
+                    "Premed" boolean DEFAULT false,
                     "Ward" character varying(255) COLLATE pg_catalog."default",
-                    "PreferConfirmMethod" smallint,
-                    "PreferContactMethod" smallint,
-                    "PreferRecallMethod" smallint,
+                    "PreferConfirmMethod" boolean DEFAULT false,
+                    "PreferContactMethod" boolean DEFAULT false,
+                    "PreferRecallMethod" boolean DEFAULT false,
                     "SchedBeforeTime" time without time zone,
                     "SchedAfterTime" time without time zone,
-                    "SchedDayOfWeek" smallint DEFAULT 0,
+                    "SchedDayOfWeek" boolean DEFAULT false,
                     "Language" character varying(100) COLLATE pg_catalog."default",
                     "AdmitDate" date,
                     "Title" character varying(15) COLLATE pg_catalog."default",
@@ -315,34 +299,34 @@ def setup_postgresql_test_database():
                     "SiteNum" bigint,
                     "DateTStamp" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
                     "ResponsParty" bigint,
-                    "CanadianEligibilityCode" smallint DEFAULT 0,
+                    "CanadianEligibilityCode" boolean DEFAULT false,
                     "AskToArriveEarly" integer DEFAULT 0,
-                    "PreferContactConfidential" smallint DEFAULT 0,
+                    "PreferContactConfidential" boolean DEFAULT false,
                     "SuperFamily" bigint,
-                    "TxtMsgOk" smallint DEFAULT 0,
+                    "TxtMsgOk" boolean DEFAULT false,
                     "SmokingSnoMed" character varying(32) COLLATE pg_catalog."default",
                     "Country" character varying(255) COLLATE pg_catalog."default",
                     "DateTimeDeceased" timestamp without time zone,
                     "BillingCycleDay" integer DEFAULT 1,
                     "SecUserNumEntry" bigint,
                     "SecDateEntry" date,
-                    "HasSuperBilling" smallint DEFAULT 0,
+                    "HasSuperBilling" boolean DEFAULT false,
                     "PatNumCloneFrom" bigint,
                     "DiscountPlanNum" bigint,
-                    "HasSignedTil" smallint DEFAULT 0,
-                    "ShortCodeOptIn" smallint DEFAULT 0,
+                    "HasSignedTil" boolean DEFAULT false,
+                    "ShortCodeOptIn" boolean DEFAULT false,
                     "SecurityHash" character varying(255) COLLATE pg_catalog."default",
                     CONSTRAINT patient_pkey PRIMARY KEY ("PatNum")
                 )
             """))
             
-            # Create appointment table with complete schema
+            # Create appointment table with correct column types to match ETL expectations
             conn.execute(text(f"""
                 CREATE TABLE raw.appointment (
-                    "AptNum" integer NOT NULL DEFAULT nextval('raw."appointment_AptNum_seq"'::regclass),
+                    "AptNum" bigint NOT NULL DEFAULT nextval('raw."appointment_AptNum_seq"'::regclass),
                     "PatNum" bigint NOT NULL,
                     "AptDateTime" timestamp without time zone NOT NULL,
-                    "AptStatus" smallint DEFAULT 0,
+                    "AptStatus" boolean DEFAULT false,
                     "DateTStamp" timestamp without time zone NOT NULL,
                     "Notes" text COLLATE pg_catalog."default",
                     CONSTRAINT appointment_pkey PRIMARY KEY ("AptNum")
