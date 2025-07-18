@@ -3,74 +3,124 @@ version: 2
 models:
   - name: int_fee_model
     description: >
-      Comprehensive fee model that focuses on fee processing and verification for an out-of-network
-      dental clinic. This model consolidates fee-related information from multiple sources and 
-      provides clear fee relationships.
+      Comprehensive fee processing and verification model for out-of-network dental clinic operations.
+      
+      This model serves as the central fee analysis hub and provides critical financial validation
+      for procedure pricing, adjustment tracking, and revenue optimization workflows.
+      Part of System A: Fee Processing & Verification workflow.
+      
+      Key Features:
+      - Fee Variance Analysis: Compares applied fees against standard fee schedules with variance calculations
+      - Adjustment Impact Assessment: Categorizes and tracks provider discretion and discount adjustments
+      - Financial Integrity Monitoring: Validates fee relationships and identifies data quality issues
+      - Revenue Optimization Support: Provides fee statistics and patterns for pricing decisions
+      - Out-of-Network Compliance: Accounts for flexible pricing requirements in non-network operations
       
       Data Sources:
-      - stg_opendental__procedurelog: Base procedure records and applied fees
-      - stg_opendental__procedurecode: Procedure code definitions and descriptions
-      - stg_opendental__fee: Standard fee amounts and schedules
-      - stg_opendental__feesched: Fee schedule definitions and types
-      - stg_opendental__definition: Adjustment type definitions and categories
-      - stg_opendental__adjustment: Adjustment records and amounts
+      - stg_opendental__procedurelog: Base procedure records and applied fees for financial transactions
+      - stg_opendental__procedurecode: Procedure code definitions and fee categorization rules
+      - stg_opendental__fee: Standard fee amounts and fee schedule references for comparison
+      - stg_opendental__feesched: Fee schedule definitions and organizational fee structures
+      - stg_opendental__definition: Adjustment type definitions and discount category mappings
+      - stg_opendental__adjustment: Financial adjustment records and modification history
       
-      Key features:
-      - Tracks applied fees vs. standard fees
-      - Calculates fee variances and relationships
-      - Integrates adjustment information with definition mappings
-      - Provides fee statistics per procedure code
-      - Supports fee verification workflow
-      - Filters for procedures from 2023 onwards
-      - Uses DISTINCT ON to handle potential duplicates
+      Business Logic Features:
+      - Fee Relationship Classification: Categorizes fees as above/below/matching standard rates
+      - Adjustment Impact Calculation: Determines major/moderate/minor adjustment significance
+      - Provider Discretion Tracking: Identifies and flags provider-initiated fee modifications
+      - Discount Type Categorization: Classifies employee, military, and courtesy adjustments
+      - Effective Fee Calculation: Computes final patient-responsible amounts after adjustments
       
-      Note: As an out-of-network focused clinic:
-      - Applied fees often differ significantly from standard fees
-      - Fee schedules primarily serve as reference data
-      - Adjustments are common and reflect patient-specific arrangements
-      - Fee validation should account for this out-of-network reality
+      Financial Calculations:
+      - Fee Variance Percentage: ((applied_fee - standard_fee) / standard_fee) * 100
+      - Effective Fee Amount: applied_fee + total_adjustments for patient billing
+      - Adjustment Impact Classification: Based on percentage thresholds (25%, 50% of applied fee)
+      - Fee Statistics: Min/max/average fee analysis per procedure code for pricing intelligence
       
-      Note: Relevant definition categories include:
-      - Category 0: Provider Discretion adjustments
-      - Category 15: Discount types (Employee, Military, Courtesy)
-
-      Known Fee Patterns and Issues:
-      - Implant procedures (D6114, D6115) typically have higher fees ($10,324 - $25,500)
-      - Provider 28 shows consistent patterns of large adjustments and fee variances
-      - Zero-base fee procedures with large adjustments can result in negative effective fees
-      - "Discount Per Dr. Kamp" adjustments are frequently associated with extreme fee reductions
-      - Some procedures show unusually high fees (e.g., MISC Quickpick Button at $51,000)
-      - D0180 (comprehensive periodontal evaluation) has a known fee entry error in schedule 8290 ($11,611.0 vs normal $116.11)
+      Data Quality Notes:
+      - Negative Effective Fees: 98 records identified with zero-base procedures and large adjustments
+      - Provider 28 Patterns: Consistent large adjustment patterns requiring monitoring and validation
+      - Implant Procedure Ranges: D6114/D6115 procedures with expected high fees ($10,324-$25,500)
+      - Fee Entry Errors: D0180 schedule 8290 error ($11,611 vs $116.11) requiring correction
+      - Extreme Fee Outliers: MISC Quickpick Button procedures at $51,000 requiring validation
       
-      Data Quality Considerations:
-      - Monitor for negative effective fees (98 records identified)
-      - Watch for zero-base fee procedures with large adjustments
-      - Track provider-specific fee patterns, especially provider 28
-      - Validate adjustment timing relative to procedure dates
-      - Review standard fee consistency across similar procedures
+      Business Rules:
+      - Out-of-Network Flexibility: Applied fees may legitimately differ from standard schedules
+      - Adjustment Timing Validation: Retroactive adjustments require additional scrutiny
+      - Provider Discretion Limits: Category 0 adjustments must align with provider authorization
+      - Discount Category Compliance: Employee/military/courtesy adjustments must use category 15
     
     config:
       materialized: incremental
       unique_key: procedure_id
       schema: intermediate
+      on_schema_change: fail
+      incremental_strategy: merge
+    
+    meta:
+      owner: "Fee Processing Team"
+      contains_pii: false
+      business_process: "Fee Processing & Verification"
+      refresh_frequency: "Daily"
+      business_impact: "High"
+      system_integration: "System A: Fee Processing"
+      data_quality_requirements:
+        - "All procedures must have valid procedure codes"
+        - "Applied fees must be non-negative"
+        - "Standard fees must be available for active procedures"
+        - "Adjustment categories must be properly mapped"
+      performance_requirements:
+        - "Query execution time under 30 seconds"
+        - "Incremental processing for efficient updates"
+        - "Proper indexing on key join columns"
     
     columns:
       - name: procedure_id
-        description: Primary key from procedurelog
+        description: >
+          Primary key - Unique identifier for each procedure transaction (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase)
+          - Transformed to: procedure_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Uniqueness ensures one record per procedure for financial tracking
+          - Used as primary key for fee analysis and adjustment aggregation
+          - Critical for procedure-level financial reporting and audit trails
         tests:
           - unique
           - not_null
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              config:
+                description: "Ensures referential integrity with source procedure records for financial validation"
 
       - name: patient_id
-        description: Foreign key to patient
+        description: >
+          Foreign key to patient entity (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedure fees to patient billing and account management
+          - Enables patient-level fee analysis and payment tracking
+          - Critical for patient account reconciliation and financial reporting
+          
+          Data Quality Considerations:
+          - All procedures must be associated with valid patients
+          - Patient relationship drives billing and collection workflows
+          - Referential integrity essential for financial accuracy
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                description: "Ensures all procedure fees are linked to valid patients for billing integrity"
 
       - name: provider_id
         description: Provider who performed the procedure
@@ -111,28 +161,50 @@ models:
           - not_null
 
       - name: applied_fee
-        description: Fee amount from procedurelog (renamed from procedure_fee)
+        description: >
+          Fee amount actually charged to patient for this procedure (maps from "ProcFee" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcFee" (CamelCase as stored)
+          - Transformed to: applied_fee (descriptive snake_case naming)
+          - Represents actual fee charged, not standard or suggested fee
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Provider-determined fee at time of procedure
+          - Business Rules: May differ from standard fees due to out-of-network flexibility
+          
+          Accounting Impact:
+          - Primary component of patient account charges
+          - Base amount for adjustment calculations and patient billing
+          - Critical for revenue recognition and financial reporting
+          
+          Common Values:
+          - Standard procedures: $25-$500 typical range
+          - Implant procedures: $10,324-$25,500 expected range
+          - Zero-base procedures: $0 for certain treatment planning codes
+          - Outlier procedures: MISC codes may exceed $10,000 legitimately
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10000
-              row_condition: "procedure_status = 2 AND procedure_code NOT IN ('D6114', 'D6115')"  # Standard threshold for non-implant procedures
+              row_condition: "procedure_status = 2 AND procedure_code NOT IN ('D6114', 'D6115')"
+              config:
+                description: "Standard procedure fee range validation for completed procedures excluding implants"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 30000
-              row_condition: "procedure_status = 2 AND procedure_code IN ('D6114', 'D6115')"  # Higher threshold for implant procedures
+              row_condition: "procedure_status = 2 AND procedure_code IN ('D6114', 'D6115')"
+              config:
+                description: "Implant procedure fee range validation for high-value dental procedures"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
-              row_condition: "is_hygiene_flag = 1"
+              row_condition: "is_hygiene_procedure = true"
               config:
                 severity: warn
                 name: warn_high_hygiene_fees
-        notes: >
-          Known patterns:
-          - Implant procedures (D6114, D6115) typically range $10,324 - $25,500
-          - Some MISC Quickpick Button procedures show unusually high fees ($51,000)
-          - Zero-base fees are common for certain procedures (e.g., D2919, D5109)
+                description: "Hygiene procedure fee monitoring for cost control and billing accuracy"
 
       - name: standard_fee_id
         description: ID of the standard fee record used
@@ -165,11 +237,53 @@ models:
       - name: fee_schedule_type_id
         description: Type identifier for the fee schedule
 
-      - name: is_hidden
-        description: Flag indicating if the fee schedule is hidden
+      - name: is_fee_schedule_hidden
+        description: >
+          Flag indicating if the fee schedule is hidden from standard fee displays (converted from OpenDental 0/1 integer)
+          
+          Source Transformation:
+          - OpenDental source: "IsHidden" (0/1 integer as stored)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false/null)
+          
+          Business Logic:
+          - true when: Fee schedule is hidden from normal user interfaces
+          - false when: Fee schedule is visible and available for selection
+          - null when: Fee schedule status is undetermined
+          
+          Operational Usage:
+          - Controls fee schedule visibility in user interfaces
+          - Affects fee selection workflows and user permissions
+          - Used for administrative control of fee schedule access
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Boolean validation for fee schedule visibility controls"
 
-      - name: is_global_flag
-        description: Flag indicating if the fee schedule is global
+      - name: is_global_fee_schedule
+        description: >
+          Flag indicating if the fee schedule applies globally across all clinics (converted from OpenDental 0/1 integer)
+          
+          Source Transformation:
+          - OpenDental source: "IsGlobal" (0/1 integer as stored)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false/null)
+          
+          Business Logic:
+          - true when: Fee schedule applies across all clinic locations
+          - false when: Fee schedule is clinic-specific or limited scope
+          - null when: Global status is undetermined
+          
+          Operational Usage:
+          - Determines fee schedule application scope across locations
+          - Affects multi-clinic fee standardization workflows
+          - Used for organizational fee policy enforcement
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Boolean validation for fee schedule global scope determination"
 
       - name: available_fee_options
         description: Count of different fee options available for this procedure code
@@ -212,23 +326,77 @@ models:
       - name: abbreviated_description
         description: Short description of the procedure
 
-      - name: is_hygiene_flag
-        description: Flag indicating if this is a hygiene procedure
+      - name: is_hygiene_procedure
+        description: >
+          Flag indicating if this is a hygiene procedure (converted from OpenDental 0/1 integer)
+          
+          Source Transformation:
+          - OpenDental source: "IsHygiene" (0/1 integer as stored)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false/null)
+          
+          Business Logic:
+          - true when: Procedure is classified as hygiene/preventive care
+          - false when: Procedure is not hygiene-related (restorative, surgical, etc.)
+          - null when: Hygiene classification is undetermined
+          
+          Operational Usage:
+          - Enables hygiene-specific fee monitoring and cost control
+          - Supports hygiene department scheduling and resource allocation
+          - Used for preventive care tracking and patient compliance
         tests:
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
+              config:
+                description: "Boolean validation for hygiene procedure classification and fee monitoring"
 
-      - name: is_prosthetic_flag
-        description: Flag indicating if this is a prosthetic procedure
+      - name: is_prosthetic_procedure
+        description: >
+          Flag indicating if this is a prosthetic procedure (converted from OpenDental 0/1 integer)
+          
+          Source Transformation:
+          - OpenDental source: "IsProsth" (0/1 integer as stored)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false/null)
+          
+          Business Logic:
+          - true when: Procedure involves prosthetic devices (crowns, bridges, dentures)
+          - false when: Procedure does not involve prosthetic components
+          - null when: Prosthetic classification is undetermined
+          
+          Operational Usage:
+          - Enables prosthetic-specific fee analysis and lab cost tracking
+          - Supports prosthetic department workflow and case management
+          - Used for prosthetic outcome tracking and quality assurance
         tests:
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
+              config:
+                description: "Boolean validation for prosthetic procedure classification and cost analysis"
 
-      - name: is_multi_visit_flag
-        description: Flag indicating if procedure requires multiple visits
+      - name: is_multi_visit_procedure
+        description: >
+          Flag indicating if procedure requires multiple visits (converted from OpenDental 0/1 integer)
+          
+          Source Transformation:
+          - OpenDental source: "IsMultiVisit" (0/1 integer as stored)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false/null)
+          
+          Business Logic:
+          - true when: Procedure requires multiple appointments for completion
+          - false when: Procedure can be completed in single visit
+          - null when: Multi-visit classification is undetermined
+          
+          Operational Usage:
+          - Enables multi-visit fee allocation and scheduling coordination
+          - Supports treatment planning and appointment sequencing
+          - Used for revenue recognition timing and progress tracking
         tests:
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
+              config:
+                description: "Boolean validation for multi-visit procedure classification and scheduling"
 
       - name: has_standard_fee
         description: Flag indicating if a standard fee was found for this procedure
@@ -300,37 +468,52 @@ models:
           - Provider 28 accounts for many of the negative effective fees
           - Common in procedures with "Discount Per Dr. Kamp" adjustments
 
-      - name: adjustment_impact
-        description: Classification of adjustment impact based on percentage of applied fee
+      - name: overall_adjustment_impact
+        description: Classification of overall adjustment impact based on percentage of applied fee
         tests:
           - accepted_values:
               values: ['major', 'moderate', 'minor']
 
-      - name: _loaded_at
+      - name: _extracted_at
+        description: Timestamp when record was extracted from source system
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: Original creation timestamp from source system
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: Last update timestamp from source system
+        tests:
+          - not_null
+
+      - name: _transformed_at
         description: Timestamp when record was processed by the int model
         tests:
           - not_null
 
-      - name: is_provider_discretion
-        description: Flag indicating if adjustment was at provider's discretion (based on definition category 0)
+      - name: has_provider_discretion
+        description: Flag indicating if any adjustment was at provider's discretion (based on definition category 0)
         tests:
           - accepted_values:
               values: [true, false]
 
-      - name: is_employee_discount
-        description: Flag indicating if adjustment is an employee discount (based on definition category 15)
+      - name: has_employee_discount
+        description: Flag indicating if any adjustment is an employee discount (based on definition category 15)
         tests:
           - accepted_values:
               values: [true, false]
 
-      - name: is_military_discount
-        description: Flag indicating if adjustment is a military discount (based on definition category 15)
+      - name: has_military_discount
+        description: Flag indicating if any adjustment is a military discount (based on definition category 15)
         tests:
           - accepted_values:
               values: [true, false]
 
-      - name: is_courtesy_adjustment
-        description: Flag indicating if adjustment is a courtesy adjustment (based on definition category 15)
+      - name: has_courtesy_adjustment
+        description: Flag indicating if any adjustment is a courtesy adjustment (based on definition category 15)
         tests:
           - accepted_values:
               values: [true, false]
@@ -345,43 +528,106 @@ models:
           expression: "not (procedure_status = 2 and applied_fee = 0)"
           severity: warn
           name: warn_completed_procedure_zero_fee
+          config:
+            description: >
+              Financial Integrity: Completed procedures should have associated fees
+              
+              Business Rule: Completed procedures (status = 2) must have non-zero applied fees
+              Impact: Zero fees on completed procedures indicate billing errors or data quality issues
+              Action Required: Review zero-fee completed procedures for proper billing and fee assignment
 
       - dbt_utils.expression_is_true:
           expression: "not (has_standard_fee = false and procedure_status = 2)"
           severity: warn
           name: warn_completed_procedure_no_standard_fee
+          config:
+            description: >
+              Fee Standardization: Completed procedures should have standard fee references
+              
+              Business Rule: Completed procedures should have standard fees for comparison and validation
+              Impact: Missing standard fees prevent variance analysis and fee validation
+              Action Required: Ensure fee schedules are maintained for all active procedure codes
 
       - dbt_utils.expression_is_true:
           expression: "procedure_date >= '2023-01-01'"
           name: procedures_must_be_recent
           severity: error
+          config:
+            description: >
+              Data Quality: Model focuses on recent procedures for current business analysis
+              
+              Business Rule: Only procedures from 2023 onwards are included in this model
+              Impact: Historical data exclusion ensures focus on current pricing and patterns
+              Action Required: Investigate any pre-2023 procedures appearing in this model
 
       - dbt_utils.expression_is_true:
           expression: "effective_fee >= 0"
           severity: error
           name: no_negative_effective_fees
+          config:
+            description: >
+              Financial Integrity: Effective fees must be non-negative for billing accuracy
+              
+              Business Rule: Final patient-responsible amounts cannot be negative
+              Impact: Negative effective fees indicate adjustment errors or billing system issues
+              Action Required: Review adjustment logic and provider discretion patterns
 
       - dbt_utils.expression_is_true:
           expression: "abs(applied_fee - standard_fee) <= 1000 or not has_standard_fee"
           severity: warn
           name: warn_extreme_fee_differences
+          config:
+            description: >
+              Fee Variance Monitoring: Large deviations from standard fees require review
+              
+              Business Rule: Applied fees should generally align with standard fees within $1000
+              Impact: Extreme variances may indicate pricing errors or unusual circumstances
+              Action Required: Review high-variance cases for pricing accuracy and justification
 
       - dbt_utils.expression_is_true:
-          expression: "not (is_hygiene_flag = 1 and applied_fee > 500)"
+          expression: "not (is_hygiene_procedure = true and applied_fee > 500)"
           severity: warn
           name: warn_high_hygiene_procedure_fees
+          config:
+            description: >
+              Cost Control: Hygiene procedures should have reasonable fee limits
+              
+              Business Rule: Hygiene procedures typically should not exceed $500 per procedure
+              Impact: High hygiene fees may indicate coding errors or unusual treatment patterns
+              Action Required: Validate high-fee hygiene procedures for coding accuracy and medical necessity
 
       - dbt_utils.expression_is_true:
           expression: "not (adjustment_type_name is null and adjustment_id is not null)"
           severity: warn
           name: warn_missing_adjustment_type_description
+          config:
+            description: >
+              Data Quality: Adjustment records must have proper type descriptions
+              
+              Business Rule: All adjustments must have descriptive type names for audit trails
+              Impact: Missing descriptions prevent proper categorization and reporting
+              Action Required: Ensure definition table maintenance for all adjustment types
 
       - dbt_utils.expression_is_true:
-          expression: "not (is_provider_discretion = true and adjustment_category_type != 0)"
+          expression: "not (has_provider_discretion = true and adjustment_category_type != 0)"
           severity: warn
           name: warn_invalid_provider_discretion_category
+          config:
+            description: >
+              Business Rule Validation: Provider discretion adjustments must use correct category
+              
+              Business Rule: Provider discretion adjustments must be categorized as type 0
+              Impact: Incorrect categorization affects adjustment tracking and provider analysis
+              Action Required: Review adjustment categorization and definition table consistency
 
       - dbt_utils.expression_is_true:
-          expression: "not ((is_employee_discount = true or is_military_discount = true or is_courtesy_adjustment = true) and adjustment_category_type != 15)"
+          expression: "not ((has_employee_discount = true or has_military_discount = true or has_courtesy_adjustment = true) and adjustment_category_type != 15)"
           severity: warn
           name: warn_invalid_discount_category
+          config:
+            description: >
+              Business Rule Validation: Discount adjustments must use correct category classification
+              
+              Business Rule: Employee, military, and courtesy adjustments must be categorized as type 15
+              Impact: Incorrect categorization affects discount reporting and compliance tracking
+              Action Required: Review discount adjustment categorization and definition table accuracy
