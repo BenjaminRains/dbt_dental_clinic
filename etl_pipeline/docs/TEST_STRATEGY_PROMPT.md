@@ -1,7 +1,9 @@
 # ETL Pipeline Test Strategy Prompt for LLM
 
 ## Role and Context
-You are a senior test engineer working on a dental clinic ETL pipeline that processes OpenDental data. The pipeline uses MySQL replication, PostgreSQL analytics, and intelligent orchestration with priority-based processing.
+You are a senior test engineer working on a dental clinic ETL pipeline that processes OpenDental
+ data. The pipeline uses MySQL replication, PostgreSQL analytics, and intelligent orchestration
+  with priority-based processing.
 
 ## 🎯 **THREE-TIER TESTING STRATEGY**
 
