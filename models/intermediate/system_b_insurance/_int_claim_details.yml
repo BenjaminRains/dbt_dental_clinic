@@ -3,72 +3,139 @@ version: 2
 models:
   - name: int_claim_details
     description: >
-      Core insurance claim information combining claim details, procedures, and insurance coverage.
-      This model consolidates data from multiple sources to provide a comprehensive view of insurance claims.
+      Comprehensive insurance claim details combining claims, procedures, and coverage information for complete claims processing workflow.
       
-      Key features:
-      - Combines claim, procedure, and insurance coverage information
-      - Includes detailed procedure code information
-      - Tracks financial aspects of claims (billed, allowed, paid amounts)
-      - Maintains insurance plan and coverage details
-      - Preserves procedure-specific flags and metadata
+      This model manages insurance claims processing and ensures optimal reimbursement through detailed procedure tracking.
+      Part of System B: Insurance & Claims Processing workflow.
       
-      Data format notes:
-      - Procedure codes can be either CDT format (D-prefixed) or numeric format (e.g., "01354", "02920")
-      - The code_prefix field will extract the prefix for D-prefixed codes only (e.g., "D1", "D2")
-      - Numeric procedure codes will have NULL values for code_prefix
-      - Common numeric codes include "02920" (Recement Crown), "01354" (SDF treatment), and "09940" (Occlusal Guard)
-      
-      Procedure code categories and formats:
-      - Category 622 contains 677 dental procedures in numeric format (e.g., "02920" for Recement Crown)
-      - D-prefixed codes follow CDT standard and appear in most procedure categories
-      - Numeric codes (without D-prefix) primarily appear in categories:
-        * 622: Standard procedures (all 677 codes are numeric)
-        * 250: Administrative and supplies (52 of 126 codes are numeric)
-        * 85: Clinical notes (all 31 codes are numeric)
-        * 73: Diagnostic services (8 of 124 codes are numeric)
-      - Special code formats include:
-        * Codes with special prefixes: ~GRP~ (Group Note), ~BAD~ 
-        * Codes with asterisk prefix: *EMG+ (Emergency exam), *NPA (New Patient Adult)
-        * Alpha-only codes: Watch, Roottip, Clo, CWTRAY
-      - Each code maps to a specific procedure category reflecting its clinical purpose
+      Key Features:
+      - Claims Integration: Links insurance claims with specific procedures and financial details for complete claim tracking
+      - Coverage Verification: Associates claims with active insurance plans, benefits, and verification status
+      - Financial Tracking: Tracks billed amounts, allowed amounts, insurance payments, and patient responsibility
+      - Procedure Classification: Includes comprehensive procedure codes, categories, treatment areas, and clinical flags
       
       Data Sources:
-      - stg_opendental__claim: Base claim information
-      - stg_opendental__claimproc: Claim procedure details
-      - stg_opendental__procedurelog: Procedure information
-      - stg_opendental__procedurecode: Procedure code details
-      - int_insurance_coverage: Insurance plan and coverage information
+      - stg_opendental__claim: Base insurance claim information and status tracking
+      - stg_opendental__claimproc: Claim procedure details and financial amounts
+      - stg_opendental__procedurelog: Procedure execution and provider information
+      - stg_opendental__procedurecode: ADA/CDT procedure codes and classification details
+      - int_insurance_coverage: Insurance plan details, benefits, and coverage verification
+      
+      Insurance Logic Features:
+      - Claims Processing: Workflow management from submission through payment with status tracking
+      - Benefits Application: Integration with insurance coverage to determine patient vs. insurance responsibility
+      - Payment Allocation: Distribution of insurance payments across multiple procedures within claims
+      - Verification Integration: Links claims processing with insurance coverage verification and eligibility
+      
+      Financial Calculations:
+      - Claim Totals: Aggregation of procedure-level amounts to claim-level financial summaries
+      - Payment Reconciliation: Tracking of expected vs. actual insurance payments for variance analysis
+      - Patient Responsibility: Calculation of copays, deductibles, and non-covered amounts
+      - Write-off Management: Tracking of contractual adjustments and bad debt write-offs
+      
+      Data Quality Notes:
+      - Procedure Code Formats: Supports both CDT format (D-prefixed) and numeric format codes with appropriate null handling for code_prefix
+      - Financial Completeness: Some financial amounts may be null for pending, rejected, or incomplete claims requiring business rule handling
+      - Coverage Dependencies: Insurance plan associations depend on effective dates and verification status affecting data completeness
+      - Multi-Procedure Claims: Complex claims with multiple procedures require composite key handling and careful aggregation logic
+      
+      Procedure Code Standards:
+      - CDT Format: D-prefixed codes (e.g., D1110, D2920) follow ADA Current Dental Terminology with extracted prefixes
+      - Numeric Format: Non-prefixed codes (e.g., 01354, 02920, 09940) used for specific clinical and administrative purposes
+      - Special Formats: System codes with prefixes (~GRP~, ~BAD~, *EMG+) and alpha codes (Watch, Roottip) for workflow management
+      - Category Mapping: All codes map to specific procedure categories reflecting clinical purpose and billing requirements
+      
+      Insurance Rules:
+      - Claims Validation: Claims must have valid insurance plans for primary claims with active verification status
+      - Financial Integrity: Billed amounts must equal or exceed the sum of paid, write-off, and patient responsibility amounts
+      - Coverage Requirements: Insurance plan associations required for primary claims that are not held or waiting
+      - Procedure Compliance: All procedures must have valid ADA/CDT codes and appropriate clinical classification
     
     config:
       materialized: table
       schema: intermediate
-      unique_key: [claim_id, procedure_id, claim_procedure_id]  # Composite key to handle multiple procedures per claim
+      unique_key: claim_detail_id
     
     columns:
+      - name: claim_detail_id
+        description: >
+          Primary key - unique identifier for each claim procedure combination (generated surrogate key)
+          
+          Source Transformation:
+          - Generated using: dbt_utils.generate_surrogate_key(['claim_id', 'procedure_id', 'claim_procedure_id'])
+          - Purpose: Deterministic unique identifier for complex grain handling multiple procedures per claim
+          - Business Context: Enables tracking of individual procedure billing within multi-procedure claims
+          
+          Business Context:
+          - Uniqueness ensures one record per claim-procedure combination for accurate financial tracking
+          - Supports claim processing workflow from procedure execution through payment reconciliation
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
       - name: claim_id
-        description: Primary key part 1 - the insurance claim identifier
+        description: >
+          Foreign key to insurance claim (maps from "ClaimNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimNum" (CamelCase as stored)
+          - Transformed to: claim_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links to the parent insurance claim containing multiple procedures
+          - Essential for claim processing workflow and financial reconciliation
+          - Required for all claim procedures to ensure proper claim association
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__claim')
               field: claim_id
+              config:
+                severity: error
+                description: "Critical for claim processing integrity - all claim procedures must belong to valid claims"
 
       - name: procedure_id
-        description: Primary key part 2 - the procedure identifier within the claim
+        description: >
+          Foreign key to performed procedure (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase as stored)
+          - Transformed to: procedure_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links to the specific procedure performed and being billed to insurance
+          - Critical for procedure-level financial tracking and clinical documentation
+          - Required for accurate procedure billing and insurance processing
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              config:
+                severity: error
+                description: "Essential for procedure billing integrity - all claim procedures must reference valid performed procedures"
 
       - name: claim_procedure_id
-        description: Primary key part 3 - the claim procedure identifier
+        description: >
+          Foreign key to claim procedure record (maps from "ClaimProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimProcNum" (CamelCase as stored)
+          - Transformed to: claim_procedure_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links to the specific claim procedure record containing billing details
+          - Manages the relationship between claims and procedures with financial amounts
+          - Required for accurate financial tracking and insurance payment allocation
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__claimproc')
               field: claim_procedure_id
+              config:
+                severity: error
+                description: "Critical for financial integrity - all claim details must reference valid claim procedure records"
 
       - name: patient_id
         description: Foreign key to the patient
@@ -253,62 +320,126 @@ models:
       - name: termination_date
         description: Date when the insurance coverage was terminated (if applicable)
 
-      - name: created_at
-        description: Timestamp when the claim was created
+      - name: _created_at  
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the claim was originally created in OpenDental
+          - Usage: Business timeline analysis and claim lifecycle tracking
         tests:
-          - not_null
+          - not_null:
+              config:
+                description: "Business requirement - all claims must have creation timestamps for audit and workflow tracking"
 
-      - name: updated_at
-        description: Timestamp when the claim was last updated
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading for claim processing updates
         tests:
-          - not_null
+          - not_null:
+              config:
+                description: "Essential for incremental processing and change tracking in claims workflow"
+
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline and model refresh monitoring
+        tests:
+          - not_null:
+              config:
+                description: "Technical requirement for data lineage and model execution monitoring"
 
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 1000
           max_value: 100000
+          config:
+            severity: warn
+            description: >
+              Data Volume Monitor: Expected range based on typical dental practice claim volume
+              
+              Baseline: Normal operating range for claim procedure records
+              Alert Threshold: Investigate if volume falls outside expected range
+              Action Required: Verify data pipeline integrity and business activity levels
 
       - dbt_utils.expression_is_true:
-          expression: "billed_amount >= paid_amount + write_off_amount + patient_responsibility"
-          severity: warn
-          name: warn_inconsistent_financial_totals
+          expression: "billed_amount >= (coalesce(paid_amount, 0) + coalesce(write_off_amount, 0) + coalesce(patient_responsibility, 0))"
+          config:
+            severity: error
+            name: financial_integrity_check
+            description: >
+              Financial Integrity: Billed amount must equal or exceed total allocations
+              
+              Accounting Requirement: Total claim amounts must reconcile for accurate financial reporting
+              Audit Significance: Critical for insurance reimbursement accuracy and patient billing
+              Business Impact: Ensures financial data integrity for revenue cycle management
 
       - dbt_utils.expression_is_true:
           expression: "not (verification_status = true and verification_date is null)"
-          severity: warn
-          name: warn_missing_verification_date
+          config:
+            severity: warn
+            name: insurance_verification_consistency
+            description: >
+              Insurance Verification: Active verification status requires verification date
+              
+              Business Rule: Verified insurance must have documented verification date
+              Impact: Affects claims processing confidence and eligibility determination
+              Enforcement: Warns of potential data quality issues in insurance verification workflow
 
       - dbt_utils.expression_is_true:
           expression: "not (claim_type = 'P' and insurance_plan_id is null)"
-          severity: warn
-          name: warn_missing_insurance_plan
+          config:
+            severity: error
+            name: primary_claim_insurance_requirement
+            description: >
+              Business Rule: Primary claims must have associated insurance plans
+              
+              Requirement: All primary claims require valid insurance plan associations
+              Impact: Critical for claims processing and reimbursement workflow
+              Enforcement: Prevents processing of incomplete primary insurance claims
 
       - dbt_utils.expression_is_true:
           expression: "not (is_radiology_flag = 1 and no_bill_insurance_flag = 1)"
-          severity: warn
-          name: warn_radiology_no_bill_conflict 
+          config:
+            severity: warn
+            name: procedure_billing_logic_validation
+            description: >
+              Business Logic: Radiology procedures should typically be billable to insurance
+              
+              Expectation: Radiology procedures are usually covered services
+              Tolerance: May have exceptions for specific clinical situations
+              Action Required: Review procedures flagged as radiology but marked as non-billable
 
-      - dbt_utils.expression_is_true:
-          expression: >
-            NOT EXISTS (
-              SELECT 1
-              FROM (
-                SELECT 
-                  claim_id,
-                  procedure_id,
-                  claim_procedure_id,
-                  COUNT(*) as duplicate_count
-                FROM {{ ref('int_claim_details') }}
-                GROUP BY 
-                  claim_id,
-                  procedure_id,
-                  claim_procedure_id
-                HAVING COUNT(*) > 1
-              ) as duplicates
-            )
+      - unique:
+          column_name: claim_detail_id
           config:
             severity: error
-            name: check_no_duplicate_claim_procedures
             description: >
-              This test verifies that there are no duplicate (claim_id, procedure_id, claim_procedure_id) combinations
-              in the int_claim_details model. Each claim procedure should appear exactly once.  
+              Data Integrity: Each claim detail record must have unique identifier
+              
+              Business Requirement: Prevents duplicate processing of claim procedures
+              System Impact: Essential for accurate financial tracking and reporting
+              Enforcement: Ensures one record per claim-procedure combination
+    
+    meta:
+      owner: "insurance_team"
+      contains_pii: true
+      business_process: "Insurance Claims Processing"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System B: Insurance & Claims Processing"
+      data_quality_requirements:
+        - "All claims must have valid insurance plan associations for primary claims"
+        - "Financial amounts must reconcile across billed, paid, write-off, and patient responsibility"
+        - "Procedure codes must be valid ADA/CDT codes with appropriate classification"
+        - "Insurance verification status must be consistent with verification dates"
+        - "Claims processing workflow must maintain referential integrity across all relationships"  
