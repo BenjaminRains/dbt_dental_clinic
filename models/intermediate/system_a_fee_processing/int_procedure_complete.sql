@@ -1,20 +1,55 @@
-{{ config(
-    materialized='incremental',
-    unique_key='procedure_id',
-    schema='intermediate'
-) }}
+{{
+    config(
+        materialized='incremental',
+        schema='intermediate',
+        unique_key='procedure_id',
+        on_schema_change='fail',
+        incremental_strategy='merge',
+        indexes=[
+            {'columns': ['procedure_id'], 'unique': true},
+            {'columns': ['patient_id']},
+            {'columns': ['_updated_at']}
+        ]
+    )
+}}
 
--- First, get the procedure logs
-WITH ProcedureLog AS (
-    SELECT *
-    FROM {{ ref('stg_opendental__procedurelog') }}
+/*
+    Intermediate model for procedure_complete
+    Part of System A: Fee Processing & Verification
+    
+    This model:
+    1. Consolidates procedure data with complete fee information and validation
+    2. Enriches procedures with associated notes, definitions, and fee schedules
+    3. Provides fee validation flags and statistics for financial analysis
+    
+    Business Logic Features:
+    - Fee Validation: Compares actual procedure fees against standard fee schedules
+    - Fee Statistics: Aggregates min, max, and average fees by procedure code
+    - Definition Lookups: Resolves coded values to human-readable descriptions
+    - Note Aggregation: Consolidates all procedure notes with timestamps
+    
+    Data Quality Notes:
+    - Fee matching uses 0.01 tolerance for decimal precision issues
+    - Definition category IDs are assumed based on OpenDental standards (4=status, 5=treatment_area, 6=fee_type)
+    - Missing standard fees are flagged for follow-up fee schedule configuration
+    
+    Performance Considerations:
+    - Incremental materialization based on date_timestamp for efficient updates
+    - ROW_NUMBER() window function for fee ranking to get most recent fees
+    - Separate fee statistics CTE to avoid duplication in main query
+*/
+
+-- 1. Source data retrieval
+with source_procedure_log as (
+    select *
+    from {{ ref('stg_opendental__procedurelog') }}
     {% if is_incremental() %}
-        WHERE date_timestamp > (select max(date_timestamp) from {{ this }})
+        where _updated_at > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
--- Get the procedure codes
-ProcedureCodes AS (
+-- 2. Lookup/reference data
+source_procedure_codes as (
     SELECT 
         procedure_code_id,
         procedure_code,
@@ -27,19 +62,12 @@ ProcedureCodes AS (
     FROM {{ ref('stg_opendental__procedurecode') }}
 ),
 
--- Get procedure notes
-ProcedureNotes AS (
-    SELECT 
-        procedure_id,
-        STRING_AGG(note, ' | ' ORDER BY entry_timestamp) AS procedure_notes,
-        COUNT(*) AS note_count,
-        MAX(entry_timestamp) AS last_note_timestamp
-    FROM {{ ref('stg_opendental__procnote') }}
-    GROUP BY procedure_id
+source_procedure_notes as (
+    select *
+    from {{ ref('stg_opendental__procnote') }}
 ),
 
--- Get fee schedules
-FeeSchedules AS (
+source_fee_schedules as (
     SELECT
         fee_schedule_id,
         fee_schedule_description,
@@ -48,8 +76,7 @@ FeeSchedules AS (
     FROM {{ ref('stg_opendental__feesched') }}
 ),
 
--- Get definitions for various coded values
-Definitions AS (
+source_definitions as (
     SELECT
         definition_id,
         category_id,
@@ -60,8 +87,8 @@ Definitions AS (
     FROM {{ ref('stg_opendental__definition') }}
 ),
 
--- Standard fees with ranking to get the most relevant fee per procedure code
-StandardFees AS (
+-- 3. Calculation/aggregation CTEs
+standard_fees_ranked as (
     SELECT
         fee_id,
         procedure_code_id,
@@ -77,8 +104,7 @@ StandardFees AS (
     FROM {{ ref('stg_opendental__fee') }}
 ),
 
--- Create fee statistics separately to avoid duplication
-FeeStats AS (
+fee_statistics as (
     SELECT
         procedure_code_id,
         COUNT(DISTINCT fee_id) AS available_fee_options,
@@ -89,8 +115,19 @@ FeeStats AS (
     GROUP BY procedure_code_id
 ),
 
--- Combine everything
-ProcedureComplete AS (
+-- 4. Business logic transformation
+procedure_notes_aggregated as (
+    SELECT 
+        procedure_id,
+        STRING_AGG(note, ' | ' ORDER BY entry_timestamp) AS procedure_notes,
+        COUNT(*) AS note_count,
+        MAX(entry_timestamp) AS last_note_timestamp
+    FROM {{ ref('stg_opendental__procnote') }}
+    GROUP BY procedure_id
+),
+
+-- 5. Integration CTE (joins everything together)
+procedure_complete_integrated as (
     SELECT
         pl.procedure_id,
         pl.patient_id,
@@ -147,33 +184,39 @@ ProcedureComplete AS (
         pn.last_note_timestamp,
         
         -- Metadata and timestamps
-        pl.date_timestamp,
-        pl._airbyte_loaded_at,
-        current_timestamp AS _loaded_at
+        pl._extracted_at,
+        pl.date_entry as _created_at,
+        coalesce(pl.date_timestamp, pl.date_entry) as _updated_at,
+        current_timestamp as _transformed_at
         
-    FROM ProcedureLog pl
-    LEFT JOIN ProcedureCodes pc 
-        ON pl.procedure_code_id = pc.procedure_code_id
-    LEFT JOIN StandardFees sf
-        ON pl.procedure_code_id = sf.procedure_code_id
-        AND pl.clinic_id = sf.clinic_id
-        AND sf.fee_rank = 1  -- Only get the most recent fee
-    LEFT JOIN FeeStats fstat
-        ON pl.procedure_code_id = fstat.procedure_code_id
-    LEFT JOIN FeeSchedules fs
-        ON sf.fee_schedule_id = fs.fee_schedule_id
-    LEFT JOIN ProcedureNotes pn
-        ON pl.procedure_id = pn.procedure_id
+    from source_procedure_log pl
+    left join source_procedure_codes pc 
+        on pl.procedure_code_id = pc.procedure_code_id
+    left join standard_fees_ranked sf
+        on pl.procedure_code_id = sf.procedure_code_id
+        and pl.clinic_id = sf.clinic_id
+        and sf.fee_rank = 1  -- Only get the most recent fee
+    left join fee_statistics fstat
+        on pl.procedure_code_id = fstat.procedure_code_id
+    left join source_fee_schedules fs
+        on sf.fee_schedule_id = fs.fee_schedule_id
+    left join procedure_notes_aggregated pn
+        on pl.procedure_id = pn.procedure_id
     -- Join with definitions for various coded values
-    LEFT JOIN Definitions def_status
-        ON def_status.category_id = 4  -- Assuming category_id 4 is for procedure status
-        AND def_status.item_value = pl.procedure_status::text
-    LEFT JOIN Definitions def_treatment
-        ON def_treatment.category_id = 5  -- Assuming category_id 5 is for treatment areas
-        AND def_treatment.item_value = pc.treatment_area::text
-    LEFT JOIN Definitions def_fee_type
-        ON def_fee_type.category_id = 6  -- Assuming category_id 6 is for fee schedule types
-        AND def_fee_type.item_value = fs.fee_schedule_type_id::text
+    left join source_definitions def_status
+        on def_status.category_id = 4  -- Assuming category_id 4 is for procedure status
+        and def_status.item_value = pl.procedure_status::text
+    left join source_definitions def_treatment
+        on def_treatment.category_id = 5  -- Assuming category_id 5 is for treatment areas
+        and def_treatment.item_value = pc.treatment_area::text
+    left join source_definitions def_fee_type
+        on def_fee_type.category_id = 6  -- Assuming category_id 6 is for fee schedule types
+        and def_fee_type.item_value = fs.fee_schedule_type_id::text
 )
 
-SELECT * FROM ProcedureComplete
+-- 6. Final selection
+final as (
+    select * from procedure_complete_integrated
+)
+
+select * from final
