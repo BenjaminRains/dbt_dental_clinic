@@ -297,18 +297,58 @@ STANDARD_TEST_APPOINTMENTS = [
     {
         'AptNum': 2,
         'PatNum': 2,
-        'AptDateTime': datetime(2023, 1, 16, 10, 0, 0),
+        'AptDateTime': datetime(2023, 1, 16, 10, 30, 0),
         'AptStatus': False,
-        'DateTStamp': datetime(2023, 1, 16, 10, 0, 0),
+        'DateTStamp': datetime(2023, 1, 16, 10, 30, 0),
         'Notes': 'Cleaning appointment'
     },
     {
         'AptNum': 3,
         'PatNum': 3,
-        'AptDateTime': datetime(2023, 1, 17, 11, 0, 0),
+        'AptDateTime': datetime(2023, 1, 17, 14, 0, 0),
         'AptStatus': False,
-        'DateTStamp': datetime(2023, 1, 17, 11, 0, 0),
-        'Notes': 'Consultation'
+        'DateTStamp': datetime(2023, 1, 17, 14, 0, 0),
+        'Notes': 'Follow-up visit'
+    }
+]
+
+# Standard test procedures that match the real OpenDental schema
+STANDARD_TEST_PROCEDURES = [
+    {
+        'ProcNum': 1,
+        'PatNum': 1,
+        'AptNum': 1,
+        'ProcStatus': False,
+        'ProcFee': 150.00,
+        'ProcFeeCur': 150.00,
+        'ProcDate': date(2023, 1, 15),
+        'CodeNum': 1,
+        'ProcNote': 'Regular cleaning',
+        'DateTStamp': datetime(2023, 1, 15, 9, 0, 0)
+    },
+    {
+        'ProcNum': 2,
+        'PatNum': 2,
+        'AptNum': 2,
+        'ProcStatus': False,
+        'ProcFee': 200.00,
+        'ProcFeeCur': 200.00,
+        'ProcDate': date(2023, 1, 16),
+        'CodeNum': 2,
+        'ProcNote': 'Deep cleaning',
+        'DateTStamp': datetime(2023, 1, 16, 10, 30, 0)
+    },
+    {
+        'ProcNum': 3,
+        'PatNum': 3,
+        'AptNum': 3,
+        'ProcStatus': False,
+        'ProcFee': 300.00,
+        'ProcFeeCur': 300.00,
+        'ProcDate': date(2023, 1, 17),
+        'CodeNum': 3,
+        'ProcNote': 'Cavity filling',
+        'DateTStamp': datetime(2023, 1, 17, 14, 0, 0)
     }
 ]
 
@@ -419,12 +459,22 @@ def get_test_appointment_data() -> List[Dict[str, Any]]:
     return STANDARD_TEST_APPOINTMENTS.copy()
 
 
+def get_test_procedure_data() -> List[Dict[str, Any]]:
+    """
+    Get standardized test procedure data following connection architecture patterns.
+    
+    Returns:
+        List of procedure data dictionaries
+    """
+    return STANDARD_TEST_PROCEDURES.copy()
+
+
 def get_test_data_for_table(table_name: str, include_all_fields: bool = True) -> List[Dict[str, Any]]:
     """
     Get standardized test data for a specific table following connection architecture patterns.
     
     Args:
-        table_name: Name of the table ('patient', 'appointment', etc.)
+        table_name: Name of the table ('patient', 'appointment', 'procedurelog', etc.)
         include_all_fields: For patient table, whether to include all fields
     
     Returns:
@@ -437,8 +487,10 @@ def get_test_data_for_table(table_name: str, include_all_fields: bool = True) ->
         return get_test_patient_data(include_all_fields)
     elif table_name.lower() == 'appointment':
         return get_test_appointment_data()
+    elif table_name.lower() == 'procedurelog':
+        return get_test_procedure_data()
     else:
-        raise ValueError(f"Unsupported table: {table_name}. Supported tables: patient, appointment")
+        raise ValueError(f"Unsupported table: {table_name}. Supported tables: patient, appointment, procedurelog")
 
 
 def get_connection_architecture_test_data() -> Dict[str, Any]:
