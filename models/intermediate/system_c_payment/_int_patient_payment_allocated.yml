@@ -133,23 +133,23 @@ models:
                 procedure_id > 0 
                 AND payment_date >= '2023-01-01'
                 AND EXISTS (
-                  SELECT 1 FROM public.procedurelog p
+                  SELECT 1 FROM raw.procedurelog p
                   WHERE p."ProcNum" = procedure_id
                   AND p."ProcDate" >= '2021-01-01'
                   AND (
                     p."ProcDate" >= '2023-01-01'
                     OR p."ProcNum" IN (
                       SELECT i."ProcNum" 
-                      FROM public.insbluebook i
+                      FROM raw.insbluebook i
                       WHERE i."DateTEntry" >= '2023-01-01'
                     )
                     OR p."ProcNum" IN (
                       SELECT "ProcNum"
-                      FROM public.procgroupitem
+                      FROM raw.procgroupitem
                     )
                     OR p."ProcNum" IN (
                       SELECT "ProcNum"
-                      FROM public.procnote
+                      FROM raw.procnote
                       WHERE "EntryDateTime" >= '2023-01-01'
                     )
                   )
@@ -168,7 +168,7 @@ models:
                 adjustment_id != 0 
                 AND payment_type_id != 0 
                 AND EXISTS (
-                  SELECT 1 FROM public.adjustment a 
+                  SELECT 1 FROM raw.adjustment a 
                   WHERE a."AdjNum" = adjustment_id 
                   AND a."AdjDate" >= '2023-01-01'
                 )

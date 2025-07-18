@@ -221,7 +221,7 @@ ReplyTracking AS (
                 WHEN is_sent = 0 THEN 'system'
                 ELSE 'unknown'
             END AS reply_direction  -- Renamed to avoid conflict
-        FROM "opendental_analytics"."public_staging"."stg_opendental__commlog"
+        FROM "opendental_analytics"."staging"."stg_opendental__commlog"
         WHERE is_sent = 1  -- Inbound messages
         AND mode IN (1, 5)  -- Only consider email (1) and text (5) for replies
         AND note IS NOT NULL

@@ -9,7 +9,7 @@ WITH procedure_fees AS (
         patient_id,
         provider_id,
         clinic_id
-    FROM public_staging.stg_opendental__procedurelog
+    FROM staging.stg_opendental__procedurelog
     WHERE procedure_fee IS NOT NULL
     AND code_id IS NOT NULL
 ),
@@ -18,7 +18,7 @@ fee_amounts AS (
     SELECT 
         procedure_code_id,
         fee_amount
-    FROM public_staging.stg_opendental__fee
+    FROM staging.stg_opendental__fee
     WHERE fee_amount IS NOT NULL
 ),
 

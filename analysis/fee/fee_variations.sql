@@ -24,7 +24,7 @@ with fee_stats as (
         avg(f.fee_amount) as avg_fee,
         max(f.fee_amount) - min(f.fee_amount) as fee_range,
         stddev(f.fee_amount) as fee_stddev
-    from public_staging.stg_opendental__fee f
+    from staging.stg_opendental__fee f
     group by f.procedure_code_id
     having max(f.fee_amount) - min(f.fee_amount) > 500
 )
@@ -39,13 +39,13 @@ select
     count(distinct pl.procedure_id) as times_performed,
     avg(pl.procedure_fee) as avg_actual_fee_charged
 from fee_stats fs
-left join public_staging.stg_opendental__procedurecode p 
+left join staging.stg_opendental__procedurecode p 
     on fs.procedure_code_id = p.procedure_code_id
-left join public_staging.stg_opendental__fee f 
+left join staging.stg_opendental__fee f 
     on fs.procedure_code_id = f.procedure_code_id
-left join public_staging.stg_opendental__feesched fs2 
+left join staging.stg_opendental__feesched fs2 
     on f.fee_schedule_id = fs2.fee_schedule_id
-left join public_staging.stg_opendental__procedurelog pl 
+left join staging.stg_opendental__procedurelog pl 
     on fs.procedure_code_id = pl.code_id
 group by 
     fs.procedure_code_id,
@@ -69,7 +69,7 @@ with fee_stats as (
         min(f.fee_amount) as min_fee,
         max(f.fee_amount) as max_fee,
         max(f.fee_amount) - min(f.fee_amount) as fee_range
-    from public_staging.stg_opendental__fee f
+    from staging.stg_opendental__fee f
     group by f.procedure_code_id
     having max(f.fee_amount) - min(f.fee_amount) > 500
 )
@@ -83,10 +83,10 @@ select
     max(f.fee_amount) as max_fee,
     count(distinct case when f.fee_amount > 1000 then f.procedure_code_id end) as high_cost_procedures,
     string_agg(distinct p.procedure_code || ': ' || p.description, '; ') as high_variation_procedures
-from public_staging.stg_opendental__fee f
-join public_staging.stg_opendental__feesched fs 
+from staging.stg_opendental__fee f
+join staging.stg_opendental__feesched fs 
     on f.fee_schedule_id = fs.fee_schedule_id
-left join public_staging.stg_opendental__procedurecode p
+left join staging.stg_opendental__procedurecode p
     on f.procedure_code_id = p.procedure_code_id
 where f.procedure_code_id in (select procedure_code_id from fee_stats)
 group by f.fee_schedule_id, fs.fee_schedule_description
@@ -102,12 +102,12 @@ select
     f.fee_amount,
     count(pl.procedure_id) as times_used,
     avg(pl.procedure_fee) as actual_fee_charged
-from public_staging.stg_opendental__fee f
-join public_staging.stg_opendental__feesched fs 
+from staging.stg_opendental__fee f
+join staging.stg_opendental__feesched fs 
     on f.fee_schedule_id = fs.fee_schedule_id
-left join public_staging.stg_opendental__procedurecode p
+left join staging.stg_opendental__procedurecode p
     on f.procedure_code_id = p.procedure_code_id
-left join public_staging.stg_opendental__procedurelog pl
+left join staging.stg_opendental__procedurelog pl
     on f.procedure_code_id = pl.code_id
 where f.fee_schedule_id in (8292, 8293)  -- MDC fee schedules
     and f.fee_amount > 1000  -- High-cost procedures only
