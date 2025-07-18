@@ -74,6 +74,7 @@ connection.json
 *.config
 !.sqlfluff
 !.sqlfluffignore
+tables.yml
 
 # Sensitive files in scripts directory
 scripts/check_env.py
