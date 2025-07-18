@@ -2,18 +2,49 @@
     config(
         materialized='table',
         schema='intermediate',
-        unique_key=['claim_id', 'procedure_id', 'claim_procedure_id', 'claim_payment_id']
+        unique_key='claim_payment_detail_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['claim_payment_detail_id'], 'unique': true},
+            {'columns': ['patient_id']},
+            {'columns': ['claim_id']},
+            {'columns': ['_updated_at']}
+        ]
     )
 }}
 
-WITH Claim as (
+/*
+    Intermediate model for claim_payments
+    Part of System B: Insurance & Claims Processing
+    
+    This model:
+    1. Consolidates claim payment details with procedure-level breakdowns
+    2. Integrates EOB attachment information for documentation tracking
+    3. Provides comprehensive payment reconciliation data
+    
+    Business Logic Features:
+    - Payment allocation: Tracks how insurance payments are allocated across procedures
+    - EOB integration: Links explanation of benefits attachments to payments
+    - Deduplication: Ensures one record per claim payment detail
+    
+    Data Quality Notes:
+    - Filters to claim payments with valid claim_payment_id
+    - Deduplicates using composite key with payment amount priority
+    - Includes EOB attachments from 2023+ to match active payment period
+    
+    Performance Considerations:
+    - Uses table materialization due to complex joins and aggregations
+    - Indexed on primary key and common lookup fields
+*/
+
+with source_claim as (
     select
         claim_id,
         patient_id
     from {{ ref('stg_opendental__claim') }}
 ),
 
-ClaimProc as (
+source_claim_proc as (
     select
         claim_id,
         procedure_id,
@@ -28,7 +59,7 @@ ClaimProc as (
     where claim_payment_id is not null
 ),
 
-ClaimPayment as (
+source_claim_payment as (
     select
         claim_payment_id,
         check_amount,
@@ -38,7 +69,7 @@ ClaimPayment as (
     from {{ ref('stg_opendental__claimpayment') }}
 ),
 
-EobAttachments as (
+eob_attachments_summary as (
     select
         claim_payment_id,
         count(eob_attach_id) as eob_attachment_count,
@@ -49,8 +80,7 @@ EobAttachments as (
     group by claim_payment_id
 ),
 
--- Deduplicate at the source using the full composite key
-DeduplicatedClaims as (
+claim_payment_details as (
     select
         c.patient_id,
         cp.claim_id,
@@ -66,14 +96,17 @@ DeduplicatedClaims as (
             partition by cp.claim_id, cp.procedure_id, cp.claim_procedure_id, cp.claim_payment_id
             order by cp.paid_amount desc
         ) as rn
-    from ClaimProc cp
-    inner join Claim c
+    from source_claim_proc cp
+    inner join source_claim c
         on cp.claim_id = c.claim_id
 ),
 
-Final as (
+claim_payment_enhanced as (
     select
-        -- Primary Key
+        -- Generate surrogate key for unique identification
+        {{ dbt_utils.generate_surrogate_key(['claim_id', 'procedure_id', 'claim_procedure_id', 'claim_payment_id']) }} as claim_payment_detail_id,
+        
+        -- Primary identifiers
         dc.claim_id,
         dc.procedure_id,
         dc.claim_procedure_id,
@@ -102,12 +135,23 @@ Final as (
         cpy.check_date as created_at,
         cpy.check_date as updated_at
 
-    from DeduplicatedClaims dc
-    left join ClaimPayment cpy
+    from claim_payment_details dc
+    left join source_claim_payment cpy
         on dc.claim_payment_id = cpy.claim_payment_id
-    left join EobAttachments eob
+    left join eob_attachments_summary eob
         on dc.claim_payment_id = eob.claim_payment_id
-    where dc.rn = 1 -- Only keep one record per unique composite key combination
+    where dc.rn = 1
+),
+
+final as (
+    select
+        *,
+        -- Metadata fields
+        current_timestamp as _extracted_at,
+        created_at as _created_at,
+        coalesce(updated_at, created_at) as _updated_at,
+        current_timestamp as _transformed_at
+    from claim_payment_enhanced
 )
 
-select * from Final
+select * from final
