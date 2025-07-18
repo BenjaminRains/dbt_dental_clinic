@@ -75,7 +75,7 @@ graph TD
     %% Supporting Components
     ORCH --> CONFIG["Settings<br/>config/settings.py<br/>✅ ACTIVE - 20 methods<br/>MODERN CONFIG"]
     ORCH --> CR["ConfigReader<br/>config/config_reader.py<br/>✅ ACTIVE - 12 methods<br/>STATIC CONFIG"]
-    ORCH --> CONN["ConnectionFactory<br/>core/connections.py<br/>✅ ACTIVE - 25 methods<br/>EXPLICIT ENV"]
+    ORCH --> CONN["ConnectionFactory<br/>core/connections.py<br/>✅ ACTIVE - 25 methods<br/>UNIFIED INTERFACE"]
     ORCH --> PGS["PostgresSchema<br/>core/postgres_schema.py<br/>✅ ACTIVE - 10 methods<br/>SCHEMA CONVERSION"]
     ORCH --> UMC["UnifiedMetricsCollector<br/>monitoring/unified_metrics.py<br/>✅ ACTIVE - 15 methods<br/>COMPREHENSIVE"]
     
@@ -114,72 +114,6 @@ graph TD
     class TABLES_YML input
 ```
 
-```mermaid
-graph TD
-    %% Entry Points
-    CLI["CLI Commands<br/>cli/main.py<br/>✅ ACTIVE"] --> ORCH["PipelineOrchestrator<br/>orchestration/pipeline_orchestrator.py<br/>✅ ACTIVE - 6 methods"]
-    
-    %% Main Orchestration
-    ORCH --> TP["TableProcessor<br/>orchestration/table_processor.py<br/>✅ ACTIVE - 9 methods<br/>CORE ETL ENGINE"]
-    ORCH --> PP["PriorityProcessor<br/>orchestration/priority_processor.py<br/>✅ ACTIVE - 5 methods<br/>BATCH PROCESSING"]
-    
-    %% ETL Phases
-    TP --> PHASE1["PHASE 1: EXTRACTION<br/>MySQL → MySQL"]
-    TP --> PHASE2["PHASE 2: LOADING<br/>MySQL → PostgreSQL"]
-    
-    %% Phase 1: Extraction
-    PHASE1 --> SMR["SimpleMySQLReplicator<br/>core/simple_mysql_replicator.py<br/>✅ ACTIVE - 10 methods<br/>STATIC CONFIG"]
-    SMR --> EXTRACT_CORE["Core Extraction Logic"]
-    SMR --> INCREMENTAL["Incremental Loading"]
-    SMR --> BATCH_COPY["Batch Copy Operations"]
-    SMR --> REPLICATION_DB["opendental_replication"]
-    
-    %% Phase 2: Loading
-    PHASE2 --> PGL["PostgresLoader<br/>loaders/postgres_loader.py<br/>✅ ACTIVE - 11 methods<br/>SIMPLIFIED"]
-    PGL --> LOAD_CORE["Core Loading Logic"]
-    PGL --> CHUNKED["Chunked Loading"]
-    PGL --> VERIFY["Load Verification"]
-    PGL --> RAW_SCHEMA["opendental_analytics.raw"]
-    
-    %% Supporting Components
-    ORCH --> CONFIG["Settings<br/>config/settings.py<br/>✅ ACTIVE - 20 methods<br/>MODERN CONFIG"]
-    ORCH --> CR["ConfigReader<br/>config/config_reader.py<br/>✅ ACTIVE - 12 methods<br/>STATIC CONFIG"]
-    ORCH --> CONN["ConnectionFactory<br/>core/connections.py<br/>✅ ACTIVE - 25 methods<br/>EXPLICIT ENV"]
-    ORCH --> PGS["PostgresSchema<br/>core/postgres_schema.py<br/>✅ ACTIVE - 10 methods<br/>SCHEMA CONVERSION"]
-    ORCH --> UMC["UnifiedMetricsCollector<br/>monitoring/unified_metrics.py<br/>✅ ACTIVE - 15 methods<br/>COMPREHENSIVE"]
-    
-    %% Configuration Flow
-    CONFIG --> CR
-    CR --> SMR
-    CR --> PGL
-    CR --> TP
-    CR --> PP
-    
-    %% Connection Management
-    CONN --> SMR
-    CONN --> PGL
-    CONN --> PGS
-    CONN --> UMC
-    
-    %% Schema Conversion
-    PGS --> PGL
-    
-    %% Metrics Collection
-    UMC --> TP
-    UMC --> PP
-    
-    %% Styling
-    classDef active fill:#d4edda,stroke:#155724,stroke-width:2px
-    classDef core fill:#cce5ff,stroke:#004085,stroke-width:3px
-    classDef simplified fill:#d1ecf1,stroke:#0c5460,stroke-width:2px
-    classDef modern fill:#d4edda,stroke:#155724,stroke-width:2px
-    
-    class CLI,ORCH,TP,PP,CONFIG,CR,CONN,PGS,UMC,SMR,PGL active
-    class TP core
-    class PGL simplified
-    class CONFIG,CR modern
-```
-
 ## Complete Method Count by Component
 
 ### ✅ NIGHTLY ETL COMPONENTS (Core Pipeline)
@@ -214,21 +148,6 @@ graph TD
 - **Nightly ETL Components**: 10 components, 123 methods
 - **Management Scripts**: 3 scripts, 27 methods/functions
 - **Total Ecosystem**: 13 components, 150 methods/functions
-
-| Component | File | Methods | Status | Purpose |
-|-----------|------|---------|--------|---------|
-| **PipelineOrchestrator** | `orchestration/pipeline_orchestrator.py` | 6 | ✅ ACTIVE | Main orchestration |
-| **TableProcessor** | `orchestration/table_processor.py` | 9 | ✅ ACTIVE | Core ETL engine |
-| **PriorityProcessor** | `orchestration/priority_processor.py` | 5 | ✅ ACTIVE | Batch processing |
-| **Settings** | `config/settings.py` | 20 | ✅ ACTIVE | Modern configuration |
-| **ConfigReader** | `config/config_reader.py` | 12 | ✅ ACTIVE | Static configuration |
-| **ConnectionFactory** | `core/connections.py` | 25 | ✅ ACTIVE | Database connections |
-| **PostgresSchema** | `core/postgres_schema.py` | 10 | ✅ ACTIVE | Schema conversion |
-| **SimpleMySQLReplicator** | `core/simple_mysql_replicator.py` | 10 | ✅ ACTIVE | MySQL replication |
-| **PostgresLoader** | `loaders/postgres_loader.py` | 11 | ✅ ACTIVE | PostgreSQL loading |
-| **UnifiedMetricsCollector** | `monitoring/unified_metrics.py` | 15 | ✅ ACTIVE | Metrics collection |
-
-**Total: 123 methods across 10 components**
 
 ## Data Flow by Phase
 
@@ -315,26 +234,35 @@ graph LR
 
 ## Connection Management Architecture
 
-### Explicit Environment Separation
+### Unified Interface with Settings Injection
 ```mermaid
 graph TD
-    PROD[Production Environment] --> PROD_CONN[Production Connections]
-    TEST[Test Environment] --> TEST_CONN[Test Connections]
+    SETTINGS[Settings Class] --> CONN_FACTORY[ConnectionFactory]
     
-    PROD_CONN --> SOURCE_PROD[OpenDental Source]
-    PROD_CONN --> REPL_PROD[MySQL Replication]
-    PROD_CONN --> ANALYTICS_PROD[PostgreSQL Analytics]
+    CONN_FACTORY --> SOURCE_CONN[get_source_connection(settings)]
+    CONN_FACTORY --> REPL_CONN[get_replication_connection(settings)]
+    CONN_FACTORY --> ANALYTICS_CONN[get_analytics_connection(settings)]
     
-    TEST_CONN --> SOURCE_TEST[Test Source]
-    TEST_CONN --> REPL_TEST[Test Replication]
-    TEST_CONN --> ANALYTICS_TEST[Test Analytics]
+    SOURCE_CONN --> SOURCE_DB[OpenDental Source]
+    REPL_CONN --> REPL_DB[MySQL Replication]
+    ANALYTICS_CONN --> ANALYTICS_DB[PostgreSQL Analytics]
+    
+    %% Environment Separation
+    PROD_ENV[Production Environment] --> PROD_SETTINGS[Production Settings]
+    TEST_ENV[Test Environment] --> TEST_SETTINGS[Test Settings]
+    
+    PROD_SETTINGS --> CONN_FACTORY
+    TEST_SETTINGS --> CONN_FACTORY
 ```
 
 **Key Connection Methods:**
-- `ConnectionFactory.get_opendental_source_connection()` - Production source
-- `ConnectionFactory.get_mysql_replication_connection()` - Production replication
-- `ConnectionFactory.get_opendental_analytics_raw_connection()` - Production analytics
-- Test equivalents for each connection type
+- `ConnectionFactory.get_source_connection(settings)` - Source database connection
+- `ConnectionFactory.get_replication_connection(settings)` - Replication database connection
+- `ConnectionFactory.get_analytics_connection(settings)` - Analytics database connection
+- `ConnectionFactory.get_analytics_raw_connection(settings)` - Raw schema connection
+- `ConnectionFactory.get_analytics_staging_connection(settings)` - Staging schema connection
+- `ConnectionFactory.get_analytics_intermediate_connection(settings)` - Intermediate schema connection
+- `ConnectionFactory.get_analytics_marts_connection(settings)` - Marts schema connection
 
 ## Orchestration Architecture
 
@@ -386,64 +314,6 @@ graph TD
 - `UnifiedMetricsCollector.save_metrics()` - Database persistence
 - `UnifiedMetricsCollector.cleanup_old_metrics()` - Retention management
 
-## Legacy Code Removal Impact
-
-### ✅ Removed Legacy Methods
-- `ConfigReader.get_table_schema()` - Legacy compatibility wrapper
-- `ConfigReader.get_table_size_info()` - Legacy compatibility wrapper
-- `ConfigReader.discover_all_tables()` - Legacy compatibility wrapper
-
-### ✅ Modern Replacements
-- Direct `ConfigReader.get_table_config()` access
-- Static configuration from `tables.yml`
-- Modern `Settings` class for environment management
-
-## Performance Characteristics
-
-### Static Configuration Benefits
-- **5-10x faster** than dynamic schema discovery
-- **No database queries** during ETL operations
-- **Predictable performance** with static configuration
-- **Better reliability** with no dependency on live database state
-
-### Connection Management Benefits
-- **Explicit environment separation** (production/test)
-- **Connection pooling** for optimal performance
-- **Retry logic** for resilience
-- **Resource cleanup** through context managers
-
-## Validation Checklist
-
-### Phase 1: Extraction
-- [x] `SimpleMySQLReplicator` uses static configuration
-- [x] Incremental loading works with `tables.yml` config
-- [x] Batch copying handles large tables efficiently
-- [x] Error handling and recovery implemented
-
-### Phase 2: Loading
-- [x] `PostgresLoader` uses static configuration
-- [x] Schema conversion via `PostgresSchema`
-- [x] Chunked loading for large tables
-- [x] Load verification and validation
-
-### Configuration
-- [x] `Settings` class provides modern configuration
-- [x] `ConfigReader` uses static `tables.yml`
-- [x] No legacy compatibility methods
-- [x] Explicit environment separation
-
-### Orchestration
-- [x] `PipelineOrchestrator` coordinates all phases
-- [x] `PriorityProcessor` handles batch processing
-- [x] `TableProcessor` manages individual table ETL
-- [x] Comprehensive metrics collection
-
-### Monitoring
-- [x] `UnifiedMetricsCollector` provides comprehensive monitoring
-- [x] Real-time metrics collection
-- [x] Database persistence for historical analysis
-- [x] Status reporting for CLI and monitoring
-
 ## Architecture Summary
 
 This ETL pipeline ecosystem represents a **complete, modern architecture** with two distinct phases:
@@ -456,9 +326,8 @@ This ETL pipeline ecosystem represents a **complete, modern architecture** with 
 
 ### Phase 2: Nightly ETL Execution
 1. **Static Configuration**: All configuration from `tables.yml` - no dynamic discovery
-2. **Explicit Environment Separation**: Clear production/test environment handling
+2. **Unified Interface**: Settings injection for all database connections
 3. **Comprehensive Metrics**: Real-time monitoring with database persistence
-4. **No Legacy Code**: All compatibility methods removed
 5. **Performance Optimized**: 5-10x faster than dynamic approaches
 6. **Resource Management**: Proper connection pooling and cleanup
 7. **Error Handling**: Comprehensive error handling and recovery
