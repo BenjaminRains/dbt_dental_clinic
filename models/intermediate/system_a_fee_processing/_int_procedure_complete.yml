@@ -3,44 +3,71 @@ version: 2
 models:
   - name: int_procedure_complete
     description: >
-      Comprehensive procedure model that combines clinical procedure data with fee schedules
-      and validation flags. Part of System A: Fee Processing & Verification workflow.
+      Comprehensive procedure model that consolidates clinical procedure data with complete fee information and validation.
+      
+      This model provides clinical procedure tracking and supports fee processing workflows.
+      Part of System A: Fee Processing & Verification workflow.
+      
+      Key Features:
+      - Fee Validation: Compares actual procedure fees against standard fee schedules with tolerance checking
+      - Clinical Integration: Enriches procedures with notes, provider information, and treatment classifications
+      - Fee Statistics: Aggregates min, max, and average fees by procedure code for pricing analysis
+      - Status Tracking: Resolves coded values to human-readable descriptions using definition lookups
+      - Data Quality: Comprehensive validation flags and business rule enforcement
       
       Data Sources:
-      - stg_opendental__procedurelog: Base procedure records, statuses, and fees
-      - stg_opendental__procedurecode: Procedure code definitions and descriptions
-      - stg_opendental__fee: Standard fee amounts and schedules
-      - stg_opendental__feesched: Fee schedule definitions and types
-      - stg_opendental__definition: Status descriptions, treatment areas, and fee types
-      - stg_opendental__procedurenote: Clinical notes and documentation
+      - stg_opendental__procedurelog: Base procedure records, statuses, fees, and patient assignments
+      - stg_opendental__procedurecode: ADA procedure code definitions, descriptions, and clinical flags
+      - stg_opendental__fee: Standard fee amounts, schedules, and clinic-specific pricing
+      - stg_opendental__feesched: Fee schedule definitions, types, and visibility settings
+      - stg_opendental__definition: Status descriptions, treatment areas, and fee type lookups
+      - stg_opendental__procnote: Clinical notes, timestamps, and documentation history
       
-      Key metrics:
-      - Approximately 88,000 procedures from staging
-      - Fee validation statuses track discrepancies between standard and applied fees
-      - Includes procedure notes and signature tracking
-      - Supports fee verification workflow
-      - Includes fee statistics (min, max, avg) per procedure code
-      - Uses definition tables for standardized descriptions of statuses, treatment areas, and fee types
+      Clinical Logic Features:
+      - Procedure Classification: Categorizes procedures by hygiene, prosthetic, and multi-visit flags
+      - Treatment Area Mapping: Links procedures to anatomical treatment areas with descriptions
+      - Provider Workflow: Associates procedures with performing providers and clinic locations
+      - Note Aggregation: Consolidates all clinical notes with count and timestamp tracking
       
-      Note: As an out-of-network focused clinic:
-      - 99.99% of patients use the default fee schedule (0)
-      - Fee schedules primarily serve as reference data
-      - Insurance-related fee schedules exist but have minimal usage
-      - Fee validation should account for this out-of-network reality
-      - Known fee entry error: D0180 in schedule 8290 shows $11,611.0 vs normal $116.11
-      - procedure_id = 0 records are excluded from this model as they represent financial transactions
-        rather than actual procedures. These records are handled in the AR analysis system.
+      Fee Processing Features:
+      - Standard Fee Lookup: Retrieves most recent fee schedule entries by procedure code and clinic
+      - Fee Variance Analysis: Calculates differences between charged and standard fees
+      - Out-of-Network Logic: Accounts for clinic's 99.99% use of default fee schedule (ID 0)
+      - Fee Statistics: Provides comprehensive fee analytics per procedure code
+      
+      Data Quality Notes:
+      - procedure_id = 0 records excluded: These represent financial transactions rather than clinical procedures
+      - Fee Validation Tolerance: Uses 0.01 precision tolerance for decimal comparison accuracy
+      - Historical Data Handling: Includes procedures from November 2022 onwards with legacy data exceptions
+      - Known Fee Anomaly: D0180 in schedule 8290 shows $11,611.0 vs normal $116.11 (data entry error)
+      - Definition Dependencies: Category IDs assumed based on OpenDental standards (4=status, 5=treatment_area, 6=fee_type)
+      
+      Clinical Rules:
+      - Completed Procedures: Must have non-zero fees and valid procedure codes
+      - Fee Matching: Standard fee lookups prioritize most recent clinic-specific entries
+      - Note Requirements: Completed procedures should have associated clinical documentation
     
     config:
       materialized: incremental
+      schema: intermediate
       unique_key: procedure_id
+      on_schema_change: fail
+      incremental_strategy: merge
     
     columns:
       - name: procedure_id
         description: >
-          Primary key from procedurelog. Note: This model excludes procedure_id = 0 records
-          as they represent financial transactions rather than actual procedures. Those records
-          are handled in the AR analysis system.
+          Primary key - Clinical procedure identifier (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase)
+          - Transformed to: procedure_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Uniquely identifies each clinical procedure record
+          - procedure_id = 0 records excluded as they represent financial transactions
+          - Used for linking procedures to notes, claims, and treatment plans
         tests:
           - unique
           - not_null
@@ -55,7 +82,17 @@ models:
                 description: "This model should not include procedure_id = 0 records"
 
       - name: patient_id
-        description: Foreign key to patient
+        description: >
+          Foreign key to patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedures to the patient who received the treatment
+          - Essential for patient care continuity and billing
+          - Used in clinical workflow and financial reporting
         tests:
           - not_null
           - relationships:
@@ -63,19 +100,49 @@ models:
               field: patient_id
 
       - name: provider_id
-        description: Provider who performed the procedure
+        description: >
+          Foreign key to provider (maps from "ProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProvNum" (CamelCase as stored)
+          - Transformed to: provider_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Identifies the provider who performed or is assigned to the procedure
+          - Critical for provider productivity tracking and clinical accountability
+          - May be null for procedures not yet assigned to a provider
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
 
       - name: clinic_id
-        description: Clinic where procedure was performed
+        description: >
+          Foreign key to clinic (maps from "ClinicNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClinicNum" (CamelCase as stored)
+          - Transformed to: clinic_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Identifies the clinic location where procedure was performed
+          - Used for clinic-specific fee schedules and productivity reporting
+          - Essential for multi-location practice management
         tests:
           - not_null
 
       - name: procedure_code_id
-        description: Foreign key to procedure code
+        description: >
+          Foreign key to procedure code (maps from "CodeNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "CodeNum" (CamelCase as stored)
+          - Transformed to: procedure_code_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links to ADA procedure code definitions and fee schedules
+          - Determines procedure description, category, and standard fees
+          - Critical for insurance billing and clinical documentation
         tests:
           - not_null
           - relationships:
@@ -266,14 +333,49 @@ models:
       - name: last_note_timestamp
         description: Timestamp of the most recent note
 
-      - name: date_timestamp
-        description: Last update timestamp from the source system
+      - name: _extracted_at
+        description: >
+          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          
+          Source: ETL pipeline metadata (added during extraction process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
 
-      - name: _airbyte_loaded_at
-        description: Timestamp when record was loaded by Airbyte
+      - name: _created_at  
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null:
+              where: "procedure_status = 2"  # Completed procedures should have creation dates
 
-      - name: _loaded_at
-        description: Timestamp when record was processed by the int model
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
         tests:
           - not_null
 
@@ -375,3 +477,21 @@ models:
           expression: "not (fee_schedule_type_desc is null and fee_schedule_type_id is not null)"
           severity: warn
           name: warn_missing_fee_schedule_type_description
+
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      business_process: "Clinical Procedure Management"
+      refresh_frequency: "incremental"
+      business_impact: "High"
+      system_integration: "System A: Fee Processing & Verification"
+      data_quality_requirements:
+        - "All completed procedures must have valid fees and procedure codes"
+        - "Fee validation must account for out-of-network clinic operations"
+        - "Clinical documentation must be preserved and accessible"
+        - "Provider and clinic associations must be accurate"
+        - "Fee statistics must be reliable for pricing analysis"
+      performance_requirements:
+        - "Incremental loading based on _updated_at metadata"
+        - "Efficient fee lookups with ranking for most recent rates"
+        - "Optimized joins for clinical and financial data integration"
