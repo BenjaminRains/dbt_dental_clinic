@@ -12,8 +12,11 @@ This module contains fixtures related to:
 
 import os
 import pytest
+import shutil
+import tempfile
 from unittest.mock import patch, mock_open
 from typing import Dict, Any
+from pathlib import Path
 
 # Import new configuration system components
 from etl_pipeline.config import (
@@ -24,6 +27,23 @@ from etl_pipeline.config import (
     create_test_settings
 )
 from etl_pipeline.config.providers import DictConfigProvider
+
+
+def _copy_tables_yml_files_to_temp_dir(real_config_dir: Path, temp_dir: Path):
+    for yml_file in real_config_dir.glob("tables*.yml"):
+        shutil.copy(yml_file, temp_dir / yml_file.name)
+
+@pytest.fixture
+def temp_tables_config_dir():
+    """
+    Creates a temp directory and copies all tables*.yml files from the real config dir into it.
+    Yields the temp dir Path for use in tests.
+    """
+    real_config_dir = Path(__file__).parent.parent / "etl_pipeline" / "etl_pipeline" / "config"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        _copy_tables_yml_files_to_temp_dir(real_config_dir, temp_dir_path)
+        yield temp_dir_path
 
 
 @pytest.fixture
