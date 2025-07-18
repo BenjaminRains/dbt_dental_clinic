@@ -37,6 +37,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 from sqlalchemy import text, inspect
 from sqlalchemy.exc import SQLAlchemyError
+import os
 
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 from etl_pipeline.config import get_settings, DatabaseType
@@ -684,3 +685,5 @@ class TestPostgresLoaderIntegration:
         assert 'test' in replication_config['host'].lower() or \
                'test' in replication_config['database'].lower(), \
             "Test environment should use test-specific configuration"
+
+# Removed test_postgresloader_loads_latest_versioned_tables_yml - we only use tables.yml with metadata versioning
