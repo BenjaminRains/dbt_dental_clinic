@@ -117,32 +117,37 @@ class PipelineConfigManager:
         try:
             logger.info(f"Validating connection configuration for {db_type}")
             
-            # Map db_type to ConnectionFactory methods with settings injection
-            settings = get_settings()
+            # Determine if this is a test connection
+            is_test = db_type.endswith('_test')
+            
+            # Get appropriate settings for the environment
+            if is_test:
+                from etl_pipeline.config import create_test_settings
+                settings = create_test_settings()
+                # Remove _test suffix for the actual connection method
+                actual_db_type = db_type.replace('_test', '')
+            else:
+                settings = get_settings()
+                actual_db_type = db_type
+            
+            # Map to ConnectionFactory methods (unified interface)
+            # Note: Removed ambiguous 'analytics' connection - use specific schema connections
             connection_methods = {
                 'source': lambda: ConnectionFactory.get_source_connection(settings),
                 'replication': lambda: ConnectionFactory.get_replication_connection(settings),
-                'analytics': lambda: ConnectionFactory.get_analytics_connection(settings),
                 'analytics_raw': lambda: ConnectionFactory.get_analytics_raw_connection(settings),
                 'analytics_staging': lambda: ConnectionFactory.get_analytics_staging_connection(settings),
                 'analytics_intermediate': lambda: ConnectionFactory.get_analytics_intermediate_connection(settings),
-                'analytics_marts': lambda: ConnectionFactory.get_analytics_marts_connection(settings),
-                'source_test': lambda: ConnectionFactory.get_source_connection(settings),
-                'replication_test': lambda: ConnectionFactory.get_replication_connection(settings),
-                'analytics_test': lambda: ConnectionFactory.get_analytics_connection(settings),
-                'analytics_raw_test': lambda: ConnectionFactory.get_analytics_raw_connection(settings),
-                'analytics_staging_test': lambda: ConnectionFactory.get_analytics_staging_connection(settings),
-                'analytics_intermediate_test': lambda: ConnectionFactory.get_analytics_intermediate_connection(settings),
-                'analytics_marts_test': lambda: ConnectionFactory.get_analytics_marts_connection(settings)
+                'analytics_marts': lambda: ConnectionFactory.get_analytics_marts_connection(settings)
             }
             
-            if db_type not in connection_methods:
-                logger.error(f"Unknown database type: {db_type}")
+            if actual_db_type not in connection_methods:
+                logger.error(f"Unknown database type: {actual_db_type}")
                 return False
             
             # Test the connection
             try:
-                engine = connection_methods[db_type]()
+                engine = connection_methods[actual_db_type]()
                 with engine.connect() as conn:
                     # Simple test query
                     result = conn.execute(text("SELECT 1"))
@@ -161,9 +166,9 @@ class PipelineConfigManager:
         """Validate all connection configurations."""
         results = {}
         
-        # Define all connection types to validate
+        # Define all connection types to validate (removed ambiguous 'analytics')
         connection_types = [
-            'source', 'replication', 'analytics', 'analytics_raw', 
+            'source', 'replication', 'analytics_raw', 
             'analytics_staging', 'analytics_intermediate', 'analytics_marts'
         ]
         
@@ -227,11 +232,10 @@ class PipelineConfigManager:
         try:
             logger.info("Validating test environment configuration...")
             
-            # Test connection types for test environment
+            # Test connection types for test environment (removed ambiguous 'analytics_test')
             test_connection_types = [
-                'source_test', 'replication_test', 'analytics_test',
-                'analytics_raw_test', 'analytics_staging_test', 
-                'analytics_intermediate_test', 'analytics_marts_test'
+                'source_test', 'replication_test', 'analytics_raw_test',
+                'analytics_staging_test', 'analytics_intermediate_test', 'analytics_marts_test'
             ]
             
             results = {}
