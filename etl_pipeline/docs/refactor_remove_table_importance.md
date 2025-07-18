@@ -281,7 +281,6 @@ def copy_tables_by_size(self, min_rows: int = 0, max_rows: int = None) -> Dict[s
 
 #### Files to Modify:
 - `etl_pipeline/etl_pipeline/config/tables.yml`
-- `etl_pipeline/etl_pipeline/config/tables_latest.yml`
 
 #### Changes:
 1. Remove `table_importance` field from all table configurations
