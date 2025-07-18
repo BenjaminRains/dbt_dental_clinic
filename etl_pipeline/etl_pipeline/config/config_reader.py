@@ -32,6 +32,7 @@ BENEFITS:
 - Maintains all existing functionality through static config
 """
 
+import os
 import yaml
 import logging
 from typing import Dict, List, Optional, Any
@@ -39,38 +40,35 @@ from pathlib import Path
 from datetime import datetime
 
 # Import specific exception classes for structured error handling
-from ..exceptions.configuration import ConfigurationError, EnvironmentError
+from ..exceptions import ConfigurationError, EnvironmentError
 
 logger = logging.getLogger(__name__)
 
 class ConfigReader:
     """
-    Static configuration reader that replaces SchemaDiscovery for ETL operations.
+    Configuration reader for ETL pipeline tables configuration.
     
-    This class provides the same interface as SchemaDiscovery but reads from
-    static configuration files instead of performing dynamic database queries.
+    Loads and manages table configuration from tables.yml file.
+    Supports metadata-based versioning through generated_at field.
     """
     
     def __init__(self, config_path: Optional[str] = None):
         """
-        Initialize the config reader.
+        Initialize ConfigReader.
         
         Args:
             config_path: Path to the tables.yml configuration file (optional, will auto-detect)
         """
         try:
             if config_path is None:
-                # Auto-detect the config path relative to this file
-                # This file is in etl_pipeline/etl_pipeline/config/config_reader.py
-                # So we need to go to etl_pipeline/etl_pipeline/config/tables.yml
+                # Use tables.yml directly - no versioned file lookup
                 self.config_path = str(Path(__file__).parent / "tables.yml")
             else:
                 self.config_path = config_path
                 
             self.config = self._load_configuration()
             self._last_loaded = datetime.now()
-            
-            logger.info(f"ConfigReader initialized with {len(self.config.get('tables', {}))} tables")
+            logger.info(f"ConfigReader initialized with {len(self.config.get('tables', {}))} tables from {self.config_path}")
             
         except ConfigurationError as e:
             logger.error(f"Configuration error during ConfigReader initialization: {e}")
