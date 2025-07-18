@@ -3,36 +3,50 @@
         materialized='table',
         schema='intermediate',
         unique_key='claim_snapshot_id',
-        cluster_by=['claim_id', 'entry_timestamp']
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['claim_snapshot_id'], 'unique': true},
+            {'columns': ['claim_id']},
+            {'columns': ['patient_id']},
+            {'columns': ['entry_timestamp']},
+            {'columns': ['_updated_at']}
+        ]
     )
 }}
 
 /*
     Intermediate model for claim snapshots
-    Part of System B: Insurance
+    Part of System B: Insurance & Claims Processing
     
     This model:
     1. Tracks claim states at various points in time
     2. Provides historical context for claim changes
     3. Integrates with int_claim_details for comprehensive claim history
     4. Supports insurance payment tracking and analysis
-    5. Links to claim tracking events for full audit trail
-    6. Enables variance analysis between estimated and actual payments
     
-    Snapshot triggers include:
-    - INITIAL: First submission of claim
-    - RESUBMIT: When a claim is resubmitted
-    - PAYMENT: When payment is received
-    - ADJUSTMENT: When claim is adjusted
-    - DENIAL: When claim is denied
-    - APPEAL: When claim is appealed
+    Business Logic Features:
+    - Snapshot Triggers: Captures key claim lifecycle events (INITIAL, RESUBMIT, PAYMENT, ADJUSTMENT, DENIAL, APPEAL)
+    - Variance Analysis: Compares estimated vs actual payments and write-offs
+    - Temporal Analysis: Calculates days between snapshot and payment events
+    - Data Deduplication: Ensures unique claim_snapshot_id values
+    
+    Data Quality Notes:
+    - Deduplication applied to handle multiple claim procedures per snapshot
+    - Payment variance calculations handle null values appropriately
+    - Temporal calculations account for data quality issues (payment before snapshot)
+    
+    Performance Considerations:
+    - Table materialization for complex joins and calculations
+    - Indexed on claim_id, patient_id, and temporal fields
+    - Row number partitioning for efficient deduplication
 */
 
-with Source as (
+-- 1. Source CTEs (multiple sources)
+with source_claim_snapshots as (
     select * from {{ ref('stg_opendental__claimsnapshot') }}
 ),
 
-ClaimProc as (
+source_claim_procedures as (
     select
         claim_procedure_id,
         claim_id,
@@ -47,21 +61,17 @@ ClaimProc as (
     from {{ ref('stg_opendental__claimproc') }}
 ),
 
-ClaimTracking as (
+source_claim_tracking as (
     select
         claim_id,
         claim_tracking_id, 
         tracking_type,
         entry_timestamp,
-        tracking_note,
-        row_number() over(
-            partition by claim_id, date_trunc('day', entry_timestamp)
-            order by entry_timestamp desc
-        ) as tracking_rank
+        tracking_note
     from {{ ref('int_claim_tracking') }}
 ),
 
-ClaimDetails as (
+source_claim_details as (
     select
         claim_id,
         patient_id,
@@ -74,27 +84,58 @@ ClaimDetails as (
     from {{ ref('int_claim_details') }}
 ),
 
--- Get most recent payment for each claim/procedure
-ClaimPayments as (
+source_claim_payments as (
+    select
+        claim_id,
+        procedure_id,
+        paid_amount,
+        check_date,
+        write_off_amount
+    from {{ ref('int_claim_payments') }}
+),
+
+-- 2. Calculation/Aggregation CTEs
+claim_tracking_ranked as (
+    select
+        claim_id,
+        claim_tracking_id, 
+        tracking_type,
+        entry_timestamp,
+        tracking_note,
+        row_number() over(
+            partition by claim_id, date_trunc('day', entry_timestamp)
+            order by entry_timestamp desc
+        ) as tracking_rank
+    from source_claim_tracking
+),
+
+claim_payments_ranked as (
     select
         claim_id,
         procedure_id,
         paid_amount,
         check_date,
         write_off_amount,
-        row_number() over(partition by claim_id, procedure_id 
-                          order by check_date desc) as payment_rank
-    from {{ ref('int_claim_payments') }}
+        row_number() over(
+            partition by claim_id, procedure_id 
+            order by check_date desc
+        ) as payment_rank
+    from source_claim_payments
 ),
 
-MostRecentPayment as (
-    select *
-    from ClaimPayments
+most_recent_payments as (
+    select
+        claim_id,
+        procedure_id,
+        paid_amount,
+        check_date,
+        write_off_amount
+    from claim_payments_ranked
     where payment_rank = 1
 ),
 
--- Only include snapshots that have a valid claim procedure ID with complete data
-ValidSnapshots as (
+-- 3. Business Logic CTEs
+snapshot_validation as (
     select
         cs.claim_snapshot_id,
         cs.claim_procedure_id,
@@ -108,14 +149,16 @@ ValidSnapshots as (
         cp.procedure_id,
         cp.patient_id,
         cp.plan_id,
-        -- Add row number to identify the first occurrence of each claim_snapshot_id
-        row_number() over(partition by cs.claim_snapshot_id order by cp.claim_id) as rn
-    from Source cs
-    inner join ClaimProc cp on cs.claim_procedure_id = cp.claim_procedure_id
+        row_number() over(
+            partition by cs.claim_snapshot_id 
+            order by cp.claim_id
+        ) as snapshot_rank
+    from source_claim_snapshots cs
+    inner join source_claim_procedures cp 
+        on cs.claim_procedure_id = cp.claim_procedure_id
 ),
 
--- Deduplicate snapshots to ensure unique claim_snapshot_id values
-DedupedSnapshots as (
+snapshot_deduplication as (
     select
         claim_snapshot_id,
         claim_procedure_id,
@@ -129,82 +172,132 @@ DedupedSnapshots as (
         procedure_id,
         patient_id,
         plan_id
-    from ValidSnapshots
-    where rn = 1
+    from snapshot_validation
+    where snapshot_rank = 1
 ),
 
-Final as (
+-- 4. Integration CTE (joins everything together)
+snapshot_integration as (
     select
-        -- Primary Key
+        -- Primary identification
         vs.claim_snapshot_id,
+        vs.claim_procedure_id,
         
-        -- Foreign Keys
+        -- Foreign keys
         vs.claim_id,
         vs.procedure_id,
         vs.patient_id,
         vs.plan_id,
         
-        -- Link to Tracking
+        -- Tracking integration
         ct.claim_tracking_id,
         ct.tracking_type,
         ct.tracking_note,
         
-        -- Procedure Info from Claim Details
+        -- Procedure information
         cd.procedure_code,
-        coalesce(cd.claim_type, vs.claim_type) as claim_type, -- Use snapshot claim_type if cd claim_type is null
+        coalesce(cd.claim_type, vs.claim_type) as claim_type,
         cd.claim_status,
         
-        -- Claim Details at Snapshot Time
+        -- Snapshot details
         vs.claim_type as snapshot_claim_type,
         vs.write_off_amount as estimated_write_off,
         vs.insurance_payment_estimate,
         vs.fee_amount,
         vs.entry_timestamp,
+        vs.snapshot_trigger,
         
-        -- Actual Payment Details
+        -- Actual claim procedure details
         cp.insurance_payment_amount as actual_payment_amount,
         cp.write_off as actual_write_off,
         cp.allowed_override as actual_allowed_amount,
         cp.status as claim_procedure_status,
         cp.claim_adjustment_reason_codes,
         
-        -- Most Recent Payment
+        -- Payment information
         mrp.paid_amount as most_recent_payment,
         mrp.check_date as most_recent_payment_date,
         
-        -- Variance Analysis
+        -- Calculated variance analysis
         (cp.insurance_payment_amount - vs.insurance_payment_estimate) as payment_variance,
         (cp.write_off - vs.write_off_amount) as write_off_variance,
         
-        -- Snapshot Metadata
-        vs.snapshot_trigger,
-        
-        -- Temporal Fields for Time-Series Analysis
-        CASE 
-            WHEN mrp.check_date IS NULL THEN NULL  -- No payment yet, so days_to_payment is undefined
-            WHEN mrp.check_date < vs.entry_timestamp THEN 0  -- Payment date before snapshot (data issue)
-            ELSE EXTRACT(EPOCH FROM (mrp.check_date - vs.entry_timestamp))/86400 
-        END as days_to_payment,
-        
-        -- Meta Fields
-        vs.entry_timestamp as created_at,
-        vs.entry_timestamp as updated_at
-    from DedupedSnapshots vs
-    left join ClaimProc cp
+        -- Temporal calculations
+        case 
+            when mrp.check_date is null then null
+            when mrp.check_date < vs.entry_timestamp then 0
+            else extract(epoch from (mrp.check_date - vs.entry_timestamp))/86400 
+        end as days_to_payment
+    from snapshot_deduplication vs
+    left join source_claim_procedures cp
         on vs.claim_procedure_id = cp.claim_procedure_id
-    left join ClaimTracking ct
+    left join claim_tracking_ranked ct
         on vs.claim_id = ct.claim_id
         and date_trunc('day', vs.entry_timestamp) = date_trunc('day', ct.entry_timestamp)
         and ct.tracking_rank = 1
-    left join ClaimDetails cd
+    left join source_claim_details cd
         on vs.claim_id = cd.claim_id
         and vs.procedure_id = cd.procedure_id
-    left join MostRecentPayment mrp
+    left join most_recent_payments mrp
         on vs.claim_id = mrp.claim_id
         and vs.procedure_id = mrp.procedure_id
+),
+
+-- 5. Final filtering/validation
+final as (
+    select
+        -- Primary identification
+        claim_snapshot_id,
+        claim_procedure_id,
+        
+        -- Foreign keys
+        claim_id,
+        procedure_id,
+        patient_id,
+        plan_id,
+        
+        -- Tracking information
+        claim_tracking_id,
+        tracking_type,
+        tracking_note,
+        
+        -- Procedure information
+        procedure_code,
+        claim_type,
+        claim_status,
+        
+        -- Snapshot details
+        snapshot_claim_type,
+        estimated_write_off,
+        insurance_payment_estimate,
+        fee_amount,
+        entry_timestamp,
+        snapshot_trigger,
+        
+        -- Actual amounts
+        actual_payment_amount,
+        actual_write_off,
+        actual_allowed_amount,
+        claim_procedure_status,
+        claim_adjustment_reason_codes,
+        
+        -- Payment information
+        most_recent_payment,
+        most_recent_payment_date,
+        
+        -- Variance analysis
+        payment_variance,
+        write_off_variance,
+        
+        -- Temporal analysis
+        days_to_payment,
+        
+        -- Metadata (standardized approach)
+        entry_timestamp as _created_at,
+        entry_timestamp as _updated_at,
+        current_timestamp as _transformed_at
+    from snapshot_integration
+    where claim_snapshot_id is not null
 )
 
--- Apply final deduplication to ensure unique claim_snapshot_id values
-select distinct on (claim_snapshot_id) *
-from Final
-order by claim_snapshot_id, claim_id
+select * from final
