@@ -129,6 +129,7 @@ from etl_pipeline.core.postgres_schema import PostgresSchema
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config.settings import Settings
+# Removed find_latest_tables_config import - we only use tables.yml with metadata versioning
 
 # Import custom exceptions for structured error handling
 from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError, DatabaseQueryError
@@ -192,13 +193,10 @@ class PostgresLoader:
             
             # Set tables config path
             if tables_config_path is None:
-                tables_config_path = os.path.join(
-                    os.path.dirname(__file__), 
-                    '..', 
-                    'config', 
-                    'tables.yml'
-                )
+                config_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
+                tables_config_path = os.path.join(config_dir, 'tables.yml')
             self.tables_config_path = tables_config_path
+            logger.info(f"PostgresLoader using tables config: {self.tables_config_path}")
             
             # Load table configuration
             self.table_configs = self._load_configuration()
@@ -313,6 +311,11 @@ class PostgresLoader:
             # Get incremental columns from configuration
             incremental_columns = table_config.get('incremental_columns', [])
             
+            # Check if this is a table without incremental columns (needs full refresh)
+            if not incremental_columns and not force_full:
+                logger.info(f"Table {table_name} has no incremental columns, treating as full refresh")
+                force_full = True
+            
             # Build query to get data
             query = self._build_load_query(table_name, incremental_columns, force_full)
             
@@ -411,6 +414,42 @@ class PostgresLoader:
             # Get incremental columns from configuration
             incremental_columns = table_config.get('incremental_columns', [])
             
+            # Check if this is a table without incremental columns (needs full refresh)
+            if not incremental_columns and not force_full:
+                logger.info(f"Table {table_name} has no incremental columns, treating as full refresh")
+                force_full = True
+            
+            # Check if analytics table exists and has sufficient data for incremental loading
+            if not force_full and incremental_columns:
+                try:
+                    # Check if analytics table exists
+                    inspector = inspect(self.analytics_engine)
+                    table_exists = inspector.has_table(table_name, schema=self.analytics_schema)
+                    
+                    if not table_exists:
+                        logger.info(f"Analytics table {table_name} does not exist. Performing full sync.")
+                        force_full = True
+                    else:
+                        # Check row counts
+                        with self.replication_engine.connect() as source_conn:
+                            replication_count = source_conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                        
+                        with self.analytics_engine.connect() as target_conn:
+                            analytics_count = target_conn.execute(text(f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}")).scalar()
+                        
+                        replication_count = replication_count or 0
+                        analytics_count = analytics_count or 0
+                        
+                        # If analytics has less than 50% of replication data, force full load
+                        if replication_count > 0 and analytics_count < (replication_count * 0.5):
+                            logger.warning(f"Analytics table {table_name} has {analytics_count} rows vs {replication_count} in replication. Performing full sync.")
+                            force_full = True
+                        else:
+                            logger.info(f"Analytics table {table_name} has {analytics_count} rows vs {replication_count} in replication. Using incremental load.")
+                        
+                except Exception as e:
+                    logger.warning(f"Could not check data completeness for {table_name}, proceeding with incremental: {str(e)}")
+            
             # First, get total count
             count_query = self._build_count_query(table_name, incremental_columns, force_full)
             
@@ -436,11 +475,13 @@ class PostgresLoader:
                     target_conn.execute(text(f"TRUNCATE TABLE {self.analytics_schema}.{table_name}"))
                     logger.info(f"Truncated table {self.analytics_schema}.{table_name} for full load")
             
+            # Build base query once (outside the loop)
+            base_query = self._build_load_query(table_name, incremental_columns, force_full)
+            
             while total_loaded < total_rows:
                 chunk_num += 1
                 
-                # Build chunked query
-                base_query = self._build_load_query(table_name, incremental_columns, force_full)
+                # Build chunked query using the pre-built base query
                 chunked_query = f"{base_query} LIMIT {chunk_size} OFFSET {total_loaded}"
                 
                 # Load chunk
