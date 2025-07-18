@@ -738,6 +738,40 @@ class TestConfigReaderIntegration:
         print(f"  Important tables: {len(important_tables)}")
         print(f"  Audit tables: {len(audit_tables)}")
 
+    @pytest.mark.integration
+    @pytest.mark.order(2)
+    @pytest.mark.config
+    def test_loads_latest_versioned_tables_yml(self, caplog):
+        """
+        Test that ConfigReader loads the latest versioned tables_*.yml if present, and logs the version used.
+        """
+        import glob
+        import shutil
+        import time
+        config_dir = os.path.join(os.path.dirname(__file__), '../../../etl_pipeline/config')
+        # Create two versioned files
+        v1 = os.path.join(config_dir, 'tables_20000101_000000.yml')
+        v2 = os.path.join(config_dir, 'tables_20990101_000000.yml')
+        with open(v1, 'w') as f:
+            f.write('tables: {foo: {batch_size: 1}}')
+        with open(v2, 'w') as f:
+            f.write('tables: {bar: {batch_size: 2}}')
+        # Remove tables.yml if present
+        tables_yml = os.path.join(config_dir, 'tables.yml')
+        if os.path.exists(tables_yml):
+            os.remove(tables_yml)
+        # Use caplog to capture logs
+        with caplog.at_level('INFO'):
+            reader = ConfigReader()
+            # Should load v2 (latest)
+            assert reader.config_path.endswith('tables_20990101_000000.yml')
+            assert 'bar' in reader.config['tables']
+            assert 'ConfigReader initialized' in caplog.text
+            assert 'tables_20990101_000000.yml' in caplog.text
+        # Cleanup
+        os.remove(v1)
+        os.remove(v2)
+
 
 class TestConfigReaderErrorHandlingIntegration:
     """
