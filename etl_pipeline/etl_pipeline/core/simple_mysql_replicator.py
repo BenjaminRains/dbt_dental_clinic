@@ -26,6 +26,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from etl_pipeline.config import get_settings, Settings
 from etl_pipeline.core.connections import ConnectionFactory
+# Removed find_latest_tables_config import - we only use tables.yml with metadata versioning
 
 # Import custom exceptions for structured error handling
 from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError, DatabaseQueryError
@@ -41,11 +42,11 @@ class SimpleMySQLReplicator:
     Simple MySQL replicator that copies data using the new Settings-centric architecture.
     
     Connection Architecture Compliance:
-    - ✅ Uses Settings injection for environment-agnostic operation
-    - ✅ Uses unified ConnectionFactory API with Settings injection
-    - ✅ Uses Settings-based configuration methods
-    - ✅ No direct environment variable access
-    - ✅ Environment-agnostic (works for both production and test)
+    - Uses Settings injection for environment-agnostic operation
+    - Uses unified ConnectionFactory API with Settings injection
+    - Uses Settings-based configuration methods
+    - No direct environment variable access
+    - Environment-agnostic (works for both production and test)
     
     Copy Strategies:
     - SMALL (< 1MB): Direct INSERT ... SELECT
@@ -77,13 +78,10 @@ class SimpleMySQLReplicator:
             
             # Set tables config path
             if tables_config_path is None:
-                tables_config_path = os.path.join(
-                    os.path.dirname(__file__), 
-                    '..', 
-                    'config', 
-                    'tables.yml'
-                )
+                config_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
+                tables_config_path = os.path.join(config_dir, 'tables.yml')
             self.tables_config_path = tables_config_path
+            logger.info(f"SimpleMySQLReplicator using tables config: {self.tables_config_path}")
             
             # Get database connections using unified ConnectionFactory API with Settings injection
             self.source_engine = ConnectionFactory.get_source_connection(self.settings)
@@ -166,7 +164,7 @@ class SimpleMySQLReplicator:
             table_name: Name of the table
             
         Returns:
-            Extraction strategy: 'full_table' or 'incremental'
+            Extraction strategy: 'full_table', 'incremental', or 'chunked_incremental'
         """
         config = self.table_configs.get(table_name, {})
         return config.get('extraction_strategy', 'full_table')
@@ -200,17 +198,14 @@ class SimpleMySQLReplicator:
             
             logger.info(f"Using {extraction_strategy} extraction strategy for {table_name}")
             
-            # For incremental tables, we don't need to create schema
-            # The table should already exist from previous runs
-            # For full_table strategy, we would need schema creation, but that's not implemented yet
-            if extraction_strategy == 'full_table':
-                logger.error(f"Full table strategy not implemented yet for {table_name}")
-                return False
-            
             # Copy data based on extraction strategy
             success = False
-            if extraction_strategy == 'incremental':
+            if extraction_strategy == 'full_table':
+                success = self._copy_full_table(table_name, config)
+            elif extraction_strategy == 'incremental':
                 success = self._copy_incremental_table(table_name, config)
+            elif extraction_strategy == 'chunked_incremental':
+                success = self._copy_chunked_incremental_table(table_name, config)
             else:
                 logger.error(f"Unknown extraction strategy: {extraction_strategy}")
                 return False
@@ -239,20 +234,95 @@ class SimpleMySQLReplicator:
 
     
   
+    def _copy_full_table(self, table_name: str, config: Dict) -> bool:
+        """Copy entire table using full table strategy."""
+        try:
+            logger.info(f"Starting full table copy for {table_name}")
+            
+            # Get copy strategy based on table size
+            copy_strategy = self.get_copy_strategy(table_name)
+            batch_size = config.get('batch_size', 5000)
+            
+            logger.info(f"Using {copy_strategy} copy strategy for {table_name}")
+            
+            # Drop and recreate table structure
+            self._recreate_table_structure(table_name)
+            
+            # Copy all data based on copy strategy
+            if copy_strategy == 'small':
+                return self._copy_small_table(table_name)
+            elif copy_strategy == 'medium':
+                return self._copy_medium_table(table_name, batch_size)
+            else:  # large
+                return self._copy_large_table(table_name, batch_size)
+                
+        except Exception as e:
+            logger.error(f"Error in full table copy for {table_name}: {str(e)}")
+            return False
+    
+    def _copy_chunked_incremental_table(self, table_name: str, config: Dict) -> bool:
+        """Copy table using chunked incremental strategy for very large tables."""
+        try:
+            # Get first incremental column from the list
+            incremental_columns = config.get('incremental_columns', [])
+            if not incremental_columns:
+                logger.error(f"No incremental columns configured for table: {table_name}")
+                return False
+            
+            incremental_column = incremental_columns[0]  # Use first column
+            batch_size = config.get('batch_size', 1000)  # Smaller batches for chunked
+            
+            logger.info(f"Copying chunked incremental data for {table_name} using column: {incremental_column}")
+            
+            # Get last processed value from target
+            last_processed = self._get_last_processed_value(table_name, incremental_column)
+            
+            # If table doesn't exist, create it first
+            if last_processed is None:
+                logger.info(f"Target table {table_name} does not exist, creating table structure")
+                if not self._recreate_table_structure(table_name):
+                    logger.error(f"Failed to create table structure for {table_name}")
+                    return False
+            
+            # Get new/changed records from source
+            new_records_count = self._get_new_records_count(table_name, incremental_column, last_processed)
+            
+            if new_records_count == 0:
+                logger.info(f"No new records to copy for {table_name}")
+                return True
+            
+            logger.info(f"Found {new_records_count} new records to copy for {table_name}")
+            
+            # Copy new records with smaller batches for chunked strategy
+            return self._copy_new_records(table_name, incremental_column, last_processed, batch_size)
+            
+        except Exception as e:
+            logger.error(f"Error in chunked incremental copy for {table_name}: {str(e)}")
+            return False
+    
     def _copy_incremental_table(self, table_name: str, config: Dict) -> bool:
         """Copy only new/changed data using incremental column."""
         try:
-            incremental_column = config.get('incremental_column')
-            if not incremental_column:
-                logger.error(f"No incremental column configured for table: {table_name}")
+            # Get first incremental column from the list
+            incremental_columns = config.get('incremental_columns', [])
+            if not incremental_columns:
+                logger.error(f"No incremental columns configured for table: {table_name}")
                 return False
             
+            incremental_column = incremental_columns[0]  # Use first column
             batch_size = config.get('batch_size', 5000)
             
             logger.info(f"Copying incremental data for {table_name} using column: {incremental_column}")
             
             # Get last processed value from target
             last_processed = self._get_last_processed_value(table_name, incremental_column)
+            
+            # If table doesn't exist, create it first
+            if last_processed is None:
+                logger.info(f"Target table {table_name} does not exist, creating table structure")
+                if not self._recreate_table_structure(table_name):
+                    logger.error(f"Failed to create table structure for {table_name}")
+                    return False
             
             # Get new/changed records from source
             new_records_count = self._get_new_records_count(table_name, incremental_column, last_processed)
@@ -277,6 +347,256 @@ class SimpleMySQLReplicator:
             return False
         except Exception as e:
             logger.error(f"Unexpected error in incremental copy for {table_name}: {str(e)}")
+            return False
+    
+    def _recreate_table_structure(self, table_name: str) -> bool:
+        """Drop and recreate table structure in target database only."""
+        try:
+            with self.target_engine.connect() as conn:
+                # Drop table if exists (in target database only)
+                conn.execute(text(f"DROP TABLE IF EXISTS `{table_name}`"))
+                
+                # Get table structure from source database
+                source_config = self.settings.get_source_connection_config()
+                source_db = source_config.get('database', 'opendental')
+                
+                # Check if source and target are on the same server
+                source_host = source_config.get('host', 'localhost')
+                target_host = self.settings.get_replication_connection_config().get('host', 'localhost')
+                
+                if source_host == target_host:
+                    # Same server - use CREATE TABLE LIKE
+                    create_sql = f"CREATE TABLE `{table_name}` LIKE `{source_db}`.`{table_name}`"
+                    conn.execute(text(create_sql))
+                else:
+                    # Different servers - get CREATE TABLE statement from source
+                    with self.source_engine.connect() as source_conn:
+                        # Get the CREATE TABLE statement from source
+                        result = source_conn.execute(text(f"SHOW CREATE TABLE `{table_name}`"))
+                        create_table_row = result.fetchone()
+                        if create_table_row:
+                            create_table_sql = create_table_row[1]
+                            # Execute the CREATE TABLE statement in target
+                            conn.execute(text(create_table_sql))
+                        else:
+                            raise Exception(f"Could not get CREATE TABLE statement for {table_name}")
+                
+                conn.commit()
+                logger.info(f"Recreated table structure for {table_name} in target database")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error recreating table structure for {table_name} in target database: {str(e)}")
+            return False
+    
+    def _copy_small_table(self, table_name: str) -> bool:
+        """Copy small table using direct INSERT ... SELECT."""
+        try:
+            with self.source_engine.connect() as source_conn:
+                with self.target_engine.connect() as target_conn:
+                    # Check if source and target are on the same server
+                    source_config = self.settings.get_source_connection_config()
+                    target_config = self.settings.get_replication_connection_config()
+                    source_host = source_config.get('host', 'localhost')
+                    target_host = target_config.get('host', 'localhost')
+                    
+                    if source_host == target_host:
+                        # Same server - use direct INSERT ... SELECT
+                        source_db = source_config.get('database', 'opendental')
+                        copy_sql = f"INSERT INTO `{table_name}` SELECT * FROM `{source_db}`.`{table_name}`"
+                        result = target_conn.execute(text(copy_sql))
+                    else:
+                        # Different servers - read from source and insert into target
+                        # Get all data from source
+                        result = source_conn.execute(text(f"SELECT * FROM `{table_name}`"))
+                        rows = result.fetchall()
+                        
+                        if rows:
+                            # Get column names
+                            columns = result.keys()
+                            # Create INSERT statement with named parameters
+                            param_names = [f":{col}" for col in columns]
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            
+                            # Insert all rows
+                            for row in rows:
+                                # Convert Row object to dictionary for named parameter binding
+                                row_dict = dict(zip(columns, row))
+                                target_conn.execute(text(insert_sql), row_dict)
+                        
+                        result.rowcount = len(rows)
+                    
+                    target_conn.commit()
+                    logger.info(f"Copied {result.rowcount} records for small table {table_name}")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"Error copying small table {table_name}: {str(e)}")
+            return False
+    
+    def _copy_medium_table(self, table_name: str, batch_size: int) -> bool:
+        """Copy medium table using chunked INSERT with LIMIT/OFFSET."""
+        try:
+            with self.source_engine.connect() as source_conn:
+                with self.target_engine.connect() as target_conn:
+                    # Check if source and target are on the same server
+                    source_config = self.settings.get_source_connection_config()
+                    target_config = self.settings.get_replication_connection_config()
+                    source_host = source_config.get('host', 'localhost')
+                    target_host = target_config.get('host', 'localhost')
+                    
+                    if source_host == target_host:
+                        # Same server - use direct INSERT ... SELECT
+                        source_db = source_config.get('database', 'opendental')
+                        offset = 0
+                        total_copied = 0
+                        
+                        while True:
+                            copy_sql = f"""
+                                INSERT INTO `{table_name}` 
+                                SELECT * FROM `{source_db}`.`{table_name}` 
+                                LIMIT {batch_size} OFFSET {offset}
+                            """
+                            result = target_conn.execute(text(copy_sql))
+                            rows_copied = result.rowcount
+                            
+                            if rows_copied == 0:
+                                break
+                            
+                            target_conn.commit()
+                            total_copied += rows_copied
+                            offset += batch_size
+                            
+                            logger.info(f"Copied batch: {total_copied} total records for {table_name}")
+                    else:
+                        # Different servers - read from source and insert into target
+                        offset = 0
+                        total_copied = 0
+                        
+                        while True:
+                            # Get batch from source
+                            result = source_conn.execute(text(f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}"))
+                            rows = result.fetchall()
+                            
+                            if not rows:
+                                break
+                            
+                            # Get column names
+                            columns = result.keys()
+                            # Create INSERT statement with named parameters
+                            param_names = [f":{col}" for col in columns]
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            
+                            # Insert batch using individual execute calls
+                            for row in rows:
+                                # Convert Row object to dictionary for named parameter binding
+                                row_dict = dict(zip(columns, row))
+                                target_conn.execute(text(insert_sql), row_dict)
+                            
+                            target_conn.commit()
+                            total_copied += len(rows)
+                            offset += batch_size
+                            
+                            logger.info(f"Copied batch: {total_copied} total records for {table_name}")
+                    
+                    logger.info(f"Completed medium table copy: {total_copied} records for {table_name}")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"Error copying medium table {table_name}: {str(e)}")
+            return False
+    
+    def _copy_large_table(self, table_name: str, batch_size: int) -> bool:
+        """Copy large table using chunked INSERT with WHERE conditions."""
+        try:
+            with self.source_engine.connect() as source_conn:
+                with self.target_engine.connect() as target_conn:
+                    # Check if source and target are on the same server
+                    source_config = self.settings.get_source_connection_config()
+                    target_config = self.settings.get_replication_connection_config()
+                    source_host = source_config.get('host', 'localhost')
+                    target_host = target_config.get('host', 'localhost')
+                    
+                    if source_host == target_host:
+                        # Same server - use direct INSERT ... SELECT
+                        source_db = source_config.get('database', 'opendental')
+                        
+                        # Get total count for progress tracking
+                        count_result = source_conn.execute(text(f"SELECT COUNT(*) FROM `{source_db}`.`{table_name}`"))
+                        total_count = count_result.scalar()
+                        if total_count is None:
+                            total_count = 0
+                        
+                        offset = 0
+                        total_copied = 0
+                        
+                        while total_copied < total_count:
+                            copy_sql = f"""
+                                INSERT INTO `{table_name}` 
+                                SELECT * FROM `{source_db}`.`{table_name}` 
+                                LIMIT {batch_size} OFFSET {offset}
+                            """
+                            result = target_conn.execute(text(copy_sql))
+                            rows_copied = result.rowcount
+                            
+                            if rows_copied == 0:
+                                break
+                            
+                            target_conn.commit()
+                            total_copied += rows_copied
+                            offset += batch_size
+                            
+                            if total_count > 0:
+                                progress = (total_copied / total_count) * 100
+                                logger.info(f"Copied batch: {total_copied}/{total_count} ({progress:.1f}%) for {table_name}")
+                            else:
+                                logger.info(f"Copied batch: {total_copied} records for {table_name}")
+                    else:
+                        # Different servers - read from source and insert into target
+                        # Get total count for progress tracking
+                        count_result = source_conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}`"))
+                        total_count = count_result.scalar()
+                        if total_count is None:
+                            total_count = 0
+                        
+                        offset = 0
+                        total_copied = 0
+                        
+                        while total_copied < total_count:
+                            # Get batch from source
+                            result = source_conn.execute(text(f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}"))
+                            rows = result.fetchall()
+                            
+                            if not rows:
+                                break
+                            
+                            # Get column names
+                            columns = result.keys()
+                            # Create INSERT statement with named parameters
+                            param_names = [f":{col}" for col in columns]
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            
+                            # Insert batch using individual execute calls
+                            for row in rows:
+                                # Convert Row object to dictionary for named parameter binding
+                                row_dict = dict(zip(columns, row))
+                                target_conn.execute(text(insert_sql), row_dict)
+                            
+                            target_conn.commit()
+                            total_copied += len(rows)
+                            offset += batch_size
+                            
+                            if total_count > 0:
+                                progress = (total_copied / total_count) * 100
+                                logger.info(f"Copied batch: {total_copied}/{total_count} ({progress:.1f}%) for {table_name}")
+                            else:
+                                logger.info(f"Copied batch: {total_copied} records for {table_name}")
+                    
+                    logger.info(f"Completed large table copy: {total_copied} records for {table_name}")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"Error copying large table {table_name}: {str(e)}")
             return False
     
     def _get_last_processed_value(self, table_name: str, incremental_column: str) -> Any:
@@ -319,7 +639,7 @@ class SimpleMySQLReplicator:
                     result = conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}`"))
                 else:
                     # Get count of records newer than last processed
-                    result = conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}` WHERE {incremental_column} > %s"), (last_processed,))
+                    result = conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}` WHERE {incremental_column} > :last_processed"), {"last_processed": last_processed})
                 
                 count = result.scalar()
                 return count or 0
@@ -344,45 +664,83 @@ class SimpleMySQLReplicator:
         try:
             with self.source_engine.connect() as source_conn:
                 with self.target_engine.connect() as target_conn:
-                    offset = 0
-                    total_copied = 0
+                    # Check if source and target are on the same server
+                    source_config = self.settings.get_source_connection_config()
+                    target_config = self.settings.get_replication_connection_config()
+                    source_host = source_config.get('host', 'localhost')
+                    target_host = target_config.get('host', 'localhost')
                     
-                    while True:
-                        # Get batch of new records
-                        # Use settings to get source database name
-                        source_config = self.settings.get_source_connection_config()
+                    if source_host == target_host:
+                        # Same server - use direct INSERT ... SELECT
                         source_db = source_config.get('database', 'opendental')
+                        offset = 0
+                        total_copied = 0
                         
-                        if last_processed is None:
-                            # Copy all records if no last processed value
-                            copy_sql = f"""
-                                INSERT INTO `{table_name}` 
-                                SELECT * FROM `{source_db}`.`{table_name}` 
-                                LIMIT {batch_size} OFFSET {offset}
-                            """
-                        else:
-                            # Copy only records newer than last processed
-                            copy_sql = f"""
-                                INSERT INTO `{table_name}` 
-                                SELECT * FROM `{source_db}`.`{table_name}` 
-                                WHERE {incremental_column} > %s
-                                LIMIT {batch_size} OFFSET {offset}
-                            """
+                        while True:
+                            if last_processed is None:
+                                # Copy all records if no last processed value
+                                copy_sql = f"""
+                                    INSERT INTO `{table_name}` 
+                                    SELECT * FROM `{source_db}`.`{table_name}` 
+                                    LIMIT {batch_size} OFFSET {offset}
+                                """
+                            else:
+                                # Copy only records newer than last processed
+                                copy_sql = f"""
+                                    INSERT INTO `{table_name}` 
+                                    SELECT * FROM `{source_db}`.`{table_name}` 
+                                    WHERE {incremental_column} > :last_processed
+                                    LIMIT {batch_size} OFFSET {offset}
+                                """
+                            
+                            if last_processed is None:
+                                result = target_conn.execute(text(copy_sql))
+                            else:
+                                result = target_conn.execute(text(copy_sql), {"last_processed": last_processed})
+                            
+                            rows_copied = result.rowcount
+                            if rows_copied == 0:
+                                break
+                            
+                            target_conn.commit()
+                            total_copied += rows_copied
+                            offset += batch_size
+                            
+                            logger.info(f"Copied batch: {total_copied} total records for {table_name}")
+                    else:
+                        # Different servers - read from source and insert into target
+                        offset = 0
+                        total_copied = 0
                         
-                        if last_processed is None:
-                            result = target_conn.execute(text(copy_sql))
-                        else:
-                            result = target_conn.execute(text(copy_sql), (last_processed,))
-                        
-                        rows_copied = result.rowcount
-                        if rows_copied == 0:
-                            break
-                        
-                        target_conn.commit()
-                        total_copied += rows_copied
-                        offset += batch_size
-                        
-                        logger.info(f"Copied batch: {total_copied} total records for {table_name}")
+                        while True:
+                            # Get batch from source
+                            if last_processed is None:
+                                result = source_conn.execute(text(f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}"))
+                            else:
+                                result = source_conn.execute(text(f"SELECT * FROM `{table_name}` WHERE {incremental_column} > :last_processed LIMIT {batch_size} OFFSET {offset}"), {"last_processed": last_processed})
+                            
+                            rows = result.fetchall()
+                            
+                            if not rows:
+                                break
+                            
+                            # Get column names
+                            columns = result.keys()
+                            # Create INSERT statement with named parameters
+                            param_names = [f":{col}" for col in columns]
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            
+                            # Insert batch using individual execute calls
+                            for row in rows:
+                                # Convert Row object to dictionary for named parameter binding
+                                row_dict = dict(zip(columns, row))
+                                target_conn.execute(text(insert_sql), row_dict)
+                            
+                            target_conn.commit()
+                            total_copied += len(rows)
+                            offset += batch_size
+                            
+                            logger.info(f"Copied batch: {total_copied} total records for {table_name}")
                     
                     logger.info(f"Completed incremental copy: {total_copied} records for {table_name}")
                     return True
@@ -422,8 +780,21 @@ class SimpleMySQLReplicator:
         logger.info(f"Starting copy of {len(tables_to_copy)} tables")
         
         for table_name in tables_to_copy:
-            success = self.copy_table(table_name)
-            results[table_name] = success
+            try:
+                success = self.copy_table(table_name)
+                results[table_name] = success
+            except DataExtractionError as e:
+                logger.error(f"Data extraction error copying table {table_name}: {e}")
+                results[table_name] = False
+            except DatabaseConnectionError as e:
+                logger.error(f"Database connection error copying table {table_name}: {e}")
+                results[table_name] = False
+            except DatabaseQueryError as e:
+                logger.error(f"Database query error copying table {table_name}: {e}")
+                results[table_name] = False
+            except Exception as e:
+                logger.error(f"Unexpected error copying table {table_name}: {str(e)}")
+                results[table_name] = False
         
         # Log summary
         successful = sum(1 for success in results.values() if success)
@@ -445,10 +816,24 @@ class SimpleMySQLReplicator:
         """
         tables_to_copy = []
         
+        # Define all valid importance levels
+        known_importance_levels = {'critical', 'important', 'standard', 'audit', 'reference'}
+        
         for table_name, config in self.table_configs.items():
             if config.get('table_importance') == importance_level:
                 tables_to_copy.append(table_name)
         
         logger.info(f"Found {len(tables_to_copy)} tables with importance: {importance_level}")
+        
+        # If no tables match the importance level
+        if not tables_to_copy:
+            # If it's a known importance level but no tables match, return empty dict
+            if importance_level in known_importance_levels:
+                logger.info(f"No tables found with importance: {importance_level}")
+                return {}
+            # If it's an unknown importance level, fall back to copying all tables
+            else:
+                logger.info(f"Unknown importance level: {importance_level}, falling back to copying all tables")
+                return self.copy_all_tables()
         
         return self.copy_all_tables(tables_to_copy) 
