@@ -210,11 +210,45 @@ function Initialize-ETLEnvironment {
     }
     Pop-Location
 
-    # Load environment variables
-    # First load project root .env_production if it exists
-    if (Test-Path "$ProjectPath\.env_production") {
-        Write-Host "📄 Loading project root .env_production file..." -ForegroundColor Yellow
-        Get-Content "$ProjectPath\.env_production" | ForEach-Object {
+    # Interactive Environment Selection
+    Write-Host "`n🔧 ETL Environment Selection" -ForegroundColor Cyan
+    Write-Host "Which environment would you like to use?" -ForegroundColor White
+    Write-Host "  Type 'production' for Production (.env_production)" -ForegroundColor Yellow
+    Write-Host "  Type 'test' for Test (.env_test)" -ForegroundColor Yellow
+    Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
+    
+    do {
+        $choice = Read-Host "`nEnter environment (production/test/cancel)"
+        $choice = $choice.ToLower().Trim()
+        
+        switch ($choice) {
+            "production" { 
+                $envFile = ".env_production"
+                $envName = "Production"
+                break
+            }
+            "test" { 
+                $envFile = ".env_test"
+                $envName = "Test"
+                break
+            }
+            "cancel" { 
+                Write-Host "❌ Environment setup cancelled" -ForegroundColor Red
+                return
+            }
+            default { 
+                Write-Host "❌ Invalid choice. Please enter 'production', 'test', or 'cancel'." -ForegroundColor Red
+            }
+        }
+    } while ($choice -notin @("production", "test", "cancel"))
+
+    # Load only the selected environment file
+    $etlPath = "$ProjectPath\etl_pipeline"
+    $envPath = "$etlPath\$envFile"
+    
+    if (Test-Path $envPath) {
+        Write-Host "📄 Loading $envName environment from: $envFile" -ForegroundColor Green
+        Get-Content $envPath | ForEach-Object {
             if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
                 $name = $matches[1].Trim()
                 $value = $matches[2].Trim()
@@ -222,23 +256,11 @@ function Initialize-ETLEnvironment {
                 Write-Host "  Loaded: $name" -ForegroundColor Gray
             }
         }
-    }
-    
-    # Load ETL-specific environment files from etl_pipeline directory
-    $etlPath = "$ProjectPath\etl_pipeline"
-    @(".env_test", ".env_production") | ForEach-Object {
-        $envFile = "$etlPath\$_"
-        if (Test-Path $envFile) {
-            Write-Host "📄 Loading ETL environment file: $_" -ForegroundColor Yellow
-            Get-Content $envFile | ForEach-Object {
-                if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
-                    $name = $matches[1].Trim()
-                    $value = $matches[2].Trim()
-                    [Environment]::SetEnvironmentVariable($name, $value, 'Process')
-                    Write-Host "  Loaded: $name" -ForegroundColor Gray
-                }
-            }
-        }
+    } else {
+        Write-Host "❌ Environment file not found: $envPath" -ForegroundColor Red
+        Write-Host "Please create $envFile from the template" -ForegroundColor Yellow
+        Write-Host "Template location: $etlPath\docs\env_$($envFile.Replace('.env_', '')).template" -ForegroundColor Yellow
+        return
     }
 
     $script:IsETLActive = $true
@@ -421,10 +443,38 @@ function Get-EnvironmentStatus {
     
     if ($script:IsETLActive) {
         Write-Host "  ETL: ✅ Active ($script:ActiveProject)" -ForegroundColor Green
+        $environment = $env:ETL_ENVIRONMENT
+        if ($environment) {
+            Write-Host "  Environment: $environment" -ForegroundColor Cyan
+        }
     } else {
         Write-Host "  ETL: ⭕ Inactive" -ForegroundColor Gray
     }
     
+    Write-Host ""
+}
+
+function Get-ETLEnvironmentStatus {
+    if (-not $script:IsETLActive) {
+        Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
+        return
+    }
+    
+    $environment = $env:ETL_ENVIRONMENT
+    Write-Host "`n📊 ETL Environment Status:" -ForegroundColor White
+    Write-Host "  Environment: $environment" -ForegroundColor Green
+    Write-Host "  Active: ✅" -ForegroundColor Green
+    Write-Host "  Project: $script:ActiveProject" -ForegroundColor Cyan
+    
+    # Show some key environment variables
+    Write-Host "`n🔧 Key Environment Variables:" -ForegroundColor White
+    if ($environment -eq "production") {
+        Write-Host "  OPENDENTAL_SOURCE_DB: $($env:OPENDENTAL_SOURCE_DB)" -ForegroundColor Gray
+        Write-Host "  OPENDENTAL_SOURCE_HOST: $($env:OPENDENTAL_SOURCE_HOST)" -ForegroundColor Gray
+    } elseif ($environment -eq "test") {
+        Write-Host "  TEST_OPENDENTAL_SOURCE_DB: $($env:TEST_OPENDENTAL_SOURCE_DB)" -ForegroundColor Gray
+        Write-Host "  TEST_OPENDENTAL_SOURCE_HOST: $($env:TEST_OPENDENTAL_SOURCE_HOST)" -ForegroundColor Gray
+    }
     Write-Host ""
 }
 
@@ -460,27 +510,28 @@ function global:prompt {
 # =============================================================================
 
 # Environment Management
-Set-Alias -Name dbt-init -Value Initialize-DBTEnvironment
-Set-Alias -Name dbt-deactivate -Value Stop-DBTEnvironment
-Set-Alias -Name etl-init -Value Initialize-ETLEnvironment
-Set-Alias -Name etl-deactivate -Value Stop-ETLEnvironment
+Set-Alias -Name dbt-init -Value Initialize-DBTEnvironment -Scope Global
+Set-Alias -Name dbt-deactivate -Value Stop-DBTEnvironment -Scope Global
+Set-Alias -Name etl-init -Value Initialize-ETLEnvironment -Scope Global
+Set-Alias -Name etl-deactivate -Value Stop-ETLEnvironment -Scope Global
 
 # DBT Commands
-Set-Alias -Name dbt -Value Invoke-DBT
-Set-Alias -Name notebook -Value Start-Notebook
-Set-Alias -Name format -Value Format-Code
-Set-Alias -Name lint -Value Format-Code
-Set-Alias -Name test -Value Test-DBT
+Set-Alias -Name dbt -Value Invoke-DBT -Scope Global
+Set-Alias -Name notebook -Value Start-Notebook -Scope Global
+Set-Alias -Name format -Value Format-Code -Scope Global
+Set-Alias -Name lint -Value Format-Code -Scope Global
+Set-Alias -Name test -Value Test-DBT -Scope Global
 
 # ETL Commands
-Set-Alias -Name etl -Value Invoke-ETL
-Set-Alias -Name etl-status -Value Get-ETLStatus
-Set-Alias -Name etl-validate -Value Test-ETLValidation
-Set-Alias -Name etl-run -Value Start-ETLPipeline
-Set-Alias -Name etl-test -Value Test-ETLConnections
+Set-Alias -Name etl -Value Invoke-ETL -Scope Global
+Set-Alias -Name etl-status -Value Get-ETLStatus -Scope Global
+Set-Alias -Name etl-validate -Value Test-ETLValidation -Scope Global
+Set-Alias -Name etl-run -Value Start-ETLPipeline -Scope Global
+Set-Alias -Name etl-test -Value Test-ETLConnections -Scope Global
+Set-Alias -Name etl-env-status -Value Get-ETLEnvironmentStatus -Scope Global
 
 # Utility
-Set-Alias -Name env-status -Value Get-EnvironmentStatus
+Set-Alias -Name env-status -Value Get-EnvironmentStatus -Scope Global
 
 # =============================================================================
 # STARTUP MESSAGE
@@ -493,7 +544,8 @@ Write-Host "╚═════════════════════�
 
 Write-Host "`n🚀 Quick Start:" -ForegroundColor White
 Write-Host "  dbt-init       - Initialize dbt environment" -ForegroundColor Cyan
-Write-Host "  etl-init       - Initialize ETL environment" -ForegroundColor Magenta
+Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
+Write-Host "  etl-env-status - Show ETL environment details" -ForegroundColor Yellow
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
 # Auto-detect project type
@@ -512,4 +564,11 @@ $etlFunctionsPath = Join-Path $PSScriptRoot "etl_functions.ps1"
 if (Test-Path $etlFunctionsPath) {
     . $etlFunctionsPath
     Write-Host "🦷 Enhanced dental clinic ETL functions loaded" -ForegroundColor Green
-} 
+}
+
+# Export functions to global scope
+Write-Host "🔧 Loading functions into global scope..." -ForegroundColor Yellow
+Get-Command -Type Function | Where-Object {$_.Name -like "*ETL*" -or $_.Name -like "*DBT*"} | ForEach-Object {
+    Set-Item -Path "function:global:$($_.Name)" -Value $_.Definition
+}
+Write-Host "✅ Functions loaded successfully!" -ForegroundColor Green 
