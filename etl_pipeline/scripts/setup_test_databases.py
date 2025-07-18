@@ -209,6 +209,7 @@ def setup_postgresql_test_database():
             # Drop existing tables if they exist (only raw schema)
             conn.execute(text("DROP TABLE IF EXISTS raw.appointment CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS raw.patient CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS raw.procedurelog CASCADE"))
             
             # Create sequences first (before tables that reference them)
             conn.execute(text("""
@@ -222,6 +223,15 @@ def setup_postgresql_test_database():
             
             conn.execute(text("""
                 CREATE SEQUENCE IF NOT EXISTS raw."appointment_AptNum_seq"
+                    INCREMENT 1
+                    START 1
+                    MINVALUE 1
+                    MAXVALUE 9223372036854775807
+                    CACHE 1;
+            """))
+            
+            conn.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS raw."procedurelog_ProcNum_seq"
                     INCREMENT 1
                     START 1
                     MINVALUE 1
@@ -330,6 +340,23 @@ def setup_postgresql_test_database():
                     "DateTStamp" timestamp without time zone NOT NULL,
                     "Notes" text COLLATE pg_catalog."default",
                     CONSTRAINT appointment_pkey PRIMARY KEY ("AptNum")
+                )
+            """))
+            
+            # Create procedurelog table with correct column types to match ETL expectations
+            conn.execute(text(f"""
+                CREATE TABLE raw.procedurelog (
+                    "ProcNum" bigint NOT NULL DEFAULT nextval('raw."procedurelog_ProcNum_seq"'::regclass),
+                    "PatNum" bigint NOT NULL,
+                    "AptNum" bigint NOT NULL,
+                    "ProcStatus" boolean DEFAULT false,
+                    "ProcFee" decimal(10,2) NOT NULL DEFAULT 0.00,
+                    "ProcFeeCur" decimal(10,2) NOT NULL DEFAULT 0.00,
+                    "ProcDate" date NOT NULL,
+                    "CodeNum" bigint NOT NULL DEFAULT 0,
+                    "ProcNote" text COLLATE pg_catalog."default",
+                    "DateTStamp" timestamp without time zone NOT NULL,
+                    CONSTRAINT procedurelog_pkey PRIMARY KEY ("ProcNum")
                 )
             """))
             
@@ -507,6 +534,7 @@ def setup_mysql_test_database(database_type):
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """
             conn.execute(text(create_patient_sql))
+            logger.info(f"Successfully created patient table in {database_type.value} database")
             
             # Drop existing appointment table if it exists, then create with complete schema
             conn.execute(text("DROP TABLE IF EXISTS appointment"))
@@ -524,6 +552,31 @@ def setup_mysql_test_database(database_type):
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """
             conn.execute(text(create_appointment_sql))
+            logger.info(f"Successfully created appointment table in {database_type.value} database")
+            
+            # Drop existing procedurelog table if it exists, then create with complete schema
+            conn.execute(text("DROP TABLE IF EXISTS procedurelog"))
+            
+            create_procedurelog_sql = f"""
+                CREATE TABLE procedurelog (
+                    ProcNum BIGINT(20) NOT NULL AUTO_INCREMENT,
+                    PatNum BIGINT(20) NOT NULL,
+                    AptNum BIGINT(20) NOT NULL,
+                    ProcStatus TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+                    ProcFee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                    ProcFeeCur DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                    ProcDate DATE NOT NULL,
+                    CodeNum BIGINT(20) NOT NULL DEFAULT 0,
+                    ProcNote TEXT,
+                    DateTStamp DATETIME NOT NULL,
+                    PRIMARY KEY (ProcNum),
+                    KEY PatNum (PatNum),
+                    KEY AptNum (AptNum),
+                    KEY CodeNum (CodeNum)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """
+            conn.execute(text(create_procedurelog_sql))
+            logger.info(f"Successfully created procedurelog table in {database_type.value} database")
             
             # Import standardized test data from fixtures
             test_patients = get_test_patient_data()
