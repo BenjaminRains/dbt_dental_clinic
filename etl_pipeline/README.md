@@ -65,6 +65,8 @@ Pipeline management and configuration tools (outside nightly ETL scope):
 - **`analyze_opendental_schema.py`**: **Schema Analysis Tool** - Dynamic schema discovery and `tables.yml` generation (4 methods)
 - **`setup_test_databases.py`**: **Test Environment Setup** - Automated test database creation and sample data loading (8 functions)
 - **`update_pipeline_config.py`**: **Configuration Management** - Settings validation, updates, and version control (13 methods)
+- **`analyze_connection_usage.py`**: **Connection Analysis** - Database connection usage analysis and optimization (15 methods)
+- **`setup_environments.py`**: **Environment Setup** - Automated environment configuration and validation (5 methods)
 
 ### **Phase 2: Nightly ETL Components**
 
@@ -88,22 +90,34 @@ PostgreSQL data loading with optimization:
 - **`postgres_loader.py`**: **PostgresLoader** - MySQL-to-PostgreSQL loading with chunked processing for large tables (11 methods)
 
 #### 4. **Configuration** (`config/`)
-**Modern, static configuration management**:
+**Modern, static configuration management with provider pattern**:
 
-- **`settings.py`**: **Settings** - Centralized configuration management with environment separation (20 methods)
+- **`settings.py`**: **Settings** - Centralized configuration management with environment separation and provider pattern (20 methods)
 - **`config_reader.py`**: **ConfigReader** - Static configuration from `tables.yml` (12 methods)
+- **`providers.py`**: **ConfigProvider** - Provider pattern for configuration injection and testing (2 providers)
 - **`logging.py`**: Advanced logging configuration (15 methods)
+- **`pipeline.yml`**: Pipeline configuration with connection overrides and settings
 
 #### 5. **Command Line Interface** (`cli/`)
 User-friendly command interface:
 
-- **`commands.py`**: CLI commands for pipeline operations
-- **`main.py`**: CLI entry point
+- **`commands.py`**: CLI commands for pipeline operations (3 main commands)
+- **`main.py`**: CLI entry point with Click-based interface
+- **`__main__.py`**: Module entry point for `python -m etl_pipeline`
 
 #### 6. **Monitoring** (`monitoring/`)
 Observability and metrics:
 
 - **`unified_metrics.py`**: **UnifiedMetricsCollector** - Comprehensive metrics collection and persistence (15 methods)
+
+#### 7. **Exception Handling** (`exceptions/`)
+Structured error handling:
+
+- **`base.py`**: Base exception classes and error handling utilities
+- **`configuration.py`**: Configuration and environment-related exceptions
+- **`database.py`**: Database connection and transaction exceptions
+- **`data.py`**: Data extraction and loading exceptions
+- **`schema.py`**: Schema-related exceptions
 
 ### **Data Transformation** (External)
 Schema and data transformation handled by dbt:
@@ -124,11 +138,14 @@ Schema Analysis → Configuration Generation → Test Environment Setup
 - **`analyze_opendental_schema.py`**: Dynamic schema discovery → `tables.yml` generation
 - **`setup_test_databases.py`**: Test environment creation → Sample data loading
 - **`update_pipeline_config.py`**: Configuration validation → Settings management
+- **`analyze_connection_usage.py`**: Connection analysis → Optimization recommendations
+- **`setup_environments.py`**: Environment setup → Configuration validation
 
 **Outputs:**
 - `tables.yml` - Static configuration for nightly ETL
 - Test databases with sample data for integration testing
 - Configuration validation and backup
+- Connection usage analysis and optimization
 
 ### **Phase 2: Nightly ETL Execution**
 
@@ -176,7 +193,13 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 - **Clear Separation**: Management tools run independently of nightly ETL operations
 - **Automated Setup**: One-command schema analysis and configuration generation
 
-### **Modern Static Configuration**
+### **Modern Provider Pattern Configuration**
+- **Provider Pattern**: `FileConfigProvider` and `DictConfigProvider` for flexible configuration injection
+- **Environment-Specific Files**: `.env_production` and `.env_test` for environment separation
+- **Fail-Fast Validation**: Comprehensive validation with detailed error reporting
+- **Testing Support**: `DictConfigProvider` enables easy testing with injected configurations
+
+### **Static Configuration Benefits**
 - **Static Configuration**: All table information from `tables.yml` - no dynamic discovery during ETL
 - **5-10x Performance**: Faster than dynamic schema discovery approaches
 - **Predictable Performance**: Consistent execution times with static configuration
@@ -198,19 +221,29 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 - **Schema Analysis**: Dynamic discovery and static configuration generation
 - **Test Environment**: Automated setup with sample data and validation
 - **Configuration Management**: Validation, updates, and version control
+- **Connection Analysis**: Usage analysis and optimization recommendations
 - **Integration Testing**: Complete test environment for validation
 
 ### **Robust Error Handling**
+- **Structured Exceptions**: Comprehensive exception hierarchy for different error types
 - **Comprehensive Logging**: Detailed logs for debugging and monitoring
 - **Graceful Degradation**: Failures don't stop the entire pipeline
 - **Resource Cleanup**: Automatic cleanup of connections and resources
 - **Context Managers**: Proper resource lifecycle management
+
+### **Modern CLI Interface**
+- **Click-Based**: Modern CLI framework with command groups
+- **Multiple Commands**: `run`, `status`, `test_connections` with comprehensive options
+- **Dry Run Mode**: Preview pipeline operations without making changes
+- **Real-Time Status**: Monitor pipeline progress and status
+- **Connection Testing**: Validate database connections before execution
 
 ### **Modern Configuration**
 - **Environment Variables**: Secure configuration through environment variables
 - **YAML Configuration**: Human-readable table and pipeline configurations
 - **Priority Management**: Table importance levels for intelligent processing
 - **Flexible Settings**: Support for custom configurations and overrides
+- **Provider Pattern**: Dependency injection for testing and flexibility
 
 ## Database Architecture
 
@@ -239,11 +272,15 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 
 Copy the template and configure your environment:
 ```bash
-cp .env.template .env
+cp .env_production.template .env_production
+cp .env_test.template .env_test
 ```
 
 Required environment variables:
 ```bash
+# Environment Selection
+ETL_ENVIRONMENT=production  # or 'test'
+
 # Source Database (OpenDental Production)
 OPENDENTAL_SOURCE_HOST=client-server
 OPENDENTAL_SOURCE_PORT=3306
@@ -262,6 +299,7 @@ MYSQL_REPLICATION_PASSWORD=your_password
 POSTGRES_ANALYTICS_HOST=localhost
 POSTGRES_ANALYTICS_PORT=5432
 POSTGRES_ANALYTICS_DB=opendental_analytics
+POSTGRES_ANALYTICS_SCHEMA=raw
 POSTGRES_ANALYTICS_USER=analytics_user
 POSTGRES_ANALYTICS_PASSWORD=your_password
 ```
@@ -331,6 +369,18 @@ This provides:
 - Settings management
 - Version control and backup
 
+#### 7. **Analyze Connection Usage**
+
+**Connection analysis and optimization**:
+```bash
+python etl_pipeline/scripts/analyze_connection_usage.py
+```
+
+This provides:
+- Connection usage analysis
+- Performance optimization recommendations
+- Resource utilization insights
+
 ## Usage
 
 ### **Phase 1: Pipeline Management**
@@ -342,6 +392,9 @@ python etl_pipeline/scripts/analyze_opendental_schema.py
 
 # Update and validate configuration
 python etl_pipeline/scripts/update_pipeline_config.py
+
+# Analyze connection usage and performance
+python etl_pipeline/scripts/analyze_connection_usage.py
 ```
 
 #### **Test Environment Management**
@@ -359,19 +412,25 @@ python etl_pipeline/scripts/update_pipeline_config.py --validate-test
 
 ```bash
 # Process all tables by priority
-python -m etl_pipeline process-all
+python -m etl_pipeline run
 
-# Process specific table
-python -m etl_pipeline process-table patient
+# Process specific tables
+python -m etl_pipeline run --tables patient appointment
 
-# Process tables by importance level
-python -m etl_pipeline process-priority critical
+# Process with custom configuration
+python -m etl_pipeline run --config custom_config.yml
 
 # Force full refresh
-python -m etl_pipeline process-table patient --force-full
+python -m etl_pipeline run --force
+
+# Dry run mode (preview without changes)
+python -m etl_pipeline run --dry-run
 
 # Show pipeline status
 python -m etl_pipeline status
+
+# Test database connections
+python -m etl_pipeline test-connections
 ```
 
 #### **Programmatic Usage**
@@ -434,29 +493,33 @@ critical_tables = config_reader.get_tables_by_importance('critical')
 etl_pipeline/
 ├── orchestration/     # Pipeline orchestration and coordination
 ├── core/             # Core pipeline components and utilities
-│   └── schema_discovery.py  # ← Single source of truth for schema analysis
 ├── loaders/          # Data loading components
-├── transformers/     # Data transformation components
-├── config/           # Configuration management
-├── cli/              # Command line interface
+├── config/           # Configuration management with provider pattern
+├── cli/              # Command line interface (Click-based)
 ├── monitoring/       # Monitoring and metrics
-├── scripts/          # Schema analysis scripts
-│   └── analyze_opendental_schema.py  # ← Main schema analysis script
+├── exceptions/       # Structured exception handling
+├── scripts/          # Schema analysis and management scripts
 ├── tests/            # Comprehensive test suite
+│   ├── unit/         # Unit tests
+│   ├── integration/  # Integration tests
+│   ├── e2e/          # End-to-end tests
+│   ├── comprehensive/ # Comprehensive test scenarios
+│   └── fixtures/     # Test fixtures and utilities
 └── docs/             # Documentation
 ```
 
 ### **Testing Strategy**
-- **Unit Tests**: Individual component testing with SchemaDiscovery mocking
-- **Integration Tests**: End-to-end pipeline testing with real SchemaDiscovery
+- **Unit Tests**: Individual component testing with mocked dependencies
+- **Integration Tests**: End-to-end pipeline testing with real databases
 - **Performance Tests**: Large dataset processing validation
 - **Error Handling Tests**: Failure scenario validation
+- **Configuration Tests**: Provider pattern and environment testing
 
 ### **Adding New Tables**
-1. Tables are automatically detected from source database by SchemaDiscovery
+1. Tables are automatically detected from source database by schema analysis
 2. Configuration in `tables.yml` defines processing behavior
 3. Priority levels determine processing order and strategy
-4. **No code changes required** - SchemaDiscovery handles everything automatically
+4. **No code changes required** - Schema analysis handles everything automatically
 5. **dbt Models**: Transformations are handled by dbt models (staging → intermediate → marts)
 
 ## Performance Optimization
@@ -466,6 +529,12 @@ etl_pipeline/
 - **No database queries** during ETL operations for schema information
 - **Predictable performance** with consistent execution times
 - **Reduced resource usage** with no dynamic discovery overhead
+
+### **Provider Pattern Benefits**
+- **Flexible Configuration**: Easy testing with `DictConfigProvider`
+- **Environment Separation**: Clear production/test configuration
+- **Dependency Injection**: Clean architecture for testing and flexibility
+- **Fail-Fast Validation**: Comprehensive validation with detailed errors
 
 ### **Parallel Processing**
 - Critical tables processed in parallel for speed
@@ -488,24 +557,28 @@ etl_pipeline/
 ### **Common Issues**
 
 1. **Connection Problems**
-   - Verify environment variables
+   - Verify environment variables in `.env_production` or `.env_test`
    - Check database permissions
    - Validate network connectivity
+   - Use `python -m etl_pipeline test-connections`
 
 2. **Processing Failures**
    - Check logs for specific error messages
    - Verify table configurations in `tables.yml`
    - Review database schema compatibility
+   - Use dry-run mode: `python -m etl_pipeline run --dry-run`
 
 3. **Performance Issues**
    - Monitor worker count and parallel processing
    - Check batch sizes for large tables
    - Review database indexes and query optimization
+   - Run connection analysis: `python etl_pipeline/scripts/analyze_connection_usage.py`
 
 4. **Configuration Issues**
    - Run `analyze_opendental_schema.py` to regenerate configurations
    - Use `update_pipeline_config.py` to validate settings
    - Check `tables.yml` for configuration errors
+   - Validate environment files with `setup_environments.py`
 
 5. **Test Environment Issues**
    - Run `setup_test_databases.py` to recreate test environment
@@ -514,25 +587,27 @@ etl_pipeline/
 
 ### **Debugging Tools**
 - **Detailed Logging**: Comprehensive log output for debugging
-- **Status Commands**: CLI commands for pipeline status
+- **Status Commands**: `python -m etl_pipeline status` for pipeline status
 - **Configuration Validation**: Settings validation and error reporting
 - **Schema Analysis Reports**: Detailed analysis from schema analysis script
 - **Test Environment Validation**: Automated test environment setup and validation
+- **Connection Testing**: `python -m etl_pipeline test-connections`
+- **Dry Run Mode**: Preview operations without making changes
 
 ## Ecosystem Statistics
 
 ### **Complete Component Overview**
-- **Total Components**: 13 (10 nightly ETL + 3 management scripts)
-- **Total Methods**: 148 (123 nightly ETL + 25 management)
+- **Total Components**: 18 (13 nightly ETL + 5 management scripts)
+- **Total Methods**: 173 (148 nightly ETL + 25 management)
 - **Architecture**: Modern, clean, with clear separation of concerns
 - **Performance**: Optimized for both setup efficiency and nightly execution speed
 
 ### **Component Breakdown**
 | Phase | Components | Methods | Purpose |
 |-------|------------|---------|---------|
-| **Management** | 3 scripts | 25 methods | Schema analysis, test setup, config management |
-| **Nightly ETL** | 10 components | 123 methods | Data extraction, loading, orchestration |
-| **Total** | **13** | **148** | **Complete pipeline ecosystem** |
+| **Management** | 5 scripts | 25 methods | Schema analysis, test setup, config management, connection analysis |
+| **Nightly ETL** | 13 components | 148 methods | Data extraction, loading, orchestration, monitoring, exceptions |
+| **Total** | **18** | **173** | **Complete pipeline ecosystem** |
 
 ## Contributing
 
@@ -541,6 +616,7 @@ etl_pipeline/
 3. **Documentation**: Update documentation for any changes
 4. **Review Process**: Submit pull requests for review
 5. **Architecture**: Maintain clear separation between management and nightly ETL phases
+6. **Provider Pattern**: Use dependency injection for testing and flexibility
 
 ## License
 
