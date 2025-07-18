@@ -1,6 +1,8 @@
 # 🦷 Frontend Roadmap for Dental Analytics Platform
 
-This document outlines a phased plan for delivering a usable frontend experience for non-technical dental clinic staff and the business owner. It builds on the existing dbt + PostgreSQL backend and Tableau dashboards.
+This document outlines a phased plan for delivering a usable frontend experience for non-technical
+ dental clinic staff and the business owner. It builds on the existing dbt + PostgreSQL backend and
+  Tableau dashboards.
 
 ---
 
