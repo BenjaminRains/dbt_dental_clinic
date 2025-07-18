@@ -472,8 +472,12 @@ class PostgresSchema:
                 # Create table
                 return self.create_postgres_table(table_name, mysql_schema)
             
-            # Verify schema
-            return self.verify_schema(table_name, mysql_schema)
+            # Verify schema - if verification fails, recreate the table
+            if not self.verify_schema(table_name, mysql_schema):
+                logger.warning(f"Schema verification failed for {table_name}, recreating table with correct schema")
+                return self.create_postgres_table(table_name, mysql_schema)
+            
+            return True
             
         except Exception as e:
             logger.error(f"Error ensuring PostgreSQL table {table_name}: {str(e)}")
