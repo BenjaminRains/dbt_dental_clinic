@@ -138,14 +138,18 @@ def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
             # Databases already have test data
             # ... test logic ...
     """
-    # Set up standard test data in SOURCE and REPLICATION databases only
+    # Set up standard test data in SOURCE database only
+    # Let the pipeline copy data to REPLICATION database
     # ANALYTICS database starts empty (PostgresSchema will populate it)
     test_data_manager.setup_patient_data(
         include_all_fields=True, 
-        database_types=[DatabaseType.SOURCE, DatabaseType.REPLICATION]
+        database_types=[DatabaseType.SOURCE]
     )
     test_data_manager.setup_appointment_data(
-        database_types=[DatabaseType.SOURCE, DatabaseType.REPLICATION]
+        database_types=[DatabaseType.SOURCE]
+    )
+    test_data_manager.setup_procedure_data(
+        database_types=[DatabaseType.SOURCE]
     )
     
     logger.info("Set up populated test databases with standard test data (SOURCE and REPLICATION only)")
