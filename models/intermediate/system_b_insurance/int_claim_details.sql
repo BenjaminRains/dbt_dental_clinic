@@ -2,11 +2,45 @@
     config(
         materialized='table',
         schema='intermediate',
-        unique_key='claim_id || "-" || procedure_id || "-" || claim_procedure_id'
+        unique_key='claim_detail_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['claim_detail_id'], 'unique': true},
+            {'columns': ['claim_id']},
+            {'columns': ['patient_id']},
+            {'columns': ['procedure_id']},
+            {'columns': ['_updated_at']}
+        ]
     )
 }}
 
-with Claim as (
+/*
+    Intermediate model for claim_details
+    Part of System B: Insurance & Claims Processing
+    
+    This model:
+    1. Combines claim data with detailed procedure and insurance information
+    2. Provides comprehensive view of claim procedures with financial details
+    3. Integrates insurance coverage verification and benefit information
+    
+    Business Logic Features:
+    - Claim Procedure Integration: Links claims to specific procedures with billing details
+    - Insurance Coverage Mapping: Associates claims with active insurance plans and benefits
+    - Financial Tracking: Tracks billed, allowed, paid amounts and patient responsibility
+    - Procedure Classification: Includes procedure codes, categories, and treatment area details
+    
+    Data Quality Notes:
+    - Some claims may have multiple procedures requiring composite key handling
+    - Insurance coverage data depends on verification status and effective dates
+    - Financial amounts may be null for pending or rejected claims
+    
+    Performance Considerations:
+    - Uses table materialization due to complex joins across multiple large tables
+    - Indexed on key lookup fields (claim_id, patient_id, procedure_id)
+    - Consider incremental materialization if volume becomes problematic
+*/
+
+with source_claim as (
     select
         claim_id,
         patient_id,
@@ -18,7 +52,7 @@ with Claim as (
     from {{ ref('stg_opendental__claim') }}
 ),
 
-ClaimProc as (
+source_claim_proc as (
     select
         claim_id,
         procedure_id,
@@ -32,7 +66,7 @@ ClaimProc as (
     from {{ ref('stg_opendental__claimproc') }}
 ),
 
-ProcedureLog as (
+procedure_lookup as (
     select distinct
         pl.procedure_id,
         pl.procedure_code_id
@@ -41,7 +75,7 @@ ProcedureLog as (
         on pl.procedure_id = cp.procedure_id
 ),
 
-ProcedureCode as (
+procedure_definitions as (
     select
         procedure_code_id,
         procedure_code,
@@ -62,7 +96,7 @@ ProcedureCode as (
     from {{ ref('stg_opendental__procedurecode') }}
 ),
 
-InsuranceCoverage as (
+insurance_coverage as (
     select
         insurance_plan_id,
         patient_id,
@@ -79,9 +113,10 @@ InsuranceCoverage as (
     from {{ ref('int_insurance_coverage') }}
 ),
 
-Final as (
+claim_details_integrated as (
     select
         -- Primary Key
+        {{ dbt_utils.generate_surrogate_key(['c.claim_id', 'cp.procedure_id', 'cp.claim_procedure_id']) }} as claim_detail_id,
         c.claim_id,
         cp.claim_procedure_id,
 
@@ -132,20 +167,21 @@ Final as (
         ic.effective_date,
         ic.termination_date,
 
-        -- Meta Fields
-        c.claim_date as created_at,
-        c.last_tracking_date as updated_at
+        -- Metadata
+        c.claim_date as _created_at,
+        coalesce(c.last_tracking_date, c.claim_date) as _updated_at,
+        current_timestamp as _transformed_at
 
-    from Claim c
-    left join ClaimProc cp
+    from source_claim c
+    left join source_claim_proc cp
         on c.claim_id = cp.claim_id
-    left join ProcedureLog pl
+    left join procedure_lookup pl
         on cp.procedure_id = pl.procedure_id
-    left join ProcedureCode pc
+    left join procedure_definitions pc
         on pl.procedure_code_id = pc.procedure_code_id
-    left join InsuranceCoverage ic
+    left join insurance_coverage ic
         on c.patient_id = ic.patient_id
         and c.plan_id = ic.insurance_plan_id
 )
 
-select * from Final 
+select * from claim_details_integrated 
