@@ -1,27 +1,66 @@
-{{ config(
-    materialized='incremental',
-    unique_key='provider_id',
-    schema='intermediate'
-) }}
+{{
+    config(
+        materialized='incremental',
+        schema='intermediate',
+        unique_key='provider_id',
+        on_schema_change='fail',
+        incremental_strategy='merge',
+        indexes=[
+            {'columns': ['provider_id'], 'unique': true},
+            {'columns': ['is_active_provider']},
+            {'columns': ['_updated_at']}
+        ]
+    )
+}}
 
 /*
-    Intermediate model for provider profile and business logic.
-    Transforms provider data into business-friendly attributes and status flags.
+    Intermediate model for provider profile and business logic
+    Part of System Foundation: Provider Profile Management
     
     This model:
-    1. Gets provider data from stg_opendental__provider
-    2. Applies business rules for provider status and classification
+    1. Transforms provider data into business-friendly attributes and status flags
+    2. Applies comprehensive business rules for provider status and classification  
     3. Creates derived fields for provider capabilities and restrictions
+    4. Establishes foundation for all provider-related downstream models
+    
+    Business Logic Features:
+    - Provider Status Classification: Active, hidden, terminated, system providers
+    - Capability Flags: Can treat patients, prescribe controlled substances, bill procedures
+    - Professional Validation: DEA numbers, state licenses, professional IDs
+    - UI/Display Properties: Colors, scheduling notes, web descriptions
+    - Financial Goals: Hourly production targets
+    
+    Data Sources:
+    - stg_opendental__provider: Primary provider data with professional identifiers
+    
+    Data Quality Notes:
+    - System provider (ID=0) handled as special case
+    - Non-person providers (labs, facilities) properly classified
+    - Terminated providers identified by termination_date
+    - Empty/null professional identifiers handled gracefully
+    
+    Performance Considerations:
+    - Incremental materialization with _updated_at filtering
+    - Indexed on provider_id, is_active_provider, and _updated_at
+    - Efficient boolean flag calculations using CASE statements
+    
+    Systems Integration:
+    - Foundation for System A: Fee Processing (provider fee schedules)
+    - Foundation for System B: Insurance Processing (provider networks)
+    - Foundation for System C: Payment Processing (provider billing)
+    - Foundation for System G: Scheduling (provider availability)
 */
 
-with provider_base as (
+-- 1. Source data retrieval with incremental filtering
+with source_providers as (
     select * from {{ ref('stg_opendental__provider') }}
     {% if is_incremental() %}
     where _updated_at > (select max(_updated_at) from {{ this }})
     {% endif %}
 ),
 
-provider_with_basic_flags as (
+-- 2. Business logic transformation - basic provider flags and classifications
+provider_enhanced as (
     select
         -- Core identifiers
         provider_id,
@@ -125,10 +164,11 @@ provider_with_basic_flags as (
         _updated_at,
         _created_by_user_id
         
-    from provider_base
+    from source_providers
 ),
 
-provider_profile as (
+-- 3. Advanced capability flags - derived from basic flags
+provider_capabilities as (
     select
         *,
         -- Provider capability flags (using previously defined flags)
@@ -145,7 +185,7 @@ provider_profile as (
             else false
         end as can_bill_procedures
         
-    from provider_with_basic_flags
+    from provider_enhanced
 )
 
-select * from provider_profile
+select * from provider_capabilities
