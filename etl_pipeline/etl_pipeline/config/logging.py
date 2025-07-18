@@ -297,8 +297,11 @@ def init_default_logger():
     """Initialize default logger configuration."""
     try:
         # Try to get log directory from environment or use default
-        log_dir = os.getenv("ETL_LOG_PATH", "logs")
+        log_dir = os.getenv("ETL_LOG_PATH", "logs/etl_pipeline")
         log_level = os.getenv("ETL_LOG_LEVEL", "INFO")
+        
+        # Create organized log directory structure
+        os.makedirs(log_dir, exist_ok=True)
         
         setup_logging(
             log_level=log_level,
