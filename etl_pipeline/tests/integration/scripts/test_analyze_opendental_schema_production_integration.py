@@ -704,8 +704,8 @@ class TestOpenDentalSchemaAnalyzerProductionIntegration:
         Validates:
             - tables.yml is created (not versioned files)
             - Internal versioning metadata is included
-            - No tables_latest.yml backup file is created
             - Metadata includes schema hash and environment info
+            - Only tables.yml is created (no versioned files)
         """
         # Arrange: Set up real production database connection and temporary output directory
         analyzer = OpenDentalSchemaAnalyzer()
@@ -736,12 +736,13 @@ class TestOpenDentalSchemaAnalyzerProductionIntegration:
                     assert 'configuration_version' in metadata
                     assert 'analyzer_version' in metadata
                 
-                # Verify no versioned files or tables_latest.yml are created
+                # Verify only tables.yml is created (no versioned files)
                 import glob
                 versioned_files = glob.glob(os.path.join(temp_dir, 'tables_*.yml'))
-                latest_path = os.path.join(temp_dir, 'tables_latest.yml')
                 assert len(versioned_files) == 0, "No versioned files should be created"
-                assert not os.path.exists(latest_path), "tables_latest.yml should not be created"
+                # tables.yml should be the only configuration file
+                tables_yml_path = os.path.join(temp_dir, 'tables.yml')
+                assert os.path.exists(tables_yml_path), "tables.yml should be created"
                 
         finally:
             # Restore original method
