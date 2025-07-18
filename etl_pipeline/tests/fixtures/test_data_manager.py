@@ -29,7 +29,8 @@ from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
 from etl_pipeline.core.connections import ConnectionFactory
 from .test_data_definitions import (
     get_test_patient_data,
-    get_test_appointment_data
+    get_test_appointment_data,
+    get_test_procedure_data
 )
 
 logger = logging.getLogger(__name__)
@@ -169,15 +170,70 @@ class IntegrationTestDataManager:
                 logger.error(f"Failed to insert appointment data into {db_type.value}: {e}")
                 raise
     
+    def setup_procedure_data(self, 
+                            database_types: Optional[List[DatabaseType]] = None) -> None:
+        """
+        Set up standardized procedure test data in specified databases using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
+        
+        Args:
+            database_types: List of DatabaseType enums to insert data into.
+                           If None, inserts into all databases.
+        """
+        if database_types is None:
+            database_types = [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS]
+        
+        procedure_data = get_test_procedure_data()
+        
+        for db_type in database_types:
+            try:
+                if db_type == DatabaseType.SOURCE:
+                    self._insert_procedure_data_mysql(self.source_engine, procedure_data, db_type.value)
+                elif db_type == DatabaseType.REPLICATION:
+                    self._insert_procedure_data_mysql(self.replication_engine, procedure_data, db_type.value)
+                elif db_type == DatabaseType.ANALYTICS:
+                    self._insert_procedure_data_postgres(self.raw_engine, procedure_data, db_type.value)
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
+                
+                logger.info(f"Inserted {len(procedure_data)} procedure records into {db_type.value} database")
+                
+            except Exception as e:
+                logger.error(f"Failed to insert procedure data into {db_type.value}: {e}")
+                raise
+    
 
     
     def _get_table_columns(self, engine, table_name):
         """Return a set of column names for the given table in the connected MySQL database."""
         with engine.connect() as conn:
+            # Debug: Check what database we're connected to
+            db_result = conn.execute(text("SELECT DATABASE()"))
+            current_db = db_result.scalar()
+            logger.info(f"Checking table '{table_name}' in database: {current_db}")
+            
             result = conn.execute(text(f"SHOW COLUMNS FROM {table_name}"))
             return set(row[0] for row in result)
 
     def _insert_patient_data_mysql(self, engine: Engine, patient_data: List[Dict[str, Any]], db_name: str) -> None:
+        # Check if table exists before trying to insert data
+        with engine.connect() as conn:
+            # Debug: Check if table exists
+            result = conn.execute(text("SHOW TABLES LIKE 'patient'"))
+            table_exists = result.fetchone() is not None
+            logger.info(f"Table 'patient' exists in {db_name}: {table_exists}")
+            
+            if not table_exists:
+                logger.error(f"Table 'patient' does not exist in {db_name}. Available tables:")
+                result = conn.execute(text("SHOW TABLES"))
+                tables = [row[0] for row in result.fetchall()]
+                logger.error(f"Available tables: {tables}")
+                raise Exception(f"Table 'patient' does not exist in {db_name}")
+        
         # Dynamically detect columns in the patient table
         table_columns = self._get_table_columns(engine, "patient")
         with engine.connect() as conn:
@@ -307,6 +363,64 @@ class IntegrationTestDataManager:
             
             conn.commit()
     
+    def _insert_procedure_data_mysql(self, engine: Engine, procedure_data: List[Dict[str, Any]], db_name: str) -> None:
+        """Insert procedure data into MySQL database."""
+        # Dynamically detect columns in the procedurelog table
+        table_columns = self._get_table_columns(engine, "procedurelog")
+        with engine.connect() as conn:
+            # Clear existing test data first
+            proc_nums = [procedure['ProcNum'] for procedure in procedure_data]
+            if proc_nums:
+                conn.execute(
+                    text("DELETE FROM procedurelog WHERE ProcNum IN :proc_nums").bindparams(bindparam("proc_nums", expanding=True)),
+                    {"proc_nums": proc_nums}
+                )
+            # Insert new test data, only using columns that exist in the table
+            for procedure in procedure_data:
+                filtered_procedure = {k: v for k, v in procedure.items() if k in table_columns}
+                columns = ', '.join(f'`{col}`' for col in filtered_procedure.keys())
+                values = ', '.join(f':{col}' for col in filtered_procedure.keys())
+                insert_sql = f"INSERT INTO procedurelog ({columns}) VALUES ({values})"
+                try:
+                    conn.execute(text(insert_sql), filtered_procedure)
+                except Exception as e:
+                    self.logger.error(f"Failed to insert procedure data into {db_name}: {e}")
+            
+            conn.commit()
+    
+    def _insert_procedure_data_postgres(self, engine: Engine, procedure_data: List[Dict[str, Any]], db_name: str) -> None:
+        """Insert procedure data into PostgreSQL database."""
+        # Dynamically detect columns in the procedurelog table
+        table_columns = self._get_table_columns_postgres(engine, "procedurelog", schema="raw")
+        with engine.connect() as conn:
+            # Clear existing test data first
+            proc_nums = [procedure['ProcNum'] for procedure in procedure_data]
+            if proc_nums:
+                conn.execute(
+                    text('DELETE FROM raw.procedurelog WHERE "ProcNum" = ANY(:proc_nums)'),
+                    {"proc_nums": proc_nums}
+                )
+            # Insert new test data, only using columns that exist in the table
+            for procedure in procedure_data:
+                filtered_procedure = {k: v for k, v in procedure.items() if k in table_columns}
+                
+                # Convert integer boolean values to PostgreSQL boolean for specific fields
+                boolean_fields = ['ProcStatus']
+                
+                for field in boolean_fields:
+                    if field in filtered_procedure and isinstance(filtered_procedure[field], int):
+                        filtered_procedure[field] = bool(filtered_procedure[field])
+                
+                columns = ', '.join(f'"{col}"' for col in filtered_procedure.keys())
+                values = ', '.join(f':{col}' for col in filtered_procedure.keys())
+                insert_sql = f'INSERT INTO raw.procedurelog ({columns}) VALUES ({values})'
+                try:
+                    conn.execute(text(insert_sql), filtered_procedure)
+                except Exception as e:
+                    self.logger.error(f"Failed to insert procedure data into {db_name}: {e}")
+            
+            conn.commit()
+    
     def cleanup_patient_data(self, database_types: Optional[List[DatabaseType]] = None) -> None:
         """
         Clean up patient test data from specified databases using enum-based specification.
@@ -373,9 +487,48 @@ class IntegrationTestDataManager:
                 logger.error(f"Failed to clean up appointment data from {db_type.value}: {e}")
                 raise
     
+    def cleanup_procedure_data(self, database_types: Optional[List[DatabaseType]] = None) -> None:
+        """
+        Clean up procedure test data from specified databases using enum-based specification.
+        
+        Connection Architecture:
+        - Uses enum-based database type specification for type safety
+        - Uses Settings injection for environment-agnostic operation
+        - Supports unified interface for all database types
+        
+        Args:
+            database_types: List of DatabaseType enums to clean up.
+                           If None, cleans up all databases.
+        """
+        if database_types is None:
+            database_types = [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS]
+        
+        for db_type in database_types:
+            try:
+                if db_type == DatabaseType.SOURCE:
+                    self._cleanup_procedure_data_mysql(self.source_engine, db_type.value)
+                elif db_type == DatabaseType.REPLICATION:
+                    self._cleanup_procedure_data_mysql(self.replication_engine, db_type.value)
+                elif db_type == DatabaseType.ANALYTICS:
+                    self._cleanup_procedure_data_postgres(self.raw_engine, db_type.value)
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
+                
+                logger.info(f"Cleaned up procedure data from {db_type.value} database")
+                
+            except Exception as e:
+                logger.error(f"Failed to clean up procedure data from {db_type.value}: {e}")
+                raise
+    
     def _cleanup_patient_data_mysql(self, engine: Engine, db_name: str) -> None:
         """Clean up patient data from MySQL database."""
         with engine.connect() as conn:
+            # Check if table exists before trying to clean it up
+            result = conn.execute(text("SHOW TABLES LIKE 'patient'"))
+            if not result.fetchone():
+                logger.info(f"Table 'patient' doesn't exist in {db_name}, skipping cleanup")
+                return
+            
             # Get all test patient PatNums
             result = conn.execute(text("SELECT PatNum FROM patient"))
             all_pat_nums = [row[0] for row in result.fetchall()]
@@ -389,6 +542,12 @@ class IntegrationTestDataManager:
     def _cleanup_patient_data_postgres(self, engine: Engine, db_name: str) -> None:
         """Clean up patient data from PostgreSQL database."""
         with engine.connect() as conn:
+            # Check if table exists before trying to clean it up
+            result = conn.execute(text("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'raw' AND table_name = 'patient')"))
+            if not result.scalar():
+                logger.info(f"Table 'raw.patient' doesn't exist in {db_name}, skipping cleanup")
+                return
+            
             # Get all test patient PatNums
             result = conn.execute(text('SELECT "PatNum" FROM raw.patient'))
             all_pat_nums = [row[0] for row in result.fetchall()]
@@ -402,6 +561,12 @@ class IntegrationTestDataManager:
     def _cleanup_appointment_data_mysql(self, engine: Engine, db_name: str) -> None:
         """Clean up appointment data from MySQL database."""
         with engine.connect() as conn:
+            # Check if table exists before trying to clean it up
+            result = conn.execute(text("SHOW TABLES LIKE 'appointment'"))
+            if not result.fetchone():
+                logger.info(f"Table 'appointment' doesn't exist in {db_name}, skipping cleanup")
+                return
+            
             # Get all test appointment AptNums
             result = conn.execute(text("SELECT AptNum FROM appointment"))
             all_apt_nums = [row[0] for row in result.fetchall()]
@@ -415,6 +580,12 @@ class IntegrationTestDataManager:
     def _cleanup_appointment_data_postgres(self, engine: Engine, db_name: str) -> None:
         """Clean up appointment data from PostgreSQL database."""
         with engine.connect() as conn:
+            # Check if table exists before trying to clean it up
+            result = conn.execute(text("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'raw' AND table_name = 'appointment')"))
+            if not result.scalar():
+                logger.info(f"Table 'raw.appointment' doesn't exist in {db_name}, skipping cleanup")
+                return
+            
             # Get all test appointment AptNums
             result = conn.execute(text('SELECT "AptNum" FROM raw.appointment'))
             all_apt_nums = [row[0] for row in result.fetchall()]
@@ -425,6 +596,44 @@ class IntegrationTestDataManager:
                 )
             conn.commit()
     
+    def _cleanup_procedure_data_mysql(self, engine: Engine, db_name: str) -> None:
+        """Clean up procedure data from MySQL database."""
+        with engine.connect() as conn:
+            # Check if table exists before trying to clean it up
+            result = conn.execute(text("SHOW TABLES LIKE 'procedurelog'"))
+            if not result.fetchone():
+                logger.info(f"Table 'procedurelog' doesn't exist in {db_name}, skipping cleanup")
+                return
+            
+            # Get all test procedure ProcNums
+            result = conn.execute(text("SELECT ProcNum FROM procedurelog"))
+            all_proc_nums = [row[0] for row in result.fetchall()]
+            if all_proc_nums:
+                conn.execute(
+                    text("DELETE FROM procedurelog WHERE ProcNum IN :proc_nums").bindparams(bindparam("proc_nums", expanding=True)),
+                    {"proc_nums": all_proc_nums}
+                )
+            conn.commit()
+    
+    def _cleanup_procedure_data_postgres(self, engine: Engine, db_name: str) -> None:
+        """Clean up procedure data from PostgreSQL database."""
+        with engine.connect() as conn:
+            # Check if table exists before trying to clean it up
+            result = conn.execute(text("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'raw' AND table_name = 'procedurelog')"))
+            if not result.scalar():
+                logger.info(f"Table 'raw.procedurelog' doesn't exist in {db_name}, skipping cleanup")
+                return
+            
+            # Get all test procedure ProcNums
+            result = conn.execute(text('SELECT "ProcNum" FROM raw.procedurelog'))
+            all_proc_nums = [row[0] for row in result.fetchall()]
+            if all_proc_nums:
+                conn.execute(
+                    text('DELETE FROM raw.procedurelog WHERE "ProcNum" = ANY(:proc_nums)'),
+                    {"proc_nums": all_proc_nums}
+                )
+            conn.commit()
+    
     def cleanup_all_test_data(self) -> None:
         """Clean up all test data from all databases using Settings injection."""
         logger.info("Cleaning up all test data using Settings injection...")
@@ -432,6 +641,7 @@ class IntegrationTestDataManager:
         try:
             self.cleanup_patient_data()
             self.cleanup_appointment_data()
+            self.cleanup_procedure_data()
             logger.info("Successfully cleaned up all test data")
         except Exception as e:
             logger.error(f"Failed to clean up all test data: {e}")
