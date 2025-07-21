@@ -414,9 +414,11 @@ class SimpleMySQLReplicator:
                         if rows:
                             # Get column names
                             columns = result.keys()
+                            # Escape column names with backticks to handle reserved keywords
+                            escaped_columns = [f"`{col}`" for col in columns]
                             # Create INSERT statement with named parameters
                             param_names = [f":{col}" for col in columns]
-                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
                             
                             # Insert all rows
                             for row in rows:
@@ -483,9 +485,11 @@ class SimpleMySQLReplicator:
                             
                             # Get column names
                             columns = result.keys()
+                            # Escape column names with backticks to handle reserved keywords
+                            escaped_columns = [f"`{col}`" for col in columns]
                             # Create INSERT statement with named parameters
                             param_names = [f":{col}" for col in columns]
-                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
                             
                             # Insert batch using individual execute calls
                             for row in rows:
@@ -572,9 +576,11 @@ class SimpleMySQLReplicator:
                             
                             # Get column names
                             columns = result.keys()
+                            # Escape column names with backticks to handle reserved keywords
+                            escaped_columns = [f"`{col}`" for col in columns]
                             # Create INSERT statement with named parameters
                             param_names = [f":{col}" for col in columns]
-                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
                             
                             # Insert batch using individual execute calls
                             for row in rows:
@@ -726,9 +732,11 @@ class SimpleMySQLReplicator:
                             
                             # Get column names
                             columns = result.keys()
+                            # Escape column names with backticks to handle reserved keywords
+                            escaped_columns = [f"`{col}`" for col in columns]
                             # Create INSERT statement with named parameters
                             param_names = [f":{col}" for col in columns]
-                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(columns)}) VALUES ({', '.join(param_names)})"
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
                             
                             # Insert batch using individual execute calls
                             for row in rows:
