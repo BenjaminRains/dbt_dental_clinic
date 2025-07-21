@@ -1,9 +1,6 @@
-{{
-    config(
-        materialized='view',
-        schema='staging'
-    )
-}}
+{{ config(
+    materialized='view'
+) }}
 
 /*
     Staging model for appointment views.

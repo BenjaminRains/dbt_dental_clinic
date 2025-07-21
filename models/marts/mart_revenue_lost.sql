@@ -1,10 +1,7 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key=['date_id', 'opportunity_id']
-    )
-}}
+{{ config(
+    materialized='table',
+    unique_key=['date_id', 'opportunity_id']
+) }}
 
 /*
 Revenue Lost Mart - Missed revenue opportunity identification and analysis

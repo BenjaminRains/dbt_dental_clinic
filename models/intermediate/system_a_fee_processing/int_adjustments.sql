@@ -1,16 +1,12 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
+{{ config(        materialized='table',
+        
         unique_key='adjustment_id',
         on_schema_change='fail',
         indexes=[
             {'columns': ['adjustment_id'], 'unique': true},
             {'columns': ['patient_id']},
             {'columns': ['_updated_at']}
-        ]
-    )
-}}
+        ]) }}
 
 /*
     Intermediate model for adjustments

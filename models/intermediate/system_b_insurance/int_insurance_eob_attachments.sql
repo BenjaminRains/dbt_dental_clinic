@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
-        unique_key='eob_attach_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='eob_attach_id') }}
 
 /*
 This model integrates EOB (Explanation of Benefits) attachments with claim payment data.

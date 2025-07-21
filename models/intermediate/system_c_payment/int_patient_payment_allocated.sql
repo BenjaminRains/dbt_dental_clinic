@@ -1,7 +1,7 @@
 {{ config(
     materialized='incremental',
     unique_key='payment_allocation_id',
-    schema='intermediate'
+    
 ) }}
 
 /*

@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key='communication_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='communication_id') }}
 
 /*
 Fact table for patient communications and messaging.

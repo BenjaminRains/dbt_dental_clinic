@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
-        unique_key='insurance_plan_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='insurance_plan_id') }}
 
 /*
 Data Quality Note:

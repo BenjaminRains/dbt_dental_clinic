@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
-        unique_key='employer_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='employer_id') }}
 
 /*
 This model integrates employer data with insurance plans. Employers are entities

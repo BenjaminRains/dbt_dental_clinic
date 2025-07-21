@@ -1,11 +1,7 @@
-{{
-    config(
-        materialized='table',
+{{ config(        materialized='table',
         database='opendental_analytics',
-        schema='intermediate',
-        tags=['intermediate', 'system_logging']
-    )
-}}
+        
+        tags=['intermediate', 'system_logging']) }}
 
 with entry_logs as (
     select

@@ -1,10 +1,7 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key=['date_id', 'provider_id', 'clinic_id']
-    )
-}}
+{{ config(
+    materialized='table',
+    unique_key=['date_id', 'provider_id', 'clinic_id']
+) }}
 
 /*
 Production Summary Mart - Daily production metrics and financial performance

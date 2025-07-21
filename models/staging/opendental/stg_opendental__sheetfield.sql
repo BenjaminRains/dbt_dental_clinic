@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='sheet_field_id',
-    schema='staging'
+    unique_key='sheet_field_id'
 ) }}
 
 with source_data as (

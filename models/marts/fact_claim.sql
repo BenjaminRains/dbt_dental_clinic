@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key=['claim_id', 'procedure_id', 'claim_procedure_id']
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key=['claim_id', 'procedure_id', 'claim_procedure_id']) }}
 
 /*
 Fact table for claim transactions and procedures.

@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key='payment_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='payment_id') }}
 
 /*
 Fact table for payment transactions and financial activity.

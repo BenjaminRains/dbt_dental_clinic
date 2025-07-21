@@ -1,6 +1,5 @@
 {{ config(
-    materialized='table',
-    schema='staging'
+    materialized='table'
 ) }}
 
 with source_data as (

@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='paysplit_id',
-    schema='staging'
+    unique_key='paysplit_id'
 ) }}
 
 with source_data as (

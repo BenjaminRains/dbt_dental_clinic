@@ -1,8 +1,7 @@
 -- depends_on: {{ ref('stg_opendental__statement') }}
 {{ config(
     materialized='incremental',
-    unique_key='statement_prod_id',
-    schema='staging'
+    unique_key='statement_prod_id'
 ) }}
 
 with statement_data as (

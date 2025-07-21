@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    schema='intermediate',
+    
     unique_key='provider_schedule_id'
 ) }}
 

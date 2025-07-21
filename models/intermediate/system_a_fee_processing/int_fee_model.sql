@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='incremental',
-        schema='intermediate',
-        unique_key='procedure_id'
-    )
-}}
+{{ config(        materialized='incremental',
+        
+        unique_key='procedure_id') }}
 
 WITH FeeSchedules AS (
     SELECT

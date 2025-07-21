@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='payment_id',
-    schema='staging'
+    unique_key='payment_id'
 ) }}
 
 with source_data as (

@@ -1,7 +1,7 @@
 {{ config(
     materialized='incremental',
     unique_key='ar_transaction_id',
-    schema='intermediate'
+    
 ) }}
 
 /*

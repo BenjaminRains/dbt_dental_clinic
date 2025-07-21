@@ -1,6 +1,6 @@
 {{ config(
     materialized='table',
-    schema='intermediate',
+    
     unique_key='template_id',
     post_hook=[
         "CREATE INDEX IF NOT EXISTS {{ this.name }}_content_gin_idx ON {{ this }} USING gin (content gin_trgm_ops)"

@@ -1,16 +1,12 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
+{{ config(        materialized='table',
+        
         unique_key='claim_tracking_id',
         on_schema_change='fail',
         indexes=[
             {'columns': ['claim_tracking_id'], 'unique': true},
             {'columns': ['claim_id']},
             {'columns': ['_updated_at']}
-        ]
-    )
-}}
+        ]) }}
 
 /*
     Intermediate model for claim tracking entries

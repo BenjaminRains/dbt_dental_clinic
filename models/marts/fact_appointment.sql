@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key='appointment_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='appointment_id') }}
 
 /*
 Fact table for appointment scheduling and tracking.

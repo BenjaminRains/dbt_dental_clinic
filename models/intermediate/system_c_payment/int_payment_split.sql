@@ -1,10 +1,5 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='paysplit_id',
-        schema='intermediate'
-    )
-}}
+{{ config(        materialized='incremental',
+        unique_key='paysplit_id',) }}
 
 /*
     Intermediate model for payment splits

@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
-        unique_key='user_od_pref_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='user_od_pref_id') }}
 
 /*
     Intermediate model for user preferences and appointment views.

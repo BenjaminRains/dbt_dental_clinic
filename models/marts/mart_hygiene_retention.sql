@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key=['date_id', 'patient_id', 'provider_id']
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key=['date_id', 'patient_id', 'provider_id']) }}
 
 /*
 Hygiene Retention Mart - Preventive care scheduling and recall analysis

@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='treatment_plan_id',
-    schema='staging'
+    unique_key='treatment_plan_id'
 ) }}
 
 with source_data as (

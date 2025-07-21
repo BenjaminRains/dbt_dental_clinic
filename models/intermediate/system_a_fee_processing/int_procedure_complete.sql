@@ -1,7 +1,5 @@
-{{
-    config(
-        materialized='incremental',
-        schema='intermediate',
+{{ config(        materialized='incremental',
+        
         unique_key='procedure_id',
         on_schema_change='fail',
         incremental_strategy='merge',
@@ -9,9 +7,7 @@
             {'columns': ['procedure_id'], 'unique': true},
             {'columns': ['patient_id']},
             {'columns': ['_updated_at']}
-        ]
-    )
-}}
+        ]) }}
 
 /*
     Intermediate model for procedure_complete

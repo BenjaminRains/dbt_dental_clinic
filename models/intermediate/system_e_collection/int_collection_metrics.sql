@@ -1,7 +1,7 @@
 {{ config(
     materialized='incremental',
     unique_key=['snapshot_date', 'campaign_id', 'user_id', 'metric_level'],
-    schema='intermediate'
+    
 ) }}
 
 /*

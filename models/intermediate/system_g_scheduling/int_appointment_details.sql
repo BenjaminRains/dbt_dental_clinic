@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    schema='intermediate',
+    
     unique_key='appointment_id'
 ) }}
 

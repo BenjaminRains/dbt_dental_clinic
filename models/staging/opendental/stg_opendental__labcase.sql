@@ -1,10 +1,7 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='lab_case_id',
-        schema='staging'
-    )
-}}
+{{ config(
+    materialized='incremental',
+    unique_key='lab_case_id'
+) }}
 
 with source_data as (
     select * from {{ source('opendental', 'labcase') }}

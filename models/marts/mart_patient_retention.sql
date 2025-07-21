@@ -1,10 +1,7 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key=['date_id', 'patient_id']
-    )
-}}
+{{ config(
+    materialized='table',
+    unique_key=['date_id', 'patient_id']
+) }}
 
 /*
 Patient Retention Mart - Comprehensive patient lifecycle and retention analysis

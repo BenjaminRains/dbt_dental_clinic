@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='task_note_id',
-    schema='staging'
+    unique_key='task_note_id'
 ) }}
 
 with source_data as (

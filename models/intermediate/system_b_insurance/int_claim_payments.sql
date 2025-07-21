@@ -1,7 +1,5 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
+{{ config(        materialized='table',
+        
         unique_key='claim_payment_detail_id',
         on_schema_change='fail',
         indexes=[
@@ -9,9 +7,7 @@
             {'columns': ['patient_id']},
             {'columns': ['claim_id']},
             {'columns': ['_updated_at']}
-        ]
-    )
-}}
+        ]) }}
 
 /*
     Intermediate model for claim_payments

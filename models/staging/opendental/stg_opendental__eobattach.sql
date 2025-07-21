@@ -1,10 +1,7 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='eob_attach_id',
-        schema='staging'
-    )
-}}
+{{ config(
+    materialized='incremental',
+    unique_key='eob_attach_id'
+) }}
 
 with source_data as (
     select * from {{ source('opendental', 'eobattach') }}

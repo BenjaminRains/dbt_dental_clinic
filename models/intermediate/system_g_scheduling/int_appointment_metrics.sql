@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='incremental',
-        schema='intermediate',
-        unique_key=['metric_id']
-    )
-}}
+{{ config(        materialized='incremental',
+        
+        unique_key=['metric_id']) }}
 
 /*
     Intermediate model for appointment metrics.

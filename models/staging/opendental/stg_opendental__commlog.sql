@@ -1,12 +1,7 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='commlog_id',
-        incremental_strategy='delete+insert',
-        schema='staging',
-        on_schema_change='fail'
-    )
-}}
+{{ config(
+    materialized='incremental',
+    unique_key='commlog_id'
+) }}
 
 with source_data as (
     select * 

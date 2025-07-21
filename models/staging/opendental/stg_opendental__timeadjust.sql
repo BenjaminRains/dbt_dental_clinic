@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='time_adjust_id',
-    schema='staging'
+    unique_key='time_adjust_id'
 ) }}
 
 with source_data as (

@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key='insurance_plan_id'
-    )
-}}
+{{ config(        materialized='table',
+        
+        unique_key='insurance_plan_id') }}
 
 /*
 Dimension table for insurance plans and carriers.

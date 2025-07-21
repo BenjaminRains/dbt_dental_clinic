@@ -1,7 +1,5 @@
-{{
-    config(
-        materialized='incremental',
-        schema='intermediate',
+{{ config(        materialized='incremental',
+        
         unique_key='provider_id',
         on_schema_change='fail',
         incremental_strategy='merge',
@@ -9,9 +7,7 @@
             {'columns': ['provider_id'], 'unique': true},
             {'columns': ['is_active_provider']},
             {'columns': ['_updated_at']}
-        ]
-    )
-}}
+        ]) }}
 
 /*
     Intermediate model for provider profile and business logic

@@ -1,7 +1,7 @@
 {{ config(
     materialized='incremental',
     unique_key='claim_snapshot_id',
-    schema='staging'
+    
 ) }}
 
 with source_data as (

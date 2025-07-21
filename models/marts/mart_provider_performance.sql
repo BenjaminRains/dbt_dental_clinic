@@ -1,10 +1,7 @@
-{{
-    config(
-        materialized='table',
-        schema='marts',
-        unique_key=['date_id', 'provider_id']
-    )
-}}
+{{ config(
+    materialized='table',
+    unique_key=['date_id', 'provider_id']
+) }}
 
 /*
 Provider Performance Mart - Comprehensive provider analytics and performance tracking

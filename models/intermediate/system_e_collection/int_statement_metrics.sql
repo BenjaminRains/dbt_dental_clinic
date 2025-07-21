@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    schema='intermediate',
+    
     unique_key=['snapshot_date', 'metric_type', 'delivery_method', 'campaign_id']
 ) }}
 

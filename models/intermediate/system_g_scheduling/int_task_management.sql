@@ -1,10 +1,6 @@
-{{
-    config(
-        materialized='incremental',
-        schema='intermediate',
-        unique_key='task_id'
-    )
-}}
+{{ config(        materialized='incremental',
+        
+        unique_key='task_id') }}
 
 /*
     Intermediate model for task management.

@@ -1,15 +1,13 @@
 {{ config(
     materialized='incremental',
-    unique_key='insbluebooklog_id',
-    incremental_strategy='delete+insert',
-    schema='staging'
+    unique_key='insbluebooklog_id'
 ) }}
 
 with source_data as (
     select * from {{ source('opendental', 'insbluebooklog') }}
-    where "DateTEntry" >= '2023-01-01'  -- Following pattern from other staging models
+    where "DateTEntry" >= '2023-01-01'
     {% if is_incremental() %}
-    and "DateTEntry" >= (select max(_created_at) from {{ this }})
+        and "DateTEntry" > (select max(date_created) from {{ this }})
     {% endif %}
 ),
 

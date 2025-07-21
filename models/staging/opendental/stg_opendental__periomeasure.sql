@@ -1,10 +1,7 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='periomeasure_id',
-        schema='staging'
-    )
-}}
+{{ config(
+    materialized='incremental',
+    unique_key='periomeasure_id'
+) }}
 
 with source_data as (
     select m.* 

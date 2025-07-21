@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='tooth_initial_id',
-    schema='staging'
+    unique_key='tooth_initial_id'
 ) }}
 
 with source_data as (

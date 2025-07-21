@@ -1,9 +1,6 @@
-{{
-    config(
-        materialized='table',
-        schema='staging'
-    )
-}}
+{{ config(
+    materialized='table'
+) }}
 
 with source_data as (
     select * from {{ source('opendental', 'pharmclinic') }}

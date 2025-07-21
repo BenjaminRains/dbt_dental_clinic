@@ -1,7 +1,5 @@
-{{
-    config(
-        materialized='table',
-        schema='intermediate',
+{{ config(        materialized='table',
+        
         unique_key='claim_snapshot_id',
         on_schema_change='fail',
         indexes=[
@@ -10,9 +8,7 @@
             {'columns': ['patient_id']},
             {'columns': ['entry_timestamp']},
             {'columns': ['_updated_at']}
-        ]
-    )
-}}
+        ]) }}
 
 /*
     Intermediate model for claim snapshots

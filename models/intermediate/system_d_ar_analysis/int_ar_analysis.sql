@@ -1,6 +1,6 @@
 {{ config(
     materialized='table',
-    schema='intermediate',
+    
     unique_key='patient_id'
 ) }}
 

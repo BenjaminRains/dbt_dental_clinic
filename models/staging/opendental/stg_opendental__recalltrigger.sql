@@ -1,7 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='recall_trigger_id',
-    schema='staging'
+    unique_key='recall_trigger_id'
 ) }}
 
 with source_data as (
