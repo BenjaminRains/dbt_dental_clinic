@@ -50,6 +50,8 @@ class ConnectionEvent:
     schema: Optional[str] = None
     thread_id: int = field(default_factory=lambda: threading.get_ident())
     connection_id: Optional[str] = None
+    operation: Optional[str] = None  # 'extract', 'load', 'replication', etc.
+    table_name: Optional[str] = None  # Which table was being processed
 
 @dataclass
 class ConnectionStats:
@@ -74,7 +76,8 @@ class ConnectionTracker:
         self.lock = threading.Lock()
         
     def track_connection_created(self, database_type: str, database_name: str, 
-                               schema: Optional[str] = None, connection_id: Optional[str] = None):
+                               schema: Optional[str] = None, connection_id: Optional[str] = None,
+                               operation: Optional[str] = None, table_name: Optional[str] = None):
         """Track when a connection is created."""
         with self.lock:
             event = ConnectionEvent(
@@ -83,7 +86,9 @@ class ConnectionTracker:
                 database_type=database_type,
                 database_name=database_name,
                 schema=schema,
-                connection_id=connection_id or f"{database_type}_{database_name}_{len(self.events)}"
+                connection_id=connection_id or f"{database_type}_{database_name}_{len(self.events)}",
+                operation=operation,
+                table_name=table_name
             )
             self.events.append(event)
             if event.connection_id:
@@ -104,10 +109,11 @@ class ConnectionTracker:
             if schema:
                 self.stats.schema_breakdown[schema] += 1
             
-            logger.debug(f"Connection created: {event.connection_id} ({database_type}/{database_name})")
+            logger.debug(f"Connection created: {event.connection_id} ({database_type}/{database_name}) for {operation or 'unknown'} operation")
     
     def track_connection_disposed(self, database_type: str, database_name: str,
-                                schema: Optional[str] = None, connection_id: Optional[str] = None):
+                                schema: Optional[str] = None, connection_id: Optional[str] = None,
+                                operation: Optional[str] = None, table_name: Optional[str] = None):
         """Track when a connection is disposed."""
         with self.lock:
             event = ConnectionEvent(
@@ -116,7 +122,9 @@ class ConnectionTracker:
                 database_type=database_type,
                 database_name=database_name,
                 schema=schema,
-                connection_id=connection_id or f"{database_type}_{database_name}_{len(self.events)}"
+                connection_id=connection_id or f"{database_type}_{database_name}_{len(self.events)}",
+                operation=operation,
+                table_name=table_name
             )
             self.events.append(event)
             
@@ -137,7 +145,7 @@ class ConnectionTracker:
             self.stats.total_connections_disposed += 1
             self.stats.active_connections = len(self.active_connections)
             
-            logger.debug(f"Connection disposed: {event.connection_id} ({database_type}/{database_name})")
+            logger.debug(f"Connection disposed: {event.connection_id} ({database_type}/{database_name}) after {operation or 'unknown'} operation")
     
     def get_connection_summary(self) -> Dict:
         """Get a summary of connection usage."""
@@ -178,14 +186,15 @@ class ConnectionAnalyzer:
     def __init__(self):
         self.tracker = ConnectionTracker()
         self.settings = get_settings()
+        self._current_table = None
         
     def analyze_simple_mysql_replicator(self, table_names: Optional[List[str]] = None) -> Dict:
         """Analyze connection usage in SimpleMySQLReplicator."""
         logger.info("Analyzing SimpleMySQLReplicator connection usage...")
         
         # Get table configurations
-        config_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
-        tables_config_path = os.path.join(config_dir, 'tables.yml')
+        config_dir = os.path.join(os.path.dirname(__file__), '..')
+        tables_config_path = os.path.join(config_dir, 'etl_pipeline', 'config', 'tables.yml')
         if not os.path.exists(tables_config_path):
             logger.error("No tables configuration found")
             return {}
@@ -239,30 +248,215 @@ class ConnectionAnalyzer:
         
         return results
     
+    def analyze_complete_etl_pipeline(self, table_names: Optional[List[str]] = None) -> Dict:
+        """Analyze connection usage in complete ETL pipeline (extract + load)."""
+        logger.info("Analyzing complete ETL pipeline connection usage...")
+        
+        # Get table configurations
+        config_dir = os.path.join(os.path.dirname(__file__), '..')
+        tables_config_path = os.path.join(config_dir, 'etl_pipeline', 'config', 'tables.yml')
+        if not os.path.exists(tables_config_path):
+            logger.error("No tables configuration found")
+            return {}
+        
+        # Load table configurations
+        import yaml
+        with open(tables_config_path, 'r') as f:
+            tables_config = yaml.safe_load(f)
+        
+        # Use provided table names or all tables
+        if table_names is None:
+            table_names = list(tables_config.get('tables', {}).keys())
+        
+        logger.info(f"Analyzing complete ETL pipeline for {len(table_names)} tables")
+        
+        # Track PostgreSQL connections
+        original_get_analytics_connection = ConnectionFactory.get_analytics_connection
+        connection_engines = {}
+        
+        def tracked_get_analytics_connection(settings, *args, **kwargs):
+            engine = original_get_analytics_connection(settings, *args, **kwargs)
+            analytics_config = settings.get_analytics_connection_config()
+            connection_id = f"analytics_{len(self.tracker.events)}"
+            
+            self.tracker.track_connection_created(
+                'postgres',
+                analytics_config.get('database', 'opendental_analytics'),
+                schema=analytics_config.get('schema', 'raw'),
+                connection_id=connection_id,
+                operation='load',
+                table_name=getattr(self, '_current_table', None)
+            )
+            
+            # Store engine for disposal tracking
+            connection_engines[connection_id] = engine
+            
+            # Override engine dispose method to track disposal
+            original_dispose = getattr(engine, 'dispose', None)
+            def tracked_dispose():
+                self.tracker.track_connection_disposed(
+                    'postgres',
+                    analytics_config.get('database', 'opendental_analytics'),
+                    schema=analytics_config.get('schema', 'raw'),
+                    connection_id=connection_id,
+                    operation='load',
+                    table_name=getattr(self, '_current_table', None)
+                )
+                if original_dispose:
+                    original_dispose()
+                if connection_id in connection_engines:
+                    del connection_engines[connection_id]
+            
+            engine.dispose = tracked_dispose
+            return engine
+        
+        # Temporarily replace analytics connection method
+        ConnectionFactory.get_analytics_connection = tracked_get_analytics_connection
+        
+        try:
+            # Create replicator with connection tracking
+            replicator = self._create_tracked_replicator()
+            
+            # Import PostgresLoader for complete pipeline
+            from etl_pipeline.loaders.postgres_loader import PostgresLoader
+            
+            # Process each table through complete ETL pipeline
+            results = {
+                'tables_processed': 0,
+                'tables_successful': 0,
+                'tables_failed': 0,
+                'connection_summary': None
+            }
+            
+            for table_name in table_names:
+                try:
+                    logger.info(f"Processing complete ETL pipeline for table: {table_name}")
+                    
+                    # Set current table for tracking context
+                    self._current_table = table_name
+                    
+                    # Extract phase (MySQL replication)
+                    logger.info(f"Starting extract phase for {table_name}")
+                    extract_success = replicator.copy_table(table_name, force_full=False)
+                    logger.info(f"Extract phase result for {table_name}: {extract_success}")
+                    
+                    if extract_success:
+                        # Load phase (PostgreSQL analytics)
+                        logger.info(f"Starting load phase for {table_name}")
+                        try:
+                            loader = PostgresLoader(settings=self.settings)
+                            load_success = loader.load_table(table_name)
+                            logger.info(f"Load phase result for {table_name}: {load_success}")
+                        except Exception as load_error:
+                            logger.error(f"Load phase failed for {table_name}: {str(load_error)}")
+                            load_success = False
+                        
+                        if load_success:
+                            results['tables_successful'] += 1
+                        else:
+                            results['tables_failed'] += 1
+                    else:
+                        logger.error(f"Extract phase failed for {table_name}")
+                        results['tables_failed'] += 1
+                    
+                    results['tables_processed'] += 1
+                    
+                    # Clear current table
+                    self._current_table = None
+                    
+                except Exception as e:
+                    logger.error(f"Error processing table {table_name}: {str(e)}")
+                    logger.error(f"Exception type: {type(e).__name__}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    results['tables_failed'] += 1
+                    results['tables_processed'] += 1
+                    self._current_table = None
+            
+            # Get connection summary
+            results['connection_summary'] = self.tracker.get_connection_summary()
+            
+            return results
+            
+        finally:
+            # Restore original analytics connection method
+            ConnectionFactory.get_analytics_connection = original_get_analytics_connection
+    
     def _create_tracked_replicator(self) -> SimpleMySQLReplicator:
         """Create a SimpleMySQLReplicator with connection tracking."""
         # Override connection creation methods to track usage
         original_get_source_connection = ConnectionFactory.get_source_connection
         original_get_replication_connection = ConnectionFactory.get_replication_connection
         
-        def tracked_get_source_connection(settings):
-            engine = original_get_source_connection(settings)
+        # Track connection IDs for disposal
+        connection_engines = {}
+        
+        def tracked_get_source_connection(settings, *args, **kwargs):
+            engine = original_get_source_connection(settings, *args, **kwargs)
             source_config = settings.get_source_connection_config()
+            connection_id = f"source_{len(self.tracker.events)}"
+            
             self.tracker.track_connection_created(
                 'mysql', 
                 source_config.get('database', 'opendental'),
-                connection_id=f"source_{len(self.tracker.events)}"
+                connection_id=connection_id,
+                operation='extract',
+                table_name=getattr(self, '_current_table', None)
             )
+            
+            # Store engine for disposal tracking
+            connection_engines[connection_id] = engine
+            
+            # Override engine dispose method to track disposal
+            original_dispose = getattr(engine, 'dispose', None)
+            def tracked_dispose():
+                self.tracker.track_connection_disposed(
+                    'mysql',
+                    source_config.get('database', 'opendental'),
+                    connection_id=connection_id,
+                    operation='extract',
+                    table_name=getattr(self, '_current_table', None)
+                )
+                if original_dispose:
+                    original_dispose()
+                if connection_id in connection_engines:
+                    del connection_engines[connection_id]
+            
+            engine.dispose = tracked_dispose
             return engine
         
-        def tracked_get_replication_connection(settings):
-            engine = original_get_replication_connection(settings)
+        def tracked_get_replication_connection(settings, *args, **kwargs):
+            engine = original_get_replication_connection(settings, *args, **kwargs)
             repl_config = settings.get_replication_connection_config()
+            connection_id = f"replication_{len(self.tracker.events)}"
+            
             self.tracker.track_connection_created(
                 'mysql',
                 repl_config.get('database', 'opendental_replication'),
-                connection_id=f"replication_{len(self.tracker.events)}"
+                connection_id=connection_id,
+                operation='replication',
+                table_name=getattr(self, '_current_table', None)
             )
+            
+            # Store engine for disposal tracking
+            connection_engines[connection_id] = engine
+            
+            # Override engine dispose method to track disposal
+            original_dispose = getattr(engine, 'dispose', None)
+            def tracked_dispose():
+                self.tracker.track_connection_disposed(
+                    'mysql',
+                    repl_config.get('database', 'opendental_replication'),
+                    connection_id=connection_id,
+                    operation='replication',
+                    table_name=getattr(self, '_current_table', None)
+                )
+                if original_dispose:
+                    original_dispose()
+                if connection_id in connection_engines:
+                    del connection_engines[connection_id]
+            
+            engine.dispose = tracked_dispose
             return engine
         
         # Temporarily replace methods
@@ -416,27 +610,54 @@ def main():
     # Create analyzer
     analyzer = ConnectionAnalyzer()
     
-    # Analyze connection patterns
-    logger.info("Analyzing connection patterns...")
-    analysis = analyzer.analyze_connection_patterns()
+    # Actually run ETL operations with connection tracking
+    logger.info("Running complete ETL pipeline with connection tracking...")
+    
+    # Test with a small set of tables to analyze connection patterns
+    test_tables = ['tmpimages']  # You can add more tables here
+    
+    # Run complete ETL pipeline (extract + load) with connection tracking
+    analysis_results = analyzer.analyze_complete_etl_pipeline(table_names=test_tables)
+    
+    # Also analyze connection patterns
+    pattern_analysis = analyzer.analyze_connection_patterns()
+    
+    # Merge results
+    analysis_results.update(pattern_analysis)
     
     # Generate report
-    report = analyzer.generate_report(analysis)
+    report = analyzer.generate_report(analysis_results)
     
     # Print report
     print(report)
     
+    # Add debugging information
+    print("\n" + "="*80)
+    print("DEBUGGING INFORMATION")
+    print("="*80)
+    print(f"Total connection events tracked: {len(analyzer.tracker.events)}")
+    print("Connection events:")
+    for i, event in enumerate(analyzer.tracker.events):
+        print(f"  {i+1}. {event.event_type} - {event.database_type}/{event.database_name} - {event.operation} - {event.table_name}")
+    
     # Save report to file
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    report_file = f"etl_pipeline/logs/connection_analysis_{timestamp}.txt"
+    report_file = f"C:\\Users\\rains\\dbt_dental_clinic\\etl_pipeline\\logs\\connection_analysis_{timestamp}.txt"
     
     os.makedirs(os.path.dirname(report_file), exist_ok=True)
     with open(report_file, 'w') as f:
         f.write(report)
+        f.write("\n\n" + "="*80 + "\n")
+        f.write("DEBUGGING INFORMATION\n")
+        f.write("="*80 + "\n")
+        f.write(f"Total connection events tracked: {len(analyzer.tracker.events)}\n")
+        f.write("Connection events:\n")
+        for i, event in enumerate(analyzer.tracker.events):
+            f.write(f"  {i+1}. {event.event_type} - {event.database_type}/{event.database_name} - {event.operation} - {event.table_name}\n")
     
     logger.info(f"Connection analysis report saved to: {report_file}")
     
-    return analysis
+    return analysis_results
 
 if __name__ == "__main__":
     main() 
