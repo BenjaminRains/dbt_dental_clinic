@@ -59,6 +59,9 @@ desktop.ini
 *.sqlite*
 *.html
 
+# Database data directory
+database_data/
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints/
