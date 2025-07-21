@@ -1,7 +1,6 @@
-{{
-    config(
+{{ config(        
+        
         materialized='table',
-        schema='intermediate',
         unique_key='patient_id',
         on_schema_change='fail',
         indexes=[
@@ -10,9 +9,7 @@
             {'columns': ['primary_provider_id']},
             {'columns': ['_updated_at']}
         ],
-        tags=['foundation', 'weekly']
-    )
-}}
+        tags=['foundation', 'weekly']) }}
 
 /*
     Intermediate model for patient profile
