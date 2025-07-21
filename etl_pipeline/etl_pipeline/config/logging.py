@@ -9,9 +9,10 @@ This module provides a unified logging system that consolidates:
 - ETL-specific logging methods (operations, validation, SQL queries)
 - Environment variable support
 - Auto-initialization
+- Run-specific log files with timestamps
 
 Usage:
-    from etl_pipeline.config.logging import get_logger, ETLLogger
+    from etl_pipeline.config.logging import get_logger, ETLLogger, setup_run_logging
     
     # Simple usage
     logger = get_logger(__name__)
@@ -21,6 +22,9 @@ Usage:
     etl_logger = ETLLogger(__name__)
     etl_logger.log_etl_start("patients", "extraction")
     etl_logger.log_etl_complete("patients", "extraction", 1000)
+    
+    # Run-specific logging
+    setup_run_logging()  # Creates timestamped log file
 """
 import logging
 import logging.config
@@ -28,6 +32,7 @@ import os
 from pathlib import Path
 from typing import Optional
 import sys
+from datetime import datetime
 
 
 def setup_logging(
@@ -90,6 +95,48 @@ def setup_logging(
     # ETL specific logger
     etl_logger = logging.getLogger("etl_pipeline")
     etl_logger.setLevel(getattr(logging, log_level.upper()))
+
+
+def setup_run_logging(
+    log_level: str = "INFO",
+    log_dir: Optional[str] = None,
+    format_type: str = "detailed",
+    run_id: Optional[str] = None
+) -> str:
+    """
+    Set up logging configuration for a specific ETL run with timestamped log file.
+    
+    Args:
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_dir: Optional log directory path
+        format_type: Format type ('simple', 'detailed', 'json')
+        run_id: Optional custom run ID (uses timestamp if None)
+        
+    Returns:
+        Path to the created log file
+    """
+    # Generate run-specific filename
+    if run_id is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_id = f"run_{timestamp}"
+    
+    log_filename = f"etl_pipeline_{run_id}.log"
+    
+    # Set up logging with run-specific file
+    setup_logging(
+        log_level=log_level,
+        log_file=log_filename,
+        log_dir=log_dir,
+        format_type=format_type
+    )
+    
+    # Return the log file path
+    if log_dir:
+        log_path = Path(log_dir) / log_filename
+    else:
+        log_path = Path(log_filename)
+    
+    return str(log_path)
 
 
 def configure_sql_logging(enabled: bool = False, level: str = "WARNING") -> None:
@@ -270,8 +317,8 @@ DEFAULT_LOG_CONFIG = {
             "class": "logging.FileHandler",
             "level": "DEBUG",
             "formatter": "detailed",
-            "filename": "etl_pipeline.log",
-            "mode": "a"
+            "filename": "etl_pipeline_{timestamp}.log",
+            "mode": "w"
         }
     },
     "loggers": {
@@ -303,12 +350,17 @@ def init_default_logger():
         # Create organized log directory structure
         os.makedirs(log_dir, exist_ok=True)
         
-        setup_logging(
+        # Use run-specific logging by default
+        log_file_path = setup_run_logging(
             log_level=log_level,
-            log_file="etl_pipeline.log",
             log_dir=log_dir,
             format_type="detailed"
         )
+        
+        # Log the run start
+        logger = get_logger("etl_pipeline")
+        logger.info(f"ETL Pipeline run started - Log file: {log_file_path}")
+        
     except Exception as e:
         # Fallback to basic console logging
         logging.basicConfig(
