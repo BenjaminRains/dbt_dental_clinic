@@ -10,9 +10,9 @@
     business_logic,
     data_quality_notes,
     owner,
-    contains_pii=true,
     business_process,
     refresh_frequency,
+    contains_pii=true,
     business_impact="High",
     sla_requirements={
         'freshness': {'warn_after': '24h', 'error_after': '48h'},

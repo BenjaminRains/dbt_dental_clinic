@@ -8,23 +8,7 @@
     unique_key_field='id'
 ) %}
 
-{{
-    config(
-        materialized=materialized,
-        schema='intermediate',
-        unique_key=unique_key_field,
-        on_schema_change='fail',
-        {% if materialized == 'incremental' %}
-        incremental_strategy='merge',
-        {% endif %}
-        indexes=[
-            {'columns': [unique_key_field], 'unique': true},
-            {'columns': ['patient_id']},
-            {'columns': ['_updated_at']},
-            {'columns': ['clinic_id']}
-        ]
-    )
-}}
+{# Config block removed - this is a macro template, not a model #}
 
 /*
     Intermediate model for {{ model_name }}
@@ -179,10 +163,4 @@ select * from final
     {{ return(['DateService', 'Description', 'Amount']) }}
 {% endmacro %}
 
-{% macro convert_opendental_boolean(column_name) %}
-    case 
-        when {{ column_name }} = 1 then true
-        when {{ column_name }} = 0 then false
-        else null
-    end
-{% endmacro %}
+{# convert_opendental_boolean macro is defined in convert_opendental_boolean.sql #}
