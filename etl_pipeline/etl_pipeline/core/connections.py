@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 class ConnectionFactory:
     """Factory for creating database connections using Settings configuration."""
     
-    # Default pool settings
-    DEFAULT_POOL_SIZE = 5
-    DEFAULT_MAX_OVERFLOW = 10
-    DEFAULT_POOL_TIMEOUT = 30
+    # Default pool settings - UPDATED FOR PERFORMANCE
+    DEFAULT_POOL_SIZE = 20        # 4x increase from 5
+    DEFAULT_MAX_OVERFLOW = 40     # 4x increase from 10
+    DEFAULT_POOL_TIMEOUT = 300    # 10x increase from 30
     DEFAULT_POOL_RECYCLE = 1800  # 30 minutes
     
     @staticmethod
@@ -104,9 +104,8 @@ class ConnectionFactory:
                 pool_recycle=pool_recycle
             )
             
-            # Set SQL mode for proper handling of zero values in auto-increment columns
-            with engine.connect() as conn:
-                conn.execute(text("SET SESSION sql_mode = 'NO_AUTO_VALUE_ON_ZERO'"))
+            # Apply MySQL performance optimizations for bulk operations
+            ConnectionFactory._apply_mysql_performance_settings(engine)
             
             logger.info(f"Successfully created MySQL connection to {database}")
             return engine
@@ -125,6 +124,36 @@ class ConnectionFactory:
                 },
                 original_exception=e
             )
+
+    @staticmethod
+    def _apply_mysql_performance_settings(engine: Engine) -> None:
+        """Apply MySQL bulk operation optimizations."""
+        try:
+            with engine.connect() as conn:
+                # Critical for bulk operations
+                conn.execute(text("SET SESSION bulk_insert_buffer_size = 268435456"))  # 256MB
+                conn.execute(text("SET SESSION innodb_flush_log_at_trx_commit = 2"))
+                conn.execute(text("SET SESSION autocommit = 0"))
+                conn.execute(text("SET SESSION unique_checks = 0"))
+                conn.execute(text("SET SESSION foreign_key_checks = 0"))
+                # Set SQL mode for proper handling of zero values in auto-increment columns
+                conn.execute(text("SET SESSION sql_mode = 'NO_AUTO_VALUE_ON_ZERO'"))
+                logger.debug("Applied MySQL performance optimizations")
+        except Exception as e:
+            logger.warning(f"Failed to apply MySQL performance settings: {e}")
+
+    @staticmethod
+    def _apply_postgres_performance_settings(engine: Engine) -> None:
+        """Apply PostgreSQL bulk loading optimizations."""
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SET work_mem = '256MB'"))
+                conn.execute(text("SET maintenance_work_mem = '1GB'"))
+                conn.execute(text("SET synchronous_commit = off"))
+                conn.execute(text("SET wal_buffers = '64MB'"))
+                logger.debug("Applied PostgreSQL performance optimizations")
+        except Exception as e:
+            logger.warning(f"Failed to apply PostgreSQL performance settings: {e}")
     
     @staticmethod
     def create_postgres_engine(
@@ -172,6 +201,9 @@ class ConnectionFactory:
                     'options': f'-csearch_path={schema}'
                 }
             )
+            
+            # Apply PostgreSQL performance optimizations for bulk operations
+            ConnectionFactory._apply_postgres_performance_settings(engine)
             
             logger.info(f"Successfully created PostgreSQL connection to {database}.{schema}")
             return engine
@@ -327,6 +359,26 @@ class ConnectionManager:
                         },
                         original_exception=e
                     )
+    
+    def commit(self):
+        """Commit the current transaction."""
+        if self._current_connection is not None:
+            try:
+                self._current_connection.commit()
+                logger.debug("Successfully committed transaction")
+            except Exception as e:
+                logger.error(f"Failed to commit transaction: {str(e)}")
+                raise
+    
+    def rollback(self):
+        """Rollback the current transaction."""
+        if self._current_connection is not None:
+            try:
+                self._current_connection.rollback()
+                logger.debug("Successfully rolled back transaction")
+            except Exception as e:
+                logger.error(f"Failed to rollback transaction: {str(e)}")
+                raise
     
     def __enter__(self):
         """Context manager entry."""
