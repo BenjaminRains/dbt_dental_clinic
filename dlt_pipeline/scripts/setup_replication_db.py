@@ -92,7 +92,7 @@ def verify_import(config):
         logger.info(f"Found {len(tables)} tables in {config['database']}")
         
         # Check counts for key tables
-        key_tables = ['patient', 'appointment', 'procedure', 'provider']
+        key_tables = ['patient', 'appointment', 'procedurelog', 'provider']
         for table in key_tables:
             try:
                 cursor.execute(f"SELECT COUNT(*) FROM {table}")
