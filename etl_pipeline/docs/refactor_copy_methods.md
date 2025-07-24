@@ -1,5 +1,7 @@
 # Refactor Copy Methods: ConnectionManager Migration Plan
 
+## fully implemented
+
 ## Overview
 
 This document outlines the plan to refactor all copy methods in `simple_mysql_replicator.py` to
