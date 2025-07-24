@@ -215,7 +215,7 @@ class PostgresSchema:
                 with self.mysql_engine.connect() as conn:
                     # Use a more efficient query that checks for non-0/1 values
                     # Handle reserved words by backticking table name
-                    safe_table_name = f"`{table_name}`" if table_name.lower() in ['procedure', 'order', 'group', 'user'] else table_name
+                    safe_table_name = f"`{table_name}`" if table_name.lower() in ['order', 'group', 'user'] else table_name
                     query = text(f"""
                         SELECT COUNT(*) 
                         FROM {safe_table_name} 
