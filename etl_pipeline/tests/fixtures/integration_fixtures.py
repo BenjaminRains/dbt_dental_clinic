@@ -56,7 +56,7 @@ def test_settings_with_file_provider():
         pytest.skip(f"Test environment not available: {str(e)}")
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def validate_test_databases():
     """
     Validate that test databases are available and skip tests if not.
@@ -91,7 +91,7 @@ def validate_test_databases():
         # Skip tests if databases are not available
         pytest.skip(f"Test databases not available: {str(e)}")
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def test_data_manager(validate_test_databases) -> Generator[IntegrationTestDataManager, None, None]:
     """
     Provides a test data manager for integration tests.
@@ -120,14 +120,14 @@ def test_data_manager(validate_test_databases) -> Generator[IntegrationTestDataM
     except Exception as e:
         logger.warning(f"Failed to clean up test data manager: {e}")
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
     """
     Provides databases with comprehensive test data.
     
     This fixture:
-    - Sets up patient and appointment data in SOURCE and REPLICATION databases
-    - SOURCE database contains original data (test_opendental)
+    - Assumes test databases are already set up by setup_test_databases.py
+    - SOURCE database contains original data (test_opendental) - set up by script
     - REPLICATION database contains replicated data (test_opendental_replication) - what PostgresSchema reads from
     - ANALYTICS database starts empty - what PostgresSchema writes to
     - Automatically cleans up after tests
@@ -135,24 +135,16 @@ def populated_test_databases(test_data_manager) -> IntegrationTestDataManager:
     
     Usage:
         def test_with_data(populated_test_databases):
-            # Databases already have test data
+            # Databases already have test data from setup_test_databases.py
             # ... test logic ...
     """
-    # Set up standard test data in SOURCE database only
-    # Let the pipeline copy data to REPLICATION database
-    # ANALYTICS database starts empty (PostgresSchema will populate it)
-    test_data_manager.setup_patient_data(
-        include_all_fields=True, 
-        database_types=[DatabaseType.SOURCE]
-    )
-    test_data_manager.setup_appointment_data(
-        database_types=[DatabaseType.SOURCE]
-    )
-    test_data_manager.setup_procedure_data(
-        database_types=[DatabaseType.SOURCE]
-    )
+    # No setup needed - databases are already populated by setup_test_databases.py
+    # The script handles:
+    # - Creating tables with correct schema
+    # - Inserting test data into SOURCE database
+    # - Clearing REPLICATION and ANALYTICS databases for ETL testing
     
-    logger.info("Set up populated test databases with standard test data (SOURCE and REPLICATION only)")
+    logger.info("Using pre-populated test databases from setup_test_databases.py")
     
     return test_data_manager
 
