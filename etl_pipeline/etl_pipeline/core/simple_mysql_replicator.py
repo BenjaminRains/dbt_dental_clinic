@@ -160,15 +160,17 @@ class SimpleMySQLReplicator:
             )
     
     def _ensure_tracking_tables_exist(self):
-        """Ensure MySQL tracking tables exist in replication database."""
+        """Ensure MySQL tracking tables exist in replication database with primary column support."""
         try:
             with self.target_engine.connect() as conn:
-                # Create etl_copy_status table if it doesn't exist
+                # Create enhanced etl_copy_status table if it doesn't exist
                 create_table_sql = """
                 CREATE TABLE IF NOT EXISTS etl_copy_status (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     table_name VARCHAR(255) NOT NULL UNIQUE,
                     last_copied TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
+                    last_primary_value VARCHAR(255) NULL,
+                    primary_column_name VARCHAR(255) NULL,
                     rows_copied INT DEFAULT 0,
                     copy_status VARCHAR(50) DEFAULT 'pending',
                     _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -178,7 +180,7 @@ class SimpleMySQLReplicator:
                 conn.execute(text(create_table_sql))
                 
                 conn.commit()
-                logger.info("MySQL tracking tables created/verified successfully")
+                logger.info("MySQL tracking tables created/verified successfully with primary column support")
                 return True
                 
         except Exception as e:
@@ -186,32 +188,38 @@ class SimpleMySQLReplicator:
             return False
     
     def _update_copy_status(self, table_name: str, rows_copied: int, 
-                           copy_status: str = 'success') -> bool:
-        """Update copy tracking after successful MySQL replication."""
+                           copy_status: str = 'success',
+                           last_primary_value: Optional[str] = None,
+                           primary_column_name: Optional[str] = None) -> bool:
+        """Update copy tracking after successful MySQL replication with primary column support."""
         try:
             # Note: This updates the replication database's tracking table
             # The PostgresLoader will later update the analytics database's tracking table
             with self.target_engine.connect() as conn:
                 conn.execute(text("""
                     INSERT INTO etl_copy_status (
-                        table_name, last_copied, rows_copied, copy_status,
-                        _created_at, _updated_at
+                        table_name, last_copied, last_primary_value, primary_column_name,
+                        rows_copied, copy_status, _created_at, _updated_at
                     ) VALUES (
-                        :table_name, CURRENT_TIMESTAMP, :rows_copied, :copy_status,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :table_name, CURRENT_TIMESTAMP, :last_primary_value, :primary_column_name,
+                        :rows_copied, :copy_status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     )
                     ON DUPLICATE KEY UPDATE
                         last_copied = CURRENT_TIMESTAMP,
+                        last_primary_value = :last_primary_value,
+                        primary_column_name = :primary_column_name,
                         rows_copied = :rows_copied,
                         copy_status = :copy_status,
                         _updated_at = CURRENT_TIMESTAMP
                 """), {
                     "table_name": table_name,
+                    "last_primary_value": last_primary_value,
+                    "primary_column_name": primary_column_name,
                     "rows_copied": rows_copied,
                     "copy_status": copy_status
                 })
                 conn.commit()
-                logger.info(f"Updated copy status for {table_name}: {rows_copied} rows, {copy_status}")
+                logger.info(f"Updated copy status for {table_name}: {rows_copied} rows, {copy_status}, primary_value={last_primary_value}")
                 return True
                 
         except Exception as e:
