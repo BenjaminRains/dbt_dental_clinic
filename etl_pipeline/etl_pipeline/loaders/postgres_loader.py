@@ -278,7 +278,7 @@ class PostgresLoader:
             )
     
     def _ensure_tracking_tables_exist(self):
-        """Ensure PostgreSQL tracking tables exist with correct schema in analytics database."""
+        """Ensure PostgreSQL tracking tables exist with primary column support in analytics database."""
         try:
             with self.analytics_engine.connect() as conn:
                 # Drop existing tables to ensure correct schema
@@ -286,12 +286,14 @@ class PostgresLoader:
                 conn.execute(text(f"DROP TABLE IF EXISTS {self.analytics_schema}.etl_load_status CASCADE"))
                 conn.execute(text(f"DROP TABLE IF EXISTS {self.analytics_schema}.etl_transform_status CASCADE"))
                 
-                # Create etl_load_status table with correct schema
+                # Create enhanced etl_load_status table with primary column support
                 create_load_status_sql = f"""
                 CREATE TABLE {self.analytics_schema}.etl_load_status (
                     id SERIAL PRIMARY KEY,
                     table_name VARCHAR(255) NOT NULL UNIQUE,
                     last_loaded TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
+                    last_primary_value VARCHAR(255) NULL,
+                    primary_column_name VARCHAR(255) NULL,
                     rows_loaded INTEGER DEFAULT 0,
                     load_status VARCHAR(50) DEFAULT 'pending',
                     _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -300,14 +302,16 @@ class PostgresLoader:
                 );
                 """
                 conn.execute(text(create_load_status_sql))
-                logger.info(f"Created {self.analytics_schema}.etl_load_status with correct schema")
+                logger.info(f"Created {self.analytics_schema}.etl_load_status with primary column support")
                 
-                # Create etl_transform_status table with correct schema
+                # Create enhanced etl_transform_status table with primary column support
                 create_transform_status_sql = f"""
                 CREATE TABLE {self.analytics_schema}.etl_transform_status (
                     id SERIAL PRIMARY KEY,
                     table_name VARCHAR(255) NOT NULL UNIQUE,
                     last_transformed TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
+                    last_primary_value VARCHAR(255) NULL,
+                    primary_column_name VARCHAR(255) NULL,
                     rows_transformed INTEGER DEFAULT 0,
                     transformation_status VARCHAR(50) DEFAULT 'pending',
                     _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -316,10 +320,10 @@ class PostgresLoader:
                 );
                 """
                 conn.execute(text(create_transform_status_sql))
-                logger.info(f"Created {self.analytics_schema}.etl_transform_status with correct schema")
+                logger.info(f"Created {self.analytics_schema}.etl_transform_status with primary column support")
                 
                 conn.commit()
-                logger.info("PostgreSQL tracking tables created with correct schema")
+                logger.info("PostgreSQL tracking tables created with primary column support")
                 return True
                 
         except Exception as e:
@@ -335,7 +339,7 @@ class PostgresLoader:
         return config
     
     def _ensure_tracking_record_exists(self, table_name: str) -> bool:
-        """Ensure a tracking record exists for the table."""
+        """Ensure a tracking record exists for the table with primary column support."""
         try:
             with self.analytics_engine.connect() as conn:
                 # Check if record exists
@@ -345,18 +349,18 @@ class PostgresLoader:
                 """), {"table_name": table_name}).scalar()
                 
                 if result == 0:
-                    # Create initial tracking record
+                    # Create initial tracking record with primary column support
                     conn.execute(text(f"""
                         INSERT INTO {self.analytics_schema}.etl_load_status (
-                            table_name, last_loaded, rows_loaded, load_status,
-                            _loaded_at, _created_at, _updated_at
+                            table_name, last_loaded, last_primary_value, primary_column_name,
+                            rows_loaded, load_status, _loaded_at, _created_at, _updated_at
                         ) VALUES (
-                            :table_name, '2024-01-01 00:00:00', 0, 'pending',
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                            :table_name, '2024-01-01 00:00:00', NULL, NULL,
+                            0, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                         )
                     """), {"table_name": table_name})
                     conn.commit()
-                    logger.info(f"Created initial tracking record for {table_name}")
+                    logger.info(f"Created initial tracking record for {table_name} with primary column support")
                 
                 return True
                 
@@ -365,30 +369,36 @@ class PostgresLoader:
             return False
 
     def _update_load_status(self, table_name: str, rows_loaded: int, 
-                           load_status: str = 'success') -> bool:
-        """Create or update load tracking record after successful PostgreSQL load."""
+                           load_status: str = 'success', 
+                           last_primary_value: Optional[str] = None,
+                           primary_column_name: Optional[str] = None) -> bool:
+        """Create or update load tracking record after successful PostgreSQL load with primary column support."""
         try:
             with self.analytics_engine.connect() as conn:
                 conn.execute(text(f"""
                     INSERT INTO {self.analytics_schema}.etl_load_status (
-                        table_name, last_loaded, rows_loaded, load_status,
-                        _loaded_at, _created_at, _updated_at
+                        table_name, last_loaded, last_primary_value, primary_column_name,
+                        rows_loaded, load_status, _loaded_at, _created_at, _updated_at
                     ) VALUES (
-                        :table_name, CURRENT_TIMESTAMP, :rows_loaded, :load_status,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :table_name, CURRENT_TIMESTAMP, :last_primary_value, :primary_column_name,
+                        :rows_loaded, :load_status, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     )
                     ON CONFLICT (table_name) DO UPDATE SET
                         last_loaded = CURRENT_TIMESTAMP,
+                        last_primary_value = :last_primary_value,
+                        primary_column_name = :primary_column_name,
                         rows_loaded = :rows_loaded,
                         load_status = :load_status,
                         _updated_at = CURRENT_TIMESTAMP
                 """), {
                     "table_name": table_name,
+                    "last_primary_value": last_primary_value,
+                    "primary_column_name": primary_column_name,
                     "rows_loaded": rows_loaded,
                     "load_status": load_status
                 })
                 conn.commit()
-                logger.info(f"Updated load status for {table_name}: {rows_loaded} rows, {load_status}")
+                logger.info(f"Updated load status for {table_name}: {rows_loaded} rows, {load_status}, primary_value={last_primary_value}")
                 return True
                 
         except Exception as e:
