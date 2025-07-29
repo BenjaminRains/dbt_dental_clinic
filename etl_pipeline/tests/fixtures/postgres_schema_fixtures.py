@@ -92,7 +92,7 @@ def test_postgres_schema_settings():
                     'batch_size': 500,
                     'table_importance': 'high'
                 },
-                'procedure': {
+                'procedurelog': {
                     'priority': 'medium',
                     'incremental_column': 'ProcDate',
                     'batch_size': 2000,
@@ -207,7 +207,7 @@ def mock_config_reader():
                 'table_importance': 'high',
                 'extraction_strategy': 'incremental'
             }
-        elif table_name == 'procedure':
+        elif table_name == 'procedurelog':
             return {
                 'priority': 'medium',
                 'incremental_column': 'ProcDate',
@@ -220,8 +220,8 @@ def mock_config_reader():
     
     config_reader.get_table_config = mock_get_table_config
     config_reader.get_tables_by_importance.return_value = ['patient', 'appointment']
-    config_reader.get_tables_by_strategy.return_value = ['patient', 'appointment', 'procedure']
-    config_reader.get_large_tables.return_value = ['procedure']
+    config_reader.get_tables_by_strategy.return_value = ['patient', 'appointment', 'procedurelog']
+    config_reader.get_large_tables.return_value = ['procedurelog']
     config_reader.get_monitored_tables.return_value = ['patient']
     
     return config_reader
@@ -264,17 +264,20 @@ def sample_mysql_schemas():
                 )
             '''
         },
-        'procedure': {
+        'procedurelog': {
             'create_statement': '''
-                CREATE TABLE `procedure` (
+                CREATE TABLE `procedurelog` (
                     ProcNum INT AUTO_INCREMENT PRIMARY KEY,
                     PatNum INT,
+                    AptNum INT,
+                    ProcStatus TINYINT DEFAULT 0,
+                    ProcFee DECIMAL(10,2) DEFAULT 0.00,
+                    ProcFeeCur DECIMAL(10,2) DEFAULT 0.00,
                     ProcDate DATE,
-                    ProcCode VARCHAR(20),
-                    ProcFee DECIMAL(10,2),
+                    CodeNum INT DEFAULT 0,
+                    ProcNote TEXT,
                     DateTStamp DATETIME,
-                    IsCompleted TINYINT,
-                    IsPaid TINYINT
+                    PRIMARY KEY (ProcNum)
                 )
             '''
         },
@@ -329,17 +332,19 @@ def expected_postgres_schemas():
                 )
             '''
         },
-        'procedure': {
+        'procedurelog': {
             'create_statement': '''
-                CREATE TABLE raw.procedure (
+                CREATE TABLE raw.procedurelog (
                     "ProcNum" integer PRIMARY KEY,
                     "PatNum" integer,
+                    "AptNum" integer,
+                    "ProcStatus" boolean DEFAULT false,
+                    "ProcFee" numeric(10,2) DEFAULT 0.00,
+                    "ProcFeeCur" numeric(10,2) DEFAULT 0.00,
                     "ProcDate" date,
-                    "ProcCode" character varying(20),
-                    "ProcFee" numeric(10,2),
-                    "DateTStamp" timestamp without time zone,
-                    "IsCompleted" boolean,
-                    "IsPaid" boolean
+                    "CodeNum" integer DEFAULT 0,
+                    "ProcNote" text,
+                    "DateTStamp" timestamp without time zone
                 )
             '''
         },
@@ -590,7 +595,7 @@ def real_config_reader_instance(test_postgres_schema_settings):
 @pytest.fixture
 def postgres_schema_test_tables():
     """List of test tables for PostgreSQL schema testing."""
-    return ['patient', 'appointment', 'procedure', 'boolean_test']
+    return ['patient', 'appointment', 'procedurelog', 'boolean_test']
 
 
 @pytest.fixture
@@ -627,8 +632,8 @@ def config_reader_with_settings(test_postgres_schema_settings):
             'table_importance': 'critical'
         }
         mock_config_reader.get_tables_by_importance.return_value = ['patient', 'appointment']
-        mock_config_reader.get_tables_by_strategy.return_value = ['patient', 'appointment', 'procedure']
-        mock_config_reader.get_large_tables.return_value = ['procedure']
+        mock_config_reader.get_tables_by_strategy.return_value = ['patient', 'appointment', 'procedurelog']
+        mock_config_reader.get_large_tables.return_value = ['procedurelog']
         mock_config_reader.get_monitored_tables.return_value = ['patient']
         
         return mock_config_reader
