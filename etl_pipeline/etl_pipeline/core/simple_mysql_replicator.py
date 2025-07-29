@@ -110,8 +110,13 @@ class SimpleMySQLReplicator:
             # Load configuration
             self.table_configs = self._load_configuration()
             
-            # Ensure tracking tables exist
-            self._ensure_tracking_tables_exist()
+            # Validate tracking tables exist
+            if not self._validate_tracking_tables_exist():
+                logger.error("MySQL tracking tables not found. Run initialize_etl_tracking_tables.py to create them.")
+                raise ConfigurationError(
+                    message="MySQL tracking tables not found",
+                    details={"error_type": "missing_tracking_tables", "solution": "Run initialize_etl_tracking_tables.py"}
+                )
             
             # Debug logging only (not used in production)
             if logger.isEnabledFor(logging.DEBUG):
@@ -135,6 +140,42 @@ class SimpleMySQLReplicator:
         except Exception as e:
             logger.error(f"Unexpected error in SimpleMySQLReplicator initialization: {str(e)}")
             raise
+
+    def _validate_tracking_tables_exist(self) -> bool:
+        """Validate that MySQL tracking tables exist in replication database."""
+        try:
+            with self.target_engine.connect() as conn:
+                # Check if etl_copy_status table exists
+                result = conn.execute(text("""
+                    SELECT COUNT(*) 
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE() 
+                    AND table_name = 'etl_copy_status'
+                """)).scalar()
+                
+                if result == 0:
+                    logger.error("MySQL tracking table 'etl_copy_status' not found in replication database")
+                    return False
+                
+                # Check if table has the expected structure with primary column support
+                result = conn.execute(text("""
+                    SELECT COUNT(*) 
+                    FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() 
+                    AND table_name = 'etl_copy_status' 
+                    AND column_name IN ('last_primary_value', 'primary_column_name')
+                """)).scalar()
+                
+                if result < 2:
+                    logger.error("MySQL tracking table 'etl_copy_status' missing primary column support columns")
+                    return False
+                
+                logger.info("MySQL tracking tables validated successfully")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error validating MySQL tracking tables: {str(e)}")
+            return False
     
     def _load_configuration(self) -> Dict:
         """Load table configuration from tables.yml."""
@@ -158,34 +199,6 @@ class SimpleMySQLReplicator:
                 config_file=self.tables_config_path,
                 details={"error": str(e)}
             )
-    
-    def _ensure_tracking_tables_exist(self):
-        """Ensure MySQL tracking tables exist in replication database with primary column support."""
-        try:
-            with self.target_engine.connect() as conn:
-                # Create enhanced etl_copy_status table if it doesn't exist
-                create_table_sql = """
-                CREATE TABLE IF NOT EXISTS etl_copy_status (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    table_name VARCHAR(255) NOT NULL UNIQUE,
-                    last_copied TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
-                    last_primary_value VARCHAR(255) NULL,
-                    primary_column_name VARCHAR(255) NULL,
-                    rows_copied INT DEFAULT 0,
-                    copy_status VARCHAR(50) DEFAULT 'pending',
-                    _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                );
-                """
-                conn.execute(text(create_table_sql))
-                
-                conn.commit()
-                logger.info("MySQL tracking tables created/verified successfully with primary column support")
-                return True
-                
-        except Exception as e:
-            logger.error(f"Error creating MySQL tracking tables: {str(e)}")
-            return False
     
     def _update_copy_status(self, table_name: str, rows_copied: int, 
                            copy_status: str = 'success',
@@ -387,6 +400,13 @@ class SimpleMySQLReplicator:
                 logger.error(f"No configuration found for table: {table_name}")
                 return False
             
+            # Get primary incremental column
+            primary_column = self._get_primary_incremental_column(config)
+            incremental_columns = config.get('incremental_columns', [])
+            
+            # Log the strategy being used
+            self._log_incremental_strategy(table_name, primary_column, incremental_columns)
+            
             # Determine extraction strategy
             extraction_strategy = self.get_extraction_strategy(table_name)
             if force_full:
@@ -410,8 +430,15 @@ class SimpleMySQLReplicator:
                 return False
             
             if success:
-                # Update copy tracking
-                self._update_copy_status(table_name, rows_copied)
+                # Get the maximum value of the primary column from copied data
+                last_primary_value = None
+                if primary_column and primary_column != 'none':
+                    # This would need to be implemented based on how data is copied
+                    # For now, we'll set it to None and update it in the tracking
+                    pass
+                
+                # Update copy tracking with primary column value
+                self._update_copy_status(table_name, rows_copied, 'success', last_primary_value, primary_column)
                 
                 # Track performance metrics
                 end_time = time.time()
@@ -425,14 +452,14 @@ class SimpleMySQLReplicator:
                 return True
             else:
                 # Update tracking with failure status
-                self._update_copy_status(table_name, 0, 'failed')
-                logger.error(f"Failed to copy table: {table_name}")
+                self._update_copy_status(table_name, 0, 'failed', None, None)
+                logger.error(f"Failed to copy {table_name}")
                 return False
                 
         except Exception as e:
             logger.error(f"Error copying table {table_name}: {str(e)}")
             # Update tracking with failure status
-            self._update_copy_status(table_name, 0, 'failed')
+            self._update_copy_status(table_name, 0, 'failed', None, None)
             return False
     
 
@@ -489,7 +516,7 @@ class SimpleMySQLReplicator:
     
     def _log_incremental_strategy(self, table_name: str, primary_column: Optional[str], incremental_columns: List[str]):
         """Log which incremental strategy is being used."""
-        if primary_column:
+        if primary_column and primary_column != 'none':
             logger.info(f"Table {table_name}: Using primary incremental column '{primary_column}' for optimized incremental loading")
         else:
             logger.info(f"Table {table_name}: Using multi-column incremental logic with columns: {incremental_columns}")
@@ -1328,6 +1355,29 @@ class SimpleMySQLReplicator:
             logger.error(f"Error copying new records for {table_name}: {str(e)}")
             return False, 0
     
+    def _get_last_copy_primary_value(self, table_name: str) -> Optional[str]:
+        """Get last copy primary column value for incremental loading."""
+        try:
+            with self.target_engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT last_primary_value, primary_column_name
+                    FROM etl_copy_status
+                    WHERE table_name = :table_name
+                    AND copy_status = 'success'
+                    ORDER BY last_copied DESC
+                    LIMIT 1
+                """), {"table_name": table_name}).fetchone()
+                
+                if result:
+                    last_primary_value, primary_column_name = result
+                    logger.debug(f"Retrieved last copy primary value for {table_name}: {last_primary_value} (column: {primary_column_name})")
+                    return last_primary_value
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting last copy primary value for {table_name}: {str(e)}")
+            return None
+
     def copy_all_tables(self, table_filter: Optional[List[str]] = None) -> Dict[str, bool]:
         """
         Copy all tables or filtered tables.
