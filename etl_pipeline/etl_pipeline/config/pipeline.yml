@@ -15,7 +15,7 @@ general:
   timezone: "UTC"
   max_retries: 3
   retry_delay_seconds: 300
-  batch_size: 25000  # Records per batch for data processing (increased for nightly runs)
+  batch_size: 50000  # Records per batch for data processing (increased from 25000 for better performance)
   parallel_jobs: 6  # Number of parallel workers for table processing (increased for better throughput)
 
 # Database connection overrides
