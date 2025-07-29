@@ -312,11 +312,12 @@ class SimpleMySQLReplicator:
         base_batch_size = config.get('batch_size', 5000)
         estimated_size_mb = config.get('estimated_size_mb', 0)
         
-        # Reduce batch size for large tables to prevent timeouts
+        # INCREASED BATCH SIZES for better performance
+        # Large tables: Increased from 10K to 50K max
         if estimated_size_mb > 100:
-            return min(base_batch_size // 2, 10000)  # Max 10K for large tables
+            return min(base_batch_size // 2, 50000)  # Increased from 10K to 50K for large tables
         elif estimated_size_mb > 50:
-            return min(base_batch_size, 25000)  # Max 25K for medium tables
+            return min(base_batch_size, 50000)  # Increased from 25K to 50K for medium tables
         else:
             return base_batch_size
     
@@ -364,9 +365,13 @@ class SimpleMySQLReplicator:
         Returns:
             True if successful, False otherwise
         """
+        import psutil
+        
+        start_time = time.time()
+        initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        
         try:
             logger.info(f"Starting copy of table: {table_name}")
-            start_time = time.time()
             
             # Get table configuration
             config = self.table_configs.get(table_name, {})
@@ -399,8 +404,16 @@ class SimpleMySQLReplicator:
             if success:
                 # Update copy tracking
                 self._update_copy_status(table_name, rows_copied)
-                elapsed = time.time() - start_time
-                logger.info(f"Successfully copied {table_name} ({rows_copied} rows) in {elapsed:.2f}s")
+                
+                # Track performance metrics
+                end_time = time.time()
+                final_memory = psutil.Process().memory_info().rss / 1024 / 1024
+                duration = end_time - start_time
+                memory_used = final_memory - initial_memory
+                
+                self.track_performance_metrics(table_name, extraction_strategy, duration, memory_used, rows_copied)
+                
+                logger.info(f"Successfully copied {table_name} ({rows_copied} rows) in {duration:.2f}s")
                 return True
             else:
                 # Update tracking with failure status
@@ -447,6 +460,32 @@ class SimpleMySQLReplicator:
             logger.error(f"Error in full table copy for {table_name}: {str(e)}")
             return False, 0
     
+    def _get_primary_incremental_column(self, config: Dict) -> Optional[str]:
+        """
+        Get the primary incremental column from configuration with fallback logic.
+        
+        Args:
+            config: Table configuration dictionary
+            
+        Returns:
+            Primary incremental column name, or None if not available
+        """
+        primary_column = config.get('primary_incremental_column')
+        
+        # Check if primary column is valid (not null, 'none', or empty)
+        if primary_column and primary_column != 'none' and primary_column.strip():
+            return primary_column
+        
+        # Fallback: if no primary column specified, return None to use multi-column logic
+        return None
+    
+    def _log_incremental_strategy(self, table_name: str, primary_column: Optional[str], incremental_columns: List[str]):
+        """Log which incremental strategy is being used."""
+        if primary_column:
+            logger.info(f"Table {table_name}: Using primary incremental column '{primary_column}' for optimized incremental loading")
+        else:
+            logger.info(f"Table {table_name}: Using multi-column incremental logic with columns: {incremental_columns}")
+    
     def _copy_chunked_incremental_table(self, table_name: str, config: Dict) -> tuple[bool, int]:
         """Copy table using chunked incremental strategy for very large tables with optimized batch sizes."""
         try:
@@ -456,33 +495,63 @@ class SimpleMySQLReplicator:
                 logger.error(f"No incremental columns configured for table: {table_name}")
                 return False, 0
             
+            # Get primary incremental column from configuration
+            primary_incremental_column = self._get_primary_incremental_column(config)
+            
             # Use optimized batch size based on table characteristics (smaller for chunked)
             base_batch_size = self._get_optimized_batch_size(table_name, config)
-            chunked_batch_size = min(base_batch_size // 2, 1000)  # Smaller batches for chunked strategy
+            chunked_batch_size = min(base_batch_size // 2, 5000)  # Increased from 1000 to 5000 for chunked strategy
             
             logger.info(f"Copying chunked incremental data for {table_name} using columns: {incremental_columns} with batch size: {chunked_batch_size}")
             
-            # Get last processed value from target using maximum across all columns
-            last_processed = self._get_last_processed_value_max(table_name, incremental_columns)
+            # Log which strategy is being used
+            self._log_incremental_strategy(table_name, primary_incremental_column, incremental_columns)
             
-            # If table doesn't exist, create it first
-            if last_processed is None:
-                logger.info(f"Target table {table_name} does not exist, creating table structure")
-                if not self._recreate_table_structure(table_name):
-                    logger.error(f"Failed to create table structure for {table_name}")
-                    return False, 0
-            
-            # Get new/changed records from source
-            new_records_count = self._get_new_records_count_max(table_name, incremental_columns, last_processed)
-            
-            if new_records_count == 0:
-                logger.info(f"No new records to copy for {table_name}")
-                return True, 0
-            
-            logger.info(f"Found {new_records_count} new records to copy for {table_name}")
-            
-            # Copy new records with smaller batches for chunked strategy
-            return self._copy_new_records_max(table_name, incremental_columns, last_processed, chunked_batch_size)
+            # Use primary incremental column if available, otherwise fall back to multi-column logic
+            if primary_incremental_column:
+                # Get last processed value using primary column
+                last_processed = self._get_last_processed_value(table_name, primary_incremental_column)
+                
+                # If table doesn't exist, create it first
+                if last_processed is None:
+                    logger.info(f"Target table {table_name} does not exist, creating table structure")
+                    if not self._recreate_table_structure(table_name):
+                        logger.error(f"Failed to create table structure for {table_name}")
+                        return False, 0
+                
+                # Get new/changed records from source using primary column
+                new_records_count = self._get_new_records_count(table_name, primary_incremental_column, last_processed)
+                
+                if new_records_count == 0:
+                    logger.info(f"No new records to copy for {table_name}")
+                    return True, 0
+                
+                logger.info(f"Found {new_records_count} new records to copy for {table_name}")
+                
+                # Copy new records with smaller batches for chunked strategy using primary column
+                return self._copy_new_records(table_name, primary_incremental_column, last_processed, chunked_batch_size)
+            else:
+                # Get last processed value from target using maximum across all columns
+                last_processed = self._get_last_processed_value_max(table_name, incremental_columns)
+                
+                # If table doesn't exist, create it first
+                if last_processed is None:
+                    logger.info(f"Target table {table_name} does not exist, creating table structure")
+                    if not self._recreate_table_structure(table_name):
+                        logger.error(f"Failed to create table structure for {table_name}")
+                        return False, 0
+                
+                # Get new/changed records from source
+                new_records_count = self._get_new_records_count_max(table_name, incremental_columns, last_processed)
+                
+                if new_records_count == 0:
+                    logger.info(f"No new records to copy for {table_name}")
+                    return True, 0
+                
+                logger.info(f"Found {new_records_count} new records to copy for {table_name}")
+                
+                # Copy new records with smaller batches for chunked strategy
+                return self._copy_new_records_max(table_name, incremental_columns, last_processed, chunked_batch_size)
             
         except Exception as e:
             logger.error(f"Error in chunked incremental copy for {table_name}: {str(e)}")
@@ -497,32 +566,62 @@ class SimpleMySQLReplicator:
                 logger.error(f"No incremental columns configured for table: {table_name}")
                 return False, 0
             
+            # Get primary incremental column from configuration
+            primary_incremental_column = self._get_primary_incremental_column(config)
+            
             # Use optimized batch size based on table characteristics
             optimized_batch_size = self._get_optimized_batch_size(table_name, config)
             
             logger.info(f"Copying incremental data for {table_name} using columns: {incremental_columns} with batch size: {optimized_batch_size}")
             
-            # Get last processed value from target using maximum across all columns
-            last_processed = self._get_last_processed_value_max(table_name, incremental_columns)
+            # Log which strategy is being used
+            self._log_incremental_strategy(table_name, primary_incremental_column, incremental_columns)
             
-            # If table doesn't exist, create it first
-            if last_processed is None:
-                logger.info(f"Target table {table_name} does not exist, creating table structure")
-                if not self._recreate_table_structure(table_name):
-                    logger.error(f"Failed to create table structure for {table_name}")
-                    return False, 0
-            
-            # Get new/changed records from source
-            new_records_count = self._get_new_records_count_max(table_name, incremental_columns, last_processed)
-            
-            if new_records_count == 0:
-                logger.info(f"No new records to copy for {table_name}")
-                return True, 0
-            
-            logger.info(f"Found {new_records_count} new records to copy for {table_name}")
-            
-            # Copy new records with optimized batch size
-            return self._copy_new_records_max(table_name, incremental_columns, last_processed, optimized_batch_size)
+            # Use primary incremental column if available, otherwise fall back to multi-column logic
+            if primary_incremental_column:
+                # Get last processed value using primary column
+                last_processed = self._get_last_processed_value(table_name, primary_incremental_column)
+                
+                # If table doesn't exist, create it first
+                if last_processed is None:
+                    logger.info(f"Target table {table_name} does not exist, creating table structure")
+                    if not self._recreate_table_structure(table_name):
+                        logger.error(f"Failed to create table structure for {table_name}")
+                        return False, 0
+                
+                # Get new/changed records from source using primary column
+                new_records_count = self._get_new_records_count(table_name, primary_incremental_column, last_processed)
+                
+                if new_records_count == 0:
+                    logger.info(f"No new records to copy for {table_name}")
+                    return True, 0
+                
+                logger.info(f"Found {new_records_count} new records to copy for {table_name}")
+                
+                # Copy new records with optimized batch size using primary column
+                return self._copy_new_records(table_name, primary_incremental_column, last_processed, optimized_batch_size)
+            else:
+                # Get last processed value from target using maximum across all columns
+                last_processed = self._get_last_processed_value_max(table_name, incremental_columns)
+                
+                # If table doesn't exist, create it first
+                if last_processed is None:
+                    logger.info(f"Target table {table_name} does not exist, creating table structure")
+                    if not self._recreate_table_structure(table_name):
+                        logger.error(f"Failed to create table structure for {table_name}")
+                        return False, 0
+                
+                # Get new/changed records from source
+                new_records_count = self._get_new_records_count_max(table_name, incremental_columns, last_processed)
+                
+                if new_records_count == 0:
+                    logger.info(f"No new records to copy for {table_name}")
+                    return True, 0
+                
+                logger.info(f"Found {new_records_count} new records to copy for {table_name}")
+                
+                # Copy new records with optimized batch size
+                return self._copy_new_records_max(table_name, incremental_columns, last_processed, optimized_batch_size)
             
         except Exception as e:
             logger.error(f"Error in incremental copy for {table_name}: {str(e)}")
@@ -595,51 +694,52 @@ class SimpleMySQLReplicator:
             
             with source_manager as source_mgr:
                 with target_manager as target_mgr:
-                    # Check if source and target are on the same server
-                    source_config = self.settings.get_source_connection_config()
-                    target_config = self.settings.get_replication_connection_config()
-                    source_host = source_config.get('host', 'localhost')
-                    target_host = target_config.get('host', 'localhost')
-                    source_db = source_config.get('database', 'opendental')
-                    target_db = target_config.get('database', 'opendental_replication')
+                    # Cross-server copy - read from source and insert into target with retry logic
+                    # Get all data from source with retry logic
+                    result = source_mgr.execute_with_retry(f"SELECT * FROM `{table_name}`", rate_limit=True)
+                    rows = result.fetchall()
                     
-                    if source_host == target_host:
-                        # Same server - use direct INSERT ... SELECT with explicit database names
-                        # Ensure we're connected to the target database context
-                        copy_sql = f"INSERT INTO `{target_db}`.`{table_name}` SELECT * FROM `{source_db}`.`{table_name}`"
-                        logger.debug(f"Executing copy SQL: {copy_sql}")
-                        result = target_mgr.execute_with_retry(copy_sql, rate_limit=True)
-                        # Commit the transaction after the copy
-                        target_mgr.commit()
-                        logger.info(f"Successfully copied {result.rowcount} records for small table {table_name}")
-                    else:
-                        # Different servers - read from source and insert into target with retry logic
-                        # Get all data from source with retry logic
-                        result = source_mgr.execute_with_retry(f"SELECT * FROM `{table_name}`", rate_limit=True)
-                        rows = result.fetchall()
+                    if rows:
+                        # Get column names
+                        columns = result.keys()
+                        # Escape column names with backticks to handle reserved keywords
+                        escaped_columns = [f"`{col}`" for col in columns]
                         
-                        if rows:
-                            # Get column names
-                            columns = result.keys()
-                            # Escape column names with backticks to handle reserved keywords
-                            escaped_columns = [f"`{col}`" for col in columns]
-                            # Create INSERT statement with named parameters
+                        # Use bulk insert for better performance
+                        if len(rows) > 1:
+                            # Bulk insert with executemany pattern
+                            values_list = []
+                            for row in rows:
+                                # Convert Row object to tuple for bulk insert
+                                values_list.append(tuple(row))
+                            
+                            # Create INSERT statement for executemany
+                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(['%s'] * len(columns))})"
+                            
+                            # Execute bulk insert using executemany pattern
+                            # Use direct connection for executemany since ConnectionManager doesn't support it
+                            with target_mgr.engine.connect() as conn:
+                                # Use the underlying database driver connection for executemany
+                                raw_conn = conn.connection
+                                raw_conn.executemany(insert_sql, values_list)
+                                conn.commit()
+                        else:
+                            # Single row insert (fallback for small tables)
                             param_names = [f":{col}" for col in columns]
                             insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
                             
-                            # Insert all rows with retry logic
-                            for row in rows:
-                                # Convert Row object to dictionary for named parameter binding
-                                row_dict = dict(zip(columns, row))
-                                target_mgr.execute_with_retry(insert_sql, row_dict, rate_limit=True)
-                            
-                            # Commit the transaction after all inserts
-                            target_mgr.commit()
+                            # Convert Row object to dictionary for named parameter binding
+                            row_dict = dict(zip(columns, rows[0]))
+                            target_mgr.execute_with_retry(insert_sql, row_dict, rate_limit=True)
                         
-                        result.rowcount = len(rows)
-                        logger.info(f"Successfully copied {result.rowcount} records for small table {table_name}")
+                        # Commit the transaction after all inserts (only for single row case)
+                        if len(rows) <= 1:
+                            target_mgr.commit()
                     
-                    return True, result.rowcount
+                    result.rowcount = len(rows)
+                    logger.info(f"Successfully copied {result.rowcount} records for small table {table_name}")
+                
+                return True, result.rowcount
                     
         except Exception as e:
             logger.error(f"Error copying small table {table_name}: {str(e)}")
@@ -664,45 +764,21 @@ class SimpleMySQLReplicator:
             
             with source_manager as source_mgr:
                 with target_manager as target_mgr:
-                    # Check if source and target are on the same server
-                    source_config = self.settings.get_source_connection_config()
-                    target_config = self.settings.get_replication_connection_config()
-                    source_host = source_config.get('host', 'localhost')
-                    target_host = target_config.get('host', 'localhost')
-                    source_db = source_config.get('database', 'opendental')
-                    target_db = target_config.get('database', 'opendental_replication')
+                    # Cross-server copy - read from source and insert into target with retry logic
+                    # Get total count for progress tracking with retry
+                    count_result = source_mgr.execute_with_retry(f"SELECT COUNT(*) FROM `{table_name}`")
+                    total_count = count_result.scalar()
+                    if total_count is None:
+                        total_count = 0
                     
-                    if source_host == target_host:
-                        # Same server - use direct INSERT ... SELECT with explicit database names
-                        offset = 0
-                        total_copied = 0
+                    offset = 0
+                    total_copied = 0
+                    batch_num = 0
+                    
+                    while True:
+                        batch_num += 1
                         
-                        while True:
-                            copy_sql = f"""
-                                INSERT INTO `{target_db}`.`{table_name}` 
-                                SELECT * FROM `{source_db}`.`{table_name}` 
-                                LIMIT {batch_size} OFFSET {offset}
-                            """
-                            logger.debug(f"Executing batch copy SQL: {copy_sql}")
-                            result = target_mgr.execute_with_retry(copy_sql, rate_limit=True)
-                            rows_copied = result.rowcount
-                            
-                            if rows_copied == 0:
-                                break
-                            
-                            # Commit the transaction after each batch
-                            target_mgr.commit()
-                            
-                            total_copied += rows_copied
-                            offset += batch_size
-                            
-                            logger.info(f"Copied batch: {total_copied} total records for {table_name}")
-                    else:
-                        # Different servers - read from source and insert into target with retry logic
-                        offset = 0
-                        total_copied = 0
-                        
-                        while True:
+                        try:
                             # Get batch from source with retry logic
                             result = source_mgr.execute_with_retry(
                                 f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}",
@@ -711,32 +787,61 @@ class SimpleMySQLReplicator:
                             rows = result.fetchall()
                             
                             if not rows:
+                                logger.info(f"Batch {batch_num}: No more rows to copy, stopping")
                                 break
                             
                             # Get column names
                             columns = result.keys()
                             # Escape column names with backticks to handle reserved keywords
                             escaped_columns = [f"`{col}`" for col in columns]
-                            # Create INSERT statement with named parameters
-                            param_names = [f":{col}" for col in columns]
-                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
                             
-                            # Insert batch using individual execute calls with retry logic
-                            for row in rows:
-                                # Convert Row object to dictionary for named parameter binding
-                                row_dict = dict(zip(columns, row))
+                            # Use bulk insert for better performance
+                            if len(rows) > 1:
+                                # Bulk insert with executemany pattern - FIXED VERSION
+                                values_list = []
+                                for row in rows:
+                                    # Validate and clean row data before insertion
+                                    cleaned_row = self._clean_row_data(row, columns, table_name)
+                                    values_list.append(cleaned_row)
+                                
+                                insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(['%s'] * len(columns))})"
+                                
+                                # FIXED: Use the correct way to get underlying connection for executemany
+                                with target_mgr.engine.connect() as conn:
+                                    # Get the underlying DBAPI connection
+                                    dbapi_conn = conn.connection.connection  # This gets the actual PyMySQL connection
+                                    cursor = dbapi_conn.cursor()
+                                    cursor.executemany(insert_sql, values_list)
+                                    conn.commit()
+                            else:
+                                # Single row insert (fallback for small batches)
+                                param_names = [f":{col}" for col in columns]
+                                insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
+                                
+                                # Clean the single row data
+                                cleaned_row = self._clean_row_data(rows[0], columns, table_name)
+                                row_dict = dict(zip(columns, cleaned_row))
                                 target_mgr.execute_with_retry(insert_sql, row_dict, rate_limit=True)
                             
-                            # Commit the transaction after each batch
-                            target_mgr.commit()
+                            # Commit the transaction after each batch (only for single row case)
+                            if len(rows) <= 1:
+                                target_mgr.commit()
                             
                             total_copied += len(rows)
                             offset += batch_size
                             
-                            logger.info(f"Copied batch: {total_copied} total records for {table_name}")
-                    
-                    logger.info(f"Successfully copied {total_copied} records for medium table {table_name}")
-                    return True, total_copied
+                            logger.info(f"Batch {batch_num}: Copied {len(rows)} rows, total: {total_copied} for {table_name}")
+                            
+                            # Force log flush to ensure progress is visible
+                            for handler in logger.handlers:
+                                handler.flush()
+                        
+                        except Exception as batch_error:
+                            logger.error(f"Error in batch {batch_num} for {table_name}: {str(batch_error)}")
+                            raise
+                
+                logger.info(f"Successfully copied {total_copied} records for medium table {table_name}")
+                return True, total_copied
                     
         except Exception as e:
             logger.error(f"Error copying medium table {table_name}: {str(e)}")
@@ -749,6 +854,48 @@ class SimpleMySQLReplicator:
             except Exception as config_error:
                 logger.error(f"Error getting config for debugging: {str(config_error)}")
             return False, 0
+
+    def _clean_row_data(self, row, columns, table_name: str):
+        """
+        Clean and validate row data before insertion to prevent type conversion errors.
+        
+        Args:
+            row: The row data to clean
+            columns: Column names
+            table_name: Table name for logging
+            
+        Returns:
+            Cleaned row data
+        """
+        try:
+            cleaned_row = []
+            for i, value in enumerate(row):
+                try:
+                    # Handle None values
+                    if value is None:
+                        cleaned_row.append(None)
+                        continue
+                    
+                    # Handle string values that might contain problematic characters
+                    if isinstance(value, str):
+                        # Remove any control characters that might cause issues
+                        cleaned_value = ''.join(c for c in value if ord(c) >= 32 or c in '\t\n\r')
+                        cleaned_row.append(cleaned_value)
+                    else:
+                        # For non-string values, ensure they're in a format that can be safely converted
+                        cleaned_row.append(value)
+                        
+                except Exception as e:
+                    logger.warning(f"Error cleaning value for column {columns[i]} in {table_name}: {str(e)}")
+                    # Use None as fallback for problematic values
+                    cleaned_row.append(None)
+            
+            return cleaned_row
+            
+        except Exception as e:
+            logger.error(f"Error cleaning row data for {table_name}: {str(e)}")
+            # Return original row if cleaning fails
+            return row
     
     def _copy_large_table(self, table_name: str, batch_size: int) -> tuple[bool, int]:
         """Copy large table using chunked INSERT with WHERE conditions and ConnectionManager."""
@@ -761,91 +908,54 @@ class SimpleMySQLReplicator:
             
             with source_manager as source_mgr:
                 with target_manager as target_mgr:
-                    # Check if source and target are on the same server
-                    source_config = self.settings.get_source_connection_config()
-                    target_config = self.settings.get_replication_connection_config()
-                    source_host = source_config.get('host', 'localhost')
-                    target_host = target_config.get('host', 'localhost')
-                    source_db = source_config.get('database', 'opendental')
-                    target_db = target_config.get('database', 'opendental_replication')
+                    # Cross-server copy - read from source and insert into target with retry logic
+                    # Get total count for progress tracking with retry
+                    count_result = source_mgr.execute_with_retry(f"SELECT COUNT(*) FROM `{table_name}`")
+                    total_count = count_result.scalar()
+                    if total_count is None:
+                        total_count = 0
                     
-                    if source_host == target_host:
-                        # Same server - use direct INSERT ... SELECT with explicit database names
+                    offset = 0
+                    total_copied = 0
+                    
+                    while total_copied < total_count:
+                        # Get batch from source with retry logic
+                        result = source_mgr.execute_with_retry(
+                            f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}",
+                            rate_limit=True
+                        )
+                        rows = result.fetchall()
                         
-                        # Get total count for progress tracking with retry
-                        count_result = source_mgr.execute_with_retry(f"SELECT COUNT(*) FROM `{source_db}`.`{table_name}`")
-                        total_count = count_result.scalar()
-                        if total_count is None:
-                            total_count = 0
+                        if not rows:
+                            break
                         
-                        offset = 0
-                        total_copied = 0
+                        # Get column names
+                        columns = result.keys()
+                        # Escape column names with backticks to handle reserved keywords
+                        escaped_columns = [f"`{col}`" for col in columns]
+                        # Create INSERT statement with named parameters
+                        param_names = [f":{col}" for col in columns]
+                        insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
                         
-                        while total_copied < total_count:
-                            copy_sql = f"""
-                                INSERT INTO `{target_db}`.`{table_name}` 
-                                SELECT * FROM `{source_db}`.`{table_name}` 
-                                LIMIT {batch_size} OFFSET {offset}
-                            """
-                            logger.debug(f"Executing large table batch copy SQL: {copy_sql}")
-                            result = target_mgr.execute_with_retry(copy_sql, rate_limit=True)
-                            rows_copied = result.rowcount
-                            
-                            if rows_copied == 0:
-                                break
-                            
-                            total_copied += rows_copied
-                            offset += batch_size
-                            
-                            if total_count > 0:
-                                progress = (total_copied / total_count) * 100
-                                logger.info(f"Copied batch: {total_copied}/{total_count} ({progress:.1f}%) for {table_name}")
-                            else:
-                                logger.info(f"Copied batch: {total_copied} records for {table_name}")
-                    else:
-                        # Different servers - read from source and insert into target with retry logic
-                        # Get total count for progress tracking with retry
-                        count_result = source_mgr.execute_with_retry(f"SELECT COUNT(*) FROM `{table_name}`")
-                        total_count = count_result.scalar()
-                        if total_count is None:
-                            total_count = 0
+                        # Insert batch using individual execute calls with retry logic
+                        for row in rows:
+                            # Clean and validate row data before insertion
+                            cleaned_row = self._clean_row_data(row, columns, table_name)
+                            # Convert Row object to dictionary for named parameter binding
+                            row_dict = dict(zip(columns, cleaned_row))
+                            target_mgr.execute_with_retry(insert_sql, row_dict, rate_limit=True)
                         
-                        offset = 0
-                        total_copied = 0
+                        # Commit the transaction after each batch
+                        target_mgr.commit()
                         
-                        while total_copied < total_count:
-                            # Get batch from source with retry logic
-                            result = source_mgr.execute_with_retry(
-                                f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}",
-                                rate_limit=True
-                            )
-                            rows = result.fetchall()
-                            
-                            if not rows:
-                                break
-                            
-                            # Get column names
-                            columns = result.keys()
-                            # Escape column names with backticks to handle reserved keywords
-                            escaped_columns = [f"`{col}`" for col in columns]
-                            # Create INSERT statement with named parameters
-                            param_names = [f":{col}" for col in columns]
-                            insert_sql = f"INSERT INTO `{table_name}` ({', '.join(escaped_columns)}) VALUES ({', '.join(param_names)})"
-                            
-                            # Insert batch using individual execute calls with retry logic
-                            for row in rows:
-                                # Convert Row object to dictionary for named parameter binding
-                                row_dict = dict(zip(columns, row))
-                                target_mgr.execute_with_retry(insert_sql, row_dict, rate_limit=True)
-                            
-                            total_copied += len(rows)
-                            offset += batch_size
-                            
-                            if total_count > 0:
-                                progress = (total_copied / total_count) * 100
-                                logger.info(f"Copied batch: {total_copied}/{total_count} ({progress:.1f}%) for {table_name}")
-                            else:
-                                logger.info(f"Copied batch: {total_copied} records for {table_name}")
+                        total_copied += len(rows)
+                        offset += batch_size
+                        
+                        if total_count > 0:
+                            progress = (total_copied / total_count) * 100
+                            logger.info(f"Copied batch: {total_copied}/{total_count} ({progress:.1f}%) for {table_name}")
+                        else:
+                            logger.info(f"Copied batch: {total_copied} records for {table_name}")
                     
                     logger.info(f"Successfully copied {total_copied} records for large table {table_name}")
                     return True, total_copied
@@ -953,43 +1063,34 @@ class SimpleMySQLReplicator:
                     
                     if source_host == target_host:
                         # Same server - use direct INSERT ... SELECT with retry logic
-                        source_db = source_config.get('database', 'opendental')
-                        offset = 0
-                        total_copied = 0
+                        logger.info(f"Using same-server copy strategy for {table_name}")
                         
-                        while True:
-                            if last_processed is None:
-                                # Copy all records if no last processed value
-                                copy_sql = f"""
-                                    INSERT INTO `{table_name}` 
-                                    SELECT * FROM `{source_db}`.`{table_name}` 
-                                    LIMIT {batch_size} OFFSET {offset}
-                                """
-                                result = target_mgr.execute_with_retry(copy_sql, rate_limit=True)
-                            else:
-                                # Copy only records newer than last processed
-                                copy_sql = f"""
-                                    INSERT INTO `{table_name}` 
-                                    SELECT * FROM `{source_db}`.`{table_name}` 
-                                    WHERE {incremental_column} > :last_processed
-                                    LIMIT {batch_size} OFFSET {offset}
-                                """
-                                result = target_mgr.execute_with_retry(
-                                    copy_sql, 
-                                    {"last_processed": last_processed}, 
-                                    rate_limit=True
-                                )
-                            
-                            rows_copied = result.rowcount
-                            if rows_copied == 0:
-                                break
-                            
-                            total_copied += rows_copied
-                            offset += batch_size
-                            
-                            logger.info(f"Copied batch: {total_copied} total records for {table_name}")
+                        if last_processed is None:
+                            # Full table copy
+                            insert_sql = f"""
+                                INSERT INTO `{table_name}` 
+                                SELECT * FROM `{table_name}`
+                            """
+                            result = target_mgr.execute_with_retry(insert_sql, rate_limit=True)
+                            total_copied = result.rowcount if hasattr(result, 'rowcount') else 0
+                        else:
+                            # Incremental copy
+                            insert_sql = f"""
+                                INSERT INTO `{table_name}` 
+                                SELECT * FROM `{table_name}` 
+                                WHERE {incremental_column} > :last_processed
+                            """
+                            result = target_mgr.execute_with_retry(insert_sql, {"last_processed": last_processed}, rate_limit=True)
+                            total_copied = result.rowcount if hasattr(result, 'rowcount') else 0
+                        
+                        target_mgr.commit()
+                        logger.info(f"Completed same-server copy: {total_copied} records for {table_name}")
+                        return True, total_copied
+                    
                     else:
-                        # Different servers - read from source and insert into target with retry logic
+                        # Cross-server copy - read from source and insert into target with retry logic
+                        logger.info(f"Using cross-server copy strategy for {table_name}")
+                        
                         offset = 0
                         total_copied = 0
                         
@@ -1029,8 +1130,10 @@ class SimpleMySQLReplicator:
                             
                             # Insert batch using individual execute calls with retry logic
                             for row in rows:
+                                # Clean and validate row data before insertion
+                                cleaned_row = self._clean_row_data(row, columns, table_name)
                                 # Convert Row object to dictionary for named parameter binding
-                                row_dict = dict(zip(columns, row))
+                                row_dict = dict(zip(columns, cleaned_row))
                                 target_mgr.execute_with_retry(insert_sql, row_dict, rate_limit=True)
                             
                             total_copied += len(rows)
@@ -1135,66 +1238,84 @@ class SimpleMySQLReplicator:
             return 0
 
     def _copy_new_records_max(self, table_name: str, incremental_columns: List[str], last_processed: Any, batch_size: int) -> tuple[bool, int]:
-        """Copy new records using maximum timestamp across all incremental columns."""
+        """
+        Copy new records using maximum timestamp logic across multiple incremental columns.
+        
+        This method uses the maximum timestamp across all incremental columns to determine
+        which records to copy, providing more comprehensive incremental loading.
+        """
         try:
-            if not last_processed:
-                # If no last processed value, copy all records
-                return self._copy_full_table(table_name, {})
+            # Get table configuration for optimized settings
+            config = self.table_configs.get(table_name, {})
             
-            # Build conditions for all incremental columns
-            conditions = []
-            for column in incremental_columns:
-                conditions.append(f"{column} > :last_processed")
+            # Create ConnectionManagers with optimized configuration
+            source_manager, target_manager = self._create_connection_managers(table_name, config)
             
-            # Use OR logic - if any column is newer than last_processed, include the record
-            where_clause = " OR ".join(conditions)
-            
-            query = f"""
-                SELECT *
-                FROM {table_name}
-                WHERE {where_clause}
-                ORDER BY {incremental_columns[0]}  # Use first column for ordering
-            """
-            
-            total_rows_copied = 0
-            offset = 0
-            
-            while True:
-                # Get batch of records
-                batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
-                
-                with self.source_engine.connect() as source_conn:
-                    result = source_conn.execute(text(batch_query), {"last_processed": last_processed})
-                    rows = result.fetchall()
+            with source_manager as source_mgr:
+                with target_manager as target_mgr:
+                    # Cross-server copy - read from source and insert into target with retry logic
+                    offset = 0
+                    total_rows_copied = 0
                     
-                    if not rows:
-                        break
-                    
-                    # Convert to list of dictionaries
-                    columns = result.keys()
-                    batch_data = [dict(zip(columns, row)) for row in rows]
-                    
-                    # Insert batch into target
-                    with self.target_engine.connect() as target_conn:
-                        # Use UPSERT to handle duplicates properly
+                    while True:
+                        # Get batch from source with retry logic
+                        if last_processed is None:
+                            result = source_mgr.execute_with_retry(
+                                f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}",
+                                rate_limit=True
+                            )
+                        else:
+                            # Build OR conditions for multiple incremental columns
+                            conditions = []
+                            for col in incremental_columns:
+                                conditions.append(f"{col} > :last_processed")
+                            where_clause = " OR ".join(conditions)
+                            
+                            result = source_mgr.execute_with_retry(
+                                f"SELECT * FROM `{table_name}` WHERE {where_clause} LIMIT {batch_size} OFFSET {offset}",
+                                {"last_processed": last_processed},
+                                rate_limit=True
+                            )
+                        
+                        rows = result.fetchall()
+                        
+                        if not rows:
+                            break
+                        
+                        # Get column names
+                        columns = result.keys()
+                        # Escape column names with backticks to handle reserved keywords
+                        escaped_columns = [f"`{col}`" for col in columns]
+                        # Create UPSERT statement with named parameters
+                        param_names = [f":{col}" for col in columns]
+                        
+                        # Use UPSERT for incremental loads to handle duplicate keys
                         insert_sql = self._build_mysql_upsert_sql(table_name, list(columns))
                         
-                        target_conn.execute(text(insert_sql), batch_data)
-                        target_conn.commit()
+                        # Insert batch using individual execute calls with retry logic
+                        with self.target_engine.connect() as target_conn:
+                            for row in rows:
+                                # Clean and validate row data before insertion
+                                cleaned_row = self._clean_row_data(row, columns, table_name)
+                                # Convert Row object to dictionary for named parameter binding
+                                row_dict = dict(zip(columns, cleaned_row))
+                                target_conn.execute(text(insert_sql), row_dict)
+                            
+                            target_conn.commit()
+                            
+                            total_rows_copied += len(rows)
+                            logger.info(f"Copied batch of {len(rows)} rows for {table_name} (total: {total_rows_copied})")
                         
-                        total_rows_copied += len(batch_data)
-                        logger.info(f"Copied batch of {len(batch_data)} rows for {table_name} (total: {total_rows_copied})")
-                
-                offset += batch_size
-                
-                # Safety check to prevent infinite loops
-                if offset > 1000000:  # 1M rows limit
-                    logger.warning(f"Reached safety limit for {table_name}, stopping copy")
-                    break
-            
-            logger.info(f"Completed incremental copy for {table_name}: {total_rows_copied} rows")
-            return True, total_rows_copied
-            
+                        offset += batch_size
+                        
+                        # Safety check to prevent infinite loops
+                        if offset > 1000000:  # 1M rows limit
+                            logger.warning(f"Reached safety limit for {table_name}, stopping copy")
+                            break
+                    
+                    logger.info(f"Completed incremental copy for {table_name}: {total_rows_copied} rows")
+                    return True, total_rows_copied
+                    
         except Exception as e:
             logger.error(f"Error copying new records for {table_name}: {str(e)}")
             return False, 0
@@ -1310,3 +1431,39 @@ class SimpleMySQLReplicator:
             ON DUPLICATE KEY UPDATE
                 {update_clause}
         """ 
+
+    def track_performance_metrics(self, table_name: str, strategy: str, duration: float, memory_mb: float, rows_processed: int):
+        """Track performance metrics for different copy strategies."""
+        if not hasattr(self, 'performance_metrics'):
+            self.performance_metrics = {}
+        
+        self.performance_metrics[table_name] = {
+            'strategy': strategy,
+            'duration': duration,
+            'memory_mb': memory_mb,
+            'rows_processed': rows_processed,
+            'rows_per_second': rows_processed / duration if duration > 0 else 0,
+            'timestamp': datetime.now()
+        }
+        
+        logger.info(f"Copy performance metrics for {table_name}: {strategy} strategy, "
+                   f"{rows_processed} rows in {duration:.2f}s ({rows_processed / duration:.0f} rows/sec), "
+                   f"Memory: {memory_mb:.1f}MB")
+
+    def get_performance_report(self) -> str:
+        """Generate a comprehensive copy performance report."""
+        if not hasattr(self, 'performance_metrics') or not self.performance_metrics:
+            return "No copy performance metrics available."
+        
+        report = ["# MySQL Copy Performance Report", ""]
+        
+        for table_name, metrics in self.performance_metrics.items():
+            report.append(f"## {table_name}")
+            report.append(f"- Strategy: {metrics['strategy']}")
+            report.append(f"- Duration: {metrics['duration']:.2f}s")
+            report.append(f"- Rows Processed: {metrics['rows_processed']:,}")
+            report.append(f"- Rows/Second: {metrics['rows_per_second']:.0f}")
+            report.append(f"- Memory Usage: {metrics['memory_mb']:.1f}MB")
+            report.append("")
+        
+        return "\n".join(report) 
