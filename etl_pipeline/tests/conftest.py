@@ -14,7 +14,6 @@ Following the connection architecture with:
 # Import essential fixtures from modular fixtures directory
 from tests.fixtures.env_fixtures import (
     test_env_vars, 
-    production_env_vars, 
     setup_test_environment, 
     reset_global_settings,
     test_env_provider,
