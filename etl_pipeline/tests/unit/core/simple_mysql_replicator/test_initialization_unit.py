@@ -8,24 +8,22 @@ for injected configuration to ensure complete test isolation.
 Test Strategy:
     - Unit tests with mocked dependencies using DictConfigProvider
     - Validates provider pattern dependency injection and Settings injection
-    - Tests FAIL FAST behavior when ETL_ENVIRONMENT not set
-    - Ensures type safety with DatabaseType and PostgresSchema enums
-    - Tests environment separation (production vs test) with provider pattern
-    - Validates incremental copy logic and configuration management
+    - Tests initialization with different Settings configurations
+    - Tests configuration file loading and validation
+    - Validates database connection setup with provider pattern
 
 Coverage Areas:
-    - SimpleMySQLReplicator initialization with Settings injection
-    - Configuration loading from YAML files with provider pattern
-    - Error handling and logging for dental clinic ETL operations
-    - Provider pattern configuration isolation and environment separation
-    - Settings injection for environment-agnostic connections
+    - Settings injection for environment-agnostic initialization
+    - Provider pattern dependency injection
+    - Configuration file loading and validation
+    - Database connection setup with provider pattern
+    - Error handling during initialization
 
 ETL Context:
     - Critical for nightly ETL pipeline execution with dental clinic data
     - Supports MariaDB v11.6 source and MySQL replication database
     - Uses provider pattern for clean dependency injection and test isolation
     - Implements Settings injection for environment-agnostic connections
-    - Enforces FAIL FAST security to prevent accidental production usage
 """
 import pytest
 from unittest.mock import patch, MagicMock, mock_open
@@ -72,22 +70,21 @@ class TestSimpleMySQLReplicatorInitialization:
     
     def test_initialization_with_settings_injection(self, test_settings):
         """
-        Test SimpleMySQLReplicator initialization with Settings injection.
+        Test SimpleMySQLReplicator initialization with Settings injection using provider pattern.
         
         Validates:
-            - Settings injection works for environment-agnostic initialization
-            - Provider pattern dependency injection for configuration
+            - Settings injection for environment-agnostic initialization
+            - Provider pattern dependency injection
             - ConnectionFactory integration with Settings injection
-            - Configuration loading from provider pattern
-            - Environment-agnostic operation with provider pattern
+            - Configuration loading from provider
+            - Database engine setup with provider pattern
             
         ETL Pipeline Context:
-            - Critical for nightly ETL pipeline execution
-            - Supports both production and test environments
-            - Uses provider pattern for clean dependency injection
-            - Implements Settings injection for environment-agnostic connections
+            - Settings injection enables environment-agnostic operation
+            - Provider pattern ensures clean dependency injection
+            - ConnectionFactory integration for database connections
+            - Configuration loading for table definitions
         """
-        # Mock ConnectionFactory methods
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
              patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
             
@@ -100,7 +97,7 @@ class TestSimpleMySQLReplicatorInitialization:
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
@@ -122,7 +119,7 @@ class TestSimpleMySQLReplicatorInitialization:
                 
                 # Verify configuration loading
                 assert 'patient' in replicator.table_configs
-                assert replicator.table_configs['patient']['incremental_column'] == 'DateTStamp'
+                assert replicator.table_configs['patient']['incremental_columns'] == ['DateTStamp']
                 
                 # Verify engine assignments
                 assert replicator.source_engine == mock_source_engine
@@ -153,7 +150,7 @@ class TestSimpleMySQLReplicatorInitialization:
             mock_target.return_value = mock_target_engine
             
             # Mock YAML file loading
-            mock_config = {'tables': {'patient': {'incremental_column': 'DateTStamp'}}}
+            mock_config = {'tables': {'patient': {'incremental_columns': ['DateTStamp']}}}
             with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
                 # Initialize replicator without explicit settings
                 replicator = SimpleMySQLReplicator()
@@ -189,7 +186,7 @@ class TestSimpleMySQLReplicatorInitialization:
             mock_target.return_value = mock_target_engine
             
             # Mock custom YAML file loading
-            custom_config = {'tables': {'custom_table': {'incremental_column': 'CustomDate'}}}
+            custom_config = {'tables': {'custom_table': {'incremental_columns': ['CustomDate']}}}
             with patch('builtins.open', mock_open(read_data=yaml.dump(custom_config))):
                 # Initialize replicator with custom config path
                 custom_path = '/custom/path/tables.yml'
@@ -200,27 +197,22 @@ class TestSimpleMySQLReplicatorInitialization:
                 
                 # Verify custom configuration loading
                 assert 'custom_table' in replicator.table_configs
-                assert replicator.table_configs['custom_table']['incremental_column'] == 'CustomDate'
+                assert replicator.table_configs['custom_table']['incremental_columns'] == ['CustomDate']
 
     def test_initialization_configuration_file_not_found(self, test_settings):
         """
         Test SimpleMySQLReplicator initialization with missing configuration file.
         
-        AAA Pattern:
-            Arrange: Set up test provider and settings with missing config file
-            Act: Attempt to create SimpleMySQLReplicator instance
-            Assert: Verify ConfigurationError is raised with proper message
-            
         Validates:
-            - ConfigurationError handling for missing tables.yml
-            - Error propagation with provider pattern
+            - Configuration file not found error handling
+            - Provider pattern error propagation
             - Settings injection error handling
-            - Clear error messages for configuration issues
+            - Clear error messages for missing files
             
         ETL Pipeline Context:
-            - Critical for ETL pipeline reliability
-            - Prevents silent failures in configuration loading
-            - Maintains provider pattern error handling
+            - Error handling for missing configuration files
+            - Maintains provider pattern for error isolation
+            - Uses Settings injection for error context
         """
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
              patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
@@ -230,26 +222,29 @@ class TestSimpleMySQLReplicatorInitialization:
             mock_source.return_value = mock_source_engine
             mock_target.return_value = mock_target_engine
             
-            # Act: Attempt to create SimpleMySQLReplicator instance
+            # Mock file not found error
             with patch('builtins.open', side_effect=FileNotFoundError("Configuration file not found")):
-                # Assert: Verify ConfigurationError is raised with proper message
-                with pytest.raises(ConfigurationError, match="Configuration file not found"):
+                # Should raise ConfigurationError
+                with pytest.raises(ConfigurationError) as exc_info:
                     SimpleMySQLReplicator(settings=test_settings)
+                
+                # Verify error message
+                assert "Configuration file not found" in str(exc_info.value)
 
     def test_initialization_invalid_yaml_configuration(self, test_settings):
         """
         Test SimpleMySQLReplicator initialization with invalid YAML configuration.
         
         Validates:
-            - YAML parsing error handling
-            - Error propagation with provider pattern
+            - Invalid YAML error handling
+            - Provider pattern error propagation
             - Settings injection error handling
-            - Clear error messages for configuration issues
+            - Clear error messages for invalid YAML
             
         ETL Pipeline Context:
-            - Critical for ETL pipeline reliability
-            - Prevents silent failures in configuration parsing
-            - Maintains provider pattern error handling
+            - Error handling for invalid configuration files
+            - Maintains provider pattern for error isolation
+            - Uses Settings injection for error context
         """
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
              patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
@@ -261,5 +256,9 @@ class TestSimpleMySQLReplicatorInitialization:
             
             # Mock invalid YAML
             with patch('builtins.open', mock_open(read_data="invalid: yaml: content:")):
-                with pytest.raises(ConfigurationError):
-                    SimpleMySQLReplicator(settings=test_settings) 
+                # Should raise ConfigurationError
+                with pytest.raises(ConfigurationError) as exc_info:
+                    SimpleMySQLReplicator(settings=test_settings)
+                
+                # Verify error message
+                assert "Failed to load configuration" in str(exc_info.value) 
