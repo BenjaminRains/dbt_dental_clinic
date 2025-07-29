@@ -190,7 +190,7 @@ class TestPriorityProcessorUnit:
         """
         # Arrange: Use existing mock_config_reader fixture with important tables and mock TableProcessor
         processor = PriorityProcessor(mock_config_reader)
-        processor.settings.get_tables_by_importance = Mock(return_value=['patient', 'appointment', 'procedure'])
+        processor.settings.get_tables_by_importance = Mock(return_value=['patient', 'appointment', 'procedurelog'])
         
         with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
             mock_table_processor = Mock()
@@ -201,7 +201,7 @@ class TestPriorityProcessorUnit:
             result = processor.process_by_priority(['important'], max_workers=2)
             
             # Assert: Verify parallel processing is used for important tables
-            assert result['important']['success'] == ['patient', 'appointment', 'procedure']
+            assert result['important']['success'] == ['patient', 'appointment', 'procedurelog']
             assert result['important']['failed'] == []
             assert result['important']['total'] == 3
             assert mock_table_processor.process_table.call_count == 3
@@ -297,13 +297,13 @@ class TestPriorityProcessorUnit:
             mock_table_processor_class.return_value = mock_table_processor
             
             processor = PriorityProcessor(config_reader)
-            tables = ['patient', 'appointment', 'procedure']
+            tables = ['patient', 'appointment', 'procedurelog']
             
             # Act: Call _process_parallel() with multiple tables
             success_tables, failed_tables = processor._process_parallel(tables, max_workers=2, force_full=False)
             
             # Assert: Verify all tables are processed successfully in parallel
-            assert success_tables == ['patient', 'appointment', 'procedure']
+            assert success_tables == ['patient', 'appointment', 'procedurelog']
             assert failed_tables == []
             assert mock_table_processor.process_table.call_count == 3
 
@@ -326,13 +326,13 @@ class TestPriorityProcessorUnit:
             mock_table_processor_class.return_value = mock_table_processor
             
             processor = PriorityProcessor(config_reader)
-            tables = ['patient', 'appointment', 'procedure']
+            tables = ['patient', 'appointment', 'procedurelog']
             
             # Act: Call _process_parallel() with tables that partially fail
             success_tables, failed_tables = processor._process_parallel(tables, max_workers=2, force_full=False)
             
             # Assert: Verify partial success and failure handling
-            assert success_tables == ['patient', 'procedure']
+            assert success_tables == ['patient', 'procedurelog']
             assert failed_tables == ['appointment']
             assert mock_table_processor.process_table.call_count == 3
 
@@ -354,14 +354,14 @@ class TestPriorityProcessorUnit:
             mock_table_processor_class.return_value = mock_table_processor
             
             processor = PriorityProcessor(config_reader)
-            tables = ['patient', 'appointment', 'procedure']
+            tables = ['patient', 'appointment', 'procedurelog']
             
             # Act: Call _process_parallel() with tables that all fail
             success_tables, failed_tables = processor._process_parallel(tables, max_workers=2, force_full=False)
             
             # Assert: Verify all tables are marked as failed (order doesn't matter for parallel processing)
             assert success_tables == []
-            assert set(failed_tables) == set(['patient', 'appointment', 'procedure'])
+            assert set(failed_tables) == set(['patient', 'appointment', 'procedurelog'])
             assert mock_table_processor.process_table.call_count == 3
 
     def test_process_parallel_exception_handling(self, mock_config_reader):
@@ -563,7 +563,7 @@ class TestPriorityProcessorUnit:
             mock_table_processor.process_table.return_value = True
             mock_table_processor_class.return_value = mock_table_processor
             
-            tables = ['patient', 'appointment', 'procedure', 'claim', 'payment']
+            tables = ['patient', 'appointment', 'procedurelog', 'claim', 'payment']
             
             # Act: Call _process_parallel() with different max_workers values
             success_tables_1, _ = processor._process_parallel(tables, max_workers=1, force_full=False)
