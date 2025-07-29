@@ -82,7 +82,7 @@ class TestSimpleMySQLReplicatorErrorHandling:
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
@@ -138,11 +138,11 @@ class TestSimpleMySQLReplicatorErrorHandling:
         replicator = replicator_with_error_config
         
         # Mock helper method to raise exception
-        with patch.object(replicator, '_get_last_processed_value', side_effect=DatabaseConnectionError("Test exception")):
+        with patch.object(replicator, '_get_last_processed_value_max', side_effect=DatabaseConnectionError("Test exception")):
             result = replicator._copy_incremental_table('patient', replicator.table_configs['patient'])
             
             # Verify failure due to exception
-            assert result is False
+            assert result == (False, 0)
 
     def test_get_last_processed_value_exception_handling(self, replicator_with_error_config):
         """
@@ -217,7 +217,7 @@ class TestSimpleMySQLReplicatorErrorHandling:
         result = replicator._copy_new_records('patient', 'DateTStamp', '2024-01-01 10:00:00', 1000)
         
         # Verify False return due to exception
-        assert result is False
+        assert result == (False, 0)
 
     def test_bulk_operations_exception_handling(self, replicator_with_error_config):
         """
@@ -267,10 +267,10 @@ class TestSimpleMySQLReplicatorErrorHandling:
         replicator = replicator_with_error_config
         
         # Test DatabaseConnectionError handling
-        with patch.object(replicator, '_get_last_processed_value', 
+        with patch.object(replicator, '_get_last_processed_value_max', 
                          side_effect=DatabaseConnectionError("Connection timeout")):
             result = replicator._copy_incremental_table('patient', replicator.table_configs['patient'])
-            assert result is False
+            assert result == (False, 0)
         
         # Test DataExtractionError handling
         with patch.object(replicator, '_copy_incremental_table', 
@@ -282,4 +282,79 @@ class TestSimpleMySQLReplicatorErrorHandling:
         with patch.object(replicator, 'get_extraction_strategy', 
                          side_effect=ConfigurationError("Invalid configuration")):
             result = replicator.copy_table('patient')
-            assert result is False 
+            assert result is False
+
+    def test_get_last_processed_value_max_exception_handling(self, replicator_with_error_config):
+        """
+        Test exception handling in _get_last_processed_value_max using provider pattern.
+        
+        Validates:
+            - Exception handling with provider pattern
+            - Settings injection error handling
+            - Provider pattern error propagation
+            - None return for exceptions
+            
+        ETL Pipeline Context:
+            - Exception handling for dental clinic ETL reliability
+            - Maintains provider pattern for error isolation
+            - Uses Settings injection for error context
+        """
+        replicator = replicator_with_error_config
+        
+        # Mock database connection to raise exception
+        replicator.target_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        
+        result = replicator._get_last_processed_value_max('patient', ['DateTStamp'])
+        
+        # Verify None return due to exception
+        assert result is None
+
+    def test_get_new_records_count_max_exception_handling(self, replicator_with_error_config):
+        """
+        Test exception handling in _get_new_records_count_max using provider pattern.
+        
+        Validates:
+            - Exception handling with provider pattern
+            - Settings injection error handling
+            - Provider pattern error propagation
+            - Zero return for exceptions
+            
+        ETL Pipeline Context:
+            - Exception handling for dental clinic ETL reliability
+            - Maintains provider pattern for error isolation
+            - Uses Settings injection for error context
+        """
+        replicator = replicator_with_error_config
+        
+        # Mock database connection to raise exception
+        replicator.source_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        
+        result = replicator._get_new_records_count_max('patient', ['DateTStamp'], None)
+        
+        # Verify zero return due to exception
+        assert result == 0
+
+    def test_copy_new_records_max_exception_handling(self, replicator_with_error_config):
+        """
+        Test exception handling in _copy_new_records_max using provider pattern.
+        
+        Validates:
+            - Exception handling with provider pattern
+            - Settings injection error handling
+            - Provider pattern error propagation
+            - False return for exceptions
+            
+        ETL Pipeline Context:
+            - Exception handling for dental clinic ETL reliability
+            - Maintains provider pattern for error isolation
+            - Uses Settings injection for error context
+        """
+        replicator = replicator_with_error_config
+        
+        # Mock database connection to raise exception
+        replicator.source_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        
+        result = replicator._copy_new_records_max('patient', ['DateTStamp'], '2024-01-01 10:00:00', 1000)
+        
+        # Verify False return due to exception
+        assert result == (False, 0) 
