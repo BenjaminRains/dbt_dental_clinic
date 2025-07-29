@@ -324,7 +324,8 @@ STANDARD_TEST_PROCEDURES = [
         'ProcDate': date(2023, 1, 15),
         'CodeNum': 1,
         'ProcNote': 'Regular cleaning',
-        'DateTStamp': datetime(2023, 1, 15, 9, 0, 0)
+        'DateTStamp': datetime(2023, 1, 15, 9, 0, 0),
+        'SecDateEntry': date(2023, 1, 15)
     },
     {
         'ProcNum': 2,
@@ -336,7 +337,8 @@ STANDARD_TEST_PROCEDURES = [
         'ProcDate': date(2023, 1, 16),
         'CodeNum': 2,
         'ProcNote': 'Deep cleaning',
-        'DateTStamp': datetime(2023, 1, 16, 10, 30, 0)
+        'DateTStamp': datetime(2023, 1, 16, 10, 30, 0),
+        'SecDateEntry': date(2023, 1, 16)
     },
     {
         'ProcNum': 3,
@@ -348,7 +350,8 @@ STANDARD_TEST_PROCEDURES = [
         'ProcDate': date(2023, 1, 17),
         'CodeNum': 3,
         'ProcNote': 'Cavity filling',
-        'DateTStamp': datetime(2023, 1, 17, 14, 0, 0)
+        'DateTStamp': datetime(2023, 1, 17, 14, 0, 0),
+        'SecDateEntry': date(2023, 1, 17)
     }
 ]
 
@@ -356,14 +359,13 @@ STANDARD_TEST_PROCEDURES = [
 CONNECTION_ARCHITECTURE_TEST_DATA = {
     'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
     'postgres_schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS],
-    'test_environment': 'test',
-    'production_environment': 'production'
+    'test_environment': 'test'
 }
 
 # Environment-specific test data following connection architecture patterns
 TEST_ENVIRONMENT_DATA = {
     'environment': 'test',
-    'database_prefix': 'TEST_',
+    'database_prefix': 'test_',
     'source_database': 'test_opendental',
     'replication_database': 'test_opendental_replication',
     'analytics_database': 'test_opendental_analytics',
@@ -372,28 +374,11 @@ TEST_ENVIRONMENT_DATA = {
     'analytics_host': 'test-analytics-host'
 }
 
-PRODUCTION_ENVIRONMENT_DATA = {
-    'environment': 'production',
-    'database_prefix': '',
-    'source_database': 'opendental',
-    'replication_database': 'opendental_replication',
-    'analytics_database': 'opendental_analytics',
-    'source_host': 'prod-source-host',
-    'replication_host': 'prod-repl-host',
-    'analytics_host': 'prod-analytics-host'
-}
-
 # Settings injection test data
 SETTINGS_INJECTION_TEST_DATA = {
     'test_settings': {
         'environment': 'test',
         'provider_type': 'DictConfigProvider',
-        'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
-        'schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS]
-    },
-    'production_settings': {
-        'environment': 'production',
-        'provider_type': 'FileConfigProvider',
         'database_types': [DatabaseType.SOURCE, DatabaseType.REPLICATION, DatabaseType.ANALYTICS],
         'schemas': [PostgresSchema.RAW, PostgresSchema.STAGING, PostgresSchema.INTERMEDIATE, PostgresSchema.MARTS]
     }
@@ -426,12 +411,6 @@ PROVIDER_PATTERN_TEST_DATA = {
         'environment': 'test',
         'config_sources': ['pipeline', 'tables', 'env'],
         'injected_config': True
-    },
-    'production_provider': {
-        'provider_type': 'FileConfigProvider',
-        'environment': 'production',
-        'config_sources': ['pipeline.yml', 'tables.yml', '.env_production'],
-        'injected_config': False
     }
 }
 
@@ -508,7 +487,7 @@ def get_environment_test_data(environment: str = 'test') -> Dict[str, Any]:
     Get environment-specific test data following connection architecture patterns.
     
     Args:
-        environment: Environment name ('test' or 'production')
+        environment: Environment name ('test')
     
     Returns:
         Dictionary containing environment-specific test data
@@ -518,10 +497,8 @@ def get_environment_test_data(environment: str = 'test') -> Dict[str, Any]:
     """
     if environment.lower() == 'test':
         return TEST_ENVIRONMENT_DATA.copy()
-    elif environment.lower() == 'production':
-        return PRODUCTION_ENVIRONMENT_DATA.copy()
     else:
-        raise ValueError(f"Unsupported environment: {environment}. Supported environments: test, production")
+        raise ValueError(f"Unsupported environment: {environment}. Supported environments: test")
 
 
 def get_settings_injection_test_data() -> Dict[str, Any]:
