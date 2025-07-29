@@ -277,7 +277,7 @@ def mock_size_data():
         Dict: Mock size data for dental clinic tables
     """
     return {
-        'patient': {'estimated_row_count': 50000, 'size_mb': 25.5, 'source': 'information_schema_estimate'},
+        'patient': {'estimated_row_count': 600000, 'size_mb': 25.5, 'source': 'information_schema_estimate'},
         'appointment': {'estimated_row_count': 150000, 'size_mb': 45.2, 'source': 'information_schema_estimate'},
         'procedurelog': {'estimated_row_count': 200000, 'size_mb': 78.9, 'source': 'information_schema_estimate'},
         'insplan': {'estimated_row_count': 500, 'size_mb': 2.1, 'source': 'information_schema_estimate'},
@@ -932,17 +932,17 @@ class TestOpenDentalSchemaAnalyzerUnit:
 
     def test_incremental_column_discovery_with_timestamp_columns(self, mock_settings_with_dict_provider, mock_schema_data, mock_environment_variables):
         """
-        Test incremental column discovery with timestamp columns.
+        Test incremental column discovery with timestamp data types.
         
         AAA Pattern:
             Arrange: Set up mock schema data with timestamp columns
             Act: Call find_incremental_columns() method
-            Assert: Verify incremental columns are correctly identified
+            Assert: Verify all timestamp data type columns are identified
             
         Validates:
-            - Timestamp column identification from mocked database schema
-            - OpenDental-specific timestamp pattern recognition
-            - Priority ordering of incremental columns
+            - Timestamp data type column identification from mocked database schema
+            - All timestamp, datetime, date, and time columns are found
+            - No pattern-based filtering, only data type checking
             - Error handling for mocked database operations
         """
         # Arrange: Set up mock schema data with timestamp columns
@@ -978,10 +978,43 @@ class TestOpenDentalSchemaAnalyzerUnit:
             for col_name in incremental_columns:
                 assert col_name in schema_info['columns']
             
-            # Verify timestamp columns are prioritized
+            # Verify all timestamp data type columns are found
             expected_timestamp_columns = ['DateTStamp', 'DateModified', 'SecDateTEdit']
-            found_timestamp_columns = [col for col in incremental_columns if col in expected_timestamp_columns]
-            assert len(found_timestamp_columns) > 0
+            assert set(incremental_columns) == set(expected_timestamp_columns)
+            
+            # Verify no non-timestamp columns are included
+            non_timestamp_columns = ['PatNum', 'LName', 'FName']
+            for col_name in non_timestamp_columns:
+                assert col_name not in incremental_columns
+            
+            # Test with appointment table (has datetime column)
+            appointment_schema = mock_schema_data['appointment']
+            appointment_columns = analyzer.find_incremental_columns('appointment', appointment_schema)
+            expected_appointment_columns = ['AptDateTime', 'DateTStamp', 'SecDateTEdit']
+            assert set(appointment_columns) == set(expected_appointment_columns)
+            
+            # Test with procedurelog table (has date column)
+            procedure_schema = mock_schema_data['procedurelog']
+            procedure_columns = analyzer.find_incremental_columns('procedurelog', procedure_schema)
+            expected_procedure_columns = ['ProcDate', 'DateTStamp', 'SecDateTEdit']
+            assert set(procedure_columns) == set(expected_procedure_columns)
+            
+            # Test with definition table (has only one timestamp column)
+            definition_schema = mock_schema_data['definition']
+            definition_columns = analyzer.find_incremental_columns('definition', definition_schema)
+            expected_definition_columns = ['DateTStamp']
+            assert set(definition_columns) == set(expected_definition_columns)
+            
+            # Test edge case: schema with None data types
+            edge_schema = {
+                'columns': {
+                    'id': {'type': None, 'nullable': False, 'primary_key': True, 'default': None},
+                    'name': {'type': 'varchar(100)', 'nullable': True, 'primary_key': False, 'default': None},
+                    'created_at': {'type': 'timestamp', 'nullable': True, 'primary_key': False, 'default': None}
+                }
+            }
+            edge_columns = analyzer.find_incremental_columns('edge_table', edge_schema)
+            assert set(edge_columns) == set(['created_at'])
 
     def test_dbt_model_discovery_with_mocked_project(self, mock_settings_with_dict_provider, mock_dbt_models, mock_environment_variables):
         """
