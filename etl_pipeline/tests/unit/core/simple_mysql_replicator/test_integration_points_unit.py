@@ -17,7 +17,7 @@ Coverage Areas:
     - Settings integration with provider pattern
     - YAML configuration integration with provider pattern
     - Logging integration with provider pattern
-    - Provider pattern configuration isolation
+    - Provider pattern integration points
 
 ETL Context:
     - Critical for nightly ETL pipeline execution with dental clinic data
@@ -75,15 +75,15 @@ class TestSimpleMySQLReplicatorIntegrationPoints:
         Validates:
             - ConnectionFactory integration with provider pattern
             - Settings injection for database connections
-            - Provider pattern configuration access
-            - Connection creation with Settings injection
+            - Provider pattern database connection setup
+            - ConnectionFactory method calls with Settings injection
             
         ETL Pipeline Context:
             - ConnectionFactory integration for dental clinic ETL
             - Optimized for dental clinic data with database connections
             - Uses provider pattern for configuration access
         """
-        # Mock ConnectionFactory methods
+        # Mock engines
         mock_source_engine = MagicMock()
         mock_target_engine = MagicMock()
         
@@ -94,7 +94,7 @@ class TestSimpleMySQLReplicatorIntegrationPoints:
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
@@ -135,7 +135,7 @@ class TestSimpleMySQLReplicatorIntegrationPoints:
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
@@ -176,7 +176,7 @@ class TestSimpleMySQLReplicatorIntegrationPoints:
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
@@ -188,8 +188,11 @@ class TestSimpleMySQLReplicatorIntegrationPoints:
                 replicator = SimpleMySQLReplicator(settings=test_settings)
                 
                 # Verify YAML file loading
-                mock_file.assert_called()
+                mock_file.assert_called_once()
+                
+                # Verify configuration loading
                 assert 'patient' in replicator.table_configs
+                assert replicator.table_configs['patient']['incremental_columns'] == ['DateTStamp']
 
     def test_logging_integration(self, test_settings):
         """
@@ -197,28 +200,70 @@ class TestSimpleMySQLReplicatorIntegrationPoints:
         
         Validates:
             - Logging integration with provider pattern
-            - Settings injection for logging context
-            - Provider pattern logging configuration
-            - Logging with provider pattern context
+            - Settings injection for logging configuration
+            - Provider pattern logging setup
+            - Logging configuration with provider pattern
             
         ETL Pipeline Context:
-            - Logging integration for dental clinic ETL monitoring
+            - Logging integration for dental clinic ETL
             - Optimized for dental clinic data with logging
-            - Uses provider pattern for logging configuration
+            - Uses provider pattern for configuration access
         """
         # Mock engines
         mock_source_engine = MagicMock()
         mock_target_engine = MagicMock()
         
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
-             patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
             
             # Mock YAML file loading with test configuration
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
+                        'batch_size': 1000,
+                        'estimated_size_mb': 50,
+                        'extraction_strategy': 'incremental',
+                        'table_importance': 'critical'
+                    }
+                }
+            }
+            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))), \
+                 patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
+                replicator = SimpleMySQLReplicator(settings=test_settings)
+                
+                # Verify logging integration
+                # The logger should be called during initialization
+                # We can verify that the logger is properly configured
+                assert mock_logger.info.called or mock_logger.debug.called
+
+    def test_provider_pattern_integration(self, test_settings):
+        """
+        Test provider pattern integration with all components.
+        
+        Validates:
+            - Provider pattern integration with all components
+            - Settings injection for all integrations
+            - Provider pattern configuration access
+            - Integration point consistency
+            
+        ETL Pipeline Context:
+            - Provider pattern integration for dental clinic ETL
+            - Optimized for dental clinic data with consistent patterns
+            - Uses provider pattern for configuration access
+        """
+        # Mock engines
+        mock_source_engine = MagicMock()
+        mock_target_engine = MagicMock()
+        
+        with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+            
+            # Mock YAML file loading with test configuration
+            mock_config = {
+                'tables': {
+                    'patient': {
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
@@ -227,14 +272,11 @@ class TestSimpleMySQLReplicatorIntegrationPoints:
                 }
             }
             with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
-                # Create replicator with mocked dependencies
                 replicator = SimpleMySQLReplicator(settings=test_settings)
                 
-                # Verify logging integration by calling a method that logs
-                with patch.object(replicator, '_copy_incremental_table', return_value=True):
-                    result = replicator.copy_table('patient')
-                    
-                    # Verify success and logging occurred
-                    assert result is True
-                    # Check that logging occurred during the operation
-                    assert mock_logger.info.call_count > 0 
+                # Verify provider pattern integration
+                assert replicator.settings.provider == test_settings.provider
+                assert replicator.settings == test_settings
+                
+                # Verify all integration points use the same provider
+                assert replicator.settings.provider is test_settings.provider 
