@@ -30,6 +30,7 @@ from unittest.mock import patch, MagicMock, mock_open
 import os
 import yaml
 from typing import Dict, Any
+from datetime import datetime
 
 # Import ETL pipeline components
 from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
@@ -82,21 +83,21 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
                         'table_importance': 'critical'
                     },
                     'appointment': {
-                        'incremental_column': 'AptDateTime',
+                        'incremental_columns': ['AptDateTime'],
                         'batch_size': 500,
                         'estimated_size_mb': 25,
                         'extraction_strategy': 'incremental',
                         'table_importance': 'important'
                     },
                     'procedurelog': {
-                        'incremental_column': 'ProcDate',
+                        'incremental_columns': ['ProcDate'],
                         'batch_size': 2000,
                         'estimated_size_mb': 100,
                         'extraction_strategy': 'full_table',
@@ -128,7 +129,7 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         replicator = replicator_with_mock_engines
         
         # Mock the incremental copy method
-        with patch.object(replicator, '_copy_incremental_table', return_value=True) as mock_copy:
+        with patch.object(replicator, '_copy_incremental_table', return_value=(True, 100)) as mock_copy:
             # Mock time for timing calculation with proper side_effect
             mock_time = MagicMock()
             mock_time.side_effect = [1000.0, 1002.5]
@@ -158,7 +159,7 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         replicator = replicator_with_mock_engines
         
         # Mock the incremental copy method to fail
-        with patch.object(replicator, '_copy_incremental_table', return_value=False) as mock_copy:
+        with patch.object(replicator, '_copy_incremental_table', return_value=(False, 0)) as mock_copy:
             # Mock time for timing calculation with proper side_effect
             mock_time = MagicMock()
             mock_time.side_effect = [1000.0, 1002.5]
@@ -188,7 +189,7 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         replicator = replicator_with_mock_engines
         
         # Mock the full table copy method to avoid real database connections
-        with patch.object(replicator, '_copy_full_table', return_value=True) as mock_copy:
+        with patch.object(replicator, '_copy_full_table', return_value=(True, 500)) as mock_copy:
             # Mock time for timing calculation with proper side_effect
             mock_time = MagicMock()
             mock_time.side_effect = [1000.0, 1002.5]
@@ -240,7 +241,7 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         replicator = replicator_with_mock_engines
         
         # Mock the full table copy method
-        with patch.object(replicator, '_copy_full_table', return_value=True) as mock_copy:
+        with patch.object(replicator, '_copy_full_table', return_value=(True, 1000)) as mock_copy:
             result = replicator.copy_table('procedurelog')
             
             # Verify success
@@ -267,13 +268,13 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         # Add chunked_incremental table to config
         replicator.table_configs['large_chunked_table'] = {
             'extraction_strategy': 'chunked_incremental',
-            'incremental_column': 'DateTStamp',
+            'incremental_columns': ['DateTStamp'],
             'batch_size': 1000,
             'estimated_size_mb': 200
         }
         
         # Mock the chunked incremental copy method
-        with patch.object(replicator, '_copy_chunked_incremental_table', return_value=True) as mock_copy:
+        with patch.object(replicator, '_copy_chunked_incremental_table', return_value=(True, 500)) as mock_copy:
             result = replicator.copy_table('large_chunked_table')
             
             # Verify success
@@ -303,4 +304,460 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         result = replicator.copy_table('patient')
         
         # Verify failure for unknown strategy
-        assert result is False 
+        assert result is False
+
+    def test_copy_table_incremental_no_columns(self, replicator_with_mock_engines):
+        """
+        Test incremental table copy with no incremental columns configured.
+        
+        Validates:
+            - Error handling when no incremental columns are configured
+            - Provider pattern error propagation
+            - Settings injection error handling
+            - Clear error messages for missing incremental columns
+            
+        ETL Pipeline Context:
+            - Error handling for dental clinic ETL reliability
+            - Maintains provider pattern for error isolation
+            - Uses Settings injection for error context
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Modify config to have no incremental columns
+        replicator.table_configs['patient']['incremental_columns'] = []
+        
+        # Mock the incremental copy method to return failure
+        with patch.object(replicator, '_copy_incremental_table', return_value=(False, 0)) as mock_copy:
+            result = replicator.copy_table('patient')
+            
+            # Verify failure due to no incremental columns
+            assert result is False
+            mock_copy.assert_called_once_with('patient', replicator.table_configs['patient'])
+
+    def test_copy_table_incremental_multiple_columns(self, replicator_with_mock_engines):
+        """
+        Test incremental table copy with multiple incremental columns.
+        
+        Validates:
+            - Multiple incremental columns handling with provider pattern
+            - Settings injection for database operations
+            - Provider pattern configuration access
+            - Multiple column incremental data copying
+            
+        ETL Pipeline Context:
+            - Multiple column incremental strategy for complex data
+            - Used for dental clinic data with multiple timestamp columns
+            - Uses provider pattern for configuration access
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Modify config to have multiple incremental columns
+        replicator.table_configs['patient']['incremental_columns'] = ['DateTStamp', 'DateModified', 'DateCreated']
+        
+        # Mock the incremental copy method
+        with patch.object(replicator, '_copy_incremental_table', return_value=(True, 200)) as mock_copy:
+            result = replicator.copy_table('patient')
+            
+            # Verify success
+            assert result is True
+            mock_copy.assert_called_once_with('patient', replicator.table_configs['patient'])
+
+
+class TestIncrementalLogicMethods:
+    """Unit tests for the new incremental logic methods that determine maximum values across columns."""
+    
+    @pytest.fixture
+    def replicator_with_mock_engines(self, test_settings):
+        """Create replicator with mocked database engines for testing incremental logic."""
+        # Mock engines
+        mock_source_engine = MagicMock()
+        mock_target_engine = MagicMock()
+        
+        with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+            
+            # Mock YAML file loading with test configuration
+            mock_config = {
+                'tables': {
+                    'patient': {
+                        'incremental_columns': ['DateTStamp', 'DateModified', 'DateCreated'],
+                        'batch_size': 1000,
+                        'estimated_size_mb': 50,
+                        'extraction_strategy': 'incremental',
+                        'table_importance': 'critical'
+                    }
+                }
+            }
+            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
+                replicator = SimpleMySQLReplicator(settings=test_settings)
+                replicator.source_engine = mock_source_engine
+                replicator.target_engine = mock_target_engine
+                return replicator
+
+    def test_get_last_processed_value_max_single_column(self, replicator_with_mock_engines):
+        """
+        Test _get_last_processed_value_max with single column.
+        
+        Validates:
+            - Single column maximum value retrieval
+            - Database query execution with proper SQL
+            - Return value handling for single column
+            - Connection management with provider pattern
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection and result
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = datetime(2024, 1, 15, 10, 30, 0)
+        mock_conn.execute.return_value = mock_result
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.target_engine.connect.return_value = mock_conn
+        
+        result = replicator._get_last_processed_value_max('patient', ['DateTStamp'])
+        
+        # Verify result
+        assert result == datetime(2024, 1, 15, 10, 30, 0)
+        
+        # Verify SQL query was executed correctly
+        mock_conn.execute.assert_called_once()
+        call_args = mock_conn.execute.call_args[0][0]
+        assert 'SELECT MAX(DateTStamp)' in str(call_args)
+        assert 'FROM patient' in str(call_args)
+
+    def test_get_last_processed_value_max_multiple_columns(self, replicator_with_mock_engines):
+        """
+        Test _get_last_processed_value_max with multiple columns.
+        
+        Validates:
+            - Multiple column maximum value retrieval
+            - Database query execution for each column
+            - Maximum value calculation across all columns
+            - Connection management with provider pattern
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection and results
+        mock_conn = MagicMock()
+        mock_result1 = MagicMock()
+        mock_result1.scalar.return_value = datetime(2024, 1, 15, 10, 30, 0)
+        mock_result2 = MagicMock()
+        mock_result2.scalar.return_value = datetime(2024, 1, 16, 14, 45, 0)
+        mock_result3 = MagicMock()
+        mock_result3.scalar.return_value = datetime(2024, 1, 14, 9, 15, 0)
+        
+        # Mock multiple execute calls for different columns
+        mock_conn.execute.side_effect = [mock_result1, mock_result2, mock_result3]
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.target_engine.connect.return_value = mock_conn
+        
+        result = replicator._get_last_processed_value_max('patient', ['DateTStamp', 'DateModified', 'DateCreated'])
+        
+        # Verify result (should be the maximum of all three dates)
+        assert result == datetime(2024, 1, 16, 14, 45, 0)
+        
+        # Verify SQL queries were executed for each column
+        assert mock_conn.execute.call_count == 3
+
+    def test_get_last_processed_value_max_no_data(self, replicator_with_mock_engines):
+        """
+        Test _get_last_processed_value_max when no data exists.
+        
+        Validates:
+            - Handling when no data exists in table
+            - None return value for empty results
+            - Connection management with provider pattern
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection and result
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = None
+        mock_conn.execute.return_value = mock_result
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.target_engine.connect.return_value = mock_conn
+        
+        result = replicator._get_last_processed_value_max('patient', ['DateTStamp'])
+        
+        # Verify result
+        assert result is None
+
+    def test_get_last_processed_value_max_exception_handling(self, replicator_with_mock_engines):
+        """
+        Test _get_last_processed_value_max exception handling.
+        
+        Validates:
+            - Exception handling during database operations
+            - None return value for exceptions
+            - Connection management with provider pattern
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection to raise exception
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = DatabaseConnectionError("Connection failed")
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.target_engine.connect.return_value = mock_conn
+        
+        result = replicator._get_last_processed_value_max('patient', ['DateTStamp'])
+        
+        # Verify result
+        assert result is None
+
+    def test_get_new_records_count_max_no_last_processed(self, replicator_with_mock_engines):
+        """
+        Test _get_new_records_count_max when no last processed value exists.
+        
+        Validates:
+            - Count all records when no last processed value
+            - Database query execution for total count
+            - Return value handling for complete count
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection and result
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = 1500
+        mock_conn.execute.return_value = mock_result
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.source_engine.connect.return_value = mock_conn
+        
+        result = replicator._get_new_records_count_max('patient', ['DateTStamp'], None)
+        
+        # Verify result
+        assert result == 1500
+        
+        # Verify SQL query was executed correctly
+        mock_conn.execute.assert_called_once()
+        call_args = mock_conn.execute.call_args[0][0]
+        assert 'SELECT COUNT(*)' in str(call_args)
+        assert 'FROM patient' in str(call_args)
+
+    def test_get_new_records_count_max_with_last_processed(self, replicator_with_mock_engines):
+        """
+        Test _get_new_records_count_max with last processed value.
+        
+        Validates:
+            - Count records newer than last processed value
+            - OR logic across multiple columns
+            - Database query execution with WHERE conditions
+            - Return value handling for filtered count
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection and result
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = 250
+        mock_conn.execute.return_value = mock_result
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.source_engine.connect.return_value = mock_conn
+        
+        last_processed = datetime(2024, 1, 15, 10, 30, 0)
+        result = replicator._get_new_records_count_max('patient', ['DateTStamp', 'DateModified'], last_processed)
+        
+        # Verify result
+        assert result == 250
+        
+        # Verify SQL query was executed correctly with OR logic
+        mock_conn.execute.assert_called_once()
+        call_args = mock_conn.execute.call_args[0][0]
+        assert 'SELECT COUNT(*)' in str(call_args)
+        assert 'FROM patient' in str(call_args)
+        assert 'WHERE' in str(call_args)
+        # Should have OR logic for multiple columns
+        assert 'DateTStamp > :last_processed OR DateModified > :last_processed' in str(call_args)
+
+    def test_get_new_records_count_max_exception_handling(self, replicator_with_mock_engines):
+        """
+        Test _get_new_records_count_max exception handling.
+        
+        Validates:
+            - Exception handling during database operations
+            - Zero return value for exceptions
+            - Connection management with provider pattern
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection to raise exception
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = DatabaseConnectionError("Connection failed")
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.source_engine.connect.return_value = mock_conn
+        
+        result = replicator._get_new_records_count_max('patient', ['DateTStamp'], None)
+        
+        # Verify result
+        assert result == 0
+
+    def test_copy_new_records_max_no_last_processed(self, replicator_with_mock_engines):
+        """
+        Test _copy_new_records_max when no last processed value exists.
+        
+        Validates:
+            - Full table copy when no last processed value
+            - Delegation to _copy_full_table method
+            - Return value handling for complete copy
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock _copy_full_table method
+        with patch.object(replicator, '_copy_full_table', return_value=(True, 1500)) as mock_copy:
+            result = replicator._copy_new_records_max('patient', ['DateTStamp'], None, 1000)
+            
+            # Verify result
+            assert result == (True, 1500)
+            
+            # Verify _copy_full_table was called
+            mock_copy.assert_called_once_with('patient', {})
+
+    def test_copy_new_records_max_with_last_processed(self, replicator_with_mock_engines):
+        """
+        Test _copy_new_records_max with last processed value.
+        
+        Validates:
+            - Incremental copy with last processed value
+            - Database query execution with WHERE conditions
+            - Batch processing with proper SQL
+            - Return value handling for incremental copy
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connections and results
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock source query result - return empty list after first batch to stop the loop
+        mock_source_result = MagicMock()
+        mock_source_result.fetchall.side_effect = [
+            [(1, 'John', datetime(2024, 1, 16, 10, 30, 0)),
+             (2, 'Jane', datetime(2024, 1, 16, 11, 45, 0))],  # First batch
+            []  # Second batch (empty to stop the loop)
+        ]
+        mock_source_result.keys.return_value = ['id', 'name', 'DateTStamp']
+        mock_source_conn.execute.return_value = mock_source_result
+        
+        # Mock the context manager pattern for both connections
+        mock_source_conn.__enter__.return_value = mock_source_conn
+        mock_source_conn.__exit__.return_value = None
+        mock_target_conn.__enter__.return_value = mock_target_conn
+        mock_target_conn.__exit__.return_value = None
+        
+        # Mock the engines to return the connections
+        replicator.source_engine.connect.return_value = mock_source_conn
+        replicator.target_engine.connect.return_value = mock_target_conn
+        
+        # Mock the _build_mysql_upsert_sql method
+        with patch.object(replicator, '_build_mysql_upsert_sql', return_value="INSERT INTO patient ..."):
+            last_processed = datetime(2024, 1, 15, 10, 30, 0)
+            result = replicator._copy_new_records_max('patient', ['DateTStamp'], last_processed, 1000)
+            
+            # Verify result
+            assert result == (True, 2)
+            
+            # Verify source query was executed correctly
+            mock_source_conn.execute.assert_called()
+            call_args = mock_source_conn.execute.call_args[0][0]
+            assert 'SELECT *' in str(call_args)
+            assert 'FROM patient' in str(call_args)
+            assert 'WHERE' in str(call_args)
+            # Should have OR logic for multiple columns
+            assert 'DateTStamp > :last_processed' in str(call_args)
+
+    def test_copy_new_records_max_exception_handling(self, replicator_with_mock_engines):
+        """
+        Test _copy_new_records_max exception handling.
+        
+        Validates:
+            - Exception handling during database operations
+            - False return value for exceptions
+            - Connection management with provider pattern
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connection to raise exception
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = DatabaseConnectionError("Connection failed")
+        
+        # Mock the context manager pattern: with engine.connect() as conn:
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.__exit__.return_value = None
+        replicator.source_engine.connect.return_value = mock_conn
+        
+        last_processed = datetime(2024, 1, 15, 10, 30, 0)
+        result = replicator._copy_new_records_max('patient', ['DateTStamp'], last_processed, 1000)
+        
+        # Verify result
+        assert result == (False, 0)
+
+    def test_copy_new_records_max_safety_limit(self, replicator_with_mock_engines):
+        """
+        Test _copy_new_records_max safety limit handling.
+        
+        Validates:
+            - Safety limit prevents infinite loops
+            - Warning logging when safety limit is reached
+            - Proper return value when safety limit is hit
+        """
+        replicator = replicator_with_mock_engines
+        
+        # Mock database connections and results that would cause infinite loop
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock source query result that always returns data (causing infinite loop)
+        mock_source_result = MagicMock()
+        mock_source_result.fetchall.return_value = [(1, 'John', datetime(2024, 1, 16, 10, 30, 0))]
+        mock_source_result.keys.return_value = ['id', 'name', 'DateTStamp']
+        mock_source_conn.execute.return_value = mock_source_result
+        
+        # Mock the context manager pattern for both connections
+        mock_source_conn.__enter__.return_value = mock_source_conn
+        mock_source_conn.__exit__.return_value = None
+        mock_target_conn.__enter__.return_value = mock_target_conn
+        mock_target_conn.__exit__.return_value = None
+        
+        # Mock the engines to return the connections
+        replicator.source_engine.connect.return_value = mock_source_conn
+        replicator.target_engine.connect.return_value = mock_target_conn
+        
+        # Mock the _build_mysql_upsert_sql method
+        with patch.object(replicator, '_build_mysql_upsert_sql', return_value="INSERT INTO patient ..."):
+            with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
+                last_processed = datetime(2024, 1, 15, 10, 30, 0)
+                result = replicator._copy_new_records_max('patient', ['DateTStamp'], last_processed, 1000)
+                
+                # Verify result (should stop due to safety limit)
+                # The safety limit is based on offset > 1000000, but total_rows_copied will be much less
+                # Each batch copies 1 row, so it will copy about 1000 rows before hitting the safety limit
+                assert result[0] == True  # Success
+                assert result[1] > 0  # Some rows were copied
+                assert result[1] <= 1000000  # Should not exceed safety limit
+                
+                # Verify warning was logged
+                mock_logger.warning.assert_called()
+                warning_call = mock_logger.warning.call_args[0][0]
+                assert "Reached safety limit" in warning_call 
