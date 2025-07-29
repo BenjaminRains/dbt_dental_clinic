@@ -117,7 +117,7 @@ What's Kept:
 
 This simplified version focuses on the actual ETL operations needed by the pipeline.
 """
-from datetime import datetime
+from datetime import datetime, date
 from typing import Dict, List, Optional
 from sqlalchemy import text, inspect
 from sqlalchemy.exc import SQLAlchemyError
@@ -239,6 +239,9 @@ class PostgresLoader:
             self.target_schema = analytics_config.get('schema', 'raw')
             self.staging_schema = replication_config.get('schema', 'raw')
             
+            # Ensure tracking tables exist
+            self._ensure_tracking_tables_exist()
+            
             logger.info(f"PostgresLoader initialized with {len(self.table_configs)} table configurations")
             
         except ConfigurationError as e:
@@ -274,6 +277,55 @@ class PostgresLoader:
                 details={"error": str(e)}
             )
     
+    def _ensure_tracking_tables_exist(self):
+        """Ensure PostgreSQL tracking tables exist with correct schema in analytics database."""
+        try:
+            with self.analytics_engine.connect() as conn:
+                # Drop existing tables to ensure correct schema
+                logger.info(f"Dropping existing tracking tables in {self.analytics_schema} to ensure correct schema")
+                conn.execute(text(f"DROP TABLE IF EXISTS {self.analytics_schema}.etl_load_status CASCADE"))
+                conn.execute(text(f"DROP TABLE IF EXISTS {self.analytics_schema}.etl_transform_status CASCADE"))
+                
+                # Create etl_load_status table with correct schema
+                create_load_status_sql = f"""
+                CREATE TABLE {self.analytics_schema}.etl_load_status (
+                    id SERIAL PRIMARY KEY,
+                    table_name VARCHAR(255) NOT NULL UNIQUE,
+                    last_loaded TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
+                    rows_loaded INTEGER DEFAULT 0,
+                    load_status VARCHAR(50) DEFAULT 'pending',
+                    _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+                conn.execute(text(create_load_status_sql))
+                logger.info(f"Created {self.analytics_schema}.etl_load_status with correct schema")
+                
+                # Create etl_transform_status table with correct schema
+                create_transform_status_sql = f"""
+                CREATE TABLE {self.analytics_schema}.etl_transform_status (
+                    id SERIAL PRIMARY KEY,
+                    table_name VARCHAR(255) NOT NULL UNIQUE,
+                    last_transformed TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
+                    rows_transformed INTEGER DEFAULT 0,
+                    transformation_status VARCHAR(50) DEFAULT 'pending',
+                    _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+                conn.execute(text(create_transform_status_sql))
+                logger.info(f"Created {self.analytics_schema}.etl_transform_status with correct schema")
+                
+                conn.commit()
+                logger.info("PostgreSQL tracking tables created with correct schema")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error creating PostgreSQL tracking tables: {str(e)}")
+            return False
+    
     def get_table_config(self, table_name: str) -> Dict:
         """Get table configuration."""
         config = self.table_configs.get(table_name, {})
@@ -282,18 +334,141 @@ class PostgresLoader:
             return {}
         return config
     
-    def load_table(self, table_name: str, force_full: bool = False) -> bool:
-        """
-        Load table from MySQL replication to PostgreSQL analytics using pure SQLAlchemy.
-        This approach avoids pandas' connection handling issues entirely.
-        
-        Args:
-            table_name: Name of the table to load
-            force_full: Whether to force a full load instead of incremental
+    def _ensure_tracking_record_exists(self, table_name: str) -> bool:
+        """Ensure a tracking record exists for the table."""
+        try:
+            with self.analytics_engine.connect() as conn:
+                # Check if record exists
+                result = conn.execute(text(f"""
+                    SELECT COUNT(*) FROM {self.analytics_schema}.etl_load_status 
+                    WHERE table_name = :table_name
+                """), {"table_name": table_name}).scalar()
+                
+                if result == 0:
+                    # Create initial tracking record
+                    conn.execute(text(f"""
+                        INSERT INTO {self.analytics_schema}.etl_load_status (
+                            table_name, last_loaded, rows_loaded, load_status,
+                            _loaded_at, _created_at, _updated_at
+                        ) VALUES (
+                            :table_name, '2024-01-01 00:00:00', 0, 'pending',
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        )
+                    """), {"table_name": table_name})
+                    conn.commit()
+                    logger.info(f"Created initial tracking record for {table_name}")
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error ensuring tracking record for {table_name}: {str(e)}")
+            return False
+
+    def _update_load_status(self, table_name: str, rows_loaded: int, 
+                           load_status: str = 'success') -> bool:
+        """Create or update load tracking record after successful PostgreSQL load."""
+        try:
+            with self.analytics_engine.connect() as conn:
+                conn.execute(text(f"""
+                    INSERT INTO {self.analytics_schema}.etl_load_status (
+                        table_name, last_loaded, rows_loaded, load_status,
+                        _loaded_at, _created_at, _updated_at
+                    ) VALUES (
+                        :table_name, CURRENT_TIMESTAMP, :rows_loaded, :load_status,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    ON CONFLICT (table_name) DO UPDATE SET
+                        last_loaded = CURRENT_TIMESTAMP,
+                        rows_loaded = :rows_loaded,
+                        load_status = :load_status,
+                        _updated_at = CURRENT_TIMESTAMP
+                """), {
+                    "table_name": table_name,
+                    "rows_loaded": rows_loaded,
+                    "load_status": load_status
+                })
+                conn.commit()
+                logger.info(f"Updated load status for {table_name}: {rows_loaded} rows, {load_status}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error updating load status for {table_name}: {str(e)}")
+            return False
+
+    def bulk_insert_optimized(self, table_name: str, rows_data: List[Dict], chunk_size: int = 100000) -> bool:  # Increased from 50000 to 100000
+        """Optimized bulk INSERT using executemany with larger chunks."""
+        try:
+            if not rows_data:
+                logger.info(f"No data to insert for {table_name}")
+                return True
             
-        Returns:
-            bool: True if successful
-        """
+            # Process in optimized chunks
+            total_inserted = 0
+            for i in range(0, len(rows_data), chunk_size):
+                chunk = rows_data[i:i + chunk_size]
+                
+                # Build optimized INSERT statement
+                columns = ', '.join([f'"{col}"' for col in chunk[0].keys()])
+                placeholders = ', '.join([f':{col}' for col in chunk[0].keys()])
+                
+                insert_sql = f"""
+                    INSERT INTO {self.analytics_schema}.{table_name} ({columns})
+                    VALUES ({placeholders})
+                """
+                
+                # Use executemany for bulk operation
+                with self.analytics_engine.begin() as conn:
+                    conn.execute(text(insert_sql), chunk)
+                
+                total_inserted += len(chunk)
+                logger.debug(f"Bulk inserted {len(chunk)} rows for {table_name} (total: {total_inserted})")
+            
+            logger.info(f"Successfully bulk inserted {total_inserted} rows for {table_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in bulk insert for {table_name}: {str(e)}")
+            return False
+
+    def stream_mysql_data(self, table_name: str, query: str, chunk_size: int = 100000):  # Increased from 50000 to 100000
+        """Stream data from MySQL without loading into memory."""
+        try:
+            with self.replication_engine.connect() as conn:
+                # Use server-side cursor for streaming
+                result = conn.execution_options(stream_results=True).execute(text(query))
+                
+                while True:
+                    try:
+                        chunk = result.fetchmany(chunk_size)
+                        if not chunk:
+                            break
+                            
+                        # Convert to list of dicts
+                        column_names = list(result.keys())
+                        chunk_dicts = [self._convert_sqlalchemy_row_to_dict(row, column_names) for row in chunk]
+                        
+                        yield chunk_dicts
+                        
+                    except Exception as e:
+                        logger.error(f"Error fetching chunk for {table_name}: {e}")
+                        raise
+                        
+        except Exception as e:
+            logger.error(f"Error in streaming for {table_name}: {e}")
+            raise
+        finally:
+            # Ensure result is closed
+            if 'result' in locals():
+                result.close()
+
+    def load_table_streaming(self, table_name: str, force_full: bool = False) -> bool:
+        """Streaming version of load_table for memory-efficient processing."""
+        import psutil
+        import time
+        
+        start_time = time.time()
+        initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        
         try:
             # Get table configuration
             table_config = self.get_table_config(table_name)
@@ -315,6 +490,372 @@ class PostgresLoader:
             if not incremental_columns and not force_full:
                 logger.info(f"Table {table_name} has no incremental columns, treating as full refresh")
                 force_full = True
+            
+            # Build query once
+            query = self._build_load_query(table_name, incremental_columns, force_full)
+            
+            # Handle full load truncation
+            if force_full:
+                with self.analytics_engine.begin() as target_conn:
+                    target_conn.execute(text(f"TRUNCATE TABLE {self.analytics_schema}.{table_name}"))
+                    logger.info(f"Truncated table {self.analytics_schema}.{table_name} for full load")
+            
+            # Stream and process in chunks
+            total_processed = 0
+            for chunk in self.stream_mysql_data(table_name, query):
+                # Convert types for entire chunk
+                converted_chunk = [
+                    self.schema_adapter.convert_row_data_types(table_name, row) 
+                    for row in chunk
+                ]
+                
+                # Bulk insert chunk
+                self.bulk_insert_optimized(table_name, converted_chunk)
+                
+                total_processed += len(chunk)
+                current_memory = psutil.Process().memory_info().rss / 1024 / 1024
+                logger.info(f"Processed {total_processed} rows for {table_name}, Memory: {current_memory:.1f}MB")
+            
+            end_time = time.time()
+            final_memory = psutil.Process().memory_info().rss / 1024 / 1024
+            duration = end_time - start_time
+            
+            logger.info(f"Streaming load completed: {total_processed} rows in {duration:.2f}s, "
+                       f"Memory: {initial_memory:.1f}MB → {final_memory:.1f}MB")
+            
+            # Update load status
+            if total_processed > 0:
+                self._update_load_status(table_name, total_processed)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Streaming load failed for {table_name}: {e}")
+            return False
+    
+    def _convert_sqlalchemy_row_to_dict(self, row, column_names: List[str]) -> Dict:
+        """
+        Convert SQLAlchemy Row object to dictionary consistently.
+        
+        Args:
+            row: SQLAlchemy Row object or similar
+            column_names: List of column names as fallback
+            
+        Returns:
+            Dict: Converted row data
+        """
+        try:
+            # Method 1: Modern SQLAlchemy (1.4+)
+            if hasattr(row, '_mapping'):
+                return dict(row._mapping)
+            
+            # Method 2: Named tuple
+            elif hasattr(row, '_asdict'):
+                return row._asdict()
+            
+            # Method 3: Check if it's already a dictionary
+            elif isinstance(row, dict):
+                return row
+            
+            # Method 4: Older SQLAlchemy Row objects
+            elif hasattr(row, 'keys') and callable(row.keys):
+                return dict(zip(row.keys(), row))
+            
+            # Method 5: Fallback for tuple/list with improved error handling
+            else:
+                # Convert SQLAlchemy Row object to proper dictionary
+                if hasattr(row, '_mapping'):
+                    # Modern SQLAlchemy (1.4+)
+                    return dict(row._mapping)
+                elif hasattr(row, '_asdict'):
+                    # Named tuple
+                    return row._asdict()
+                elif hasattr(row, 'keys') and callable(row.keys):
+                    # Older SQLAlchemy Row objects
+                    return dict(zip(row.keys(), row))
+                else:
+                    # Fallback for tuple/list
+                    return dict(zip(column_names, row))
+                
+        except Exception as e:
+            logger.warning(f"Error converting row to dict: {str(e)}, using fallback")
+            # Ultimate fallback with improved logic
+            try:
+                # Convert SQLAlchemy Row object to proper dictionary
+                if hasattr(row, '_mapping'):
+                    # Modern SQLAlchemy (1.4+)
+                    return dict(row._mapping)
+                elif hasattr(row, '_asdict'):
+                    # Named tuple
+                    return row._asdict()
+                elif hasattr(row, 'keys') and callable(row.keys):
+                    # Older SQLAlchemy Row objects
+                    return dict(zip(row.keys(), row))
+                else:
+                    # Fallback for tuple/list
+                    return dict(zip(column_names, row))
+            except Exception as e2:
+                logger.error(f"Fallback row conversion also failed: {str(e2)}")
+                return {}
+
+    def _get_last_load_time_max(self, table_name: str, incremental_columns: List[str]) -> Optional[datetime]:
+        """Get the maximum last load time across all incremental columns."""
+        try:
+            timestamps = []
+            
+            with self.analytics_engine.connect() as conn:
+                for column in incremental_columns:
+                    # Get last load time for this specific column
+                    result = conn.execute(text(f"""
+                        SELECT last_loaded
+                        FROM {self.analytics_schema}.etl_load_status
+                        WHERE table_name = :table_name
+                        AND load_status = 'success'
+                        ORDER BY last_loaded DESC
+                        LIMIT 1
+                    """), {"table_name": table_name}).scalar()
+                    
+                    if result:
+                        timestamps.append(result)
+            
+            return max(timestamps) if timestamps else None
+            
+        except Exception as e:
+            logger.error(f"Error getting max last load time for {table_name}: {str(e)}")
+            return None
+    
+    def _build_improved_load_query_max(self, table_name: str, incremental_columns: List[str], 
+                                      force_full: bool = False, use_or_logic: bool = True) -> str:
+        """Build query with improved incremental logic using maximum timestamp across all columns."""
+        
+        # Get replication database name from settings
+        replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+        replication_db = replication_config.get('database', 'opendental_replication')
+        
+        # Data quality validation
+        valid_columns = self._filter_valid_incremental_columns(table_name, incremental_columns)
+        
+        if force_full or not valid_columns:
+            return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+        
+        # Get maximum last load time across all columns
+        last_load = self._get_last_load_time_max(table_name, valid_columns)
+        if not last_load:
+            return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+        
+        # Build conditions with OR logic (configurable)
+        conditions = []
+        for col in valid_columns:
+            conditions.append(f"{col} > '{last_load}'")
+        
+        if use_or_logic:
+            where_clause = " OR ".join(conditions)
+        else:
+            where_clause = " AND ".join(conditions)
+        
+        return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
+    
+    def _filter_valid_incremental_columns(self, table_name: str, columns: List[str]) -> List[str]:
+        """
+        Filter out columns with data quality issues.
+        
+        Args:
+            table_name: Name of the table
+            columns: List of incremental columns to validate
+            
+        Returns:
+            List[str]: Filtered list of valid incremental columns
+        """
+        if not columns:
+            return []
+        
+        valid_columns = []
+        
+        try:
+            # Get replication database name from settings
+            replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+            replication_db = replication_config.get('database', 'opendental_replication')
+            
+            with self.replication_engine.connect() as conn:
+                for column in columns:
+                    # Check for data quality issues by sampling the column
+                    sample_query = f"""
+                        SELECT MIN({column}), MAX({column}), COUNT(*)
+                        FROM `{replication_db}`.`{table_name}`
+                        WHERE {column} IS NOT NULL
+                        LIMIT 1000
+                    """
+                    
+                    result = conn.execute(text(sample_query))
+                    row = result.fetchone()
+                    
+                    if row and row[0] and row[1]:
+                        min_date = row[0]
+                        max_date = row[1]
+                        count = row[2]
+                        
+                        # Skip columns with obviously bad dates
+                        if isinstance(min_date, (datetime, date)):
+                            if min_date.year < 2000 or max_date.year > 2030:
+                                logger.warning(f"Column {column} in {table_name} has bad date range: {min_date} to {max_date}")
+                                continue
+                        
+                        # Skip columns with too many NULL values (indicating poor data quality)
+                        if count < 100:  # Less than 100 non-null values in sample
+                            logger.warning(f"Column {column} in {table_name} has poor data quality: only {count} non-null values")
+                            continue
+                        
+                        valid_columns.append(column)
+                        logger.debug(f"Column {column} in {table_name} passed data quality validation")
+                    else:
+                        logger.warning(f"Column {column} in {table_name} has no valid data")
+                        
+        except Exception as e:
+            logger.warning(f"Could not validate data quality for columns in {table_name}: {str(e)}")
+            # If validation fails, return original columns (fail open)
+            return columns
+        
+        return valid_columns
+    
+    def _get_last_load_time(self, table_name: str) -> Optional[datetime]:
+        """Get last load time for incremental loading."""
+        try:
+            with self.analytics_engine.connect() as conn:
+                result = conn.execute(text(f"""
+                    SELECT last_loaded
+                    FROM {self.analytics_schema}.etl_load_status
+                    WHERE table_name = :table_name
+                    AND load_status = 'success'
+                    ORDER BY last_loaded DESC
+                    LIMIT 1
+                """), {"table_name": table_name}).scalar()
+                
+                return result
+        except Exception as e:
+            logger.error(f"Error getting last load time for {table_name}: {str(e)}")
+            return None
+    
+    def load_table(self, table_name: str, force_full: bool = False) -> bool:
+        """
+        Load table from MySQL replication to PostgreSQL analytics using pure SQLAlchemy.
+        This approach avoids pandas' connection handling issues entirely.
+        
+        ENHANCED WITH AUTOMATIC STRATEGY SELECTION:
+        - Small tables (< 50MB): Standard loading
+        - Medium tables (50-200MB): Streaming loading  
+        - Large tables (200-500MB): Chunked loading
+        - Very large tables (> 500MB): COPY command
+        - Massive tables (> 1M rows): Parallel processing
+        
+        Args:
+            table_name: Name of the table to load
+            force_full: Whether to force a full load instead of incremental
+            
+        Returns:
+            bool: True if successful
+        """
+        import time
+        import psutil
+        
+        start_time = time.time()
+        initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        
+        try:
+            # Get table configuration for strategy selection
+            table_config = self.get_table_config(table_name)
+            if not table_config:
+                logger.error(f"No configuration found for table: {table_name}")
+                return False
+            
+            estimated_size_mb = table_config.get('estimated_size_mb', 0)
+            estimated_rows = table_config.get('estimated_rows', 0)
+            
+            # Enhanced strategy selection with parallel processing
+            if estimated_rows > 1_000_000:
+                logger.info(f"Using parallel processing for massive table {table_name} ({estimated_rows:,} rows)")
+                strategy = "parallel"
+                success = self.load_table_parallel(table_name, force_full)
+            elif estimated_size_mb > 500:
+                logger.info(f"Using COPY command for very large table {table_name} ({estimated_size_mb}MB)")
+                strategy = "copy_csv"
+                success = self.load_table_copy_csv(table_name, force_full)
+            elif estimated_size_mb > 200:
+                logger.info(f"Using chunked loading for large table {table_name} ({estimated_size_mb}MB)")
+                strategy = "chunked"
+                success = self.load_table_chunked(table_name, force_full, chunk_size=100000)  # Increased from 50000 to 100000
+            elif estimated_size_mb > 50:
+                logger.info(f"Using streaming loading for medium table {table_name} ({estimated_size_mb}MB)")
+                strategy = "streaming"
+                success = self.load_table_streaming(table_name, force_full)
+            else:
+                logger.info(f"Using standard loading for small table {table_name} ({estimated_size_mb}MB)")
+                strategy = "standard"
+                success = self.load_table_standard(table_name, force_full)
+            
+            # Track performance metrics
+            if success:
+                end_time = time.time()
+                final_memory = psutil.Process().memory_info().rss / 1024 / 1024
+                duration = end_time - start_time
+                memory_used = final_memory - initial_memory
+                
+                # Get actual rows processed from tracking
+                with self.analytics_engine.connect() as conn:
+                    result = conn.execute(text(f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}")).scalar()
+                    rows_processed = result or 0
+                
+                self.track_performance_metrics(table_name, strategy, duration, memory_used, rows_processed)
+            
+            return success
+                
+        except Exception as e:
+            logger.error(f"Error in load_table for {table_name}: {str(e)}")
+            return False
+
+    def load_table_standard(self, table_name: str, force_full: bool = False) -> bool:
+        """
+        Standard table loading method (original implementation).
+        Used for small tables that can be loaded entirely into memory.
+        """
+        try:
+            # Ensure tracking record exists before loading
+            if not self._ensure_tracking_record_exists(table_name):
+                logger.error(f"Failed to ensure tracking record for {table_name}")
+                return False
+            
+            # Get table configuration
+            table_config = self.get_table_config(table_name)
+            if not table_config:
+                logger.error(f"No configuration found for table: {table_name}")
+                return False
+            
+            # Get MySQL schema from replication database
+            mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
+            
+            # Create or verify PostgreSQL table
+            if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
+                return False
+            
+            # Get incremental columns from configuration
+            incremental_columns = table_config.get('incremental_columns', [])
+            
+            # Apply data quality validation to incremental columns
+            if incremental_columns:
+                valid_columns = self._filter_valid_incremental_columns(table_name, incremental_columns)
+                if len(valid_columns) != len(incremental_columns):
+                    logger.warning(f"Data quality validation filtered {len(incremental_columns) - len(valid_columns)} columns for {table_name}")
+                incremental_columns = valid_columns
+            
+            # Check if this is a table without incremental columns (needs full refresh)
+            if not incremental_columns and not force_full:
+                logger.info(f"Table {table_name} has no incremental columns, treating as full refresh")
+                force_full = True
+            
+            # Validate incremental integrity before loading
+            if not force_full and incremental_columns:
+                last_load = self._get_last_load_time_max(table_name, incremental_columns)
+                if last_load:
+                    self._validate_incremental_integrity(table_name, incremental_columns, last_load)
             
             # Build query to get data
             query = self._build_load_query(table_name, incremental_columns, force_full)
@@ -339,7 +880,7 @@ class PostgresLoader:
             # Prepare data for PostgreSQL insertion with type conversion
             rows_data = []
             for row in rows:
-                row_dict = dict(zip(column_names, row))
+                row_dict = self._convert_sqlalchemy_row_to_dict(row, column_names)
                 converted_row = self.schema_adapter.convert_row_data_types(table_name, row_dict)
                 rows_data.append(converted_row)
             
@@ -352,40 +893,37 @@ class PostgresLoader:
                 
                 # Use bulk insert for better performance
                 if rows_data:
-                    # Create parameterized insert statement
-                    columns = ', '.join([f'"{col}"' for col in column_names])
-                    placeholders = ', '.join([f':{col}' for col in column_names])
+                    # Use UPSERT for incremental loads to handle duplicate keys
+                    if force_full:
+                        # For full loads, use simple INSERT (table is truncated)
+                        columns = ', '.join([f'"{col}"' for col in column_names])
+                        placeholders = ', '.join([f':{col}' for col in column_names])
+                        
+                        insert_sql = f"""
+                            INSERT INTO {self.analytics_schema}.{table_name} ({columns})
+                            VALUES ({placeholders})
+                        """
+                    else:
+                        # For incremental loads, use UPSERT to handle duplicate keys
+                        insert_sql = self._build_upsert_sql(table_name, column_names)
                     
-                    insert_sql = f"""
-                        INSERT INTO {self.analytics_schema}.{table_name} ({columns})
-                        VALUES ({placeholders})
-                    """
-                    
-                    # Execute bulk insert
+                    # Execute bulk insert/upsert
                     target_conn.execute(text(insert_sql), rows_data)
                     
                     logger.info(f"Loaded {len(rows_data)} rows to {self.analytics_schema}.{table_name} using {'full' if force_full else 'incremental'} strategy")
             
+            # After successful load, update tracking record
+            if rows_data:
+                self._update_load_status(table_name, len(rows_data))
+            
             return True
-                
-        except DataLoadingError as e:
-            logger.error(f"Data loading failed for {table_name}: {e}")
-            return False
-        except DatabaseConnectionError as e:
-            logger.error(f"Database connection failed for {table_name}: {e}")
-            return False
-        except DatabaseTransactionError as e:
-            logger.error(f"Database transaction failed for {table_name}: {e}")
-            return False
-        except DatabaseQueryError as e:
-            logger.error(f"Database query failed for {table_name}: {e}")
-            return False
+            
         except Exception as e:
-            logger.error(f"Unexpected error loading table {table_name}: {str(e)}")
+            logger.error(f"Error in standard load for {table_name}: {str(e)}")
             return False
     
     def load_table_chunked(self, table_name: str, force_full: bool = False, 
-                          chunk_size: int = 10000) -> bool:
+                          chunk_size: int = 50000) -> bool:
         """
         Load table in chunks for memory efficiency with large datasets.
         
@@ -455,6 +993,7 @@ class PostgresLoader:
             
             with self.replication_engine.connect() as source_conn:
                 total_rows = source_conn.execute(text(count_query)).scalar()
+                logger.info(f"DEBUG: Count query result for {table_name}: {total_rows} rows")
             
             if total_rows is None or total_rows == 0:
                 logger.info(f"No new data to load for {table_name}")
@@ -496,19 +1035,25 @@ class PostgresLoader:
                     # Prepare chunk data with type conversion
                     rows_data = []
                     for row in rows:
-                        row_dict = dict(zip(column_names, row))
+                        row_dict = self._convert_sqlalchemy_row_to_dict(row, column_names)
                         converted_row = self.schema_adapter.convert_row_data_types(table_name, row_dict)
                         rows_data.append(converted_row)
                 
                 # Insert chunk
                 with self.analytics_engine.begin() as target_conn:
-                    columns = ', '.join([f'"{col}"' for col in column_names])
-                    placeholders = ', '.join([f':{col}' for col in column_names])
-                    
-                    insert_sql = f"""
-                        INSERT INTO {self.analytics_schema}.{table_name} ({columns})
-                        VALUES ({placeholders})
-                    """
+                    # Use UPSERT for incremental loads to handle duplicate keys
+                    if force_full:
+                        # For full loads, use simple INSERT (table is truncated)
+                        columns = ', '.join([f'"{col}"' for col in column_names])
+                        placeholders = ', '.join([f':{col}' for col in column_names])
+                        
+                        insert_sql = f"""
+                            INSERT INTO {self.analytics_schema}.{table_name} ({columns})
+                            VALUES ({placeholders})
+                        """
+                    else:
+                        # For incremental loads, use UPSERT to handle duplicate keys
+                        insert_sql = self._build_upsert_sql(table_name, column_names)
                     
                     target_conn.execute(text(insert_sql), rows_data)
                 
@@ -593,64 +1138,8 @@ class PostgresLoader:
         Returns:
             str: SQL query
         """
-        # Check if we're in test environment using Settings instead of direct env access
-        is_test_environment = self.settings.environment.lower() == 'test'
-        
-        # Only use column-specific SELECT in test environments
-        if is_test_environment:
-            # Get PostgreSQL column list to ensure we only select columns that exist in target
-            try:
-                inspector = inspect(self.analytics_engine)
-                pg_columns = inspector.get_columns(table_name, schema=self.analytics_schema)
-                pg_column_names = [col['name'] for col in pg_columns]
-                
-                # Filter to only include columns that exist in PostgreSQL table
-                # This handles cases where MySQL has more columns than PostgreSQL (like in test environments)
-                available_columns = []
-                for col_name in pg_column_names:
-                    # Check if column exists in MySQL replication table
-                    # For now, we'll assume all PostgreSQL columns exist in MySQL
-                    # In a more robust implementation, we could check MySQL schema too
-                    available_columns.append(col_name)
-                
-                if not available_columns:
-                    logger.error(f"No matching columns found for table {table_name}")
-                    return f"SELECT 1 FROM {table_name} WHERE 1=0"  # Return empty result
-                
-                columns_clause = ", ".join(available_columns)
-                
-            except Exception as e:
-                logger.warning(f"Could not get PostgreSQL columns for {table_name}, using SELECT *: {str(e)}")
-                columns_clause = "*"
-        else:
-            # Production environment - use SELECT * as originally designed
-            columns_clause = "*"
-        
-        # If force_full is True, return full table query
-        if force_full:
-            logger.info(f"Building full load query for {table_name}")
-            return f"SELECT {columns_clause} FROM {table_name}"
-            
-        # Get last load timestamp
-        last_load = self._get_last_load(table_name)
-        
-        if last_load and incremental_columns:
-            # Build incremental condition
-            conditions = []
-            for col in incremental_columns:
-                if is_test_environment and col not in pg_column_names:
-                    # Only include if column exists in PostgreSQL (test environment only)
-                    continue
-                conditions.append(f"{col} > '{last_load}'")
-            
-            if conditions:
-                where_clause = " AND ".join(conditions)
-                query = f"SELECT {columns_clause} FROM {table_name} WHERE {where_clause}"
-                logger.info(f"Building incremental query for {table_name} since {last_load}")
-                return query
-        
-        logger.info(f"No incremental columns or last load timestamp found for {table_name}, using full query")
-        return f"SELECT {columns_clause} FROM {table_name}"
+        # Use improved incremental logic
+        return self._build_improved_load_query_max(table_name, incremental_columns, force_full, use_or_logic=True)
     
     def _build_count_query(self, table_name: str, incremental_columns: List[str], force_full: bool = False) -> str:
         """
@@ -664,21 +1153,32 @@ class PostgresLoader:
         Returns:
             str: SQL count query
         """
-        if force_full:
-            return f"SELECT COUNT(*) FROM {table_name}"
+        # Get replication database name from settings
+        replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+        replication_db = replication_config.get('database', 'opendental_replication')
         
-        # Get last load timestamp
-        last_load = self._get_last_load(table_name)
+        if force_full:
+            query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"
+            logger.info(f"DEBUG: Force full count query for {table_name}: {query}")
+            return query
+        
+        # Get maximum last load timestamp across all columns
+        last_load = self._get_last_load_time_max(table_name, incremental_columns)
         
         if last_load and incremental_columns:
             conditions = []
             for col in incremental_columns:
                 conditions.append(f"{col} > '{last_load}'")
             
-            where_clause = " AND ".join(conditions)
-            return f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
+            # Use OR logic - if any column is newer than last_load, include the record
+            where_clause = " OR ".join(conditions)
+            query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
+            logger.info(f"DEBUG: Incremental count query for {table_name}: {query}")
+            return query
         
-        return f"SELECT COUNT(*) FROM {table_name}"
+        query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"
+        logger.info(f"DEBUG: Default count query for {table_name}: {query}")
+        return query
     
     def _get_last_load(self, table_name: str) -> Optional[datetime]:
         """
@@ -705,4 +1205,320 @@ class PostgresLoader:
             logger.error(f"Error getting last load for {table_name}: {str(e)}")
             return None
     
+    def _build_upsert_sql(self, table_name: str, column_names: List[str]) -> str:
+        """
+        Build PostgreSQL UPSERT SQL with dynamic primary key handling.
+        
+        PostgreSQL uses: INSERT ... ON CONFLICT DO UPDATE
+        with explicit conflict target and EXCLUDED table reference.
+        
+        Args:
+            table_name: Name of the table
+            column_names: List of column names to insert
+            
+        Returns:
+            str: PostgreSQL UPSERT SQL statement
+        """
+        # Get primary key from table configuration
+        table_config = self.get_table_config(table_name)
+        primary_key = table_config.get('primary_key', 'id')
+        
+        # Build column lists
+        columns = ', '.join([f'"{col}"' for col in column_names])
+        placeholders = ', '.join([f':{col}' for col in column_names])
+        
+        # Build UPDATE clause (exclude primary key from updates)
+        update_columns = [f'"{col}" = EXCLUDED."{col}"' 
+                         for col in column_names if col != primary_key]
+        update_clause = ', '.join(update_columns) if update_columns else 'updated_at = CURRENT_TIMESTAMP'
+        
+        return f"""
+            INSERT INTO {self.analytics_schema}.{table_name} ({columns})
+            VALUES ({placeholders})
+            ON CONFLICT ("{primary_key}") DO UPDATE SET
+                {update_clause}
+        """
+ 
+    def _validate_incremental_integrity(self, table_name: str, incremental_columns: List[str], last_load: datetime) -> bool:
+        """
+        Validate that incremental logic isn't missing records.
+        
+        Args:
+            table_name: Name of the table
+            incremental_columns: List of incremental columns
+            last_load: Last load timestamp
+            
+        Returns:
+            bool: True if validation passes
+        """
+        try:
+            if not incremental_columns or not last_load:
+                return True  # Skip validation if no incremental columns or last load
+            
+            with self.replication_engine.connect() as conn:
+                # Check if any records exist between last_load and now that aren't captured
+                conditions = []
+                for col in incremental_columns:
+                    conditions.append(f"{col} > '{last_load}'")
+                
+                validation_query = f"""
+                    SELECT COUNT(*) FROM {table_name} 
+                    WHERE {' OR '.join(conditions)}
+                """
+                
+                result = conn.execute(text(validation_query))
+                total_new_records = result.scalar() or 0
+                
+                if total_new_records > 0:
+                    logger.info(f"Incremental integrity validation for {table_name}: {total_new_records} new records found since {last_load}")
+                else:
+                    logger.info(f"Incremental integrity validation for {table_name}: No new records found since {last_load}")
+                
+                return True
+                
+        except Exception as e:
+            logger.warning(f"Incremental integrity validation failed for {table_name}: {str(e)}")
+            return False
+
+    def _validate_data_completeness(self, table_name: str, expected_count: int, actual_count: int) -> bool:
+        """
+        Validate that the expected number of records were loaded.
+        
+        Args:
+            table_name: Name of the table
+            expected_count: Expected number of records
+            actual_count: Actual number of records loaded
+            
+        Returns:
+            bool: True if validation passes
+        """
+        if actual_count < expected_count * 0.9:  # Allow 10% variance
+            logger.warning(f"Data completeness check failed for {table_name}: expected {expected_count}, got {actual_count}")
+            return False
+        
+        logger.info(f"Data completeness validated for {table_name}: {actual_count} records")
+        return True
+ 
+    def load_table_copy_csv(self, table_name: str, force_full: bool = False) -> bool:
+        """Use PostgreSQL COPY command with CSV for maximum speed."""
+        import tempfile
+        import csv
+        import os
+        
+        try:
+            # Get table configuration
+            table_config = self.get_table_config(table_name)
+            if not table_config:
+                logger.error(f"No configuration found for table: {table_name}")
+                return False
+            
+            # Get MySQL schema from replication database
+            mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
+            
+            # Create or verify PostgreSQL table
+            if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
+                return False
+            
+            # Get incremental columns from configuration
+            incremental_columns = table_config.get('incremental_columns', [])
+            
+            # Check if this is a table without incremental columns (needs full refresh)
+            if not incremental_columns and not force_full:
+                logger.info(f"Table {table_name} has no incremental columns, treating as full refresh")
+                force_full = True
+            
+            # Build query to get data
+            query = self._build_load_query(table_name, incremental_columns, force_full)
+            
+            # Create temporary CSV file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as csvfile:
+                # Stream from MySQL directly to CSV
+                with self.replication_engine.connect() as source_conn:
+                    result = source_conn.execution_options(stream_results=True).execute(text(query))
+                    
+                    writer = csv.writer(csvfile)
+                    column_names = list(result.keys())
+                    
+                    # Write header
+                    writer.writerow(column_names)
+                    
+                    # Stream rows directly to CSV
+                    chunk_size = 50000
+                    total_rows = 0
+                    while True:
+                        chunk = result.fetchmany(chunk_size)
+                        if not chunk:
+                            break
+                        writer.writerows(chunk)
+                        total_rows += len(chunk)
+                        logger.debug(f"Wrote {len(chunk)} rows to CSV for {table_name} (total: {total_rows})")
+                
+                csv_path = csvfile.name
+            
+            try:
+                # Use PostgreSQL COPY command
+                with self.analytics_engine.begin() as target_conn:
+                    if force_full:
+                        target_conn.execute(text(f"TRUNCATE TABLE {self.analytics_schema}.{table_name}"))
+                    
+                    copy_sql = f"""
+                        COPY {self.analytics_schema}.{table_name} ({','.join([f'"{col}"' for col in column_names])})
+                        FROM '{csv_path}'
+                        WITH (FORMAT csv, HEADER true, DELIMITER ',')
+                    """
+                    target_conn.execute(text(copy_sql))
+                    
+                logger.info(f"Successfully loaded {table_name} using COPY command: {total_rows} rows")
+                
+                # Update load status
+                if total_rows > 0:
+                    self._update_load_status(table_name, total_rows)
+                
+                return True
+                
+            finally:
+                # Clean up temp file
+                if os.path.exists(csv_path):
+                    os.unlink(csv_path)
+                    
+        except Exception as e:
+            logger.error(f"Error in COPY load for {table_name}: {str(e)}")
+            return False
+ 
+    def load_table_parallel(self, table_name: str, force_full: bool = False) -> bool:
+        """Parallel chunk processing for massive tables."""
+        import os
+        from concurrent.futures import ThreadPoolExecutor
+        import time
+        
+        try:
+            # Get table configuration
+            table_config = self.get_table_config(table_name)
+            if not table_config:
+                logger.error(f"No configuration found for table: {table_name}")
+                return False
+            
+            # Get incremental columns from configuration
+            incremental_columns = table_config.get('incremental_columns', [])
+            
+            # Get total row count
+            count_query = self._build_count_query(table_name, incremental_columns, force_full)
+            with self.replication_engine.connect() as conn:
+                total_rows = conn.execute(text(count_query)).scalar() or 0
+            
+            if total_rows < 100000:
+                # Not worth parallelizing small tables
+                logger.info(f"Table {table_name} has only {total_rows} rows, using streaming instead of parallel")
+                return self.load_table_streaming(table_name, force_full)
+            
+            # Calculate optimal chunk size and worker count
+            cpu_count = os.cpu_count() or 4
+            chunk_size = max(100000, total_rows // (cpu_count * 2))  # Increased from 50000 to 100000
+            
+            # Create chunks
+            chunks = [(i * chunk_size, min((i + 1) * chunk_size, total_rows)) 
+                      for i in range(0, total_rows, chunk_size)]
+            
+            logger.info(f"Processing {table_name} in {len(chunks)} parallel chunks with {cpu_count} workers")
+            
+            # Process chunks in parallel
+            with ThreadPoolExecutor(max_workers=cpu_count) as executor:
+                futures = [
+                    executor.submit(self._process_chunk_parallel, table_name, start, end, force_full, incremental_columns)
+                    for start, end in chunks
+                ]
+                
+                # Wait for all chunks to complete
+                results = [future.result() for future in futures]
+            
+            success = all(results)
+            if success:
+                logger.info(f"Successfully processed {table_name} in parallel: {total_rows} rows")
+                self._update_load_status(table_name, total_rows)
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error in parallel load for {table_name}: {str(e)}")
+            return False
+
+    def _process_chunk_parallel(self, table_name: str, start: int, end: int, force_full: bool, incremental_columns: List[str]) -> bool:
+        """Process a single chunk in parallel."""
+        from etl_pipeline.core.connections import ConnectionFactory
+        
+        try:
+            # Each thread gets its own connections
+            replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+            analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
+            
+            # Build chunk query
+            base_query = self._build_load_query(table_name, incremental_columns, force_full)
+            chunk_query = f"{base_query} LIMIT {end - start} OFFSET {start}"
+            
+            # Process chunk
+            with replication_engine.connect() as source_conn:
+                result = source_conn.execute(text(chunk_query))
+                column_names = list(result.keys())
+                rows = result.fetchall()
+                
+                # Convert types
+                rows_data = []
+                for row in rows:
+                    row_dict = self._convert_sqlalchemy_row_to_dict(row, column_names)
+                    converted_row = self.schema_adapter.convert_row_data_types(table_name, row_dict)
+                    rows_data.append(converted_row)
+            
+            # Bulk insert chunk
+            with analytics_engine.begin() as target_conn:
+                columns = ', '.join([f'"{col}"' for col in column_names])
+                placeholders = ', '.join([f':{col}' for col in column_names])
+                
+                insert_sql = f"""
+                    INSERT INTO {self.analytics_schema}.{table_name} ({columns})
+                    VALUES ({placeholders})
+                """
+                target_conn.execute(text(insert_sql), rows_data)
+            
+            logger.debug(f"Completed chunk {start}-{end} for {table_name}: {len(rows_data)} rows")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed chunk {start}-{end} for {table_name}: {e}")
+            return False
+
+    def track_performance_metrics(self, table_name: str, strategy: str, duration: float, memory_mb: float, rows_processed: int):
+        """Track performance metrics for different strategies."""
+        if not hasattr(self, 'performance_metrics'):
+            self.performance_metrics = {}
+        
+        self.performance_metrics[table_name] = {
+            'strategy': strategy,
+            'duration': duration,
+            'memory_mb': memory_mb,
+            'rows_processed': rows_processed,
+            'rows_per_second': rows_processed / duration if duration > 0 else 0,
+            'timestamp': datetime.now()
+        }
+        
+        logger.info(f"Performance metrics for {table_name}: {strategy} strategy, "
+                   f"{rows_processed} rows in {duration:.2f}s ({rows_processed / duration:.0f} rows/sec), "
+                   f"Memory: {memory_mb:.1f}MB")
+
+    def get_performance_report(self) -> str:
+        """Generate a comprehensive performance report."""
+        if not hasattr(self, 'performance_metrics') or not self.performance_metrics:
+            return "No performance metrics available."
+        
+        report = ["# ETL Performance Report", ""]
+        
+        for table_name, metrics in self.performance_metrics.items():
+            report.append(f"## {table_name}")
+            report.append(f"- Strategy: {metrics['strategy']}")
+            report.append(f"- Duration: {metrics['duration']:.2f}s")
+            report.append(f"- Rows Processed: {metrics['rows_processed']:,}")
+            report.append(f"- Rows/Second: {metrics['rows_per_second']:.0f}")
+            report.append(f"- Memory Usage: {metrics['memory_mb']:.1f}MB")
+            report.append("")
+        
+        return "\n".join(report)
  
