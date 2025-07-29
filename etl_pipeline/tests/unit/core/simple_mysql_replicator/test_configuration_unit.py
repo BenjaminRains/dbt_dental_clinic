@@ -8,15 +8,15 @@ for injected configuration to ensure complete test isolation.
 Test Strategy:
     - Unit tests with mocked dependencies using DictConfigProvider
     - Validates provider pattern dependency injection and Settings injection
-    - Tests copy strategy determination based on table size
-    - Tests extraction strategy retrieval from configuration
-    - Validates configuration access with provider pattern
+    - Tests configuration retrieval and validation
+    - Tests strategy determination logic
+    - Validates configuration access patterns
 
 Coverage Areas:
-    - Copy strategy determination (small, medium, large)
-    - Extraction strategy retrieval (incremental, full_table, chunked_incremental)
-    - Configuration access with provider pattern
-    - Default value handling for missing configuration
+    - Configuration retrieval with provider pattern
+    - Strategy determination logic
+    - Configuration validation and fallbacks
+    - Settings injection for configuration access
     - Provider pattern configuration isolation
 
 ETL Context:
@@ -71,55 +71,64 @@ class TestSimpleMySQLReplicatorConfigurationMethods:
     @pytest.fixture
     def replicator_with_config(self, test_settings):
         """Create replicator with test configuration using provider pattern."""
-        # Mock ConnectionFactory methods
-        with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
-            
-            mock_source_engine = MagicMock()
-            mock_target_engine = MagicMock()
-            mock_source.return_value = mock_source_engine
-            mock_target.return_value = mock_target_engine
+        # Mock engines
+        mock_source_engine = MagicMock()
+        mock_target_engine = MagicMock()
+        
+        with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
             
             # Mock YAML file loading with test configuration
             mock_config = {
                 'tables': {
                     'small_table': {
+                        'incremental_columns': ['DateTStamp'],
+                        'batch_size': 1000,
                         'estimated_size_mb': 0.5,
                         'extraction_strategy': 'incremental',
-                        'table_importance': 'standard'
+                        'table_importance': 'critical'
                     },
                     'medium_table': {
+                        'incremental_columns': ['AptDateTime'],
+                        'batch_size': 500,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
                         'table_importance': 'important'
                     },
                     'large_table': {
+                        'incremental_columns': ['ProcDate'],
+                        'batch_size': 2000,
                         'estimated_size_mb': 150,
                         'extraction_strategy': 'full_table',
-                        'table_importance': 'critical'
+                        'table_importance': 'important'
                     },
                     'no_size_table': {
+                        'incremental_columns': ['DateTStamp'],
+                        'batch_size': 1000,
                         'extraction_strategy': 'incremental',
                         'table_importance': 'standard'
                     }
                 }
             }
             with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
-                return SimpleMySQLReplicator(settings=test_settings)
+                replicator = SimpleMySQLReplicator(settings=test_settings)
+                replicator.source_engine = mock_source_engine
+                replicator.target_engine = mock_target_engine
+                return replicator
 
     def test_get_copy_strategy_small_table(self, replicator_with_config):
         """
-        Test copy strategy determination for small tables.
+        Test copy strategy determination for small tables using provider pattern.
         
         Validates:
-            - Small table (< 1MB) strategy determination
-            - Size-based strategy logic with provider pattern
-            - Configuration retrieval from provider
-            - Default strategy handling
+            - Small table strategy determination with provider pattern
+            - Configuration access with provider pattern
+            - Strategy logic based on table size
+            - Provider pattern integration
             
         ETL Pipeline Context:
-            - Small tables use direct INSERT ... SELECT for efficiency
-            - Optimized for dental clinic data with small patient tables
+            - Small table strategy for efficient copying
+            - Optimized for dental clinic data with small tables
             - Uses provider pattern for configuration access
         """
         strategy = replicator_with_config.get_copy_strategy('small_table')
@@ -127,17 +136,17 @@ class TestSimpleMySQLReplicatorConfigurationMethods:
 
     def test_get_copy_strategy_medium_table(self, replicator_with_config):
         """
-        Test copy strategy determination for medium tables.
+        Test copy strategy determination for medium tables using provider pattern.
         
         Validates:
-            - Medium table (1-100MB) strategy determination
-            - Size-based strategy logic with provider pattern
-            - Configuration retrieval from provider
-            - Strategy boundary handling
+            - Medium table strategy determination with provider pattern
+            - Configuration access with provider pattern
+            - Strategy logic based on table size
+            - Provider pattern integration
             
         ETL Pipeline Context:
-            - Medium tables use chunked INSERT with LIMIT/OFFSET
-            - Optimized for dental clinic data with appointment tables
+            - Medium table strategy for balanced copying
+            - Optimized for dental clinic data with medium tables
             - Uses provider pattern for configuration access
         """
         strategy = replicator_with_config.get_copy_strategy('medium_table')
@@ -145,17 +154,17 @@ class TestSimpleMySQLReplicatorConfigurationMethods:
 
     def test_get_copy_strategy_large_table(self, replicator_with_config):
         """
-        Test copy strategy determination for large tables.
+        Test copy strategy determination for large tables using provider pattern.
         
         Validates:
-            - Large table (> 100MB) strategy determination
-            - Size-based strategy logic with provider pattern
-            - Configuration retrieval from provider
-            - Strategy boundary handling
+            - Large table strategy determination with provider pattern
+            - Configuration access with provider pattern
+            - Strategy logic based on table size
+            - Provider pattern integration
             
         ETL Pipeline Context:
-            - Large tables use chunked INSERT with WHERE conditions
-            - Optimized for dental clinic data with procedure tables
+            - Large table strategy for efficient copying
+            - Optimized for dental clinic data with large tables
             - Uses provider pattern for configuration access
         """
         strategy = replicator_with_config.get_copy_strategy('large_table')
@@ -166,13 +175,13 @@ class TestSimpleMySQLReplicatorConfigurationMethods:
         Test copy strategy determination for tables without size configuration.
         
         Validates:
-            - Default strategy when no size configured
+            - Default strategy for tables without size config
             - Fallback behavior with provider pattern
-            - Configuration retrieval from provider
+            - Configuration access with provider pattern
             - Default value handling
             
         ETL Pipeline Context:
-            - Defaults to 'small' strategy for unknown table sizes
+            - Defaults to 'small' strategy for unknown sizes
             - Safe fallback for dental clinic data
             - Uses provider pattern for configuration access
         """
@@ -269,7 +278,7 @@ class TestSimpleMySQLReplicatorConfigurationMethods:
         # Add chunked_incremental table to config
         replicator_with_config.table_configs['large_chunked_table'] = {
             'extraction_strategy': 'chunked_incremental',
-            'incremental_column': 'DateTStamp',
+            'incremental_columns': ['DateTStamp'],
             'batch_size': 1000,
             'estimated_size_mb': 200
         }
