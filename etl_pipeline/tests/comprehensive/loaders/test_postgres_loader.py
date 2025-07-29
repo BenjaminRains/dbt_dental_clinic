@@ -78,7 +78,6 @@ from tests.fixtures.connection_fixtures import (
 )
 from tests.fixtures.env_fixtures import (
     test_env_vars,
-    production_env_vars,
     test_env_provider,
     production_env_provider,
     test_settings as env_test_settings,
