@@ -56,7 +56,7 @@ from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config import get_settings
-from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+from etl_pipeline.orchestration import PipelineOrchestrator
 
 # Import custom exceptions for structured error handling
 from etl_pipeline.exceptions.database import DatabaseConnectionError, DatabaseTransactionError
