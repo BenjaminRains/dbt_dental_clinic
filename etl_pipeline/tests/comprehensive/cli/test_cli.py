@@ -145,7 +145,7 @@ class TestCLIComprehensive:
                         'estimated_size_mb': 200,
                         'estimated_rows': 50000
                     },
-                    'procedure': {
+                    'procedurelog': {
                         'incremental_column': 'DateModified',
                         'batch_size': 200,
                         'extraction_strategy': 'incremental',
@@ -486,7 +486,7 @@ class TestCLIDryRunComprehensive:
             mock_orchestrator.settings = mock_settings
             mock_settings.get_tables_by_importance.side_effect = lambda importance: {
                 'critical': ['patient', 'appointment'],
-                'important': ['procedure', 'payment'],
+                'important': ['procedurelog', 'payment'],
                 'audit': ['audit_log'],
                 'reference': ['zipcode', 'carrier']
             }.get(importance, [])
