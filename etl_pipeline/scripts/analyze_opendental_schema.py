@@ -397,86 +397,97 @@ class OpenDentalSchemaAnalyzer:
         incremental_columns = self.find_incremental_columns(table_name, schema_info)
         has_incremental_columns = len(incremental_columns) > 0
         
+        # If no incremental columns, use full table
+        if not has_incremental_columns:
+            return 'full_table'
+        
         # Chunked incremental for very large tables (> 1M rows)
-        if estimated_row_count > 1_000_000 and has_incremental_columns:
+        if estimated_row_count > 1_000_000:
             return 'chunked_incremental'
         
-        # Incremental for large tables (> 500k rows)
-        if estimated_row_count > 500_000 and has_incremental_columns:
+        # Incremental for medium to large tables (> 10k rows)
+        if estimated_row_count > 10_000:
             return 'incremental'
         
-        # Full table for everything else
+        # For small tables (< 10k rows), use full table - simpler and faster for small datasets
         return 'full_table'
     
     def find_incremental_columns(self, table_name: str, schema_info: Dict) -> List[str]:
-        """Find suitable incremental columns for a table using OpenDental-specific patterns."""
+        """Find timestamp and datetime columns for incremental loading (excludes simple date columns and workflow-specific columns)."""
         columns = schema_info.get('columns', {})
-        incremental_candidates = []
+        timestamp_columns = []
         
-        # OpenDental-specific timestamp column patterns (in order of preference)
-        timestamp_patterns = [
-            # Primary timestamp columns (most reliable for incremental)
-            'DateTStamp', 'DateTimeStamp', 'SecDateTEdit', 'SecDateTEntry',
-            'DateTimeEntry', 'DateTEntry', 'DateTimeCreated', 'DateCreated',
-            'DateTimeModified', 'DateModified', 'DateTimeLastActive',
-            
-            # Secondary timestamp columns
-            'SecDateEntry', 'DateEntry', 'DateTStamp', 'DateTimeStamp',
-            'DateTimeLastModified', 'DateTimeUpdated', 'DateTimeEdit',
-            
-            # Business-specific date columns (less reliable but still useful)
-            'ProcDate', 'AdjDate', 'PayDate', 'DateService', 'DateComplete',
-            'DateEntry', 'DateCreated', 'DateModified', 'DateLastModified',
-            
-            # Generic timestamp patterns (fallback)
-            'timestamp', 'datetime', 'date_created', 'date_modified',
-            'created_at', 'updated_at', 'modified_at', 'entry_date',
-            'last_modified', 'last_updated', 'last_edit'
-        ]
+        # Columns to exclude - workflow-specific datetime columns that don't track record modifications
+        excluded_columns = {
+            'DateTimeArrived', 'DateTimeSeated', 'DateTimeDismissed', 'DateTimeAskedToArrive',
+            'DateTimeStarted', 'DateTimeFinished', 'DateTimeCheckedIn', 'DateTimeCheckedOut',
+            'DateTimeConfirmed', 'DateTimeCancelled', 'DateTimeRescheduled', 'IntakeDate', 
+            'DateTimeNewPatThankYouTransmit', 'DateTimeSent', 'DateTimeThankYouTransmit', 'DateTimeExpire',
+            'DateTimeSmsScheduled', 'DateTimeSmsSent', 'DateTimeEmailSent', 'DateTimeOrig', 'DateExclude',
+            'DateTimePending', 'DateTimeCompleted', 'DateTimeExpired', 'DateTimeLastError',
+            'DateTimeEntry', 'SmsContractDate', 'TimeEntered1', 'TimeDisplayed1', 'TimeEntered2',
+            'TimeDisplayed2', 'DateTimeLastConnect', 'DateTimeEnd', 'LastHeartBeat', 'DateTimeConfirmTransmit',
+            'DateTimeRSVP', 'DateTimeConfirmExpire', 'LastQueryTime', 'DateLastRun', 'DateTimeShown',
+            'DateTRequest', 'DateTAcceptDeny', 'DateTAppend', 'DischargeDate', 'DateTPracticeSigned'
+        }
         
-        # Check each column against patterns
+        # Check each column for timestamp/datetime data types only
         for column_name, column_info in columns.items():
             # Handle None values safely
             data_type = column_info.get('type')
             if data_type is None:
-                data_type = ''
-            data_type = str(data_type).lower()
-            
-            column_name_lower = column_name.lower()
-            
-            # Check if it's a timestamp/datetime data type
-            is_timestamp_type = data_type in ['timestamp', 'datetime', 'date', 'time']
-            
-            # Check if column name matches any pattern
-            matches_pattern = any(pattern.lower() in column_name_lower for pattern in timestamp_patterns)
-            
-            # Additional checks for OpenDental-specific patterns
-            is_opendental_timestamp = (
-                'datetimestamp' in column_name_lower or
-                'datestamp' in column_name_lower or
-                'dateentry' in column_name_lower or
-                'dateedit' in column_name_lower or
-                'datecreated' in column_name_lower or
-                'datemodified' in column_name_lower or
-                'datelastactive' in column_name_lower or
-                'secdate' in column_name_lower
-            )
-            
-            if is_timestamp_type and (matches_pattern or is_opendental_timestamp):
-                # Prioritize columns with CURRENT_TIMESTAMP default (most reliable)
-                default_value = column_info.get('default')
-                if default_value is None:
-                    default_value = ''
-                default_value = str(default_value).lower()
-                is_auto_timestamp = 'current_timestamp' in default_value
+                continue
                 
-                # Add to candidates with priority
-                priority = 1 if is_auto_timestamp else 2
-                incremental_candidates.append((column_name, priority, column_info))
+            data_type_str = str(data_type).lower()
+            
+            # Only include timestamp and datetime columns, exclude simple date columns
+            # This ensures we only get columns that can track when records were modified
+            if any(dt in data_type_str for dt in ['timestamp', 'datetime']):
+                # Skip workflow-specific datetime columns
+                if column_name not in excluded_columns:
+                    timestamp_columns.append(column_name)
         
-        # Sort by priority and return column names
-        incremental_candidates.sort(key=lambda x: x[1])
-        return [col[0] for col in incremental_candidates]
+        return timestamp_columns
+    
+    def select_primary_incremental_column(self, incremental_columns: List[str]) -> Optional[str]:
+        """
+        Select the primary incremental column from a list based on priority order.
+        
+        Priority order (highest to lowest):
+        1. DateTStamp - Most recent timestamp (when record was last modified)
+        2. SecDateTEdit - Security date edit (when record was last edited)
+        3. SecDateTEntry - Security date entry (when record was created/modified)
+        4. DateTEntry - Date entry
+        5. All others - Any remaining timestamp columns
+        
+        Args:
+            incremental_columns: List of incremental column names
+            
+        Returns:
+            The selected primary incremental column, or None if no columns provided
+        """
+        if not incremental_columns:
+            return None
+        
+        # Priority order for selecting the best incremental column
+        priority_order = [
+            'DateTStamp',      # Most recent timestamp - highest priority
+            'SecDateTEdit',    # Security date edit - second priority
+            'SecDateTEntry',   # Security date entry - third priority
+            'DateTEntry'       # Date entry - fourth priority
+        ]
+        
+        # First, try to find a column that matches our priority order
+        for priority_column in priority_order:
+            if priority_column in incremental_columns:
+                logger.debug(f"Selected primary incremental column '{priority_column}' based on priority order")
+                return priority_column
+        
+        # If no priority columns found, return the first column in the list
+        # This ensures we always have a fallback
+        selected_column = incremental_columns[0]
+        logger.debug(f"Selected primary incremental column '{selected_column}' as fallback (no priority columns found)")
+        return selected_column
     
     def get_batch_schema_info(self, table_names: List[str]) -> Dict[str, Dict]:
         """Get schema information for multiple tables in a single connection."""
@@ -700,6 +711,9 @@ class OpenDentalSchemaAnalyzer:
                         extraction_strategy = self.determine_extraction_strategy(table_name, schema_info, size_info)
                         incremental_columns = self.find_incremental_columns(table_name, schema_info)
                         
+                        # Select primary incremental column based on priority order
+                        primary_incremental_column = self.select_primary_incremental_column(incremental_columns)
+                        
                         # Check if table has dbt models
                         is_modeled = False
                         dbt_model_types = []
@@ -738,6 +752,10 @@ class OpenDentalSchemaAnalyzer:
                         else:  # Small tables
                             batch_size = 5_000
                         
+                        # Get primary key from schema info
+                        primary_keys = schema_info.get('primary_keys', [])
+                        primary_key = primary_keys[0] if primary_keys else None
+                        
                         # Build table configuration
                         table_config = {
                             'table_name': table_name,
@@ -747,6 +765,7 @@ class OpenDentalSchemaAnalyzer:
                             'estimated_size_mb': size_info.get('size_mb', 0),
                             'batch_size': batch_size,
                             'incremental_columns': incremental_columns,
+                            'primary_incremental_column': primary_incremental_column,
                             'is_modeled': is_modeled,
                             'dbt_model_types': dbt_model_types,
                             'monitoring': {
@@ -756,6 +775,10 @@ class OpenDentalSchemaAnalyzer:
                             'schema_hash': hash(str(schema_info)),  # Simple hash for change detection
                             'last_analyzed': datetime.now().isoformat()
                         }
+                        
+                        # Add primary key if available
+                        if primary_key:
+                            table_config['primary_key'] = primary_key
                         
                         config['tables'][table_name] = table_config
                         processed_count += 1
