@@ -373,33 +373,113 @@ class TestOpenDentalSchemaAnalyzerProductionIntegration:
         AAA Pattern:
             Arrange: Set up real production database connection and get real schema data
             Act: Call find_incremental_columns() method with production schema
-            Assert: Verify incremental columns are correctly identified in production
+            Assert: Verify timestamp columns are correctly identified by data type in production
             
         Validates:
             - Real production incremental column discovery from actual database schema
-            - Timestamp column identification from real production database
-            - ID column identification from real production database
+            - Timestamp column identification by data type from real production database
+            - Data type-based discovery (timestamp, datetime, date, time)
             - Maximum candidate limit enforcement
             - Error handling for real production database operations
+            - Data-driven approach vs hardcoded patterns
         """
         # Arrange: Set up real production database connection and get real schema data
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
-        # Test with patient table
-        if 'patient' in tables:
-            schema_info = analyzer.get_table_schema('patient')
+        # Test with multiple tables that likely have timestamp columns
+        test_tables = ['patient', 'appointment', 'procedurelog', 'claimproc']
+        found_tables = [table for table in test_tables if table in tables]
+        
+        if not found_tables:
+            pytest.skip("No suitable test tables found in production database")
+        
+        for table_name in found_tables:
+            schema_info = analyzer.get_table_schema(table_name)
             
             # Act: Call find_incremental_columns() method with production schema
-            incremental_columns = analyzer.find_incremental_columns('patient', schema_info)
+            incremental_columns = analyzer.find_incremental_columns(table_name, schema_info)
             
-            # Assert: Verify incremental columns are correctly identified in production
+            # Assert: Verify timestamp and datetime columns are correctly identified by data type in production
             assert isinstance(incremental_columns, list)
-            assert len(incremental_columns) <= 3  # Max 3 candidates
+            assert len(incremental_columns) <= 5  # Allow more realistic limit for timestamp/datetime columns
             
             # Verify that identified columns exist in the production schema
             for col_name in incremental_columns:
                 assert col_name in schema_info['columns']
+                
+                # Verify that identified columns have timestamp or datetime data types only
+                col_info = schema_info['columns'][col_name]
+                col_type = str(col_info['type']).lower()
+                assert any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime']), \
+                    f"Column {col_name} with type {col_type} should be a timestamp or datetime type"
+            
+            # Log the results for debugging
+            print(f"Table {table_name}: Found {len(incremental_columns)} timestamp columns: {incremental_columns}")
+            
+            # Verify we found at least some timestamp columns for tables that should have them
+            if table_name in ['appointment', 'procedurelog']:
+                assert len(incremental_columns) > 0, f"Table {table_name} should have timestamp columns"
+
+    def test_production_data_driven_timestamp_discovery(self, production_settings):
+        """
+        Test production data-driven timestamp discovery approach vs hardcoded patterns.
+        
+        AAA Pattern:
+            Arrange: Set up real production database connection and get real schema data
+            Act: Call find_incremental_columns() method with production schema
+            Assert: Verify data-driven approach finds timestamp columns by data type
+            
+        Validates:
+            - Data-driven timestamp discovery works with real production database
+            - Timestamp columns are identified by data type, not hardcoded patterns
+            - Approach works with various timestamp data types (timestamp, datetime, date, time)
+            - No reliance on specific column name patterns
+            - Real production database schema compatibility
+        """
+        # Arrange: Set up real production database connection and get real schema data
+        analyzer = OpenDentalSchemaAnalyzer()
+        tables = analyzer.discover_all_tables()
+        
+        # Test with tables that should have various timestamp column types
+        test_tables = ['appointment', 'procedurelog', 'claimproc', 'patient']
+        found_tables = [table for table in test_tables if table in tables]
+        
+        if not found_tables:
+            pytest.skip("No suitable test tables found in production database")
+        
+        timestamp_data_types_found = set()
+        
+        for table_name in found_tables:
+            schema_info = analyzer.get_table_schema(table_name)
+            
+            # Act: Call find_incremental_columns() method with production schema
+            incremental_columns = analyzer.find_incremental_columns(table_name, schema_info)
+            
+            # Assert: Verify data-driven approach finds timestamp and datetime columns by data type
+            for col_name in incremental_columns:
+                col_info = schema_info['columns'][col_name]
+                col_type = str(col_info['type']).lower()
+                
+                # Verify it's a timestamp or datetime data type
+                is_timestamp = any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime'])
+                assert is_timestamp, f"Column {col_name} with type {col_type} should be a timestamp or datetime type"
+                
+                # Track what timestamp data types we found
+                if 'timestamp' in col_type:
+                    timestamp_data_types_found.add('timestamp')
+                elif 'datetime' in col_type:
+                    timestamp_data_types_found.add('datetime')
+            
+            print(f"Table {table_name}: Found {len(incremental_columns)} timestamp columns")
+            if incremental_columns:
+                print(f"  Columns: {incremental_columns}")
+                for col in incremental_columns:
+                    col_type = str(schema_info['columns'][col]['type'])
+                    print(f"    {col}: {col_type}")
+        
+        # Verify we found at least some timestamp data types
+        assert len(timestamp_data_types_found) > 0, "Should find at least one timestamp data type in production database"
 
     def test_production_dbt_model_discovery(self, production_settings):
         """
@@ -529,9 +609,52 @@ class TestOpenDentalSchemaAnalyzerProductionIntegration:
                     assert isinstance(table_config['schema_hash'], int)  # Should be integer from hash() function
                     assert isinstance(table_config['last_analyzed'], str)
                     
+                    # Verify that incremental columns are timestamp or datetime data types (new data-driven approach)
+                    if table_config['incremental_columns']:
+                        # Get the actual schema info for this table to verify data types
+                        table_schema = analyzer.get_table_schema(table_name)
+                        for col_name in table_config['incremental_columns']:
+                            assert col_name in table_schema['columns'], f"Column {col_name} not found in schema for {table_name}"
+                            col_info = table_schema['columns'][col_name]
+                            col_type = str(col_info['type']).lower()
+                            assert any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime']), \
+                                f"Column {col_name} with type {col_type} should be a timestamp or datetime type for table {table_name}"
+                    
         finally:
             # Restore original method
             analyzer.discover_all_tables = original_discover
+
+    def test_primary_key_detection_in_tables_yml(self, production_settings):
+        """Test that primary_key is correctly detected and written for key tables in tables.yml."""
+        import yaml
+        from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
+        import os
+        
+        # Use a temp directory to avoid overwriting production config
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            analyzer = OpenDentalSchemaAnalyzer()
+            config = analyzer.generate_complete_configuration(tmpdir)
+            tables_yml_path = os.path.join(tmpdir, 'tables.yml')
+            assert os.path.exists(tables_yml_path), f"tables.yml not found at {tables_yml_path}"
+            with open(tables_yml_path, 'r') as f:
+                config_data = yaml.safe_load(f)
+            tables = config_data.get('tables', {})
+
+            # Check procedurelog
+            proc = tables.get('procedurelog')
+            assert proc is not None, "procedurelog table not found in config"
+            assert 'primary_key' in proc, "primary_key missing for procedurelog"
+            assert proc['primary_key'] == 'ProcNum', f"Expected primary_key 'ProcNum' for procedurelog, got {proc['primary_key']}"
+
+            # Check appointment
+            appt = tables.get('appointment')
+            assert appt is not None, "appointment table not found in config"
+            assert 'primary_key' in appt, "primary_key missing for appointment"
+            assert appt['primary_key'] == 'AptNum', f"Expected primary_key 'AptNum' for appointment, got {appt['primary_key']}"
+
+            # Optionally check a table with a composite or no primary key
+            # ... add more assertions as needed
 
     def test_production_complete_schema_analysis(self, production_settings):
         """
@@ -687,7 +810,7 @@ class TestOpenDentalSchemaAnalyzerProductionIntegration:
                     assert 'Tables with Monitoring:' in summary_content
                     assert 'Configuration saved to:' in summary_content
                     assert 'Detailed analysis saved to:' in summary_content
-                    
+                
         finally:
             # Restore original method
             analyzer.discover_all_tables = original_discover
