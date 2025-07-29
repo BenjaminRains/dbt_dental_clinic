@@ -537,7 +537,7 @@ class TestCLIDryRunUnit:
                 'tables': {
                     'patient': {'table_importance': 'critical', 'batch_size': 1000},
                     'appointment': {'table_importance': 'important', 'batch_size': 500},
-                    'procedure': {'table_importance': 'audit', 'batch_size': 200},
+                    'procedurelog': {'table_importance': 'audit', 'batch_size': 200},
                     'payment': {'table_importance': 'reference', 'batch_size': 100}
                 }
             },
@@ -590,7 +590,7 @@ class TestCLIDryRunUnit:
         mock_settings.get_tables_by_importance.side_effect = lambda importance: {
             'critical': ['patient'],
             'important': ['appointment'],
-            'audit': ['procedure'],
+            'audit': ['procedurelog'],
             'reference': ['payment']
         }.get(importance, [])
         
