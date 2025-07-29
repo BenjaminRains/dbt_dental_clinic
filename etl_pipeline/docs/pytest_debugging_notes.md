@@ -18,6 +18,7 @@
 | Configuration file not found errors | [12.2](#122-configuration-file-testing-patterns) | Create temporary test files |
 | Complex configuration mocking | [12.3](#123-real-configuration-vs-mock-configuration) | Use real config with test data |
 | KeyError in SQLAlchemy execute mocks | [3.4](#34-sqlalchemy-execute-parameter-access) | Check args[1] before kwargs |
+| Integration tests using mock settings | [14](#14-unit-vs-integration-test-settings-pattern) | Use test_settings_with_file_provider for integration tests |
 
 ---
 
@@ -926,3 +927,118 @@ pytest --collect-only tests/
 ---
 
 *This guide is a living document. Update it with new patterns as they're discovered. Each debugging session that takes >30 minutes should result in a new pattern or enhancement to existing ones.*
+
+## 14. Unit vs Integration Test Settings Pattern
+
+**Problem**: Tests fail because they use the wrong settings fixture - unit tests should use mock settings while integration tests need real environment files with FileConfigProvider.
+**Context**: ETL pipeline tests that need to distinguish between unit testing (mocked) and integration testing (real databases)
+**Error Pattern**: 
+- `(pymysql.err.OperationalError) (1045, "Access denied for user 'test_repl_user'@'localhost'")` when integration tests use mock settings
+- Tests skip with "Test database not available" when they should connect to real test databases
+
+**Root Cause**: 
+- **Unit tests** should use `test_settings` (DictConfigProvider with mock values) for isolated testing
+- **Integration tests** should use `test_settings_with_file_provider` (FileConfigProvider with real `.env_test` file) for real database connections
+
+**Solutions**:
+
+#### 14.1 Unit Tests: Use Mock Settings
+```python
+# ✅ CORRECT - Unit tests use mock settings
+@pytest.mark.unit
+def test_postgres_loader_unit(self, test_settings):
+    """Unit test with mocked settings."""
+    loader = PostgresLoader(settings=test_settings)
+    # Test logic with mocked dependencies
+    result = loader._build_enhanced_load_query('test_table', ['created_date'], 'DateTStamp')
+    assert 'DateTStamp >' in result
+```
+
+#### 14.2 Integration Tests: Use Real Environment Settings
+```python
+# ✅ CORRECT - Integration tests use real test environment
+@pytest.mark.integration
+@pytest.mark.order(4)  # Data Loading phase
+def test_postgres_loader_integration(self, test_settings_with_file_provider, setup_etl_tracking):
+    """Integration test with real test database connections."""
+    try:
+        loader = PostgresLoader(settings=test_settings_with_file_provider)
+        # Test with real test database
+        created = loader._ensure_tracking_record_exists('test_table')
+        assert created is True
+    except Exception as e:
+        pytest.skip(f"Test database not available: {str(e)}")
+```
+
+#### 14.3 Fixture Selection Pattern
+```python
+# Unit test fixtures (mock everything)
+from tests.fixtures.config_fixtures import test_settings  # DictConfigProvider with mock values
+
+# Integration test fixtures (real environment)
+from tests.fixtures.integration_fixtures import test_settings_with_file_provider  # FileConfigProvider with .env_test
+```
+
+#### 14.4 Environment File Loading Pattern
+```python
+# ✅ CORRECT - Integration tests load real .env_test file
+@pytest.fixture
+def test_settings_with_file_provider():
+    """Create test settings using FileConfigProvider for real integration testing."""
+    try:
+        # Create FileConfigProvider that will load from .env_test
+        config_dir = Path(__file__).parent.parent.parent  # Go to etl_pipeline root
+        provider = FileConfigProvider(config_dir, environment='test')
+        
+        # Create settings with FileConfigProvider for real environment loading
+        settings = Settings(environment='test', provider=provider)
+        
+        # Validate that test environment is properly loaded
+        if not settings.validate_configs():
+            pytest.skip("Test environment configuration not available")
+        
+        return settings
+    except Exception as e:
+        # Skip tests if test environment is not available
+        pytest.skip(f"Test environment not available: {str(e)}")
+```
+
+#### 14.5 Test Classification by Settings Type
+```python
+# Unit Tests: Mocked settings for isolated testing
+@pytest.mark.unit
+def test_unit_behavior(self, test_settings):
+    """Test component logic with mocked dependencies."""
+    component = ComponentClass(test_settings)  # Mock settings
+    result = component.process_data('test_table')
+    assert result is True
+
+# Comprehensive Tests: Mocked settings with full functionality
+def test_comprehensive_behavior(self, test_settings, mock_engines):
+    """Test full functionality with mocked dependencies."""
+    component = ComponentClass(test_settings, mock_engines)  # Mock settings + engines
+    result = component.process_data('test_table')
+    assert result is True
+
+# Integration Tests: Real test database settings
+@pytest.mark.integration
+@pytest.mark.order(4)
+def test_integration_behavior(self, test_settings_with_file_provider):
+    """Test with real test database connections."""
+    component = ComponentClass(test_settings_with_file_provider)  # Real test database settings
+    result = component.process_data('test_table')
+    assert result is True
+```
+
+**Key Principles**:
+- **Unit tests**: Use `test_settings` (DictConfigProvider) for isolated, fast testing
+- **Integration tests**: Use `test_settings_with_file_provider` (FileConfigProvider) for real database validation
+- **Environment separation**: Unit tests mock everything, integration tests use real test databases
+- **Fail gracefully**: Integration tests should skip if test databases are unavailable
+- **Proper imports**: Import the correct fixture based on test type
+
+**Related Sections**: [5.1](#51-real-database-integration-testing), [5.2](#52-test-database-connection-patterns), [4.1](#41-testing-real-logic-vs-mocks), [9.2](#92-configuration-and-environment)
+
+---
+
+## 15. Environment Variable Loading Debugging
