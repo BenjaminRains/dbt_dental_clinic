@@ -72,42 +72,7 @@ def test_env_vars():
     }
 
 
-@pytest.fixture
-def production_env_vars():
-    """Production environment variables following connection architecture naming convention.
-    
-    This fixture provides production environment variables that conform to the connection architecture:
-    - Uses non-prefixed variables for production environment
-    - Follows the environment-specific variable naming convention
-    - Matches the .env_production file structure
-    - Supports the provider pattern for dependency injection
-    """
-    return {
-        # Environment declaration (required for fail-fast validation)
-        'ETL_ENVIRONMENT': 'production',
-        
-        # OpenDental Source (Production) - following architecture naming
-        'OPENDENTAL_SOURCE_HOST': os.getenv('OPENDENTAL_SOURCE_HOST', 'prod-source-host'),
-        'OPENDENTAL_SOURCE_PORT': os.getenv('OPENDENTAL_SOURCE_PORT', '3306'),
-        'OPENDENTAL_SOURCE_DB': os.getenv('OPENDENTAL_SOURCE_DB', 'opendental'),
-        'OPENDENTAL_SOURCE_USER': os.getenv('OPENDENTAL_SOURCE_USER', 'source_user'),
-        'OPENDENTAL_SOURCE_PASSWORD': os.getenv('OPENDENTAL_SOURCE_PASSWORD', 'source_pass'),
-        
-        # MySQL Replication (Production) - following architecture naming
-        'MYSQL_REPLICATION_HOST': os.getenv('MYSQL_REPLICATION_HOST', 'prod-repl-host'),
-        'MYSQL_REPLICATION_PORT': os.getenv('MYSQL_REPLICATION_PORT', '3306'),
-        'MYSQL_REPLICATION_DB': os.getenv('MYSQL_REPLICATION_DB', 'opendental_replication'),
-        'MYSQL_REPLICATION_USER': os.getenv('MYSQL_REPLICATION_USER', 'repl_user'),
-        'MYSQL_REPLICATION_PASSWORD': os.getenv('MYSQL_REPLICATION_PASSWORD', 'repl_pass'),
-        
-        # PostgreSQL Analytics (Production) - following architecture naming
-        'POSTGRES_ANALYTICS_HOST': os.getenv('POSTGRES_ANALYTICS_HOST', 'prod-analytics-host'),
-        'POSTGRES_ANALYTICS_PORT': os.getenv('POSTGRES_ANALYTICS_PORT', '5432'),
-        'POSTGRES_ANALYTICS_DB': os.getenv('POSTGRES_ANALYTICS_DB', 'opendental_analytics'),
-        'POSTGRES_ANALYTICS_SCHEMA': os.getenv('POSTGRES_ANALYTICS_SCHEMA', 'raw'),
-        'POSTGRES_ANALYTICS_USER': os.getenv('POSTGRES_ANALYTICS_USER', 'analytics_user'),
-        'POSTGRES_ANALYTICS_PASSWORD': os.getenv('POSTGRES_ANALYTICS_PASSWORD', 'analytics_pass')
-    }
+
 
 
 @pytest.fixture
@@ -390,39 +355,7 @@ def environment_detection_test_cases():
     ]
 
 
-@pytest.fixture
-def database_environment_mappings():
-    """Database environment variable mappings for testing following connection architecture.
-    
-    This fixture provides environment variable mappings that follow the architecture:
-    - Uses enums for type safety as specified in the architecture
-    - Follows environment-specific variable naming convention
-    - Supports provider pattern for configuration loading
-    """
-    return {
-        DatabaseType.SOURCE: {
-            'host': 'OPENDENTAL_SOURCE_HOST',
-            'port': 'OPENDENTAL_SOURCE_PORT',
-            'database': 'OPENDENTAL_SOURCE_DB',
-            'user': 'OPENDENTAL_SOURCE_USER',
-            'password': 'OPENDENTAL_SOURCE_PASSWORD'
-        },
-        DatabaseType.REPLICATION: {
-            'host': 'MYSQL_REPLICATION_HOST',
-            'port': 'MYSQL_REPLICATION_PORT',
-            'database': 'MYSQL_REPLICATION_DB',
-            'user': 'MYSQL_REPLICATION_USER',
-            'password': 'MYSQL_REPLICATION_PASSWORD'
-        },
-        DatabaseType.ANALYTICS: {
-            'host': 'POSTGRES_ANALYTICS_HOST',
-            'port': 'POSTGRES_ANALYTICS_PORT',
-            'database': 'POSTGRES_ANALYTICS_DB',
-            'schema': 'POSTGRES_ANALYTICS_SCHEMA',
-            'user': 'POSTGRES_ANALYTICS_USER',
-            'password': 'POSTGRES_ANALYTICS_PASSWORD'
-        }
-    }
+
 
 
 @pytest.fixture
