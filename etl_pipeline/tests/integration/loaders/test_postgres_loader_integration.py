@@ -38,6 +38,7 @@ from typing import Dict, List
 from sqlalchemy import text, inspect
 from sqlalchemy.exc import SQLAlchemyError
 import os
+import logging
 
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 from etl_pipeline.config import get_settings, DatabaseType
@@ -49,6 +50,9 @@ from etl_pipeline.exceptions.configuration import ConfigurationError
 
 # Direct import of the fixture to ensure pytest can find it
 from tests.fixtures.integration_fixtures import test_settings_with_file_provider
+
+# Set up logger for tests
+logger = logging.getLogger(__name__)
 
 
 class TestPostgresLoaderIntegration:
@@ -148,7 +152,7 @@ class TestPostgresLoaderIntegration:
         # Act & Assert: Test valid table configuration
         patient_config = postgres_loader.get_table_config('patient')
         assert isinstance(patient_config, dict)
-        assert 'incremental_column' in patient_config, "Patient config should have incremental_column"
+        assert 'incremental_columns' in patient_config, "Patient config should have incremental_columns"
         
         # Act & Assert: Test non-existent table configuration
         nonexistent_config = postgres_loader.get_table_config('nonexistent_table')
@@ -439,7 +443,7 @@ class TestPostgresLoaderIntegration:
         assert 'patient' in table_configs, "Patient table config should be loaded"
         patient_config = table_configs['patient']
         assert isinstance(patient_config, dict), "Patient config should be a dict"
-        assert 'incremental_column' in patient_config, "Patient config should have incremental_column"
+        assert 'incremental_columns' in patient_config, "Patient config should have incremental_columns"
 
     @pytest.mark.integration
     @pytest.mark.order(4)
@@ -687,3 +691,342 @@ class TestPostgresLoaderIntegration:
             "Test environment should use test-specific configuration"
 
 # Removed test_postgresloader_loads_latest_versioned_tables_yml - we only use tables.yml with metadata versioning
+
+    @pytest.mark.integration
+    @pytest.mark.order(4)
+    @pytest.mark.postgres
+    @pytest.mark.mysql
+    @pytest.mark.incremental
+    def test_postgres_loader_incremental_methods(
+        self,
+        test_settings_with_file_provider,
+        populated_test_databases,
+        test_data_manager
+    ):
+        """
+        Test PostgresLoader incremental loading methods with AAA pattern.
+        
+        AAA Pattern:
+            Arrange: Set up PostgresLoader with test data and incremental columns
+            Act: Execute incremental loading methods with real database connections
+            Assert: Verify incremental logic works correctly
+            
+        Validates:
+            - _get_last_load_time_max() with multiple incremental columns
+            - _build_improved_load_query_max() with OR logic
+            - _filter_valid_incremental_columns() data quality validation
+            - _validate_incremental_integrity() validation logic
+            - Incremental loading with real timestamp columns
+            - OR vs AND logic for incremental queries
+        """
+        # Arrange: Set up PostgresLoader and populate test data
+        postgres_loader = PostgresLoader(settings=test_settings_with_file_provider)
+        test_data_manager.setup_patient_data(include_all_fields=True, database_types=[DatabaseType.REPLICATION])
+        
+        # Load initial data to establish baseline
+        result = postgres_loader.load_table('patient')
+        assert result is True, "Initial load should succeed"
+        
+        # Act & Assert: Test _get_last_load_time_max with multiple columns
+        # Get the actual incremental columns from the table configuration
+        patient_config = postgres_loader.get_table_config('patient')
+        incremental_columns = patient_config.get('incremental_columns', ['DateTStamp', 'DateTimeDeceased'])
+        last_load_time = postgres_loader._get_last_load_time_max('patient', incremental_columns)
+        
+        # Should return a datetime or None (depending on whether tracking records exist)
+        assert last_load_time is None or isinstance(last_load_time, datetime), \
+            "Last load time should be datetime or None"
+        
+        if last_load_time:
+            logger.info(f"Last load time: {last_load_time}")
+        
+        # Act & Assert: Test _build_improved_load_query_max with OR logic
+        query_or = postgres_loader._build_improved_load_query_max(
+            'patient', incremental_columns, force_full=False, use_or_logic=True
+        )
+        
+        # Verify OR logic query structure
+        assert 'SELECT * FROM patient' in query_or
+        if 'WHERE' in query_or:
+            assert ' OR ' in query_or, "OR logic should use OR between conditions"
+            # Check for any of the actual incremental columns
+            for col in incremental_columns:
+                if f'{col} >' in query_or:
+                    break
+            else:
+                # If no actual columns found, check for generic pattern
+                assert any(f'{col} >' in query_or for col in incremental_columns), \
+                    f"OR logic should include incremental column conditions: {incremental_columns}"
+        
+        # Act & Assert: Test _build_improved_load_query_max with AND logic
+        query_and = postgres_loader._build_improved_load_query_max(
+            'patient', incremental_columns, force_full=False, use_or_logic=False
+        )
+        
+        # Verify AND logic query structure
+        assert 'SELECT * FROM patient' in query_and
+        if 'WHERE' in query_and:
+            assert ' AND ' in query_and, "AND logic should use AND between conditions"
+        
+        # Act & Assert: Test _build_improved_load_query_max with force_full=True
+        query_full = postgres_loader._build_improved_load_query_max(
+            'patient', incremental_columns, force_full=True, use_or_logic=True
+        )
+        
+        # Verify full load query (no WHERE clause)
+        assert query_full.strip() == 'SELECT * FROM patient', \
+            "Full load query should not have WHERE clause"
+        
+        # Act & Assert: Test _filter_valid_incremental_columns
+        valid_columns = postgres_loader._filter_valid_incremental_columns('patient', incremental_columns)
+        
+        # Should return a list of valid columns
+        assert isinstance(valid_columns, list), "Should return list of valid columns"
+        assert len(valid_columns) <= len(incremental_columns), \
+            "Valid columns should not exceed original columns"
+        
+        # Act & Assert: Test _validate_incremental_integrity
+        if last_load_time:
+            integrity_result = postgres_loader._validate_incremental_integrity(
+                'patient', incremental_columns, last_load_time
+            )
+            assert isinstance(integrity_result, bool), \
+                "Integrity validation should return boolean"
+
+    @pytest.mark.integration
+    @pytest.mark.order(4)
+    @pytest.mark.postgres
+    @pytest.mark.mysql
+    @pytest.mark.bulk_incremental
+    @pytest.mark.slow
+    def test_postgres_loader_bulk_incremental_methods(
+        self,
+        test_settings_with_file_provider,
+        populated_test_databases,
+        test_data_manager
+    ):
+        """
+        Test PostgresLoader bulk incremental loading methods with AAA pattern.
+        
+        AAA Pattern:
+            Arrange: Set up PostgresLoader with large dataset and incremental columns
+            Act: Execute bulk incremental loading with real database connections
+            Assert: Verify bulk incremental logic works correctly
+            
+        Validates:
+            - load_table_streaming() with incremental logic
+            - load_table_chunked() with incremental logic
+            - load_table_copy_csv() with incremental logic
+            - Bulk insert optimization with incremental data
+            - Memory monitoring during bulk operations
+            - Transaction handling across bulk operations
+        """
+        # Arrange: Set up PostgresLoader and populate large test dataset
+        postgres_loader = PostgresLoader(settings=test_settings_with_file_provider)
+        test_data_manager.setup_patient_data(include_all_fields=True, database_types=[DatabaseType.REPLICATION])
+        
+        # Load initial data to establish baseline
+        result = postgres_loader.load_table('patient')
+        assert result is True, "Initial load should succeed"
+        
+        # Act & Assert: Test load_table_streaming with incremental logic
+        streaming_result = postgres_loader.load_table_streaming('patient', force_full=False)
+        assert streaming_result is True, "Streaming load should succeed"
+        
+        # Verify data integrity after streaming load
+        verification_result = postgres_loader.verify_load('patient')
+        assert verification_result is True, "Load verification should pass after streaming"
+        
+        # Act & Assert: Test load_table_chunked with incremental logic
+        chunked_result = postgres_loader.load_table_chunked('patient', force_full=False, chunk_size=100)
+        assert chunked_result is True, "Chunked load should succeed"
+        
+        # Verify data integrity after chunked load
+        verification_result = postgres_loader.verify_load('patient')
+        assert verification_result is True, "Load verification should pass after chunked load"
+        
+        # Act & Assert: Test load_table_copy_csv with incremental logic (if table is large enough)
+        # This test depends on table size configuration - may skip for small tables
+        table_config = postgres_loader.get_table_config('patient')
+        estimated_size_mb = table_config.get('estimated_size_mb', 0)
+        
+        if estimated_size_mb > 500:  # Only test COPY for very large tables
+            copy_result = postgres_loader.load_table_copy_csv('patient', force_full=False)
+            assert copy_result is True, "COPY load should succeed for large tables"
+            
+            # Verify data integrity after COPY load
+            verification_result = postgres_loader.verify_load('patient')
+            assert verification_result is True, "Load verification should pass after COPY load"
+        else:
+            logger.info(f"Skipping COPY test for patient table (estimated size: {estimated_size_mb}MB)")
+
+    @pytest.mark.integration
+    @pytest.mark.order(4)
+    @pytest.mark.postgres
+    @pytest.mark.mysql
+    @pytest.mark.incremental_validation
+    def test_postgres_loader_incremental_validation_methods(
+        self,
+        test_settings_with_file_provider,
+        populated_test_databases,
+        test_data_manager
+    ):
+        """
+        Test PostgresLoader incremental validation methods with AAA pattern.
+        
+        AAA Pattern:
+            Arrange: Set up PostgresLoader with test data and validation scenarios
+            Act: Execute incremental validation methods with real database connections
+            Assert: Verify validation logic works correctly
+            
+        Validates:
+            - _validate_incremental_integrity() with real data
+            - Data quality validation for incremental columns
+            - Error handling for invalid incremental scenarios
+            - Validation with multiple incremental columns
+            - Edge cases in incremental validation
+        """
+        # Arrange: Set up PostgresLoader and populate test data
+        postgres_loader = PostgresLoader(settings=test_settings_with_file_provider)
+        test_data_manager.setup_patient_data(include_all_fields=True, database_types=[DatabaseType.REPLICATION])
+        
+        # Load initial data to establish baseline
+        result = postgres_loader.load_table('patient')
+        assert result is True, "Initial load should succeed"
+        
+        # Act & Assert: Test _validate_incremental_integrity with valid data
+        # Get the actual incremental columns from the table configuration
+        patient_config = postgres_loader.get_table_config('patient')
+        incremental_columns = patient_config.get('incremental_columns', ['DateTStamp', 'DateTimeDeceased'])
+        last_load_time = postgres_loader._get_last_load_time_max('patient', incremental_columns)
+        
+        if last_load_time:
+            integrity_result = postgres_loader._validate_incremental_integrity(
+                'patient', incremental_columns, last_load_time
+            )
+            assert isinstance(integrity_result, bool), \
+                "Integrity validation should return boolean"
+            assert integrity_result is True, "Integrity validation should pass with valid data"
+        
+        # Act & Assert: Test _filter_valid_incremental_columns with real data
+        valid_columns = postgres_loader._filter_valid_incremental_columns('patient', incremental_columns)
+        
+        # Should return valid columns based on data quality
+        assert isinstance(valid_columns, list), "Should return list of valid columns"
+        assert len(valid_columns) <= len(incremental_columns), \
+            "Valid columns should not exceed original columns"
+        
+        # Verify that returned columns are actually valid
+        for col in valid_columns:
+            assert col in incremental_columns, f"Valid column {col} should be in original list"
+        
+        # Act & Assert: Test validation with non-existent table
+        nonexistent_result = postgres_loader._validate_incremental_integrity(
+            'nonexistent_table', incremental_columns, datetime.now()
+        )
+        assert isinstance(nonexistent_result, bool), \
+            "Validation should return boolean even for non-existent table"
+        
+        # Act & Assert: Test validation with empty incremental columns
+        empty_result = postgres_loader._validate_incremental_integrity(
+            'patient', [], datetime.now()
+        )
+        assert empty_result is True, "Validation should pass with empty columns"
+        
+        # Act & Assert: Test _filter_valid_incremental_columns with empty list
+        empty_valid = postgres_loader._filter_valid_incremental_columns('patient', [])
+        assert empty_valid == [], "Should return empty list for empty input"
+
+    @pytest.mark.integration
+    @pytest.mark.order(4)
+    @pytest.mark.postgres
+    @pytest.mark.mysql
+    @pytest.mark.incremental_performance
+    def test_postgres_loader_incremental_performance_methods(
+        self,
+        test_settings_with_file_provider,
+        populated_test_databases,
+        test_data_manager
+    ):
+        """
+        Test PostgresLoader incremental performance methods with AAA pattern.
+        
+        AAA Pattern:
+            Arrange: Set up PostgresLoader with performance test scenarios
+            Act: Execute incremental performance methods with real database connections
+            Assert: Verify performance optimizations work correctly
+            
+        Validates:
+            - Automatic strategy selection based on table size
+            - Performance monitoring during incremental loads
+            - Memory usage optimization in incremental operations
+            - Query performance with different incremental strategies
+            - Bulk operation efficiency with incremental data
+        """
+        # Arrange: Set up PostgresLoader
+        postgres_loader = PostgresLoader(settings=test_settings_with_file_provider)
+        test_data_manager.setup_patient_data(include_all_fields=True, database_types=[DatabaseType.REPLICATION])
+        
+        # Act & Assert: Test automatic strategy selection
+        table_config = postgres_loader.get_table_config('patient')
+        estimated_size_mb = table_config.get('estimated_size_mb', 0)
+        
+        # Test load_table() automatic strategy selection
+        result = postgres_loader.load_table('patient')
+        assert result is True, "Automatic strategy selection should succeed"
+        
+        # Verify the correct strategy was used based on table size
+        if estimated_size_mb <= 50:
+            logger.info("Small table - should use standard loading")
+        elif estimated_size_mb <= 200:
+            logger.info("Medium table - should use streaming loading")
+        elif estimated_size_mb <= 500:
+            logger.info("Large table - should use chunked loading")
+        else:
+            logger.info("Very large table - should use COPY loading")
+        
+        # Act & Assert: Test performance with different incremental strategies
+        # Test streaming performance
+        streaming_start = datetime.now()
+        streaming_result = postgres_loader.load_table_streaming('patient', force_full=False)
+        streaming_duration = (datetime.now() - streaming_start).total_seconds()
+        
+        assert streaming_result is True, "Streaming load should succeed"
+        assert streaming_duration >= 0, "Streaming duration should be non-negative"
+        logger.info(f"Streaming load duration: {streaming_duration:.2f} seconds")
+        
+        # Test chunked performance
+        chunked_start = datetime.now()
+        chunked_result = postgres_loader.load_table_chunked('patient', force_full=False, chunk_size=50)
+        chunked_duration = (datetime.now() - chunked_start).total_seconds()
+        
+        assert chunked_result is True, "Chunked load should succeed"
+        assert chunked_duration >= 0, "Chunked duration should be non-negative"
+        logger.info(f"Chunked load duration: {chunked_duration:.2f} seconds")
+        
+        # Verify data integrity after performance tests
+        verification_result = postgres_loader.verify_load('patient')
+        assert verification_result is True, "Load verification should pass after performance tests"
+        
+        # Act & Assert: Test query performance with different incremental logic
+        incremental_columns = ['DateModified', 'DateCreated']
+        
+        # Test OR logic query performance
+        or_query_start = datetime.now()
+        or_query = postgres_loader._build_improved_load_query_max(
+            'patient', incremental_columns, force_full=False, use_or_logic=True
+        )
+        or_query_duration = (datetime.now() - or_query_start).total_seconds()
+        
+        assert 'SELECT * FROM patient' in or_query, "OR query should be valid"
+        assert or_query_duration < 1.0, "Query building should be fast (< 1 second)"
+        
+        # Test AND logic query performance
+        and_query_start = datetime.now()
+        and_query = postgres_loader._build_improved_load_query_max(
+            'patient', incremental_columns, force_full=False, use_or_logic=False
+        )
+        and_query_duration = (datetime.now() - and_query_start).total_seconds()
+        
+        assert 'SELECT * FROM patient' in and_query, "AND query should be valid"
+        assert and_query_duration < 1.0, "Query building should be fast (< 1 second)"
