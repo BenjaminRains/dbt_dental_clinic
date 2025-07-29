@@ -173,6 +173,123 @@ def get_table_columns(engine, database_name, table_name, schema_name=None):
         return pd.DataFrame()
 
 
+def compare_table_counts(source_engine, replication_engine, analytics_engine, table_name):
+    """
+    Compare row counts for a specific table across all three databases.
+    
+    Args:
+        source_engine: MySQL engine for source database
+        replication_engine: MySQL engine for replication database  
+        analytics_engine: PostgreSQL engine for analytics database
+        table_name: Name of the table to compare
+        
+    Returns:
+        DataFrame with comparison results
+    """
+    logger.info(f"Comparing table counts for: {table_name}")
+    
+    results = []
+    
+    try:
+        # Source database (MySQL)
+        with source_engine.connect() as conn:
+            result = conn.execute(text(f"SELECT COUNT(*) as row_count FROM opendental.{table_name}"))
+            source_count = result.scalar()
+            results.append({
+                'database': 'opendental (source)',
+                'table_name': table_name,
+                'row_count': source_count,
+                'database_type': 'mysql'
+            })
+            logger.info(f"Source database {table_name}: {source_count} rows")
+            
+    except Exception as e:
+        logger.error(f"Error counting rows in source database for {table_name}: {e}")
+        results.append({
+            'database': 'opendental (source)',
+            'table_name': table_name,
+            'row_count': None,
+            'database_type': 'mysql',
+            'error': str(e)
+        })
+    
+    try:
+        # Replication database (MySQL)
+        with replication_engine.connect() as conn:
+            result = conn.execute(text(f"SELECT COUNT(*) as row_count FROM opendental_replication.{table_name}"))
+            replication_count = result.scalar()
+            results.append({
+                'database': 'opendental_replication',
+                'table_name': table_name,
+                'row_count': replication_count,
+                'database_type': 'mysql'
+            })
+            logger.info(f"Replication database {table_name}: {replication_count} rows")
+            
+    except Exception as e:
+        logger.error(f"Error counting rows in replication database for {table_name}: {e}")
+        results.append({
+            'database': 'opendental_replication',
+            'table_name': table_name,
+            'row_count': None,
+            'database_type': 'mysql',
+            'error': str(e)
+        })
+    
+    try:
+        # Analytics database (PostgreSQL)
+        with analytics_engine.connect() as conn:
+            result = conn.execute(text(f"SELECT COUNT(*) as row_count FROM raw.{table_name}"))
+            analytics_count = result.scalar()
+            results.append({
+                'database': 'opendental_analytics (raw)',
+                'table_name': table_name,
+                'row_count': analytics_count,
+                'database_type': 'postgresql'
+            })
+            logger.info(f"Analytics database {table_name}: {analytics_count} rows")
+            
+    except Exception as e:
+        logger.error(f"Error counting rows in analytics database for {table_name}: {e}")
+        results.append({
+            'database': 'opendental_analytics (raw)',
+            'table_name': table_name,
+            'row_count': None,
+            'database_type': 'postgresql',
+            'error': str(e)
+        })
+    
+    # Create DataFrame
+    df = pd.DataFrame(results)
+    
+    # Add comparison analysis
+    if len(df) == 3 and df['row_count'].notna().all():
+        source_count = df[df['database'] == 'opendental (source)']['row_count'].iloc[0]
+        replication_count = df[df['database'] == 'opendental_replication']['row_count'].iloc[0]
+        analytics_count = df[df['database'] == 'opendental_analytics (raw)']['row_count'].iloc[0]
+        
+        # Check for data loss
+        if replication_count < source_count:
+            logger.warning(f"Data loss detected in replication: {source_count - replication_count} rows missing")
+        if analytics_count < replication_count:
+            logger.warning(f"Data loss detected in analytics: {replication_count - analytics_count} rows missing")
+        if analytics_count < source_count:
+            logger.warning(f"Data loss detected in pipeline: {source_count - analytics_count} rows missing")
+            
+        # Add summary
+        print(f"\n📊 Table Count Comparison for '{table_name}':")
+        print(f"Source (opendental): {source_count:,} rows")
+        print(f"Replication (opendental_replication): {replication_count:,} rows")
+        print(f"Analytics (opendental_analytics.raw): {analytics_count:,} rows")
+        
+        if source_count == replication_count == analytics_count:
+            print("✅ All databases have the same row count")
+        else:
+            print("⚠️  Row count differences detected")
+    
+    return df
+
+
 def main():
     """Main analysis function."""
     logger.info("Starting database comparison analysis...")
@@ -202,23 +319,33 @@ def main():
         # Combine all dataframes
         all_tables_df = pd.concat([source_df, replication_df, analytics_df], ignore_index=True)
         
-        # Create simple output directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path("database_data") / f"export_{timestamp}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save raw database data to CSV files
-        source_df.to_csv(output_dir / "opendental_tables.csv", index=False)
-        replication_df.to_csv(output_dir / "opendental_replication_tables.csv", index=False)
-        analytics_df.to_csv(output_dir / "opendental_analytics_tables.csv", index=False)
-        
         # Simple summary
         print(f"\n📊 Database Export Complete")
         print(f"Source (opendental): {len(source_df)} tables")
         print(f"Replication (opendental_replication): {len(replication_df)} tables")
         print(f"Analytics (opendental_analytics): {len(analytics_df)} tables")
-        print(f"📁 Data saved to: {output_dir}")
         print(f"📝 Log file: {log_file_path}")
+        
+        # Interactive table count comparison
+        print(f"\n🔍 Interactive Table Count Comparison")
+        print(f"Enter a table name to compare counts across all databases (or 'quit' to exit):")
+        
+        while True:
+            table_name = input("\nEnter table name: ").strip().lower()
+            
+            if table_name.lower() in ['quit', 'exit', 'q']:
+                break
+                
+            if not table_name:
+                print("Please enter a valid table name")
+                continue
+                
+            # Perform table count comparison
+            comparison_df = compare_table_counts(source_engine, replication_engine, analytics_engine, table_name)
+            
+            # Log the comparison results
+            logger.info(f"Table count comparison completed for '{table_name}'")
+            logger.info(f"Comparison results: {comparison_df.to_dict('records')}")
         
         logger.info(f"Database export completed - {len(source_df)} source, {len(replication_df)} replication, {len(analytics_df)} analytics tables")
         
