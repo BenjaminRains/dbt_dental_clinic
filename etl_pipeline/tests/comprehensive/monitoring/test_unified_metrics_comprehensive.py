@@ -124,7 +124,7 @@ class TestUnifiedMetricsCollectorComprehensive:
         # Process multiple tables with different scenarios
         collector.record_table_processed('patient', 1000, 30.5, True)
         collector.record_table_processed('appointment', 500, 15.2, False, "Database connection failed")
-        collector.record_table_processed('procedure', 750, 25.0, True)
+        collector.record_table_processed('procedurelog', 750, 25.0, True)
         collector.record_table_processed('payment', 250, 8.5, True)
         collector.record_error("General pipeline warning", "system")
         
@@ -183,7 +183,7 @@ class TestUnifiedMetricsCollectorComprehensive:
         # Add complex test data
         collector.record_table_processed('patient', 1000, 30.5, True)
         collector.record_table_processed('appointment', 500, 15.2, False, "Connection timeout")
-        collector.record_table_processed('procedure', 750, 25.0, True)
+        collector.record_table_processed('procedurelog', 750, 25.0, True)
         collector.record_table_processed('payment', 250, 8.5, False, "Data validation failed")
         collector.record_error("General system error", "orchestration")
         collector.record_error("Configuration warning", "config")
@@ -276,7 +276,7 @@ class TestUnifiedMetricsCollectorComprehensive:
             # Add comprehensive test data
             collector.record_table_processed('patient', 1000, 30.5, True)
             collector.record_table_processed('appointment', 500, 15.2, False, "Connection failed")
-            collector.record_table_processed('procedure', 750, 25.0, True)
+            collector.record_table_processed('procedurelog', 750, 25.0, True)
             collector.record_error("General error", "system")
             collector.end_pipeline()
             print('DEBUG: metrics keys after end_pipeline:', collector.metrics.keys())
@@ -353,7 +353,7 @@ class TestUnifiedMetricsCollectorComprehensive:
         # Table processing errors
         collector.record_table_processed('patient', 1000, 30.5, False, "Database connection timeout")
         collector.record_table_processed('appointment', 500, 15.2, False, "Data validation failed")
-        collector.record_table_processed('procedure', 750, 25.0, False, "Schema mismatch")
+        collector.record_table_processed('procedurelog', 750, 25.0, False, "Schema mismatch")
         
         # General pipeline errors
         collector.record_error("Configuration error", "config")
@@ -371,7 +371,7 @@ class TestUnifiedMetricsCollectorComprehensive:
         assert len(collector.metrics['table_metrics']) == 4
         
         # Verify table errors are properly recorded
-        table_errors = [error for error in collector.metrics['errors'] if 'table' in error and error.get('table') in ['patient', 'appointment', 'procedure']]
+        table_errors = [error for error in collector.metrics['errors'] if 'table' in error and error.get('table') in ['patient', 'appointment', 'procedurelog']]
         assert len(table_errors) == 3
         
         # Verify general errors are properly recorded
