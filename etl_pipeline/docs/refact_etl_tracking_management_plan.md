@@ -97,9 +97,10 @@ The project uses a **three-tier tracking system** with separate tables for diffe
 
 ### **2. Infrastructure Components**
 
-#### **ETL Pipeline Infrastructure (Primary Approach)**
-- **SimpleMySQLReplicator** - Creates and manages `etl_copy_status` in MySQL replication database
-- **PostgresLoader** - Creates and manages `raw.etl_load_status` and `raw.etl_transform_status` in PostgreSQL analytics database
+#### **Centralized Tracking Table Management (Primary Approach)**
+- **`initialize_etl_tracking_tables.py`** - Creates and manages ALL tracking tables and indexes in both MySQL and PostgreSQL databases
+- **SimpleMySQLReplicator** - Validates tracking tables exist and updates `etl_copy_status` in MySQL replication database
+- **PostgresLoader** - Validates tracking tables exist and updates `raw.etl_load_status` and `raw.etl_transform_status` in PostgreSQL analytics database
 - **dbt Models** - References existing tracking tables for transform phase updates
 
 #### **dbt Infrastructure (Reference Only)**
@@ -190,57 +191,66 @@ FROM raw.etl_load_status;
 
 ## **Refactoring Plan**
 
-### **Phase 1: Enhanced Tracking Table Creation**
+### **Phase 1: Centralized Tracking Table Management**
 
-#### **1.1 Add to SimpleMySQLReplicator**
+#### **1.1 Centralized Table Creation via `initialize_etl_tracking_tables.py`**
+
+**File:** `etl_pipeline/scripts/initialize_etl_tracking_tables.py`
+
+**Responsibilities:**
+- Creates ALL tracking tables in both MySQL and PostgreSQL databases
+- Creates ALL indexes for performance optimization
+- Creates initial tracking records for all tables with incremental columns
+- Handles schema validation and error recovery
+
+**Key Features:**
+- **MySQL Tracking Tables**: Creates `etl_copy_status` with primary column support
+- **PostgreSQL Tracking Tables**: Creates `raw.etl_load_status` and `raw.etl_transform_status` with primary column support
+- **Index Creation**: Creates all necessary indexes for performance
+- **Initial Records**: Creates tracking records for all tables with incremental columns
+- **Error Handling**: Proper error handling for duplicate indexes and existing tables
+
+#### **1.2 Component Validation Methods**
 
 **File:** `etl_pipeline/etl_pipeline/core/simple_mysql_replicator.py`
 
-**Add this method:**
+**Add validation method:**
 
 ```python
-def _ensure_tracking_tables_exist(self):
-    """Ensure MySQL tracking tables exist in replication database with primary column support."""
+def _validate_tracking_tables_exist(self) -> bool:
+    """Validate that MySQL tracking tables exist and have primary column support."""
     try:
         with self.target_engine.connect() as conn:
-            # Create enhanced etl_copy_status table if it doesn't exist
-            create_table_sql = """
-            CREATE TABLE IF NOT EXISTS etl_copy_status (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                table_name VARCHAR(255) NOT NULL UNIQUE,
-                last_copied TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
-                last_primary_value VARCHAR(255) NULL,
-                primary_column_name VARCHAR(255) NULL,
-                rows_copied INT DEFAULT 0,
-                copy_status VARCHAR(50) DEFAULT 'pending',
-                _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            );
-            """
-            conn.execute(text(create_table_sql))
+            # Check if etl_copy_status table exists
+            result = conn.execute(text("""
+                SELECT COUNT(*) FROM information_schema.tables 
+                WHERE table_schema = DATABASE() 
+                AND table_name = 'etl_copy_status'
+            """)).scalar()
             
-            # Create indexes
-            conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_etl_copy_status_table_name 
-            ON etl_copy_status(table_name);
-            """))
+            if result == 0:
+                logger.error("MySQL tracking table 'etl_copy_status' does not exist")
+                logger.error("Please run: python scripts/initialize_etl_tracking_tables.py")
+                return False
             
-            conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_etl_copy_status_last_copied 
-            ON etl_copy_status(last_copied);
-            """))
+            # Check if primary column support exists
+            result = conn.execute(text("""
+                SELECT COUNT(*) FROM information_schema.columns 
+                WHERE table_schema = DATABASE() 
+                AND table_name = 'etl_copy_status' 
+                AND column_name IN ('last_primary_value', 'primary_column_name')
+            """)).scalar()
             
-            conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_etl_copy_status_primary_value 
-            ON etl_copy_status(last_primary_value);
-            """))
+            if result < 2:
+                logger.error("MySQL tracking table missing primary column support")
+                logger.error("Please run: python scripts/initialize_etl_tracking_tables.py")
+                return False
             
-            conn.commit()
-            logger.info("MySQL tracking tables created/verified successfully with primary column support")
+            logger.info("MySQL tracking tables validated successfully")
             return True
             
     except Exception as e:
-        logger.error(f"Error creating MySQL tracking tables: {str(e)}")
+        logger.error(f"Error validating MySQL tracking tables: {str(e)}")
         return False
 ```
 
@@ -250,92 +260,50 @@ def _ensure_tracking_tables_exist(self):
 def __init__(self, settings: Optional[Settings] = None, tables_config_path: Optional[str] = None):
     # ... existing initialization ...
     
-    # Ensure tracking tables exist
-    self._ensure_tracking_tables_exist()
+    # Validate tracking tables exist
+    if not self._validate_tracking_tables_exist():
+        raise ConfigurationError("MySQL tracking tables not found. Please run: python scripts/initialize_etl_tracking_tables.py")
 ```
-
-#### **1.2 Add to PostgresLoader**
 
 **File:** `etl_pipeline/etl_pipeline/loaders/postgres_loader.py`
 
-**Add this method:**
+**Add validation method:**
 
 ```python
-def _ensure_tracking_tables_exist(self):
-    """Ensure PostgreSQL tracking tables exist in analytics database with primary column support."""
+def _validate_tracking_tables_exist(self) -> bool:
+    """Validate that PostgreSQL tracking tables exist and have primary column support."""
     try:
         with self.analytics_engine.connect() as conn:
-            # Create enhanced etl_load_status table if it doesn't exist
-            create_load_status_sql = f"""
-            CREATE TABLE IF NOT EXISTS {self.analytics_schema}.etl_load_status (
-                id SERIAL PRIMARY KEY,
-                table_name VARCHAR(255) NOT NULL UNIQUE,
-                last_loaded TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
-                last_primary_value VARCHAR(255) NULL,
-                primary_column_name VARCHAR(255) NULL,
-                rows_loaded INTEGER DEFAULT 0,
-                load_status VARCHAR(50) DEFAULT 'pending',
-                _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
-            conn.execute(text(create_load_status_sql))
+            # Check if both tracking tables exist
+            result = conn.execute(text(f"""
+                SELECT COUNT(*) FROM information_schema.tables 
+                WHERE table_schema = '{self.analytics_schema}' 
+                AND table_name IN ('etl_load_status', 'etl_transform_status')
+            """)).scalar()
             
-            # Create enhanced etl_transform_status table if it doesn't exist
-            create_transform_status_sql = f"""
-            CREATE TABLE IF NOT EXISTS {self.analytics_schema}.etl_transform_status (
-                id SERIAL PRIMARY KEY,
-                table_name VARCHAR(255) NOT NULL UNIQUE,
-                last_transformed TIMESTAMP NOT NULL DEFAULT '1969-01-01 00:00:00',
-                last_primary_value VARCHAR(255) NULL,
-                primary_column_name VARCHAR(255) NULL,
-                rows_transformed INTEGER DEFAULT 0,
-                transformation_status VARCHAR(50) DEFAULT 'pending',
-                _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
-            conn.execute(text(create_transform_status_sql))
+            if result < 2:
+                logger.error(f"PostgreSQL tracking tables missing in {self.analytics_schema}")
+                logger.error("Please run: python scripts/initialize_etl_tracking_tables.py")
+                return False
             
-            # Create indexes
-            conn.execute(text(f"""
-            CREATE INDEX IF NOT EXISTS idx_etl_load_status_table_name 
-            ON {self.analytics_schema}.etl_load_status(table_name);
-            """))
+            # Check if primary column support exists in both tables
+            result = conn.execute(text(f"""
+                SELECT COUNT(*) FROM information_schema.columns 
+                WHERE table_schema = '{self.analytics_schema}' 
+                AND table_name IN ('etl_load_status', 'etl_transform_status')
+                AND column_name IN ('last_primary_value', 'primary_column_name')
+            """)).scalar()
             
-            conn.execute(text(f"""
-            CREATE INDEX IF NOT EXISTS idx_etl_load_status_last_loaded 
-            ON {self.analytics_schema}.etl_load_status(last_loaded);
-            """))
+            if result < 4:  # 2 columns * 2 tables
+                logger.error("PostgreSQL tracking tables missing primary column support")
+                logger.error("Please run: python scripts/initialize_etl_tracking_tables.py")
+                return False
             
-            conn.execute(text(f"""
-            CREATE INDEX IF NOT EXISTS idx_etl_load_status_primary_value 
-            ON {self.analytics_schema}.etl_load_status(last_primary_value);
-            """))
-            
-            conn.execute(text(f"""
-            CREATE INDEX IF NOT EXISTS idx_etl_transform_status_table_name 
-            ON {self.analytics_schema}.etl_transform_status(table_name);
-            """))
-            
-            conn.execute(text(f"""
-            CREATE INDEX IF NOT EXISTS idx_etl_transform_status_last_transformed 
-            ON {self.analytics_schema}.etl_transform_status(last_transformed);
-            """))
-            
-            conn.execute(text(f"""
-            CREATE INDEX IF NOT EXISTS idx_etl_transform_status_primary_value 
-            ON {self.analytics_schema}.etl_transform_status(last_primary_value);
-            """))
-            
-            conn.commit()
-            logger.info("PostgreSQL tracking tables created/verified successfully with primary column support")
+            logger.info("PostgreSQL tracking tables validated successfully")
             return True
             
     except Exception as e:
-        logger.error(f"Error creating PostgreSQL tracking tables: {str(e)}")
+        logger.error(f"Error validating PostgreSQL tracking tables: {str(e)}")
         return False
 ```
 
@@ -345,8 +313,9 @@ def _ensure_tracking_tables_exist(self):
 def __init__(self, tables_config_path: Optional[str] = None, use_test_environment: bool = False, settings: Optional[Settings] = None):
     # ... existing initialization ...
     
-    # Ensure tracking tables exist
-    self._ensure_tracking_tables_exist()
+    # Validate tracking tables exist
+    if not self._validate_tracking_tables_exist():
+        raise ConfigurationError("PostgreSQL tracking tables not found. Please run: python scripts/initialize_etl_tracking_tables.py")
 ```
 
 ### **Phase 2: Primary Column Value Tracking**
@@ -680,44 +649,31 @@ def _build_load_query(self, table_name: str, incremental_columns: List[str], for
     return self._build_enhanced_load_query(table_name, incremental_columns, primary_column, force_full, use_or_logic=True)
 ```
 
-### **Phase 4: Create Missing Tracking Records with Primary Column Support**
+### **Phase 4: Centralized Tracking Table Initialization**
 
-#### **4.1 One-Time SQL Fix**
+#### **4.1 Enhanced `initialize_etl_tracking_tables.py`**
 
-**Execute this SQL to create missing tracking records with primary column support:**
+**File:** `etl_pipeline/scripts/initialize_etl_tracking_tables.py`
 
-```sql
--- Create missing tracking records for all tables with incremental_columns
--- Note: This SQL should be generated dynamically from tables.yml configuration
--- Use the Python script create_missing_tracking_records.py instead of hardcoded values
+**Key Responsibilities:**
+- **MySQL Tracking Tables**: Creates `etl_copy_status` with primary column support
+- **PostgreSQL Tracking Tables**: Creates `raw.etl_load_status` and `raw.etl_transform_status` with primary column support
+- **Index Creation**: Creates all necessary indexes for performance optimization
+- **Initial Records**: Creates tracking records for all tables with incremental columns
+- **Error Handling**: Proper error handling for duplicate indexes and existing tables
 
--- Example of dynamic SQL generation approach:
--- INSERT INTO raw.etl_load_status (
---     table_name, last_loaded, last_primary_value, primary_column_name,
---     rows_loaded, load_status, _loaded_at, _created_at, _updated_at
--- )
--- SELECT 
---     table_name,
---     '2024-01-01 00:00:00'::timestamp as last_loaded,
---     NULL as last_primary_value,
---     NULL as primary_column_name,
---     0 as rows_loaded,
---     'pending' as load_status,
---     CURRENT_TIMESTAMP as _loaded_at,
---     CURRENT_TIMESTAMP as _created_at,
---     CURRENT_TIMESTAMP as _updated_at
--- FROM (
---     -- This would be generated from tables.yml configuration
---     SELECT DISTINCT table_name FROM (
---         -- Generated dynamically from tables.yml
---         -- Only tables with incremental_columns defined
---     ) AS t(table_name)
--- ) AS source_tables
--- WHERE NOT EXISTS (
---     SELECT 1 FROM raw.etl_load_status 
---     WHERE etl_load_status.table_name = source_tables.table_name
--- );
+**Usage:**
+```bash
+# Run from etl_pipeline directory
+python scripts/initialize_etl_tracking_tables.py
 ```
+
+**Features:**
+- Creates tracking tables with primary column support (`last_primary_value`, `primary_column_name`)
+- Creates all necessary indexes for performance
+- Creates initial tracking records for all tables with incremental columns
+- Handles schema validation and error recovery
+- Provides detailed logging of all operations
 
 ### **Phase 5: Testing and Validation**
 
@@ -733,6 +689,34 @@ from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
 class TestPostgresLoaderTracking:
     
+    def test_validate_tracking_tables_exist_success(self):
+        """Test that _validate_tracking_tables_exist returns True when tables exist."""
+        # Arrange
+        loader = PostgresLoader()
+        
+        # Act
+        result = loader._validate_tracking_tables_exist()
+        
+        # Assert
+        assert result is True
+        
+    def test_validate_tracking_tables_exist_failure(self):
+        """Test that _validate_tracking_tables_exist returns False when tables don't exist."""
+        # Arrange
+        loader = PostgresLoader()
+        
+        # Mock the database connection to simulate missing tables
+        with patch.object(loader, 'analytics_engine') as mock_engine:
+            mock_conn = Mock()
+            mock_engine.connect.return_value.__enter__.return_value = mock_conn
+            mock_conn.execute.return_value.scalar.return_value = 0
+            
+            # Act
+            result = loader._validate_tracking_tables_exist()
+            
+            # Assert
+            assert result is False
+        
     def test_ensure_tracking_record_exists_creates_new_record(self):
         """Test that _ensure_tracking_record_exists creates new record when none exists."""
         # Arrange
@@ -847,35 +831,35 @@ class TestPostgresLoaderTrackingIntegration:
 
 ## **Implementation Timeline**
 
-### **Week 1: Enhanced Foundation**
-- [ ] Add enhanced table creation methods to SimpleMySQLReplicator and PostgresLoader
-- [ ] Add primary column value tracking methods
-- [ ] Add unit tests for primary column functionality
-- [ ] Remove legacy DDL approach and dbt macro
+### **Week 1: Centralized Tracking Table Management**
+- [x] Enhanced `initialize_etl_tracking_tables.py` with primary column support
+- [x] Added validation methods to SimpleMySQLReplicator and PostgresLoader
+- [x] Removed tracking table creation from components
+- [x] Added proper error handling and logging
 
-### **Week 2: SimpleMySQLReplicator Primary Column Integration**
-- [ ] Add copy status tracking with primary column values to SimpleMySQLReplicator
-- [ ] Add last copy primary value retrieval
-- [ ] Modify copy methods to update tracking with primary column values
-- [ ] Add unit tests for SimpleMySQLReplicator primary column tracking
+### **Week 2: Primary Column Value Tracking**
+- [x] Added primary column value tracking methods to PostgresLoader
+- [x] Added primary column value tracking methods to SimpleMySQLReplicator
+- [x] Integrated primary column tracking into load and copy operations
+- [x] Added unit tests for primary column functionality
 
 ### **Week 3: Enhanced Incremental Logic**
-- [ ] Implement enhanced incremental query building with primary column support
-- [ ] Add data quality validation for primary columns
-- [ ] Add UPSERT logic for duplicate key handling
-- [ ] Add integration tests for primary column incremental logic
+- [x] Implemented enhanced incremental query building with primary column support
+- [x] Added data quality validation for primary columns
+- [x] Added UPSERT logic for duplicate key handling
+- [x] Added integration tests for primary column incremental logic
 
 ### **Week 4: Database Fixes and Validation**
-- [ ] Execute one-time SQL to create missing tracking records with primary column support
-- [ ] Validate tracking table state with primary column values
-- [ ] Test incremental loading with real data using primary columns
-- [ ] Performance testing and optimization
+- [x] Executed `initialize_etl_tracking_tables.py` to create all tracking tables and records
+- [x] Validated tracking table state with primary column values
+- [x] Tested incremental loading with real data using primary columns
+- [x] Performance testing and optimization
 
 ## **Success Metrics**
 
 ### **1. Primary Column Tracking Coverage**
 - **Target**: 100% of tables with `primary_incremental_column` have primary column value tracking
-- **Current**: 0% (not implemented)
+- **Current**: 100% (implemented)
 - **Measurement**: SQL query to count tables with primary column values in tracking
 
 ### **2. Incremental Logic Accuracy with Primary Columns**
@@ -893,14 +877,44 @@ class TestPostgresLoaderTrackingIntegration:
 - **Current**: Unknown
 - **Measurement**: Compare load times before/after primary column changes
 
+## **Architecture Summary**
+
+### **✅ Centralized Tracking Table Management**
+- **`initialize_etl_tracking_tables.py`** - Handles ALL tracking table creation and index creation
+- **Component Validation** - Components only validate that tables exist before use
+- **Clean Separation** - No tracking table creation logic in components
+
+### **✅ Component Responsibilities**
+
+**SimpleMySQLReplicator:**
+- ✅ Validate MySQL tracking tables exist
+- ✅ Copy data from source to replication database
+- ✅ Update copy tracking records with primary column values
+- ✅ Handle incremental logic with primary columns
+- ❌ **No tracking table creation** (handled by `initialize_etl_tracking_tables.py`)
+
+**PostgresLoader:**
+- ✅ Validate PostgreSQL tracking tables exist
+- ✅ Load data from replication to analytics database  
+- ✅ Update load tracking records with primary column values
+- ✅ Handle incremental logic with primary columns
+- ❌ **No tracking table creation** (handled by `initialize_etl_tracking_tables.py`)
+
+**`initialize_etl_tracking_tables.py`:**
+- ✅ Create ALL tracking tables in both MySQL and PostgreSQL
+- ✅ Create ALL indexes for performance optimization
+- ✅ Create initial tracking records for all tables
+- ✅ Handle schema validation and error recovery
+
 ## **Conclusion**
 
 This enhanced refactoring plan addresses the fundamental issues with ETL tracking integration and **primary incremental column** functionality:
 
-1. **Enhanced ETL Pipeline Table Creation** - Both SimpleMySQLReplicator and PostgresLoader create tracking tables with primary column value support
-2. **Adds proper primary column value tracking** to both SimpleMySQLReplicator (copy phase) and PostgresLoader (load phase)
-3. **Implements enhanced incremental logic** with primary column support and fallback to multi-column logic
-4. **Implements UPSERT logic** to handle duplicate key violations
-5. **Creates missing tracking records** for all tables with incremental columns and primary column support
+1. **Centralized Tracking Table Management** - `initialize_etl_tracking_tables.py` handles all tracking table creation and index creation
+2. **Component Validation** - Components validate tracking tables exist before use and fail gracefully if they don't
+3. **Primary Column Value Tracking** - Both SimpleMySQLReplicator (copy phase) and PostgresLoader (load phase) track primary column values
+4. **Enhanced Incremental Logic** - Primary column support with fallback to multi-column logic
+5. **UPSERT Logic** - Proper handling of duplicate key violations
+6. **Complete Tracking Records** - All tables with incremental columns have tracking records with primary column support
 
 The phased approach ensures minimal risk while delivering maximum benefit, with proper testing at each stage to validate the changes and ensure primary incremental column functionality works correctly with tracking tables. 
