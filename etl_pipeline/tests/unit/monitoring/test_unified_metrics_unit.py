@@ -454,7 +454,7 @@ class TestUnifiedMetricsCollectorUnit:
         collector.start_pipeline()
         collector.record_table_processed('patient', 1000, 30.5, True)
         collector.record_table_processed('appointment', 500, 15.2, False, "Error")
-        collector.record_table_processed('procedure', 750, 25.0, True)
+        collector.record_table_processed('procedurelog', 750, 25.0, True)
         
         # Act: Call get_pipeline_stats() method
         stats = collector.get_pipeline_stats()
