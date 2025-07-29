@@ -903,8 +903,8 @@ class TestPostgresSchemaAdaptation:
             with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
                 # Test comprehensive schema conversion
                 for table_name, mysql_schema in sample_mysql_schemas.items():
-                    # Skip procedure table as it has a different format (no backticks)
-                    if table_name == 'procedure':
+                    # Skip procedurelog table as it has a different format (no backticks)
+                    if table_name == 'procedurelog':
                         continue
                         
                     pg_create = schema.adapt_schema(table_name, mysql_schema)
@@ -2277,7 +2277,7 @@ class TestPostgresSchemaComplexScenarios:
             mock_conn.execute.side_effect = mock_execute_side_effect
             
             # Test schema extraction
-            test_tables = ['patient', 'appointment', 'procedure']
+            test_tables = ['patient', 'appointment', 'procedurelog']
             for table_name in test_tables:
                 # Mock the _calculate_schema_hash method to return a string
                 with patch.object(schema, '_calculate_schema_hash', return_value='test_hash_123'):
@@ -2554,9 +2554,9 @@ class TestPostgresSchemaComplexScenarios:
                 edge_cases = [
                     # Reserved word table name
                     {
-                        'table_name': 'procedure',
+                        'table_name': 'procedurelog',
                         'create_statement': '''
-                            CREATE TABLE `procedure` (
+                            CREATE TABLE `procedurelog` (
                                 `ProcNum` INT PRIMARY KEY,
                                 `ProcCode` VARCHAR(50)
                             )
