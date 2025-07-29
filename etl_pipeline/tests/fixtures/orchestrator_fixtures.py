@@ -65,7 +65,7 @@ def test_orchestrator_settings():
                     'incremental_column': 'AptDateTime',
                     'batch_size': 500
                 },
-                'procedure': {
+                'procedurelog': {
                     'priority': 'medium',
                     'incremental_column': 'ProcDate',
                     'batch_size': 2000
@@ -325,7 +325,7 @@ def mock_priority_processing_result():
             'failed': []
         },
         'medium': {
-            'success': ['procedure'],
+            'success': ['procedurelog'],
             'failed': []
         },
         'low': {
@@ -345,7 +345,7 @@ def mock_priority_processing_result_with_failures():
         },
         'medium': {
             'success': [],
-            'failed': ['procedure']
+            'failed': ['procedurelog']
         }
     }
 
@@ -535,13 +535,13 @@ def mock_dependency_graph():
         'nodes': [
             {'id': 'patient', 'type': 'table', 'priority': 'high'},
             {'id': 'appointment', 'type': 'table', 'priority': 'high'},
-            {'id': 'procedure', 'type': 'table', 'priority': 'medium'},
+            {'id': 'procedurelog', 'type': 'table', 'priority': 'medium'},
             {'id': 'payment', 'type': 'table', 'priority': 'low'}
         ],
         'edges': [
             {'from': 'patient', 'to': 'appointment', 'type': 'foreign_key'},
-            {'from': 'patient', 'to': 'procedure', 'type': 'foreign_key'},
-            {'from': 'procedure', 'to': 'payment', 'type': 'foreign_key'}
+            {'from': 'patient', 'to': 'procedurelog', 'type': 'foreign_key'},
+            {'from': 'procedurelog', 'to': 'payment', 'type': 'foreign_key'}
         ]
     }
 
