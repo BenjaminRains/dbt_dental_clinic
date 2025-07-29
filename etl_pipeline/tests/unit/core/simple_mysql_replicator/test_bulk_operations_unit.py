@@ -82,21 +82,21 @@ class TestSimpleMySQLReplicatorBulkOperations:
             mock_config = {
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateTStamp',
+                        'incremental_columns': ['DateTStamp'],
                         'batch_size': 1000,
                         'estimated_size_mb': 50,
                         'extraction_strategy': 'incremental',
                         'table_importance': 'critical'
                     },
                     'appointment': {
-                        'incremental_column': 'AptDateTime',
+                        'incremental_columns': ['AptDateTime'],
                         'batch_size': 500,
                         'estimated_size_mb': 25,
                         'extraction_strategy': 'incremental',
                         'table_importance': 'important'
                     },
                     'procedurelog': {
-                        'incremental_column': 'ProcDate',
+                        'incremental_columns': ['ProcDate'],
                         'batch_size': 2000,
                         'estimated_size_mb': 100,
                         'extraction_strategy': 'full_table',
