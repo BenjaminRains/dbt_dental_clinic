@@ -215,7 +215,7 @@ class TestPipelineOrchestratorComprehensive:
         result_single = orchestrator.run_pipeline_for_table('patient')
         
         # Process multiple tables by priority
-        result_batch = orchestrator.process_tables_by_priority(['patient', 'appointment', 'procedure'])
+        result_batch = orchestrator.process_tables_by_priority(['patient', 'appointment', 'procedurelog'])
         
         # End pipeline
         final_metrics = orchestrator.metrics.end_pipeline()
@@ -229,7 +229,7 @@ class TestPipelineOrchestratorComprehensive:
         mock_components['metrics_collector'].start_pipeline.assert_called_once()
         # Accept both possible signatures for process_table
         assert mock_components['table_processor'].process_table.call_args[0][0] == 'patient'
-        mock_components['priority_processor'].process_by_priority.assert_called_with(['patient', 'appointment', 'procedure'], 5, False)
+        mock_components['priority_processor'].process_by_priority.assert_called_with(['patient', 'appointment', 'procedurelog'], 5, False)
         mock_components['metrics_collector'].end_pipeline.assert_called_once()
 
     def test_comprehensive_error_handling_all_scenarios(self, comprehensive_orchestrator):
@@ -465,7 +465,7 @@ class TestPipelineOrchestratorComprehensive:
         
         # Test batch processing performance
         batch_start = time.time()
-        batch_result = orchestrator.process_tables_by_priority(['patient', 'appointment', 'procedure'])
+        batch_result = orchestrator.process_tables_by_priority(['patient', 'appointment', 'procedurelog'])
         batch_time = time.time() - batch_start
         
         # Test cleanup performance
