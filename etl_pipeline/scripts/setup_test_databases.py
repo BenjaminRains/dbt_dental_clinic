@@ -62,7 +62,7 @@ try:
     import os
     fixtures_path = os.path.join(os.path.dirname(__file__), '..', 'tests', 'fixtures')
     sys.path.insert(0, fixtures_path)
-    from test_data_definitions import get_test_patient_data, get_test_appointment_data  # type: ignore
+    from test_data_definitions import get_test_patient_data, get_test_appointment_data, get_test_procedure_data  # type: ignore
     NEW_CONFIG_AVAILABLE = True
 except ImportError as e:
     print(f"Import error: {e}")
@@ -356,42 +356,25 @@ def setup_postgresql_test_database():
                     "CodeNum" bigint NOT NULL DEFAULT 0,
                     "ProcNote" text COLLATE pg_catalog."default",
                     "DateTStamp" timestamp without time zone NOT NULL,
+                    "SecDateEntry" timestamp without time zone NOT NULL DEFAULT '0001-01-01 00:00:00',
                     CONSTRAINT procedurelog_pkey PRIMARY KEY ("ProcNum")
                 )
             """))
             
-            # Import standardized test data from fixtures
-            test_patients = get_test_patient_data()
+            # Clear ALL existing data from analytics database (leave empty for ETL testing)
+            conn.execute(text("DELETE FROM raw.patient"))
+            conn.execute(text("DELETE FROM raw.appointment"))
+            conn.execute(text("DELETE FROM raw.procedurelog"))
             
-            # Insert standardized test data
-            # Clear any existing test data first
-            conn.execute(text("DELETE FROM raw.patient WHERE \"PatNum\" IN (1, 2)"))
-            
-            for patient in test_patients:
-                # Build dynamic INSERT statement based on available fields
-                fields = list(patient.keys())
-                placeholders = ', '.join([f':{field}' for field in fields])
-                field_names = ', '.join([f'"{field}"' for field in fields])
-                
-                insert_sql = f'INSERT INTO raw.patient ({field_names}) VALUES ({placeholders})'
-                conn.execute(text(insert_sql), patient)
-            
-            # Verify the test data was inserted successfully
-            result = conn.execute(text("SELECT COUNT(*) FROM raw.patient WHERE \"PatNum\" IN (1, 2)"))
-            count = result.scalar()
-            logger.info(f"Inserted {count} test patients to verify table functionality")
-            
-            # Clean up test data - remove the test patients we just inserted
-            conn.execute(text("DELETE FROM raw.patient WHERE \"PatNum\" IN (1, 2)"))
-            logger.info("Cleaned up test patients - table is now empty and ready for pytest tests")
+            logger.info("Analytics database tables created and cleared - ready for ETL pipeline testing")
             
             conn.commit()
-            logger.info(f"Successfully created complete patient table in raw schema")
+            logger.info(f"Successfully set up PostgreSQL analytics database with empty tables")
         
         analytics_engine.dispose()
         
     except Exception as e:
-        logger.error(f"Failed to create patient table: {e}")
+        logger.error(f"Failed to set up PostgreSQL analytics database: {e}")
         sys.exit(1) # exit if error
 
 def setup_mysql_test_database(database_type):
@@ -569,6 +552,7 @@ def setup_mysql_test_database(database_type):
                     CodeNum BIGINT(20) NOT NULL DEFAULT 0,
                     ProcNote TEXT,
                     DateTStamp DATETIME NOT NULL,
+                    SecDateEntry DATE NOT NULL DEFAULT '0001-01-01',
                     PRIMARY KEY (ProcNum),
                     KEY PatNum (PatNum),
                     KEY AptNum (AptNum),
@@ -578,30 +562,63 @@ def setup_mysql_test_database(database_type):
             conn.execute(text(create_procedurelog_sql))
             logger.info(f"Successfully created procedurelog table in {database_type.value} database")
             
-            # Import standardized test data from fixtures
-            test_patients = get_test_patient_data()
-            
-            # Insert standardized test data
-            # Clear any existing test data first
-            conn.execute(text("DELETE FROM patient WHERE PatNum IN (1, 2)"))
-            
-            for patient in test_patients:
-                # Build dynamic INSERT statement based on available fields
-                fields = list(patient.keys())
-                placeholders = ', '.join([f':{field}' for field in fields])
-                field_names = ', '.join([f'`{field}`' for field in fields])
+            # Handle data insertion based on database type
+            if database_type == DatabaseType.SOURCE:
+                # Import standardized test data from fixtures
+                test_patients = get_test_patient_data()
+                test_appointments = get_test_appointment_data()
+                test_procedures = get_test_procedure_data()
                 
-                insert_sql = f"INSERT INTO patient ({field_names}) VALUES ({placeholders})"
-                conn.execute(text(insert_sql), patient)
-            
-            # Verify the test data was inserted successfully
-            result = conn.execute(text("SELECT COUNT(*) FROM patient WHERE PatNum IN (1, 2)"))
-            count = result.scalar()
-            logger.info(f"Inserted {count} test patients to verify table functionality")
-            
-            # Clean up test data - remove the test patients we just inserted
-            conn.execute(text("DELETE FROM patient WHERE PatNum IN (1, 2)"))
-            logger.info("Cleaned up test patients - table is now empty and ready for pytest tests")
+                # Clear any existing test data first
+                conn.execute(text("DELETE FROM patient WHERE PatNum IN (1, 2, 3)"))
+                conn.execute(text("DELETE FROM appointment WHERE AptNum IN (1, 2, 3)"))
+                conn.execute(text("DELETE FROM procedurelog WHERE ProcNum IN (1, 2, 3)"))
+                
+                # Insert patient test data
+                for patient in test_patients:
+                    # Build dynamic INSERT statement based on available fields
+                    fields = list(patient.keys())
+                    placeholders = ', '.join([f':{field}' for field in fields])
+                    field_names = ', '.join([f'`{field}`' for field in fields])
+                    
+                    insert_sql = f"INSERT INTO patient ({field_names}) VALUES ({placeholders})"
+                    conn.execute(text(insert_sql), patient)
+                
+                # Insert appointment test data
+                for appointment in test_appointments:
+                    # Build dynamic INSERT statement based on available fields
+                    fields = list(appointment.keys())
+                    placeholders = ', '.join([f':{field}' for field in fields])
+                    field_names = ', '.join([f'`{field}`' for field in fields])
+                    
+                    insert_sql = f"INSERT INTO appointment ({field_names}) VALUES ({placeholders})"
+                    conn.execute(text(insert_sql), appointment)
+                
+                # Insert procedure test data
+                for procedure in test_procedures:
+                    # Build dynamic INSERT statement based on available fields
+                    fields = list(procedure.keys())
+                    placeholders = ', '.join([f':{field}' for field in fields])
+                    field_names = ', '.join([f'`{field}`' for field in fields])
+                    
+                    insert_sql = f"INSERT INTO procedurelog ({field_names}) VALUES ({placeholders})"
+                    conn.execute(text(insert_sql), procedure)
+                
+                # Verify the test data was inserted successfully
+                patient_count = conn.execute(text("SELECT COUNT(*) FROM patient WHERE PatNum IN (1, 2, 3)")).scalar()
+                appointment_count = conn.execute(text("SELECT COUNT(*) FROM appointment WHERE AptNum IN (1, 2, 3)")).scalar()
+                procedure_count = conn.execute(text("SELECT COUNT(*) FROM procedurelog WHERE ProcNum IN (1, 2, 3)")).scalar()
+                
+                logger.info(f"SOURCE DATABASE: Inserted {patient_count} test patients, {appointment_count} test appointments, {procedure_count} test procedures")
+                logger.info("Source database is now ready for ETL pipeline testing")
+                
+            elif database_type == DatabaseType.REPLICATION:
+                # Clear ALL existing data from replication database (leave empty for ETL testing)
+                conn.execute(text("DELETE FROM patient"))
+                conn.execute(text("DELETE FROM appointment"))
+                conn.execute(text("DELETE FROM procedurelog"))
+                
+                logger.info("REPLICATION DATABASE: Cleared all data - ready for ETL pipeline testing")
             
             conn.commit()
             logger.info(f"Successfully set up MySQL test database with complete schema")
@@ -665,17 +682,28 @@ def main():
             logger.error(f"MySQL replication server ping failed at {replication_host}:{replication_port}. Cannot proceed with database setup.")
             sys.exit(1)
 
-        # Set up MySQL test source database using new ConnectionFactory
+        # Set up MySQL test source database with test data
+        logger.info("Setting up SOURCE database (test_opendental) with test data...")
         setup_mysql_test_database(DatabaseType.SOURCE)
         
-        # Set up PostgreSQL test database using new ConnectionFactory
+        # Set up PostgreSQL analytics database (empty for ETL testing)
+        logger.info("Setting up ANALYTICS database (test_opendental_analytics) with empty tables...")
         setup_postgresql_test_database()
         
-        # Set up MySQL test replication database using new ConnectionFactory
+        # Set up MySQL test replication database (empty for ETL testing)
+        logger.info("Setting up REPLICATION database (test_opendental_replication) with empty tables...")
         setup_mysql_test_database(DatabaseType.REPLICATION)
         
-        logger.info("Test database setup completed successfully!")
-        logger.info("You can now run integration tests with: pytest -m integration")
+        logger.info("="*60)
+        logger.info("TEST DATABASE SETUP COMPLETED SUCCESSFULLY!")
+        logger.info("="*60)
+        logger.info("Database State:")
+        logger.info("  • SOURCE (test_opendental): Contains test data (patients, appointments, procedures)")
+        logger.info("  • REPLICATION (test_opendental_replication): Empty tables ready for ETL")
+        logger.info("  • ANALYTICS (test_opendental_analytics): Empty tables ready for ETL")
+        logger.info("")
+        logger.info("You can now run E2E tests with: pytest -m e2e")
+        logger.info("The ETL pipeline will copy data from SOURCE → REPLICATION → ANALYTICS")
         
     except Exception as e:
         logger.error(f"Test database setup failed: {e}")
