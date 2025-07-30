@@ -1,11 +1,11 @@
 metadata:
-  generated_at: '2025-07-30T11:34:37.684019'
+  generated_at: '2025-07-30T12:17:39.019994'
   analyzer_version: '3.0'
   configuration_version: '3.0'
   source_database: opendental
   total_tables: 432
   schema_hash: 3628d4797dbed403d5755df24d64c342
-  analysis_timestamp: '20250730_113437'
+  analysis_timestamp: '20250730_121739'
   environment: production
 tables:
   account:
@@ -23,8 +23,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3504210905575524924
-    last_analyzed: '2025-07-30T11:34:39.063009'
+    schema_hash: -2515281546064739497
+    last_analyzed: '2025-07-30T12:17:40.409639'
     primary_key: AccountNum
   accountingautopay:
     table_name: accountingautopay
@@ -41,14 +41,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1109467513626168890
-    last_analyzed: '2025-07-30T11:34:39.063009'
+    schema_hash: 2582476463914515729
+    last_analyzed: '2025-07-30T12:17:40.410640'
     primary_key: AccountingAutoPayNum
   activeinstance:
     table_name: activeinstance
     table_importance: standard
     extraction_strategy: full_table
-    estimated_rows: 14
+    estimated_rows: 15
     estimated_size_mb: 0.01
     batch_size: 5000
     incremental_columns: []
@@ -59,8 +59,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4835978272165342384
-    last_analyzed: '2025-07-30T11:34:39.312815'
+    schema_hash: -8229166744611079647
+    last_analyzed: '2025-07-30T12:17:40.636715'
     primary_key: ActiveInstanceNum
   adjustment:
     table_name: adjustment
@@ -80,8 +80,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -5788963732457825101
-    last_analyzed: '2025-07-30T11:34:40.088997'
+    schema_hash: 4804505549672767806
+    last_analyzed: '2025-07-30T12:17:41.378031'
     primary_key: AdjNum
   alertcategory:
     table_name: alertcategory
@@ -98,8 +98,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2451375794703457863
-    last_analyzed: '2025-07-30T11:34:40.089990'
+    schema_hash: -1079707041096708049
+    last_analyzed: '2025-07-30T12:17:41.379036'
     primary_key: AlertCategoryNum
   alertcategorylink:
     table_name: alertcategorylink
@@ -116,8 +116,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8296888748765486600
-    last_analyzed: '2025-07-30T11:34:42.376047'
+    schema_hash: 5530927464484134438
+    last_analyzed: '2025-07-30T12:17:43.659402'
     primary_key: AlertCategoryLinkNum
   alertitem:
     table_name: alertitem
@@ -134,8 +134,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4396168346254155864
-    last_analyzed: '2025-07-30T11:34:42.500036'
+    schema_hash: 7951258893972985797
+    last_analyzed: '2025-07-30T12:17:43.774006'
     primary_key: AlertItemNum
   alertread:
     table_name: alertread
@@ -152,8 +152,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7712659867999099437
-    last_analyzed: '2025-07-30T11:34:42.500036'
+    schema_hash: -4052121866216943236
+    last_analyzed: '2025-07-30T12:17:43.775029'
     primary_key: AlertReadNum
   alertsub:
     table_name: alertsub
@@ -170,13 +170,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9208261290613445043
-    last_analyzed: '2025-07-30T11:34:42.500036'
+    schema_hash: -1452583917598181883
+    last_analyzed: '2025-07-30T12:17:43.775029'
     primary_key: AlertSubNum
   allergy:
     table_name: allergy
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 4665
     estimated_size_mb: 0.44
     batch_size: 5000
@@ -190,8 +190,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1937726807780903674
-    last_analyzed: '2025-07-30T11:34:42.637803'
+    schema_hash: 8593513630449974424
+    last_analyzed: '2025-07-30T12:17:43.916673'
     primary_key: AllergyNum
   allergydef:
     table_name: allergydef
@@ -209,8 +209,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1364026464609560894
-    last_analyzed: '2025-07-30T11:34:45.285481'
+    schema_hash: -1522875346643354199
+    last_analyzed: '2025-07-30T12:17:46.539516'
     primary_key: AllergyDefNum
   anestheticdata:
     table_name: anestheticdata
@@ -227,8 +227,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9122139397228908418
-    last_analyzed: '2025-07-30T11:34:45.285481'
+    schema_hash: 6468170258259460914
+    last_analyzed: '2025-07-30T12:17:46.539516'
     primary_key: AnestheticDataNum
   anestheticrecord:
     table_name: anestheticrecord
@@ -245,8 +245,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6824363404623154870
-    last_analyzed: '2025-07-30T11:34:45.396964'
+    schema_hash: -5999813144675423507
+    last_analyzed: '2025-07-30T12:17:46.656896'
     primary_key: AnestheticRecordNum
   anesthmedsgiven:
     table_name: anesthmedsgiven
@@ -263,8 +263,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -274183852862020988
-    last_analyzed: '2025-07-30T11:34:45.397957'
+    schema_hash: -5451101887181909447
+    last_analyzed: '2025-07-30T12:17:46.656896'
     primary_key: AnestheticMedNum
   anesthmedsintake:
     table_name: anesthmedsintake
@@ -281,8 +281,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9006289556172686806
-    last_analyzed: '2025-07-30T11:34:45.397957'
+    schema_hash: -4341760031775912864
+    last_analyzed: '2025-07-30T12:17:46.658400'
     primary_key: AnestheticMedNum
   anesthmedsinventory:
     table_name: anesthmedsinventory
@@ -299,8 +299,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5378160450398276866
-    last_analyzed: '2025-07-30T11:34:48.014367'
+    schema_hash: -7602695830010342771
+    last_analyzed: '2025-07-30T12:17:49.238102'
     primary_key: AnestheticMedNum
   anesthmedsinventoryadj:
     table_name: anesthmedsinventoryadj
@@ -317,8 +317,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4790772096720349262
-    last_analyzed: '2025-07-30T11:34:48.128988'
+    schema_hash: 2660996496138436252
+    last_analyzed: '2025-07-30T12:17:49.355621'
     primary_key: AdjustNum
   anesthmedsuppliers:
     table_name: anesthmedsuppliers
@@ -335,8 +335,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1416095749587175529
-    last_analyzed: '2025-07-30T11:34:48.131014'
+    schema_hash: 7840681514057205503
+    last_analyzed: '2025-07-30T12:17:49.355621'
     primary_key: SupplierIDNum
   anesthscore:
     table_name: anesthscore
@@ -353,8 +353,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8903763054657638339
-    last_analyzed: '2025-07-30T11:34:48.132013'
+    schema_hash: -3790870234168779948
+    last_analyzed: '2025-07-30T12:17:49.356797'
     primary_key: AnesthScoreNum
   anesthvsdata:
     table_name: anesthvsdata
@@ -371,8 +371,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5245280866351420966
-    last_analyzed: '2025-07-30T11:34:48.132013'
+    schema_hash: 1957852715070647766
+    last_analyzed: '2025-07-30T12:17:49.356797'
     primary_key: AnesthVSDataNum
   apikey:
     table_name: apikey
@@ -389,8 +389,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8173630909805446655
-    last_analyzed: '2025-07-30T11:34:50.628439'
+    schema_hash: -4892625613457015823
+    last_analyzed: '2025-07-30T12:17:51.819533'
     primary_key: APIKeyNum
   apisubscription:
     table_name: apisubscription
@@ -407,14 +407,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5879416885180740121
-    last_analyzed: '2025-07-30T11:34:50.865361'
+    schema_hash: 1431305023486658758
+    last_analyzed: '2025-07-30T12:17:52.040314'
     primary_key: ApiSubscriptionNum
   appointment:
     table_name: appointment
     table_importance: critical
     extraction_strategy: incremental
-    estimated_rows: 80885
+    estimated_rows: 80887
     estimated_size_mb: 42.3
     batch_size: 10000
     incremental_columns:
@@ -431,8 +431,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 7364938663293470686
-    last_analyzed: '2025-07-30T11:34:51.907690'
+    schema_hash: -5487867530023510692
+    last_analyzed: '2025-07-30T12:17:53.062395'
     primary_key: AptNum
   appointmentrule:
     table_name: appointmentrule
@@ -449,8 +449,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7372112637291974850
-    last_analyzed: '2025-07-30T11:34:51.908283'
+    schema_hash: -6427433424413718407
+    last_analyzed: '2025-07-30T12:17:53.063395'
     primary_key: AppointmentRuleNum
   appointmenttype:
     table_name: appointmenttype
@@ -468,14 +468,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3498722241181243565
-    last_analyzed: '2025-07-30T11:34:51.908283'
+    schema_hash: 8625048151317504594
+    last_analyzed: '2025-07-30T12:17:53.063395'
     primary_key: AppointmentTypeNum
   apptfield:
     table_name: apptfield
     table_importance: standard
     extraction_strategy: full_table
-    estimated_rows: 11299
+    estimated_rows: 11301
     estimated_size_mb: 0.87
     batch_size: 10000
     incremental_columns: []
@@ -486,8 +486,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7185528968360892710
-    last_analyzed: '2025-07-30T11:34:54.278010'
+    schema_hash: -6608696191627904724
+    last_analyzed: '2025-07-30T12:17:55.401345'
     primary_key: ApptFieldNum
   apptfielddef:
     table_name: apptfielddef
@@ -504,8 +504,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4798637173328144875
-    last_analyzed: '2025-07-30T11:34:54.280043'
+    schema_hash: -5835146214700433573
+    last_analyzed: '2025-07-30T12:17:55.401345'
     primary_key: ApptFieldDefNum
   apptgeneralmessagesent:
     table_name: apptgeneralmessagesent
@@ -522,8 +522,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1399269557836284172
-    last_analyzed: '2025-07-30T11:34:54.396524'
+    schema_hash: -4109359836020744244
+    last_analyzed: '2025-07-30T12:17:55.511611'
     primary_key: ApptGeneralMessageSentNum
   apptnewpatthankyousent:
     table_name: apptnewpatthankyousent
@@ -540,8 +540,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -442834881522368276
-    last_analyzed: '2025-07-30T11:34:54.641243'
+    schema_hash: 2537319535600355409
+    last_analyzed: '2025-07-30T12:17:55.740280'
     primary_key: ApptNewPatThankYouSentNum
   apptreminderrule:
     table_name: apptreminderrule
@@ -558,8 +558,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7076185380593413402
-    last_analyzed: '2025-07-30T11:34:54.643241'
+    schema_hash: 5726435243914574327
+    last_analyzed: '2025-07-30T12:17:55.741275'
     primary_key: ApptReminderRuleNum
   apptremindersent:
     table_name: apptremindersent
@@ -576,8 +576,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7983323546290444818
-    last_analyzed: '2025-07-30T11:34:57.129245'
+    schema_hash: 1928630537526543349
+    last_analyzed: '2025-07-30T12:17:58.206789'
     primary_key: ApptReminderSentNum
   apptthankyousent:
     table_name: apptthankyousent
@@ -594,8 +594,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3036872488049584846
-    last_analyzed: '2025-07-30T11:34:57.369331'
+    schema_hash: -8339316386596696344
+    last_analyzed: '2025-07-30T12:17:58.441688'
     primary_key: ApptThankYouSentNum
   apptview:
     table_name: apptview
@@ -613,8 +613,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6753131446095132522
-    last_analyzed: '2025-07-30T11:34:57.369862'
+    schema_hash: -6871027579162215984
+    last_analyzed: '2025-07-30T12:17:58.442682'
     primary_key: ApptViewNum
   apptviewitem:
     table_name: apptviewitem
@@ -631,8 +631,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7270496299579348704
-    last_analyzed: '2025-07-30T11:34:57.369862'
+    schema_hash: 833928049411340416
+    last_analyzed: '2025-07-30T12:17:58.442682'
     primary_key: ApptViewItemNum
   asapcomm:
     table_name: asapcomm
@@ -649,8 +649,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8920053014333484920
-    last_analyzed: '2025-07-30T11:34:57.369862'
+    schema_hash: 3415962782430373959
+    last_analyzed: '2025-07-30T12:17:58.442682'
     primary_key: AsapCommNum
   autocode:
     table_name: autocode
@@ -668,8 +668,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3640429378975527596
-    last_analyzed: '2025-07-30T11:34:59.736988'
+    schema_hash: -8712776902520132520
+    last_analyzed: '2025-07-30T12:18:00.746312'
     primary_key: AutoCodeNum
   autocodecond:
     table_name: autocodecond
@@ -686,8 +686,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5413168770277317854
-    last_analyzed: '2025-07-30T11:34:59.737987'
+    schema_hash: -5192246100766177183
+    last_analyzed: '2025-07-30T12:18:00.747315'
     primary_key: AutoCodeCondNum
   autocodeitem:
     table_name: autocodeitem
@@ -704,8 +704,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1537851183885224577
-    last_analyzed: '2025-07-30T11:34:59.739292'
+    schema_hash: 887994702950456853
+    last_analyzed: '2025-07-30T12:18:00.747315'
     primary_key: AutoCodeItemNum
   autocommexcludedate:
     table_name: autocommexcludedate
@@ -722,8 +722,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3301245679010721364
-    last_analyzed: '2025-07-30T11:34:59.739292'
+    schema_hash: 3072237859798915783
+    last_analyzed: '2025-07-30T12:18:00.748316'
     primary_key: AutoCommExcludeDateNum
   automation:
     table_name: automation
@@ -740,8 +740,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 9120278766747454149
-    last_analyzed: '2025-07-30T11:34:59.740290'
+    schema_hash: -8029937075043008274
+    last_analyzed: '2025-07-30T12:18:00.748828'
     primary_key: AutomationNum
   automationcondition:
     table_name: automationcondition
@@ -758,8 +758,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -927026151234332534
-    last_analyzed: '2025-07-30T11:35:02.149642'
+    schema_hash: -2438406813302849097
+    last_analyzed: '2025-07-30T12:18:03.092054'
     primary_key: AutomationConditionNum
   autonote:
     table_name: autonote
@@ -776,8 +776,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7543308542232147752
-    last_analyzed: '2025-07-30T11:35:02.150649'
+    schema_hash: -787521716576825426
+    last_analyzed: '2025-07-30T12:18:03.093126'
     primary_key: AutoNoteNum
   autonotecontrol:
     table_name: autonotecontrol
@@ -794,8 +794,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4643684689438538230
-    last_analyzed: '2025-07-30T11:35:02.150649'
+    schema_hash: 8804281680582610979
+    last_analyzed: '2025-07-30T12:18:03.093126'
     primary_key: AutoNoteControlNum
   benefit:
     table_name: benefit
@@ -815,8 +815,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -3077778734192575418
-    last_analyzed: '2025-07-30T11:35:02.858201'
+    schema_hash: -6654320300586092753
+    last_analyzed: '2025-07-30T12:18:03.726125'
     primary_key: BenefitNum
   canadiannetwork:
     table_name: canadiannetwork
@@ -833,8 +833,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5079321523760682948
-    last_analyzed: '2025-07-30T11:35:02.859239'
+    schema_hash: 4594422200709266185
+    last_analyzed: '2025-07-30T12:18:03.727116'
     primary_key: CanadianNetworkNum
   carecreditwebresponse:
     table_name: carecreditwebresponse
@@ -851,13 +851,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6732864688320989122
-    last_analyzed: '2025-07-30T11:35:05.306670'
+    schema_hash: 3226303805181492025
+    last_analyzed: '2025-07-30T12:18:06.144001'
     primary_key: CareCreditWebResponseNum
   carrier:
     table_name: carrier
     table_importance: important
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 2335
     estimated_size_mb: 0.46
     batch_size: 5000
@@ -871,8 +871,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -2236740900908156521
-    last_analyzed: '2025-07-30T11:35:05.442306'
+    schema_hash: -5982302209628803009
+    last_analyzed: '2025-07-30T12:18:06.272289'
     primary_key: CarrierNum
   cdcrec:
     table_name: cdcrec
@@ -889,8 +889,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2520042006381209773
-    last_analyzed: '2025-07-30T11:35:05.442306'
+    schema_hash: -1161794277449703580
+    last_analyzed: '2025-07-30T12:18:06.273288'
     primary_key: CdcrecNum
   cdspermission:
     table_name: cdspermission
@@ -907,8 +907,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5234348182292594402
-    last_analyzed: '2025-07-30T11:35:05.443417'
+    schema_hash: -606010222324419840
+    last_analyzed: '2025-07-30T12:18:06.273288'
     primary_key: CDSPermissionNum
   centralconnection:
     table_name: centralconnection
@@ -925,8 +925,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7857142800511069689
-    last_analyzed: '2025-07-30T11:35:05.443417'
+    schema_hash: -2988501684813941218
+    last_analyzed: '2025-07-30T12:18:06.273288'
     primary_key: CentralConnectionNum
   cert:
     table_name: cert
@@ -943,8 +943,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5840008564851950615
-    last_analyzed: '2025-07-30T11:35:07.956268'
+    schema_hash: 4417759063597889596
+    last_analyzed: '2025-07-30T12:18:08.802667'
     primary_key: CertNum
   certemployee:
     table_name: certemployee
@@ -961,8 +961,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4835590638327102410
-    last_analyzed: '2025-07-30T11:35:07.956268'
+    schema_hash: 3497202591666113685
+    last_analyzed: '2025-07-30T12:18:08.803669'
     primary_key: CertEmployeeNum
   chartview:
     table_name: chartview
@@ -979,15 +979,15 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 682369721395165179
-    last_analyzed: '2025-07-30T11:35:07.956268'
+    schema_hash: 9107338822944690652
+    last_analyzed: '2025-07-30T12:18:08.804667'
     primary_key: ChartViewNum
   claim:
     table_name: claim
     table_importance: important
     extraction_strategy: incremental
-    estimated_rows: 25659
-    estimated_size_mb: 11.89
+    estimated_rows: 25660
+    estimated_size_mb: 11.9
     batch_size: 10000
     incremental_columns:
     - SecDateTEdit
@@ -1001,8 +1001,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -711371676019918697
-    last_analyzed: '2025-07-30T11:35:08.210111'
+    schema_hash: -5932488481552330537
+    last_analyzed: '2025-07-30T12:18:09.070578'
     primary_key: ClaimNum
   claimattach:
     table_name: claimattach
@@ -1019,8 +1019,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 3387815723572874019
-    last_analyzed: '2025-07-30T11:35:08.210111'
+    schema_hash: 3044082596628846893
+    last_analyzed: '2025-07-30T12:18:09.072373'
     primary_key: ClaimAttachNum
   claimcondcodelog:
     table_name: claimcondcodelog
@@ -1037,8 +1037,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2436510779277838935
-    last_analyzed: '2025-07-30T11:35:10.631485'
+    schema_hash: -8583168739721841708
+    last_analyzed: '2025-07-30T12:18:11.524089'
     primary_key: ClaimCondCodeLogNum
   claimform:
     table_name: claimform
@@ -1055,8 +1055,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 4518209512050076014
-    last_analyzed: '2025-07-30T11:35:10.632483'
+    schema_hash: 8187325077481997939
+    last_analyzed: '2025-07-30T12:18:11.525211'
     primary_key: ClaimFormNum
   claimformitem:
     table_name: claimformitem
@@ -1073,8 +1073,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -5597793337811604244
-    last_analyzed: '2025-07-30T11:35:10.632483'
+    schema_hash: 1739095040126739183
+    last_analyzed: '2025-07-30T12:18:11.525211'
     primary_key: ClaimFormItemNum
   claimpayment:
     table_name: claimpayment
@@ -1093,14 +1093,14 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -7381135949426737195
-    last_analyzed: '2025-07-30T11:35:10.811440'
+    schema_hash: 7135179502367664251
+    last_analyzed: '2025-07-30T12:18:11.699666'
     primary_key: ClaimPaymentNum
   claimproc:
     table_name: claimproc
     table_importance: critical
     extraction_strategy: incremental
-    estimated_rows: 197935
+    estimated_rows: 197942
     estimated_size_mb: 134.54
     batch_size: 25000
     incremental_columns:
@@ -1113,14 +1113,14 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
-    schema_hash: -6801364583180698573
-    last_analyzed: '2025-07-30T11:35:11.751308'
+    schema_hash: -7736773646715790243
+    last_analyzed: '2025-07-30T12:18:12.349142'
     primary_key: ClaimProcNum
   claimsnapshot:
     table_name: claimsnapshot
     table_importance: important
     extraction_strategy: incremental
-    estimated_rows: 73832
+    estimated_rows: 73833
     estimated_size_mb: 7.28
     batch_size: 10000
     incremental_columns:
@@ -1133,8 +1133,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -6365307126214692758
-    last_analyzed: '2025-07-30T11:35:14.463287'
+    schema_hash: 7564468554949840075
+    last_analyzed: '2025-07-30T12:18:15.128917'
     primary_key: ClaimSnapshotNum
   claimtracking:
     table_name: claimtracking
@@ -1152,8 +1152,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 6065711974117954249
-    last_analyzed: '2025-07-30T11:35:14.463287'
+    schema_hash: -526414911662334074
+    last_analyzed: '2025-07-30T12:18:15.129920'
     primary_key: ClaimTrackingNum
   claimvalcodelog:
     table_name: claimvalcodelog
@@ -1170,8 +1170,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1108107935899466118
-    last_analyzed: '2025-07-30T11:35:14.464309'
+    schema_hash: 8881804965108526049
+    last_analyzed: '2025-07-30T12:18:15.129920'
     primary_key: ClaimValCodeLogNum
   clearinghouse:
     table_name: clearinghouse
@@ -1188,8 +1188,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4134010278265672702
-    last_analyzed: '2025-07-30T11:35:14.464309'
+    schema_hash: -7671134379501174660
+    last_analyzed: '2025-07-30T12:18:15.129920'
     primary_key: ClearinghouseNum
   clinic:
     table_name: clinic
@@ -1207,8 +1207,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8734147585977074520
-    last_analyzed: '2025-07-30T11:35:14.464309'
+    schema_hash: -3908138762212651991
+    last_analyzed: '2025-07-30T12:18:15.129920'
     primary_key: ClinicNum
   clinicerx:
     table_name: clinicerx
@@ -1225,8 +1225,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 786325214328791699
-    last_analyzed: '2025-07-30T11:35:17.055093'
+    schema_hash: -2194984538963490612
+    last_analyzed: '2025-07-30T12:18:17.726230'
     primary_key: ClinicErxNum
   clinicpref:
     table_name: clinicpref
@@ -1243,8 +1243,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 523953701893985665
-    last_analyzed: '2025-07-30T11:35:17.056090'
+    schema_hash: 8580739695529951039
+    last_analyzed: '2025-07-30T12:18:17.726230'
     primary_key: ClinicPrefNum
   clockevent:
     table_name: clockevent
@@ -1261,8 +1261,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4661797011669207766
-    last_analyzed: '2025-07-30T11:35:17.056090'
+    schema_hash: 6673559311695919744
+    last_analyzed: '2025-07-30T12:18:17.726230'
     primary_key: ClockEventNum
   cloudaddress:
     table_name: cloudaddress
@@ -1279,8 +1279,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1810606753707112970
-    last_analyzed: '2025-07-30T11:35:17.057089'
+    schema_hash: 9153553076987763849
+    last_analyzed: '2025-07-30T12:18:17.726230'
     primary_key: CloudAddressNum
   codegroup:
     table_name: codegroup
@@ -1298,8 +1298,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3598642689051921230
-    last_analyzed: '2025-07-30T11:35:17.057089'
+    schema_hash: 6439380017220929018
+    last_analyzed: '2025-07-30T12:18:17.726230'
     primary_key: CodeGroupNum
   codesystem:
     table_name: codesystem
@@ -1316,15 +1316,15 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9132095983143549539
-    last_analyzed: '2025-07-30T11:35:19.429145'
+    schema_hash: 8758487544662130313
+    last_analyzed: '2025-07-30T12:18:20.084680'
     primary_key: CodeSystemNum
   commlog:
     table_name: commlog
     table_importance: audit
     extraction_strategy: incremental
-    estimated_rows: 802192
-    estimated_size_mb: 250.34
+    estimated_rows: 802222
+    estimated_size_mb: 250.35
     batch_size: 50000
     incremental_columns:
     - DateTStamp
@@ -1338,14 +1338,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 9080905779686978365
-    last_analyzed: '2025-07-30T11:35:25.323677'
+    schema_hash: 6290475673564145757
+    last_analyzed: '2025-07-30T12:18:25.772551'
     primary_key: CommlogNum
   commoptout:
     table_name: commoptout
     table_importance: standard
     extraction_strategy: full_table
-    estimated_rows: 6933
+    estimated_rows: 6934
     estimated_size_mb: 0.37
     batch_size: 5000
     incremental_columns: []
@@ -1356,8 +1356,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1110713718423395115
-    last_analyzed: '2025-07-30T11:35:25.324676'
+    schema_hash: -890860311373409077
+    last_analyzed: '2025-07-30T12:18:25.773552'
     primary_key: CommOptOutNum
   computer:
     table_name: computer
@@ -1374,8 +1374,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8548847479461619297
-    last_analyzed: '2025-07-30T11:35:25.324676'
+    schema_hash: -2490296813465452304
+    last_analyzed: '2025-07-30T12:18:25.773552'
     primary_key: ComputerNum
   computerpref:
     table_name: computerpref
@@ -1392,13 +1392,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8872386553496141613
-    last_analyzed: '2025-07-30T11:35:25.324676'
+    schema_hash: -5446377909965045828
+    last_analyzed: '2025-07-30T12:18:25.773552'
     primary_key: ComputerPrefNum
   confirmationrequest:
     table_name: confirmationrequest
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 106
     estimated_size_mb: 0.04
     batch_size: 5000
@@ -1411,8 +1411,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6717453411023907221
-    last_analyzed: '2025-07-30T11:35:28.081069'
+    schema_hash: -6635424407962594839
+    last_analyzed: '2025-07-30T12:18:28.525215'
     primary_key: ConfirmationRequestNum
   connectiongroup:
     table_name: connectiongroup
@@ -1429,8 +1429,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3224149888083708
-    last_analyzed: '2025-07-30T11:35:28.081069'
+    schema_hash: 4950104852359805322
+    last_analyzed: '2025-07-30T12:18:28.525215'
     primary_key: ConnectionGroupNum
   conngroupattach:
     table_name: conngroupattach
@@ -1447,8 +1447,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5974393616442589290
-    last_analyzed: '2025-07-30T11:35:28.081069'
+    schema_hash: -7404928184431934641
+    last_analyzed: '2025-07-30T12:18:28.525215'
     primary_key: ConnGroupAttachNum
   contact:
     table_name: contact
@@ -1465,8 +1465,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1128551351318989711
-    last_analyzed: '2025-07-30T11:35:28.081069'
+    schema_hash: -5354185907026789488
+    last_analyzed: '2025-07-30T12:18:28.526216'
     primary_key: ContactNum
   county:
     table_name: county
@@ -1483,8 +1483,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7456996844551738059
-    last_analyzed: '2025-07-30T11:35:28.081069'
+    schema_hash: 6967938146212487370
+    last_analyzed: '2025-07-30T12:18:28.526216'
     primary_key: CountyNum
   covcat:
     table_name: covcat
@@ -1501,8 +1501,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4273441129473795678
-    last_analyzed: '2025-07-30T11:35:30.625056'
+    schema_hash: -4482969774051273846
+    last_analyzed: '2025-07-30T12:18:31.067496'
     primary_key: CovCatNum
   covspan:
     table_name: covspan
@@ -1519,8 +1519,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 903843773081979187
-    last_analyzed: '2025-07-30T11:35:30.626057'
+    schema_hash: -7467543784520913194
+    last_analyzed: '2025-07-30T12:18:31.067496'
     primary_key: CovSpanNum
   cpt:
     table_name: cpt
@@ -1537,8 +1537,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6688767744920323451
-    last_analyzed: '2025-07-30T11:35:30.626057'
+    schema_hash: 9123108537533500309
+    last_analyzed: '2025-07-30T12:18:31.067496'
     primary_key: CptNum
   creditcard:
     table_name: creditcard
@@ -1555,8 +1555,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 223077137569785351
-    last_analyzed: '2025-07-30T11:35:30.626057'
+    schema_hash: -281431769406978945
+    last_analyzed: '2025-07-30T12:18:31.068494'
     primary_key: CreditCardNum
   custrefentry:
     table_name: custrefentry
@@ -1573,8 +1573,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4557866046887123514
-    last_analyzed: '2025-07-30T11:35:30.626057'
+    schema_hash: -2996576080418118710
+    last_analyzed: '2025-07-30T12:18:31.068494'
     primary_key: CustRefEntryNum
   custreference:
     table_name: custreference
@@ -1591,8 +1591,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5935550354982624033
-    last_analyzed: '2025-07-30T11:35:33.220939'
+    schema_hash: -3343191686717416631
+    last_analyzed: '2025-07-30T12:18:33.638149'
     primary_key: CustReferenceNum
   cvx:
     table_name: cvx
@@ -1609,8 +1609,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8945584257624584258
-    last_analyzed: '2025-07-30T11:35:33.221938'
+    schema_hash: -1596226030865535596
+    last_analyzed: '2025-07-30T12:18:33.638149'
     primary_key: CvxNum
   dashboardar:
     table_name: dashboardar
@@ -1627,8 +1627,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5341935224791125273
-    last_analyzed: '2025-07-30T11:35:33.221938'
+    schema_hash: 2376519632102460544
+    last_analyzed: '2025-07-30T12:18:33.638149'
     primary_key: DashboardARNum
   dashboardcell:
     table_name: dashboardcell
@@ -1645,8 +1645,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1683094139536475654
-    last_analyzed: '2025-07-30T11:35:33.221938'
+    schema_hash: 9040981382497789760
+    last_analyzed: '2025-07-30T12:18:33.638149'
     primary_key: DashboardCellNum
   dashboardlayout:
     table_name: dashboardlayout
@@ -1663,8 +1663,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2099326988141995519
-    last_analyzed: '2025-07-30T11:35:33.222939'
+    schema_hash: 8737784917816746132
+    last_analyzed: '2025-07-30T12:18:33.639153'
     primary_key: DashboardLayoutNum
   databasemaintenance:
     table_name: databasemaintenance
@@ -1681,8 +1681,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3728847953675983841
-    last_analyzed: '2025-07-30T11:35:35.654294'
+    schema_hash: 5290448068896203844
+    last_analyzed: '2025-07-30T12:18:35.981522'
     primary_key: DatabaseMaintenanceNum
   dbmlog:
     table_name: dbmlog
@@ -1699,8 +1699,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7170548589630727793
-    last_analyzed: '2025-07-30T11:35:35.655294'
+    schema_hash: 2435773771129186784
+    last_analyzed: '2025-07-30T12:18:35.982609'
     primary_key: DbmLogNum
   definition:
     table_name: definition
@@ -1718,8 +1718,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 9120911886690580288
-    last_analyzed: '2025-07-30T11:35:35.656295'
+    schema_hash: 7596104448627232575
+    last_analyzed: '2025-07-30T12:18:35.982609'
     primary_key: DefNum
   deflink:
     table_name: deflink
@@ -1736,13 +1736,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8855185080385676172
-    last_analyzed: '2025-07-30T11:35:35.656295'
+    schema_hash: 322608006279881690
+    last_analyzed: '2025-07-30T12:18:35.984620'
     primary_key: DefLinkNum
   deletedobject:
     table_name: deletedobject
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 4762
     estimated_size_mb: 0.18
     batch_size: 5000
@@ -1755,8 +1755,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7754878224887897557
-    last_analyzed: '2025-07-30T11:35:35.803656'
+    schema_hash: -2009795897812191927
+    last_analyzed: '2025-07-30T12:18:36.124628'
     primary_key: DeletedObjectNum
   deposit:
     table_name: deposit
@@ -1773,8 +1773,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4604612514375941914
-    last_analyzed: '2025-07-30T11:35:38.145106'
+    schema_hash: 5008880261277703857
+    last_analyzed: '2025-07-30T12:18:38.507037'
     primary_key: DepositNum
   dictcustom:
     table_name: dictcustom
@@ -1791,8 +1791,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3899293252110568589
-    last_analyzed: '2025-07-30T11:35:38.146073'
+    schema_hash: -7441032351343419493
+    last_analyzed: '2025-07-30T12:18:38.508543'
     primary_key: DictCustomNum
   discountplan:
     table_name: discountplan
@@ -1809,8 +1809,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4800516021170631107
-    last_analyzed: '2025-07-30T11:35:38.146989'
+    schema_hash: 1427658171061467121
+    last_analyzed: '2025-07-30T12:18:38.508543'
     primary_key: DiscountPlanNum
   discountplansub:
     table_name: discountplansub
@@ -1827,8 +1827,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -865238711185949070
-    last_analyzed: '2025-07-30T11:35:38.146989'
+    schema_hash: 3509231321687780756
+    last_analyzed: '2025-07-30T12:18:38.508543'
     primary_key: DiscountSubNum
   disease:
     table_name: disease
@@ -1847,13 +1847,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5846373102359146574
-    last_analyzed: '2025-07-30T11:35:38.325265'
+    schema_hash: 6238690394303644623
+    last_analyzed: '2025-07-30T12:18:38.689558'
     primary_key: DiseaseNum
   diseasedef:
     table_name: diseasedef
     table_importance: reference
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 159
     estimated_size_mb: 0.03
     batch_size: 5000
@@ -1867,8 +1867,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9001396021834284956
-    last_analyzed: '2025-07-30T11:35:40.888728'
+    schema_hash: -8141716173133278530
+    last_analyzed: '2025-07-30T12:18:41.254186'
     primary_key: DiseaseDefNum
   displayfield:
     table_name: displayfield
@@ -1885,8 +1885,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3722853100523478578
-    last_analyzed: '2025-07-30T11:35:40.888728'
+    schema_hash: 7930712906344417744
+    last_analyzed: '2025-07-30T12:18:41.255187'
     primary_key: DisplayFieldNum
   displayreport:
     table_name: displayreport
@@ -1903,8 +1903,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4097141088276263491
-    last_analyzed: '2025-07-30T11:35:40.888728'
+    schema_hash: -6384155472922533248
+    last_analyzed: '2025-07-30T12:18:41.255187'
     primary_key: DisplayReportNum
   dispsupply:
     table_name: dispsupply
@@ -1921,14 +1921,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3331619048133370114
-    last_analyzed: '2025-07-30T11:35:40.888728'
+    schema_hash: -3445782697555626514
+    last_analyzed: '2025-07-30T12:18:41.255187'
     primary_key: DispSupplyNum
   document:
     table_name: document
     table_importance: standard
     extraction_strategy: incremental
-    estimated_rows: 248022
+    estimated_rows: 248043
     estimated_size_mb: 40.71
     batch_size: 25000
     incremental_columns:
@@ -1942,8 +1942,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 9055953260445735538
-    last_analyzed: '2025-07-30T11:35:42.237305'
+    schema_hash: -3738029248131545907
+    last_analyzed: '2025-07-30T12:18:42.592027'
     primary_key: DocNum
   documentmisc:
     table_name: documentmisc
@@ -1960,8 +1960,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1491563984734305946
-    last_analyzed: '2025-07-30T11:35:44.796356'
+    schema_hash: 706005871346980662
+    last_analyzed: '2025-07-30T12:18:45.122115'
     primary_key: DocMiscNum
   drugmanufacturer:
     table_name: drugmanufacturer
@@ -1978,8 +1978,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6983648467529513456
-    last_analyzed: '2025-07-30T11:35:44.796356'
+    schema_hash: 5710305523558315096
+    last_analyzed: '2025-07-30T12:18:45.123116'
     primary_key: DrugManufacturerNum
   drugunit:
     table_name: drugunit
@@ -1996,8 +1996,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8252660157793923051
-    last_analyzed: '2025-07-30T11:35:44.797353'
+    schema_hash: 3430738587925158266
+    last_analyzed: '2025-07-30T12:18:45.123116'
     primary_key: DrugUnitNum
   dunning:
     table_name: dunning
@@ -2014,8 +2014,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5021380865325615677
-    last_analyzed: '2025-07-30T11:35:44.798352'
+    schema_hash: 8108561797982852103
+    last_analyzed: '2025-07-30T12:18:45.123116'
     primary_key: DunningNum
   ebill:
     table_name: ebill
@@ -2032,8 +2032,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 64094987390035661
-    last_analyzed: '2025-07-30T11:35:44.798352'
+    schema_hash: 972404052480571968
+    last_analyzed: '2025-07-30T12:18:45.123116'
     primary_key: EbillNum
   eclipboardimagecapture:
     table_name: eclipboardimagecapture
@@ -2050,8 +2050,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8250029999313693086
-    last_analyzed: '2025-07-30T11:35:47.592805'
+    schema_hash: -8528762210534067390
+    last_analyzed: '2025-07-30T12:18:47.861074'
     primary_key: EClipboardImageCaptureNum
   eclipboardimagecapturedef:
     table_name: eclipboardimagecapturedef
@@ -2068,8 +2068,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4074617730372789140
-    last_analyzed: '2025-07-30T11:35:47.593806'
+    schema_hash: 3650933340759213450
+    last_analyzed: '2025-07-30T12:18:47.861985'
     primary_key: EClipboardImageCaptureDefNum
   eclipboardsheetdef:
     table_name: eclipboardsheetdef
@@ -2086,8 +2086,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2919290258462949056
-    last_analyzed: '2025-07-30T11:35:47.593806'
+    schema_hash: -1474743486552843868
+    last_analyzed: '2025-07-30T12:18:47.861985'
     primary_key: EClipboardSheetDefNum
   eduresource:
     table_name: eduresource
@@ -2104,8 +2104,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8211350147377928603
-    last_analyzed: '2025-07-30T11:35:47.593806'
+    schema_hash: 2737286030483556330
+    last_analyzed: '2025-07-30T12:18:47.861985'
     primary_key: EduResourceNum
   eform:
     table_name: eform
@@ -2122,8 +2122,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6761494261568003475
-    last_analyzed: '2025-07-30T11:35:47.715350'
+    schema_hash: 7361650385220322553
+    last_analyzed: '2025-07-30T12:18:47.979715'
     primary_key: EFormNum
   eformdef:
     table_name: eformdef
@@ -2140,8 +2140,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2202012194570045707
-    last_analyzed: '2025-07-30T11:35:50.509551'
+    schema_hash: -1128916278954998798
+    last_analyzed: '2025-07-30T12:18:50.784965'
     primary_key: EFormDefNum
   eformfield:
     table_name: eformfield
@@ -2158,8 +2158,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6586142705659205677
-    last_analyzed: '2025-07-30T11:35:50.509551'
+    schema_hash: -8404082342925415423
+    last_analyzed: '2025-07-30T12:18:50.785958'
     primary_key: EFormFieldNum
   eformfielddef:
     table_name: eformfielddef
@@ -2176,8 +2176,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2970893798928681816
-    last_analyzed: '2025-07-30T11:35:50.509551'
+    schema_hash: -6106543365045970622
+    last_analyzed: '2025-07-30T12:18:50.785958'
     primary_key: EFormFieldDefNum
   eformimportrule:
     table_name: eformimportrule
@@ -2194,8 +2194,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6437740462412250435
-    last_analyzed: '2025-07-30T11:35:50.509551'
+    schema_hash: -1815795544890183362
+    last_analyzed: '2025-07-30T12:18:50.785958'
     primary_key: EFormImportRuleNum
   ehramendment:
     table_name: ehramendment
@@ -2212,8 +2212,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3349542784917260588
-    last_analyzed: '2025-07-30T11:35:50.509551'
+    schema_hash: -2571371790668695655
+    last_analyzed: '2025-07-30T12:18:50.785958'
     primary_key: EhrAmendmentNum
   ehraptobs:
     table_name: ehraptobs
@@ -2230,8 +2230,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8853898711343576129
-    last_analyzed: '2025-07-30T11:35:53.238411'
+    schema_hash: 3315863346641155600
+    last_analyzed: '2025-07-30T12:18:53.492335'
     primary_key: EhrAptObsNum
   ehrcareplan:
     table_name: ehrcareplan
@@ -2248,8 +2248,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7885673775832069300
-    last_analyzed: '2025-07-30T11:35:53.239475'
+    schema_hash: -6020219525318305997
+    last_analyzed: '2025-07-30T12:18:53.492335'
     primary_key: EhrCarePlanNum
   ehrlab:
     table_name: ehrlab
@@ -2266,8 +2266,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8102993307365127483
-    last_analyzed: '2025-07-30T11:35:53.239475'
+    schema_hash: 3713878551007838804
+    last_analyzed: '2025-07-30T12:18:53.492335'
     primary_key: EhrLabNum
   ehrlabclinicalinfo:
     table_name: ehrlabclinicalinfo
@@ -2284,8 +2284,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1565192650975679298
-    last_analyzed: '2025-07-30T11:35:53.239475'
+    schema_hash: -4472074196344385435
+    last_analyzed: '2025-07-30T12:18:53.493324'
     primary_key: EhrLabClinicalInfoNum
   ehrlabimage:
     table_name: ehrlabimage
@@ -2302,8 +2302,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5878509992479163765
-    last_analyzed: '2025-07-30T11:35:53.239475'
+    schema_hash: 7377059350931005551
+    last_analyzed: '2025-07-30T12:18:53.493324'
     primary_key: EhrLabImageNum
   ehrlabnote:
     table_name: ehrlabnote
@@ -2320,8 +2320,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5772885172470357338
-    last_analyzed: '2025-07-30T11:35:56.020875'
+    schema_hash: -6263822484561576740
+    last_analyzed: '2025-07-30T12:18:56.189748'
     primary_key: EhrLabNoteNum
   ehrlabresult:
     table_name: ehrlabresult
@@ -2338,8 +2338,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1299106958352785808
-    last_analyzed: '2025-07-30T11:35:56.020875'
+    schema_hash: -8417792549871582569
+    last_analyzed: '2025-07-30T12:18:56.190748'
     primary_key: EhrLabResultNum
   ehrlabresultscopyto:
     table_name: ehrlabresultscopyto
@@ -2356,8 +2356,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5020867938216655928
-    last_analyzed: '2025-07-30T11:35:56.021875'
+    schema_hash: -907581559544889357
+    last_analyzed: '2025-07-30T12:18:56.190748'
     primary_key: EhrLabResultsCopyToNum
   ehrlabspecimen:
     table_name: ehrlabspecimen
@@ -2374,8 +2374,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4905859722111297989
-    last_analyzed: '2025-07-30T11:35:56.021875'
+    schema_hash: -1731337673152982717
+    last_analyzed: '2025-07-30T12:18:56.190748'
     primary_key: EhrLabSpecimenNum
   ehrlabspecimencondition:
     table_name: ehrlabspecimencondition
@@ -2392,8 +2392,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9199871239096896397
-    last_analyzed: '2025-07-30T11:35:56.021875'
+    schema_hash: -9148443575911023646
+    last_analyzed: '2025-07-30T12:18:56.190748'
     primary_key: EhrLabSpecimenConditionNum
   ehrlabspecimenrejectreason:
     table_name: ehrlabspecimenrejectreason
@@ -2410,8 +2410,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8351965050907158310
-    last_analyzed: '2025-07-30T11:35:58.529321'
+    schema_hash: -5894529968125831018
+    last_analyzed: '2025-07-30T12:18:58.700501'
     primary_key: EhrLabSpecimenRejectReasonNum
   ehrmeasure:
     table_name: ehrmeasure
@@ -2428,13 +2428,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7997043485075028839
-    last_analyzed: '2025-07-30T11:35:58.529321'
+    schema_hash: 9100841936299542197
+    last_analyzed: '2025-07-30T12:18:58.700501'
     primary_key: EhrMeasureNum
   ehrmeasureevent:
     table_name: ehrmeasureevent
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 5981
     estimated_size_mb: 0.65
     batch_size: 5000
@@ -2447,8 +2447,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2986845553223053701
-    last_analyzed: '2025-07-30T11:35:58.671122'
+    schema_hash: 563808515472679691
+    last_analyzed: '2025-07-30T12:18:58.841804'
     primary_key: EhrMeasureEventNum
   ehrnotperformed:
     table_name: ehrnotperformed
@@ -2465,8 +2465,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -171991783730440304
-    last_analyzed: '2025-07-30T11:35:58.672122'
+    schema_hash: -6938699586746394110
+    last_analyzed: '2025-07-30T12:18:58.842797'
     primary_key: EhrNotPerformedNum
   ehrpatient:
     table_name: ehrpatient
@@ -2483,8 +2483,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7017711174371457944
-    last_analyzed: '2025-07-30T11:35:58.672122'
+    schema_hash: -9062503366383543195
+    last_analyzed: '2025-07-30T12:18:58.843122'
     primary_key: PatNum
   ehrprovkey:
     table_name: ehrprovkey
@@ -2501,8 +2501,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -41450174211251541
-    last_analyzed: '2025-07-30T11:36:01.285812'
+    schema_hash: -5184984343719137756
+    last_analyzed: '2025-07-30T12:19:01.500394'
     primary_key: EhrProvKeyNum
   ehrquarterlykey:
     table_name: ehrquarterlykey
@@ -2519,8 +2519,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4741266725158842019
-    last_analyzed: '2025-07-30T11:36:01.285812'
+    schema_hash: 9110387028701421359
+    last_analyzed: '2025-07-30T12:19:01.501393'
     primary_key: EhrQuarterlyKeyNum
   ehrsummaryccd:
     table_name: ehrsummaryccd
@@ -2537,8 +2537,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2240963307136036008
-    last_analyzed: '2025-07-30T11:36:01.286814'
+    schema_hash: 2517835056389848418
+    last_analyzed: '2025-07-30T12:19:01.501393'
     primary_key: EhrSummaryCcdNum
   ehrtrigger:
     table_name: ehrtrigger
@@ -2555,8 +2555,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1084762278296107662
-    last_analyzed: '2025-07-30T11:36:01.286814'
+    schema_hash: -2582601434502012098
+    last_analyzed: '2025-07-30T12:19:01.501393'
     primary_key: EhrTriggerNum
   electid:
     table_name: electid
@@ -2573,8 +2573,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4309062603273901078
-    last_analyzed: '2025-07-30T11:36:01.286814'
+    schema_hash: 2957376319650706341
+    last_analyzed: '2025-07-30T12:19:01.501393'
     primary_key: ElectIDNum
   emailaddress:
     table_name: emailaddress
@@ -2591,8 +2591,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8280150816919046458
-    last_analyzed: '2025-07-30T11:36:03.637990'
+    schema_hash: 6467564253083541108
+    last_analyzed: '2025-07-30T12:19:03.868935'
     primary_key: EmailAddressNum
   emailattach:
     table_name: emailattach
@@ -2609,8 +2609,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3788861321534834711
-    last_analyzed: '2025-07-30T11:36:03.637990'
+    schema_hash: -876189802428831376
+    last_analyzed: '2025-07-30T12:19:03.868935'
     primary_key: EmailAttachNum
   emailautograph:
     table_name: emailautograph
@@ -2627,8 +2627,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 18535840075662238
-    last_analyzed: '2025-07-30T11:36:03.637990'
+    schema_hash: 6080197983124711831
+    last_analyzed: '2025-07-30T12:19:03.868935'
     primary_key: EmailAutographNum
   emailhostingtemplate:
     table_name: emailhostingtemplate
@@ -2645,13 +2645,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1443028072502547326
-    last_analyzed: '2025-07-30T11:36:03.637990'
+    schema_hash: 1852797399010362249
+    last_analyzed: '2025-07-30T12:19:03.868935'
     primary_key: EmailHostingTemplateNum
   emailmessage:
     table_name: emailmessage
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 2908
     estimated_size_mb: 2.1
     batch_size: 5000
@@ -2666,8 +2666,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3562919391582796271
-    last_analyzed: '2025-07-30T11:36:04.053658'
+    schema_hash: -6144928798283965544
+    last_analyzed: '2025-07-30T12:19:04.273424'
     primary_key: EmailMessageNum
   emailmessageuid:
     table_name: emailmessageuid
@@ -2684,8 +2684,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8020750976344197322
-    last_analyzed: '2025-07-30T11:36:06.633124'
+    schema_hash: -804648943810872234
+    last_analyzed: '2025-07-30T12:19:06.868590'
     primary_key: EmailMessageUidNum
   emailsecure:
     table_name: emailsecure
@@ -2702,8 +2702,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 938000436938743520
-    last_analyzed: '2025-07-30T11:36:06.862106'
+    schema_hash: 2981356108012406973
+    last_analyzed: '2025-07-30T12:19:07.086666'
     primary_key: EmailSecureNum
   emailsecureattach:
     table_name: emailsecureattach
@@ -2720,8 +2720,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3667430778014328519
-    last_analyzed: '2025-07-30T11:36:07.104419'
+    schema_hash: -15688289760603979
+    last_analyzed: '2025-07-30T12:19:07.321292'
     primary_key: EmailSecureAttachNum
   emailtemplate:
     table_name: emailtemplate
@@ -2738,8 +2738,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7059970888579879828
-    last_analyzed: '2025-07-30T11:36:07.104419'
+    schema_hash: 8392325892415808077
+    last_analyzed: '2025-07-30T12:19:07.322296'
     primary_key: EmailTemplateNum
   employee:
     table_name: employee
@@ -2757,8 +2757,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7579317572672872783
-    last_analyzed: '2025-07-30T11:36:07.104419'
+    schema_hash: -3420437289992588246
+    last_analyzed: '2025-07-30T12:19:07.322296'
     primary_key: EmployeeNum
   employer:
     table_name: employer
@@ -2777,8 +2777,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 339632139511674570
-    last_analyzed: '2025-07-30T11:36:09.597898'
+    schema_hash: -8218969403736940539
+    last_analyzed: '2025-07-30T12:19:09.843615'
     primary_key: EmployerNum
   encounter:
     table_name: encounter
@@ -2795,14 +2795,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6183578291473469885
-    last_analyzed: '2025-07-30T11:36:09.597898'
+    schema_hash: 2253707871808036575
+    last_analyzed: '2025-07-30T12:19:09.843615'
     primary_key: EncounterNum
   entrylog:
     table_name: entrylog
     table_importance: audit
     extraction_strategy: incremental
-    estimated_rows: 47906
+    estimated_rows: 47907
     estimated_size_mb: 4.37
     batch_size: 10000
     incremental_columns:
@@ -2815,8 +2815,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2410876748886807025
-    last_analyzed: '2025-07-30T11:36:09.913287'
+    schema_hash: -3307006246399205831
+    last_analyzed: '2025-07-30T12:19:10.090607'
     primary_key: EntryLogNum
   eobattach:
     table_name: eobattach
@@ -2835,8 +2835,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5716224283815004443
-    last_analyzed: '2025-07-30T11:36:10.063277'
+    schema_hash: -6677766840129565917
+    last_analyzed: '2025-07-30T12:19:10.248368'
     primary_key: EobAttachNum
   equipment:
     table_name: equipment
@@ -2853,8 +2853,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1600054868798648270
-    last_analyzed: '2025-07-30T11:36:10.065333'
+    schema_hash: -2772460846947536082
+    last_analyzed: '2025-07-30T12:19:10.248368'
     primary_key: EquipmentNum
   erouting:
     table_name: erouting
@@ -2871,8 +2871,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3802381102799927906
-    last_analyzed: '2025-07-30T11:36:12.942202'
+    schema_hash: 8551546699933786478
+    last_analyzed: '2025-07-30T12:19:13.083824'
     primary_key: ERoutingNum
   eroutingaction:
     table_name: eroutingaction
@@ -2889,8 +2889,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8673702687472094211
-    last_analyzed: '2025-07-30T11:36:13.071099'
+    schema_hash: 2615125016122845259
+    last_analyzed: '2025-07-30T12:19:13.198376'
     primary_key: ERoutingActionNum
   eroutingactiondef:
     table_name: eroutingactiondef
@@ -2907,8 +2907,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1525670260750733391
-    last_analyzed: '2025-07-30T11:36:13.322035'
+    schema_hash: 5636202607927941366
+    last_analyzed: '2025-07-30T12:19:13.431402'
     primary_key: ERoutingActionDefNum
   eroutingdef:
     table_name: eroutingdef
@@ -2925,8 +2925,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4912299638273912412
-    last_analyzed: '2025-07-30T11:36:13.574640'
+    schema_hash: 638976732430338269
+    last_analyzed: '2025-07-30T12:19:13.668727'
     primary_key: ERoutingDefNum
   eroutingdeflink:
     table_name: eroutingdeflink
@@ -2943,13 +2943,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1710860440632439683
-    last_analyzed: '2025-07-30T11:36:13.575636'
+    schema_hash: 8554725561426929719
+    last_analyzed: '2025-07-30T12:19:13.669734'
     primary_key: ERoutingDefLinkNum
   erxlog:
     table_name: erxlog
     table_importance: audit
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 3872
     estimated_size_mb: 11.22
     batch_size: 5000
@@ -2962,8 +2962,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3058814071230837769
-    last_analyzed: '2025-07-30T11:36:16.208811'
+    schema_hash: -6531782932561006205
+    last_analyzed: '2025-07-30T12:19:16.195528'
     primary_key: ErxLogNum
   eservicelog:
     table_name: eservicelog
@@ -2982,8 +2982,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7439748948637562530
-    last_analyzed: '2025-07-30T11:36:16.535632'
+    schema_hash: 4966729532592589272
+    last_analyzed: '2025-07-30T12:19:16.482680'
     primary_key: EServiceLogNum
   eserviceshortguid:
     table_name: eserviceshortguid
@@ -3000,13 +3000,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6061505605349926630
-    last_analyzed: '2025-07-30T11:36:16.785058'
+    schema_hash: -842914763089161313
+    last_analyzed: '2025-07-30T12:19:16.707015'
     primary_key: EServiceShortGuidNum
   eservicesignal:
     table_name: eservicesignal
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 1669
     estimated_size_mb: 1.02
     batch_size: 5000
@@ -3019,8 +3019,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3415521966906819080
-    last_analyzed: '2025-07-30T11:36:16.901445'
+    schema_hash: 7636406833516726352
+    last_analyzed: '2025-07-30T12:19:16.836431'
     primary_key: EServiceSignalNum
   etrans:
     table_name: etrans
@@ -3038,8 +3038,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4185612644950333118
-    last_analyzed: '2025-07-30T11:36:17.116950'
+    schema_hash: 494168458166969347
+    last_analyzed: '2025-07-30T12:19:16.992968'
     primary_key: EtransNum
   etrans835:
     table_name: etrans835
@@ -3056,8 +3056,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2444057782819846048
-    last_analyzed: '2025-07-30T11:36:19.813604'
+    schema_hash: -1073810131256082983
+    last_analyzed: '2025-07-30T12:19:19.623706'
     primary_key: Etrans835Num
   etrans835attach:
     table_name: etrans835attach
@@ -3074,8 +3074,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3145595188774382654
-    last_analyzed: '2025-07-30T11:36:19.813604'
+    schema_hash: -7516325126472362426
+    last_analyzed: '2025-07-30T12:19:19.624706'
     primary_key: Etrans835AttachNum
   etransmessagetext:
     table_name: etransmessagetext
@@ -3092,8 +3092,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1115546908963720417
-    last_analyzed: '2025-07-30T11:36:19.814605'
+    schema_hash: 5946802262123500005
+    last_analyzed: '2025-07-30T12:19:19.624706'
     primary_key: EtransMessageTextNum
   evaluation:
     table_name: evaluation
@@ -3110,8 +3110,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -635184208909781610
-    last_analyzed: '2025-07-30T11:36:19.814605'
+    schema_hash: -5147899868774584834
+    last_analyzed: '2025-07-30T12:19:19.624706'
     primary_key: EvaluationNum
   evaluationcriterion:
     table_name: evaluationcriterion
@@ -3128,8 +3128,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8135427427533766909
-    last_analyzed: '2025-07-30T11:36:19.814605'
+    schema_hash: -2462794557157300625
+    last_analyzed: '2025-07-30T12:19:19.624706'
     primary_key: EvaluationCriterionNum
   evaluationcriteriondef:
     table_name: evaluationcriteriondef
@@ -3146,8 +3146,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5095330531335195093
-    last_analyzed: '2025-07-30T11:36:22.539036'
+    schema_hash: -198793335831926653
+    last_analyzed: '2025-07-30T12:19:22.272765'
     primary_key: EvaluationCriterionDefNum
   evaluationdef:
     table_name: evaluationdef
@@ -3164,8 +3164,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4262732906968131956
-    last_analyzed: '2025-07-30T11:36:22.539036'
+    schema_hash: 3995876672817448292
+    last_analyzed: '2025-07-30T12:19:22.272765'
     primary_key: EvaluationDefNum
   famaging:
     table_name: famaging
@@ -3182,8 +3182,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -781931277610382475
-    last_analyzed: '2025-07-30T11:36:22.539036'
+    schema_hash: -3188143823868576446
+    last_analyzed: '2025-07-30T12:19:22.272765'
     primary_key: PatNum
   familyhealth:
     table_name: familyhealth
@@ -3200,8 +3200,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7549755555004277809
-    last_analyzed: '2025-07-30T11:36:22.539036'
+    schema_hash: -3248983518654690285
+    last_analyzed: '2025-07-30T12:19:22.272765'
     primary_key: FamilyHealthNum
   fee:
     table_name: fee
@@ -3221,13 +3221,13 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -2458123554271530764
-    last_analyzed: '2025-07-30T11:36:22.862051'
+    schema_hash: 3894011678112380452
+    last_analyzed: '2025-07-30T12:19:22.594376'
     primary_key: FeeNum
   feesched:
     table_name: feesched
     table_importance: important
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 8266
     estimated_size_mb: 0.63
     batch_size: 5000
@@ -3241,8 +3241,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -8603425411240974480
-    last_analyzed: '2025-07-30T11:36:25.802201'
+    schema_hash: -768626458828800055
+    last_analyzed: '2025-07-30T12:19:25.412341'
     primary_key: FeeSchedNum
   feeschedgroup:
     table_name: feeschedgroup
@@ -3259,8 +3259,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 3317537582483376711
-    last_analyzed: '2025-07-30T11:36:25.803196'
+    schema_hash: -2728480147160944299
+    last_analyzed: '2025-07-30T12:19:25.412341'
     primary_key: FeeSchedGroupNum
   fhircontactpoint:
     table_name: fhircontactpoint
@@ -3277,8 +3277,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6703534286575927198
-    last_analyzed: '2025-07-30T11:36:25.804198'
+    schema_hash: -4645783724797231982
+    last_analyzed: '2025-07-30T12:19:25.412341'
     primary_key: FHIRContactPointNum
   fhirsubscription:
     table_name: fhirsubscription
@@ -3295,8 +3295,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2397449364041424320
-    last_analyzed: '2025-07-30T11:36:25.932902'
+    schema_hash: -2420467688456498171
+    last_analyzed: '2025-07-30T12:19:25.528486'
     primary_key: FHIRSubscriptionNum
   fielddeflink:
     table_name: fielddeflink
@@ -3313,8 +3313,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5423214744274070692
-    last_analyzed: '2025-07-30T11:36:25.934114'
+    schema_hash: -6671615758677443739
+    last_analyzed: '2025-07-30T12:19:25.528486'
     primary_key: FieldDefLinkNum
   files:
     table_name: files
@@ -3331,8 +3331,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2681917324390417350
-    last_analyzed: '2025-07-30T11:36:28.589486'
+    schema_hash: -189290337007095985
+    last_analyzed: '2025-07-30T12:19:28.166346'
     primary_key: DocNum
   formpat:
     table_name: formpat
@@ -3349,8 +3349,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4120437721877218935
-    last_analyzed: '2025-07-30T11:36:28.703189'
+    schema_hash: -4802678482468461314
+    last_analyzed: '2025-07-30T12:19:28.281463'
     primary_key: FormPatNum
   gradingscale:
     table_name: gradingscale
@@ -3367,8 +3367,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4994023660835113882
-    last_analyzed: '2025-07-30T11:36:28.704188'
+    schema_hash: -6810041311243865602
+    last_analyzed: '2025-07-30T12:19:28.281463'
     primary_key: GradingScaleNum
   gradingscaleitem:
     table_name: gradingscaleitem
@@ -3385,8 +3385,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2549265143680479113
-    last_analyzed: '2025-07-30T11:36:28.705190'
+    schema_hash: 5390611688429607712
+    last_analyzed: '2025-07-30T12:19:28.281463'
     primary_key: GradingScaleItemNum
   grouppermission:
     table_name: grouppermission
@@ -3403,8 +3403,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3540024931227467791
-    last_analyzed: '2025-07-30T11:36:28.705190'
+    schema_hash: -7125319836128577967
+    last_analyzed: '2025-07-30T12:19:28.282536'
     primary_key: GroupPermNum
   guardian:
     table_name: guardian
@@ -3421,8 +3421,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3670443682652540022
-    last_analyzed: '2025-07-30T11:36:31.336444'
+    schema_hash: 6555760817101384434
+    last_analyzed: '2025-07-30T12:19:30.849545'
     primary_key: GuardianNum
   hcpcs:
     table_name: hcpcs
@@ -3439,8 +3439,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8270580403497264326
-    last_analyzed: '2025-07-30T11:36:31.336444'
+    schema_hash: 8461499168598261777
+    last_analyzed: '2025-07-30T12:19:30.849545'
     primary_key: HcpcsNum
   hieclinic:
     table_name: hieclinic
@@ -3457,8 +3457,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5877204756364349774
-    last_analyzed: '2025-07-30T11:36:31.336444'
+    schema_hash: 8281318530232930362
+    last_analyzed: '2025-07-30T12:19:30.850601'
     primary_key: HieClinicNum
   hiequeue:
     table_name: hiequeue
@@ -3475,15 +3475,15 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6635583652990966519
-    last_analyzed: '2025-07-30T11:36:31.337951'
+    schema_hash: -4832706867694117446
+    last_analyzed: '2025-07-30T12:19:30.850601'
     primary_key: HieQueueNum
   histappointment:
     table_name: histappointment
     table_importance: audit
     extraction_strategy: incremental
-    estimated_rows: 588744
-    estimated_size_mb: 356.37
+    estimated_rows: 588766
+    estimated_size_mb: 356.39
     batch_size: 50000
     incremental_columns:
     - DateTStamp
@@ -3497,8 +3497,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 3835167420277932801
-    last_analyzed: '2025-07-30T11:36:38.110128'
+    schema_hash: -3558450194900322056
+    last_analyzed: '2025-07-30T12:19:37.086687'
     primary_key: HistApptNum
   hl7def:
     table_name: hl7def
@@ -3515,8 +3515,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4308047416865243707
-    last_analyzed: '2025-07-30T11:36:40.830760'
+    schema_hash: -2414205950500677977
+    last_analyzed: '2025-07-30T12:19:39.791429'
     primary_key: HL7DefNum
   hl7deffield:
     table_name: hl7deffield
@@ -3533,8 +3533,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1464337880258247444
-    last_analyzed: '2025-07-30T11:36:40.830760'
+    schema_hash: 6916543692938930999
+    last_analyzed: '2025-07-30T12:19:39.792430'
     primary_key: HL7DefFieldNum
   hl7defmessage:
     table_name: hl7defmessage
@@ -3551,8 +3551,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5705617067165113354
-    last_analyzed: '2025-07-30T11:36:40.830760'
+    schema_hash: 2924172426125433750
+    last_analyzed: '2025-07-30T12:19:39.792430'
     primary_key: HL7DefMessageNum
   hl7defsegment:
     table_name: hl7defsegment
@@ -3569,8 +3569,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5425983392858829875
-    last_analyzed: '2025-07-30T11:36:40.831790'
+    schema_hash: -8483906593415396747
+    last_analyzed: '2025-07-30T12:19:39.792430'
     primary_key: HL7DefSegmentNum
   hl7msg:
     table_name: hl7msg
@@ -3587,8 +3587,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3306226833375950290
-    last_analyzed: '2025-07-30T11:36:40.953215'
+    schema_hash: 1436459340606347727
+    last_analyzed: '2025-07-30T12:19:39.903651'
     primary_key: HL7MsgNum
   hl7procattach:
     table_name: hl7procattach
@@ -3605,8 +3605,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4417095142908837651
-    last_analyzed: '2025-07-30T11:36:43.560043'
+    schema_hash: 1349539876083264733
+    last_analyzed: '2025-07-30T12:19:42.479197'
     primary_key: HL7ProcAttachNum
   icd10:
     table_name: icd10
@@ -3623,8 +3623,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7247252078029306601
-    last_analyzed: '2025-07-30T11:36:43.560043'
+    schema_hash: 3941112712796989345
+    last_analyzed: '2025-07-30T12:19:42.479197'
     primary_key: Icd10Num
   icd9:
     table_name: icd9
@@ -3641,8 +3641,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 9214048893934110864
-    last_analyzed: '2025-07-30T11:36:43.686499'
+    schema_hash: 263737174865113996
+    last_analyzed: '2025-07-30T12:19:42.589221'
     primary_key: ICD9Num
   imagedraw:
     table_name: imagedraw
@@ -3659,8 +3659,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6042352847864858096
-    last_analyzed: '2025-07-30T11:36:43.686499'
+    schema_hash: 6802014488573532108
+    last_analyzed: '2025-07-30T12:19:42.589221'
     primary_key: ImageDrawNum
   imagingdevice:
     table_name: imagingdevice
@@ -3677,8 +3677,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5304286138286818020
-    last_analyzed: '2025-07-30T11:36:43.686499'
+    schema_hash: -6214992704249175980
+    last_analyzed: '2025-07-30T12:19:42.589221'
     primary_key: ImagingDeviceNum
   insbluebook:
     table_name: insbluebook
@@ -3697,14 +3697,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1698984473073644686
-    last_analyzed: '2025-07-30T11:36:46.295215'
+    schema_hash: -7757713236804131615
+    last_analyzed: '2025-07-30T12:19:45.205229'
     primary_key: InsBlueBookNum
   insbluebooklog:
     table_name: insbluebooklog
     table_importance: audit
     extraction_strategy: incremental
-    estimated_rows: 215037
+    estimated_rows: 215043
     estimated_size_mb: 34.79
     batch_size: 25000
     incremental_columns:
@@ -3717,8 +3717,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -4912523743891061250
-    last_analyzed: '2025-07-30T11:36:46.780024'
+    schema_hash: -6160856353404149668
+    last_analyzed: '2025-07-30T12:19:45.699406'
     primary_key: InsBlueBookLogNum
   insbluebookrule:
     table_name: insbluebookrule
@@ -3735,8 +3735,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7383429202947498529
-    last_analyzed: '2025-07-30T11:36:46.781236'
+    schema_hash: 3321408843113251071
+    last_analyzed: '2025-07-30T12:19:45.700406'
     primary_key: InsBlueBookRuleNum
   inseditlog:
     table_name: inseditlog
@@ -3754,8 +3754,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 7817943872808984443
-    last_analyzed: '2025-07-30T11:36:47.756163'
+    schema_hash: 5814373207625856234
+    last_analyzed: '2025-07-30T12:19:46.656495'
     primary_key: InsEditLogNum
   inseditpatlog:
     table_name: inseditpatlog
@@ -3773,8 +3773,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2433645739779171483
-    last_analyzed: '2025-07-30T11:36:47.990083'
+    schema_hash: 830105526332051363
+    last_analyzed: '2025-07-30T12:19:46.898640'
     primary_key: InsEditPatLogNum
   insfilingcode:
     table_name: insfilingcode
@@ -3791,8 +3791,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6110931047395150372
-    last_analyzed: '2025-07-30T11:36:50.556889'
+    schema_hash: 3430200393031924453
+    last_analyzed: '2025-07-30T12:19:49.415709'
     primary_key: InsFilingCodeNum
   insfilingcodesubtype:
     table_name: insfilingcodesubtype
@@ -3809,13 +3809,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3071698508196093126
-    last_analyzed: '2025-07-30T11:36:50.557889'
+    schema_hash: 4993568438186794606
+    last_analyzed: '2025-07-30T12:19:49.416729'
     primary_key: InsFilingCodeSubtypeNum
   insplan:
     table_name: insplan
     table_importance: important
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 5834
     estimated_size_mb: 1.65
     batch_size: 5000
@@ -3829,8 +3829,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -3283934018661040226
-    last_analyzed: '2025-07-30T11:36:50.721405'
+    schema_hash: 7788453823788236672
+    last_analyzed: '2025-07-30T12:19:49.570648'
     primary_key: PlanNum
   insplanpreference:
     table_name: insplanpreference
@@ -3847,8 +3847,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -1571771059987763330
-    last_analyzed: '2025-07-30T11:36:50.722406'
+    schema_hash: -8423515079585027322
+    last_analyzed: '2025-07-30T12:19:49.571648'
     primary_key: InsPlanPrefNum
   inssub:
     table_name: inssub
@@ -3867,8 +3867,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4839880489131125261
-    last_analyzed: '2025-07-30T11:36:50.904227'
+    schema_hash: 3832646835090200579
+    last_analyzed: '2025-07-30T12:19:49.739410'
     primary_key: InsSubNum
   installmentplan:
     table_name: installmentplan
@@ -3885,8 +3885,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2152442615722123038
-    last_analyzed: '2025-07-30T11:36:53.465587'
+    schema_hash: -2454676335167388427
+    last_analyzed: '2025-07-30T12:19:52.432615'
     primary_key: InstallmentPlanNum
   instructor:
     table_name: instructor
@@ -3903,8 +3903,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6908253478513328776
-    last_analyzed: '2025-07-30T11:36:53.466583'
+    schema_hash: -6950897770725429264
+    last_analyzed: '2025-07-30T12:19:52.432615'
     primary_key: InstructorNum
   insverify:
     table_name: insverify
@@ -3923,14 +3923,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1292820546182572321
-    last_analyzed: '2025-07-30T11:36:53.647964'
+    schema_hash: -1829123017427911199
+    last_analyzed: '2025-07-30T12:19:52.602217'
     primary_key: InsVerifyNum
   insverifyhist:
     table_name: insverifyhist
     table_importance: audit
     extraction_strategy: incremental
-    estimated_rows: 40417
+    estimated_rows: 40419
     estimated_size_mb: 6.61
     batch_size: 10000
     incremental_columns:
@@ -3943,8 +3943,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6763558772224221111
-    last_analyzed: '2025-07-30T11:36:53.953682'
+    schema_hash: -5055018903180501867
+    last_analyzed: '2025-07-30T12:19:52.858397'
     primary_key: InsVerifyHistNum
   intervention:
     table_name: intervention
@@ -3961,8 +3961,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7643126958085443843
-    last_analyzed: '2025-07-30T11:36:53.955682'
+    schema_hash: 1855895128708888994
+    last_analyzed: '2025-07-30T12:19:52.859444'
     primary_key: InterventionNum
   journalentry:
     table_name: journalentry
@@ -3979,13 +3979,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8454196342718837016
-    last_analyzed: '2025-07-30T11:36:56.794308'
+    schema_hash: -9021271196514849204
+    last_analyzed: '2025-07-30T12:19:55.730509'
     primary_key: JournalEntryNum
   labcase:
     table_name: labcase
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 4558
     estimated_size_mb: 0.7
     batch_size: 5000
@@ -4001,8 +4001,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1174041161877107840
-    last_analyzed: '2025-07-30T11:36:57.500174'
+    schema_hash: 8785398002323090664
+    last_analyzed: '2025-07-30T12:19:56.407392'
     primary_key: LabCaseNum
   laboratory:
     table_name: laboratory
@@ -4019,8 +4019,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7497976465095356527
-    last_analyzed: '2025-07-30T11:36:57.501184'
+    schema_hash: 517788173547611062
+    last_analyzed: '2025-07-30T12:19:56.408392'
     primary_key: LaboratoryNum
   labpanel:
     table_name: labpanel
@@ -4037,8 +4037,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -628878580539584999
-    last_analyzed: '2025-07-30T11:36:57.619074'
+    schema_hash: 5700751714700247752
+    last_analyzed: '2025-07-30T12:19:56.522446'
     primary_key: LabPanelNum
   labresult:
     table_name: labresult
@@ -4055,8 +4055,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1383552226463433764
-    last_analyzed: '2025-07-30T11:36:57.854658'
+    schema_hash: -8259162723177367280
+    last_analyzed: '2025-07-30T12:19:56.746239'
     primary_key: LabResultNum
   labturnaround:
     table_name: labturnaround
@@ -4073,8 +4073,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8714629857492308832
-    last_analyzed: '2025-07-30T11:37:00.339344'
+    schema_hash: 3353615614957656785
+    last_analyzed: '2025-07-30T12:19:59.236760'
     primary_key: LabTurnaroundNum
   language:
     table_name: language
@@ -4091,8 +4091,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6649690819012477495
-    last_analyzed: '2025-07-30T11:37:00.339344'
+    schema_hash: 3294525049695872925
+    last_analyzed: '2025-07-30T12:19:59.236760'
     primary_key: LanguageNum
   languageforeign:
     table_name: languageforeign
@@ -4109,8 +4109,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5392984776045544461
-    last_analyzed: '2025-07-30T11:37:00.339344'
+    schema_hash: -3872424035807211731
+    last_analyzed: '2025-07-30T12:19:59.236760'
     primary_key: LanguageForeignNum
   languagepat:
     table_name: languagepat
@@ -4127,8 +4127,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 260804808227697702
-    last_analyzed: '2025-07-30T11:37:00.339344'
+    schema_hash: 7624795694765309075
+    last_analyzed: '2025-07-30T12:19:59.236760'
     primary_key: LanguagePatNum
   letter:
     table_name: letter
@@ -4145,8 +4145,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9211665331264185457
-    last_analyzed: '2025-07-30T11:37:00.340345'
+    schema_hash: -556679584566810967
+    last_analyzed: '2025-07-30T12:19:59.238266'
     primary_key: LetterNum
   lettermerge:
     table_name: lettermerge
@@ -4163,8 +4163,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4341947762520344969
-    last_analyzed: '2025-07-30T11:37:03.131836'
+    schema_hash: 4198819295689557135
+    last_analyzed: '2025-07-30T12:20:01.928103'
     primary_key: LetterMergeNum
   lettermergefield:
     table_name: lettermergefield
@@ -4181,8 +4181,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8581744589489807857
-    last_analyzed: '2025-07-30T11:37:03.131836'
+    schema_hash: 2482100218798543680
+    last_analyzed: '2025-07-30T12:20:01.928103'
     primary_key: FieldNum
   limitedbetafeature:
     table_name: limitedbetafeature
@@ -4199,8 +4199,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4519555521478236990
-    last_analyzed: '2025-07-30T11:37:03.131836'
+    schema_hash: 1889180384141207040
+    last_analyzed: '2025-07-30T12:20:01.929455'
     primary_key: LimitedBetaFeatureNum
   loginattempt:
     table_name: loginattempt
@@ -4217,8 +4217,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6135538135662792303
-    last_analyzed: '2025-07-30T11:37:03.247993'
+    schema_hash: 8486011881868956433
+    last_analyzed: '2025-07-30T12:20:02.054142'
     primary_key: LoginAttemptNum
   loinc:
     table_name: loinc
@@ -4235,8 +4235,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3355972418396633140
-    last_analyzed: '2025-07-30T11:37:03.248495'
+    schema_hash: -1607684908105673934
+    last_analyzed: '2025-07-30T12:20:02.055138'
     primary_key: LoincNum
   maparea:
     table_name: maparea
@@ -4253,8 +4253,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3293097178856252150
-    last_analyzed: '2025-07-30T11:37:05.836937'
+    schema_hash: 5695143265112782255
+    last_analyzed: '2025-07-30T12:20:04.656410'
     primary_key: MapAreaNum
   medicalorder:
     table_name: medicalorder
@@ -4271,13 +4271,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 590917211365994234
-    last_analyzed: '2025-07-30T11:37:05.945475'
+    schema_hash: 8893918612910408945
+    last_analyzed: '2025-07-30T12:20:04.770362'
     primary_key: MedicalOrderNum
   medication:
     table_name: medication
     table_importance: important
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 939
     estimated_size_mb: 0.1
     batch_size: 5000
@@ -4291,8 +4291,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 6983382679970316719
-    last_analyzed: '2025-07-30T11:37:06.063081'
+    schema_hash: 1211737190882406588
+    last_analyzed: '2025-07-30T12:20:04.890097'
     primary_key: MedicationNum
   medicationpat:
     table_name: medicationpat
@@ -4310,8 +4310,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -5094751563836060358
-    last_analyzed: '2025-07-30T11:37:06.248231'
+    schema_hash: 7574896882379446072
+    last_analyzed: '2025-07-30T12:20:05.076416'
     primary_key: MedicationPatNum
   medlab:
     table_name: medlab
@@ -4328,8 +4328,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7323411037654898340
-    last_analyzed: '2025-07-30T11:37:06.586543'
+    schema_hash: -8352264268374053379
+    last_analyzed: '2025-07-30T12:20:05.416928'
     primary_key: MedLabNum
   medlabfacattach:
     table_name: medlabfacattach
@@ -4346,8 +4346,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2134157548568656802
-    last_analyzed: '2025-07-30T11:37:09.206316'
+    schema_hash: -1582938451692294727
+    last_analyzed: '2025-07-30T12:20:08.061326'
     primary_key: MedLabFacAttachNum
   medlabfacility:
     table_name: medlabfacility
@@ -4364,8 +4364,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2569690792709613473
-    last_analyzed: '2025-07-30T11:37:09.207317'
+    schema_hash: 6557872657328342850
+    last_analyzed: '2025-07-30T12:20:08.062331'
     primary_key: MedLabFacilityNum
   medlabresult:
     table_name: medlabresult
@@ -4382,8 +4382,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1473861611668127350
-    last_analyzed: '2025-07-30T11:37:09.328880'
+    schema_hash: 3399591338616880738
+    last_analyzed: '2025-07-30T12:20:08.177339'
     primary_key: MedLabResultNum
   medlabspecimen:
     table_name: medlabspecimen
@@ -4400,8 +4400,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 618277111847003651
-    last_analyzed: '2025-07-30T11:37:09.446667'
+    schema_hash: -5226313287485226744
+    last_analyzed: '2025-07-30T12:20:08.293531'
     primary_key: MedLabSpecimenNum
   mobileappdevice:
     table_name: mobileappdevice
@@ -4418,8 +4418,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2284809990303656892
-    last_analyzed: '2025-07-30T11:37:10.029337'
+    schema_hash: -8647506243300709492
+    last_analyzed: '2025-07-30T12:20:08.852664'
     primary_key: MobileAppDeviceNum
   mobilebrandingprofile:
     table_name: mobilebrandingprofile
@@ -4436,8 +4436,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6885061754322135696
-    last_analyzed: '2025-07-30T11:37:12.693345'
+    schema_hash: -2816055591902473090
+    last_analyzed: '2025-07-30T12:20:11.454200'
     primary_key: MobileBrandingProfileNum
   mobiledatabyte:
     table_name: mobiledatabyte
@@ -4454,8 +4454,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 9172601816312492913
-    last_analyzed: '2025-07-30T11:37:12.820352'
+    schema_hash: -4721255730210794897
+    last_analyzed: '2025-07-30T12:20:11.562235'
     primary_key: MobileDataByteNum
   mobilenotification:
     table_name: mobilenotification
@@ -4472,8 +4472,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 196948806875006551
-    last_analyzed: '2025-07-30T11:37:12.946662'
+    schema_hash: -6417251272216886256
+    last_analyzed: '2025-07-30T12:20:11.676397'
     primary_key: MobileNotificationNum
   mount:
     table_name: mount
@@ -4490,8 +4490,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5932214706647643664
-    last_analyzed: '2025-07-30T11:37:13.066797'
+    schema_hash: -5809944112675112947
+    last_analyzed: '2025-07-30T12:20:11.788418'
     primary_key: MountNum
   mountdef:
     table_name: mountdef
@@ -4508,8 +4508,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 676943480298709950
-    last_analyzed: '2025-07-30T11:37:13.066797'
+    schema_hash: -7049799630726846537
+    last_analyzed: '2025-07-30T12:20:11.789637'
     primary_key: MountDefNum
   mountitem:
     table_name: mountitem
@@ -4526,8 +4526,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5469005701653166177
-    last_analyzed: '2025-07-30T11:37:15.575013'
+    schema_hash: -5081819314658003047
+    last_analyzed: '2025-07-30T12:20:14.271884'
     primary_key: MountItemNum
   mountitemdef:
     table_name: mountitemdef
@@ -4544,8 +4544,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1787338072451256792
-    last_analyzed: '2025-07-30T11:37:15.575013'
+    schema_hash: -8431231070016947189
+    last_analyzed: '2025-07-30T12:20:14.271884'
     primary_key: MountItemDefNum
   msgtopaysent:
     table_name: msgtopaysent
@@ -4562,8 +4562,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4658382514418385299
-    last_analyzed: '2025-07-30T11:37:15.802397'
+    schema_hash: -183550114213631013
+    last_analyzed: '2025-07-30T12:20:14.533741'
     primary_key: MsgToPaySentNum
   oidexternal:
     table_name: oidexternal
@@ -4580,8 +4580,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5518933831556353619
-    last_analyzed: '2025-07-30T11:37:15.803400'
+    schema_hash: 5361515089992912442
+    last_analyzed: '2025-07-30T12:20:14.534645'
     primary_key: OIDExternalNum
   oidinternal:
     table_name: oidinternal
@@ -4598,8 +4598,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4149598476501772473
-    last_analyzed: '2025-07-30T11:37:15.803400'
+    schema_hash: 1965330476961367963
+    last_analyzed: '2025-07-30T12:20:14.534645'
     primary_key: OIDInternalNum
   operatory:
     table_name: operatory
@@ -4616,8 +4616,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2917056820699904111
-    last_analyzed: '2025-07-30T11:37:18.584105'
+    schema_hash: -4929464084736654981
+    last_analyzed: '2025-07-30T12:20:17.268064'
     primary_key: OperatoryNum
   orionproc:
     table_name: orionproc
@@ -4634,8 +4634,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8446217408839091084
-    last_analyzed: '2025-07-30T11:37:18.584105'
+    schema_hash: 3749165121307991952
+    last_analyzed: '2025-07-30T12:20:17.268572'
     primary_key: OrionProcNum
   orthocase:
     table_name: orthocase
@@ -4652,8 +4652,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4862533620499918172
-    last_analyzed: '2025-07-30T11:37:18.816477'
+    schema_hash: -5822632892887198902
+    last_analyzed: '2025-07-30T12:20:17.485956'
     primary_key: OrthoCaseNum
   orthochart:
     table_name: orthochart
@@ -4670,8 +4670,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2759114446142999190
-    last_analyzed: '2025-07-30T11:37:18.816477'
+    schema_hash: -8277983679704295476
+    last_analyzed: '2025-07-30T12:20:17.485956'
     primary_key: OrthoChartNum
   orthochartlog:
     table_name: orthochartlog
@@ -4688,8 +4688,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4568659443780522378
-    last_analyzed: '2025-07-30T11:37:19.046483'
+    schema_hash: -3848830461450393530
+    last_analyzed: '2025-07-30T12:20:17.707926'
     primary_key: OrthoChartLogNum
   orthochartrow:
     table_name: orthochartrow
@@ -4706,8 +4706,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4272912693009872819
-    last_analyzed: '2025-07-30T11:37:21.724836'
+    schema_hash: -2661428363094821116
+    last_analyzed: '2025-07-30T12:20:20.398493'
     primary_key: OrthoChartRowNum
   orthocharttab:
     table_name: orthocharttab
@@ -4724,8 +4724,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4812806995874279965
-    last_analyzed: '2025-07-30T11:37:21.725837'
+    schema_hash: -8259948408568545086
+    last_analyzed: '2025-07-30T12:20:20.399501'
     primary_key: OrthoChartTabNum
   orthocharttablink:
     table_name: orthocharttablink
@@ -4742,8 +4742,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1375442162609068825
-    last_analyzed: '2025-07-30T11:37:21.725837'
+    schema_hash: -2516199258704806278
+    last_analyzed: '2025-07-30T12:20:20.400501'
     primary_key: OrthoChartTabLinkNum
   orthohardware:
     table_name: orthohardware
@@ -4760,8 +4760,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8465733422371061271
-    last_analyzed: '2025-07-30T11:37:21.725837'
+    schema_hash: -8514868820075642377
+    last_analyzed: '2025-07-30T12:20:20.400501'
     primary_key: OrthoHardwareNum
   orthohardwarespec:
     table_name: orthohardwarespec
@@ -4778,8 +4778,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2003873023230896611
-    last_analyzed: '2025-07-30T11:37:21.725837'
+    schema_hash: -2379352743944979844
+    last_analyzed: '2025-07-30T12:20:20.400501'
     primary_key: OrthoHardwareSpecNum
   orthoplanlink:
     table_name: orthoplanlink
@@ -4796,8 +4796,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2786499892473486116
-    last_analyzed: '2025-07-30T11:37:24.507396'
+    schema_hash: -9164593952736039073
+    last_analyzed: '2025-07-30T12:20:23.175304'
     primary_key: OrthoPlanLinkNum
   orthoproclink:
     table_name: orthoproclink
@@ -4814,8 +4814,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5488606981897451517
-    last_analyzed: '2025-07-30T11:37:24.626630'
+    schema_hash: -3941636904688912618
+    last_analyzed: '2025-07-30T12:20:23.285742'
     primary_key: OrthoProcLinkNum
   orthorx:
     table_name: orthorx
@@ -4832,8 +4832,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8530252201109149236
-    last_analyzed: '2025-07-30T11:37:24.626630'
+    schema_hash: -3651775763680474836
+    last_analyzed: '2025-07-30T12:20:23.286775'
     primary_key: OrthoRxNum
   orthoschedule:
     table_name: orthoschedule
@@ -4850,14 +4850,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 9137687122532166792
-    last_analyzed: '2025-07-30T11:37:24.742634'
+    schema_hash: -1494324227608392489
+    last_analyzed: '2025-07-30T12:20:23.400187'
     primary_key: OrthoScheduleNum
   patfield:
     table_name: patfield
     table_importance: standard
     extraction_strategy: incremental
-    estimated_rows: 47107
+    estimated_rows: 47108
     estimated_size_mb: 4.69
     batch_size: 10000
     incremental_columns:
@@ -4869,8 +4869,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5472205774488569822
-    last_analyzed: '2025-07-30T11:37:24.991564'
+    schema_hash: -3951364901175301598
+    last_analyzed: '2025-07-30T12:20:23.641272'
     primary_key: PatFieldNum
   patfielddef:
     table_name: patfielddef
@@ -4887,8 +4887,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5845610290498724757
-    last_analyzed: '2025-07-30T11:37:27.383711'
+    schema_hash: 6458352762422833040
+    last_analyzed: '2025-07-30T12:20:25.998286'
     primary_key: PatFieldDefNum
   patfieldpickitem:
     table_name: patfieldpickitem
@@ -4905,8 +4905,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4316793514433790473
-    last_analyzed: '2025-07-30T11:37:27.384722'
+    schema_hash: 3456438805651162202
+    last_analyzed: '2025-07-30T12:20:25.998286'
     primary_key: PatFieldPickItemNum
   patient:
     table_name: patient
@@ -4928,13 +4928,13 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -8207937648851181949
-    last_analyzed: '2025-07-30T11:37:27.997941'
+    schema_hash: 3971064652711852198
+    last_analyzed: '2025-07-30T12:20:26.592178'
     primary_key: PatNum
   patientlink:
     table_name: patientlink
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 133
     estimated_size_mb: 0.01
     batch_size: 5000
@@ -4948,8 +4948,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4551674047708309316
-    last_analyzed: '2025-07-30T11:37:28.108017'
+    schema_hash: -7550308184923803200
+    last_analyzed: '2025-07-30T12:20:26.712561'
     primary_key: PatientLinkNum
   patientnote:
     table_name: patientnote
@@ -4969,8 +4969,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8069812273491684961
-    last_analyzed: '2025-07-30T11:37:28.542147'
+    schema_hash: -3937365242709189606
+    last_analyzed: '2025-07-30T12:20:27.134190'
     primary_key: PatNum
   patientportalinvite:
     table_name: patientportalinvite
@@ -4987,8 +4987,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1113420796149822695
-    last_analyzed: '2025-07-30T11:37:31.436646'
+    schema_hash: 5555774018284896992
+    last_analyzed: '2025-07-30T12:20:29.886448'
     primary_key: PatientPortalInviteNum
   patientrace:
     table_name: patientrace
@@ -5005,8 +5005,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6315698878150775802
-    last_analyzed: '2025-07-30T11:37:31.436646'
+    schema_hash: 7711265697603220581
+    last_analyzed: '2025-07-30T12:20:29.887293'
     primary_key: PatientRaceNum
   patplan:
     table_name: patplan
@@ -5026,8 +5026,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 2288872120257504377
-    last_analyzed: '2025-07-30T11:37:31.803045'
+    schema_hash: -2002559458907319014
+    last_analyzed: '2025-07-30T12:20:30.223667'
     primary_key: PatPlanNum
   patrestriction:
     table_name: patrestriction
@@ -5044,8 +5044,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1389261324422565780
-    last_analyzed: '2025-07-30T11:37:31.803045'
+    schema_hash: -8878704562484650063
+    last_analyzed: '2025-07-30T12:20:30.224674'
     primary_key: PatRestrictionNum
   payconnectresponseweb:
     table_name: payconnectresponseweb
@@ -5062,14 +5062,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3457843753105658674
-    last_analyzed: '2025-07-30T11:37:31.803045'
+    schema_hash: -1691114219293482025
+    last_analyzed: '2025-07-30T12:20:30.224674'
     primary_key: PayConnectResponseWebNum
   payment:
     table_name: payment
     table_importance: critical
     extraction_strategy: incremental
-    estimated_rows: 301378
+    estimated_rows: 301380
     estimated_size_mb: 51.36
     batch_size: 25000
     incremental_columns:
@@ -5084,8 +5084,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
-    schema_hash: 5040459215496365675
-    last_analyzed: '2025-07-30T11:37:35.145267'
+    schema_hash: 5997872958905805252
+    last_analyzed: '2025-07-30T12:20:34.057575'
     primary_key: PayNum
   payortype:
     table_name: payortype
@@ -5102,8 +5102,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3957602574111448479
-    last_analyzed: '2025-07-30T11:37:35.146253'
+    schema_hash: -6650927372011901771
+    last_analyzed: '2025-07-30T12:20:34.058566'
     primary_key: PayorTypeNum
   payperiod:
     table_name: payperiod
@@ -5120,8 +5120,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2306023319100571786
-    last_analyzed: '2025-07-30T11:37:35.146253'
+    schema_hash: -6380382900443486599
+    last_analyzed: '2025-07-30T12:20:34.058566'
     primary_key: PayPeriodNum
   payplan:
     table_name: payplan
@@ -5138,8 +5138,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -854949976252544642
-    last_analyzed: '2025-07-30T11:37:35.146253'
+    schema_hash: -8158921883129675035
+    last_analyzed: '2025-07-30T12:20:34.058566'
     primary_key: PayPlanNum
   payplancharge:
     table_name: payplancharge
@@ -5156,8 +5156,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9111048265680336317
-    last_analyzed: '2025-07-30T11:37:35.412066'
+    schema_hash: 5851985139617104463
+    last_analyzed: '2025-07-30T12:20:34.276029'
     primary_key: PayPlanChargeNum
   payplanlink:
     table_name: payplanlink
@@ -5174,8 +5174,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8533610473038582271
-    last_analyzed: '2025-07-30T11:37:38.198478'
+    schema_hash: -3088706714472377697
+    last_analyzed: '2025-07-30T12:20:37.051450'
     primary_key: PayPlanLinkNum
   payplantemplate:
     table_name: payplantemplate
@@ -5192,14 +5192,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4712825290759646894
-    last_analyzed: '2025-07-30T11:37:38.198478'
+    schema_hash: -869746521646533658
+    last_analyzed: '2025-07-30T12:20:37.052451'
     primary_key: PayPlanTemplateNum
   paysplit:
     table_name: paysplit
     table_importance: important
-    extraction_strategy: chunked_incremental
-    estimated_rows: 1439253
+    extraction_strategy: incremental_chunked
+    estimated_rows: 1439255
     estimated_size_mb: 389.69
     batch_size: 100000
     incremental_columns:
@@ -5212,8 +5212,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
-    schema_hash: 1880595878316295268
-    last_analyzed: '2025-07-30T11:37:41.946400'
+    schema_hash: 7006334487228497385
+    last_analyzed: '2025-07-30T12:20:40.536890'
     primary_key: SplitNum
   payterminal:
     table_name: payterminal
@@ -5230,8 +5230,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6329380301710923480
-    last_analyzed: '2025-07-30T11:37:41.946400'
+    schema_hash: -5824300187879225981
+    last_analyzed: '2025-07-30T12:20:40.536890'
     primary_key: PayTerminalNum
   pearlrequest:
     table_name: pearlrequest
@@ -5248,8 +5248,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3485705208414347632
-    last_analyzed: '2025-07-30T11:37:41.946400'
+    schema_hash: 5500077995774398691
+    last_analyzed: '2025-07-30T12:20:40.536890'
     primary_key: PearlRequestNum
   perioexam:
     table_name: perioexam
@@ -5268,8 +5268,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3110623499635415849
-    last_analyzed: '2025-07-30T11:37:44.586131'
+    schema_hash: -2344237985839913531
+    last_analyzed: '2025-07-30T12:20:43.098691'
     primary_key: PerioExamNum
   periomeasure:
     table_name: periomeasure
@@ -5289,8 +5289,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -5842104815532698739
-    last_analyzed: '2025-07-30T11:37:47.536642'
+    schema_hash: 3020738180579483492
+    last_analyzed: '2025-07-30T12:20:45.630240'
     primary_key: PerioMeasureNum
   pharmacy:
     table_name: pharmacy
@@ -5308,8 +5308,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8231611811127748459
-    last_analyzed: '2025-07-30T11:37:47.655456'
+    schema_hash: 6577043431854293403
+    last_analyzed: '2025-07-30T12:20:45.744349'
     primary_key: PharmacyNum
   pharmclinic:
     table_name: pharmclinic
@@ -5327,8 +5327,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3754395787820116110
-    last_analyzed: '2025-07-30T11:37:47.656457'
+    schema_hash: 7878377874593662208
+    last_analyzed: '2025-07-30T12:20:45.745356'
     primary_key: PharmClinicNum
   phonenumber:
     table_name: phonenumber
@@ -5345,8 +5345,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8584524922581639236
-    last_analyzed: '2025-07-30T11:37:47.656457'
+    schema_hash: 5676317268653417023
+    last_analyzed: '2025-07-30T12:20:45.745356'
     primary_key: PhoneNumberNum
   popup:
     table_name: popup
@@ -5364,8 +5364,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6255472209369299228
-    last_analyzed: '2025-07-30T11:37:50.242272'
+    schema_hash: -4093416543140136700
+    last_analyzed: '2025-07-30T12:20:48.322098'
     primary_key: PopupNum
   preference:
     table_name: preference
@@ -5383,8 +5383,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7747924476130436907
-    last_analyzed: '2025-07-30T11:37:50.242272'
+    schema_hash: 3597434704072724952
+    last_analyzed: '2025-07-30T12:20:48.322098'
     primary_key: PrefNum
   printer:
     table_name: printer
@@ -5401,8 +5401,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 435204824462817850
-    last_analyzed: '2025-07-30T11:37:50.242272'
+    schema_hash: -2306302709014135771
+    last_analyzed: '2025-07-30T12:20:48.322098'
     primary_key: PrinterNum
   procapptcolor:
     table_name: procapptcolor
@@ -5419,8 +5419,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4885384294984047973
-    last_analyzed: '2025-07-30T11:37:50.243273'
+    schema_hash: 1218459432426764234
+    last_analyzed: '2025-07-30T12:20:48.323031'
     primary_key: ProcApptColorNum
   procbutton:
     table_name: procbutton
@@ -5437,8 +5437,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7769566856669908912
-    last_analyzed: '2025-07-30T11:37:50.243273'
+    schema_hash: -8227133734467571328
+    last_analyzed: '2025-07-30T12:20:48.323031'
     primary_key: ProcButtonNum
   procbuttonitem:
     table_name: procbuttonitem
@@ -5455,8 +5455,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -594322864758073910
-    last_analyzed: '2025-07-30T11:37:52.779335'
+    schema_hash: 7385312850456127657
+    last_analyzed: '2025-07-30T12:20:50.751879'
     primary_key: ProcButtonItemNum
   procbuttonquick:
     table_name: procbuttonquick
@@ -5473,8 +5473,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5313278648327257146
-    last_analyzed: '2025-07-30T11:37:52.779335'
+    schema_hash: 1485171150768331051
+    last_analyzed: '2025-07-30T12:20:50.752882'
     primary_key: ProcButtonQuickNum
   proccodenote:
     table_name: proccodenote
@@ -5491,13 +5491,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3326422989606038740
-    last_analyzed: '2025-07-30T11:37:52.780335'
+    schema_hash: -9206771599114146058
+    last_analyzed: '2025-07-30T12:20:50.752882'
     primary_key: ProcCodeNoteNum
   procedurecode:
     table_name: procedurecode
     table_importance: important
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 1727
     estimated_size_mb: 0.24
     batch_size: 5000
@@ -5511,14 +5511,14 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -1080195109586753808
-    last_analyzed: '2025-07-30T11:37:52.911149'
+    schema_hash: -6605865747264144983
+    last_analyzed: '2025-07-30T12:20:50.921776'
     primary_key: CodeNum
   procedurelog:
     table_name: procedurelog
     table_importance: critical
     extraction_strategy: incremental
-    estimated_rows: 751550
+    estimated_rows: 751557
     estimated_size_mb: 365.19
     batch_size: 50000
     incremental_columns:
@@ -5532,8 +5532,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
-    schema_hash: 5522658214351598868
-    last_analyzed: '2025-07-30T11:37:58.302399'
+    schema_hash: 6959991689843079429
+    last_analyzed: '2025-07-30T12:20:55.957388'
     primary_key: ProcNum
   procgroupitem:
     table_name: procgroupitem
@@ -5551,13 +5551,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3545614368442707280
-    last_analyzed: '2025-07-30T11:38:00.666500'
+    schema_hash: 2555056049703400002
+    last_analyzed: '2025-07-30T12:20:58.336729'
     primary_key: ProcGroupItemNum
   procmultivisit:
     table_name: procmultivisit
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 281
     estimated_size_mb: 0.06
     batch_size: 5000
@@ -5572,14 +5572,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5713437586248970810
-    last_analyzed: '2025-07-30T11:38:00.896796'
+    schema_hash: -5958617892836120643
+    last_analyzed: '2025-07-30T12:20:58.570645'
     primary_key: ProcMultiVisitNum
   procnote:
     table_name: procnote
     table_importance: standard
     extraction_strategy: full_table
-    estimated_rows: 562369
+    estimated_rows: 562375
     estimated_size_mb: 122.09
     batch_size: 50000
     incremental_columns: []
@@ -5591,13 +5591,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -5945312627098870664
-    last_analyzed: '2025-07-30T11:38:01.668381'
+    schema_hash: -2924754981419228274
+    last_analyzed: '2025-07-30T12:20:59.330393'
     primary_key: ProcNoteNum
   proctp:
     table_name: proctp
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 965
     estimated_size_mb: 0.35
     batch_size: 5000
@@ -5611,8 +5611,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5610151977841723688
-    last_analyzed: '2025-07-30T11:38:01.797351'
+    schema_hash: -6523694431177555732
+    last_analyzed: '2025-07-30T12:20:59.458486'
     primary_key: ProcTPNum
   program:
     table_name: program
@@ -5630,8 +5630,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1605809750236540090
-    last_analyzed: '2025-07-30T11:38:01.797351'
+    schema_hash: 2315990811849230362
+    last_analyzed: '2025-07-30T12:20:59.459493'
     primary_key: ProgramNum
   programproperty:
     table_name: programproperty
@@ -5649,8 +5649,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -724754191209069670
-    last_analyzed: '2025-07-30T11:38:04.306910'
+    schema_hash: 1719417074627705054
+    last_analyzed: '2025-07-30T12:21:01.960971'
     primary_key: ProgramPropertyNum
   promotion:
     table_name: promotion
@@ -5667,8 +5667,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6780672098189998354
-    last_analyzed: '2025-07-30T11:38:04.307910'
+    schema_hash: -2726911134473509770
+    last_analyzed: '2025-07-30T12:21:01.960971'
     primary_key: PromotionNum
   promotionlog:
     table_name: promotionlog
@@ -5685,8 +5685,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3698170776555496793
-    last_analyzed: '2025-07-30T11:38:04.307910'
+    schema_hash: -7969835829164430891
+    last_analyzed: '2025-07-30T12:21:01.960971'
     primary_key: PromotionLogNum
   provider:
     table_name: provider
@@ -5706,8 +5706,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3351989620416379772
-    last_analyzed: '2025-07-30T11:38:04.466604'
+    schema_hash: 490491242884668876
+    last_analyzed: '2025-07-30T12:21:02.074425'
     primary_key: ProvNum
   providerclinic:
     table_name: providerclinic
@@ -5724,8 +5724,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3422556248644896504
-    last_analyzed: '2025-07-30T11:38:04.467986'
+    schema_hash: 5414513606229288801
+    last_analyzed: '2025-07-30T12:21:02.074425'
     primary_key: ProviderClinicNum
   providercliniclink:
     table_name: providercliniclink
@@ -5742,8 +5742,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6989785158850034656
-    last_analyzed: '2025-07-30T11:38:07.152786'
+    schema_hash: 1016027096254375788
+    last_analyzed: '2025-07-30T12:21:04.705491'
     primary_key: ProviderClinicLinkNum
   providererx:
     table_name: providererx
@@ -5760,8 +5760,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5803873610002703122
-    last_analyzed: '2025-07-30T11:38:07.153942'
+    schema_hash: 4524391900296077027
+    last_analyzed: '2025-07-30T12:21:04.705491'
     primary_key: ProviderErxNum
   providerident:
     table_name: providerident
@@ -5778,8 +5778,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4705554284170848401
-    last_analyzed: '2025-07-30T11:38:07.154942'
+    schema_hash: 6960567124218265076
+    last_analyzed: '2025-07-30T12:21:04.705491'
     primary_key: ProviderIdentNum
   question:
     table_name: question
@@ -5796,8 +5796,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4069506479318420559
-    last_analyzed: '2025-07-30T11:38:07.154942'
+    schema_hash: 414419329808219969
+    last_analyzed: '2025-07-30T12:21:04.705491'
     primary_key: QuestionNum
   questiondef:
     table_name: questiondef
@@ -5814,8 +5814,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2431240062718917098
-    last_analyzed: '2025-07-30T11:38:07.154942'
+    schema_hash: 5971151960732137685
+    last_analyzed: '2025-07-30T12:21:04.705491'
     primary_key: QuestionDefNum
   quickpastecat:
     table_name: quickpastecat
@@ -5832,8 +5832,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7828711944605766535
-    last_analyzed: '2025-07-30T11:38:09.571149'
+    schema_hash: -2794623853079385475
+    last_analyzed: '2025-07-30T12:21:07.152022'
     primary_key: QuickPasteCatNum
   quickpastenote:
     table_name: quickpastenote
@@ -5850,8 +5850,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4628078660141998797
-    last_analyzed: '2025-07-30T11:38:09.571149'
+    schema_hash: 6808190210296955197
+    last_analyzed: '2025-07-30T12:21:07.152022'
     primary_key: QuickPasteNoteNum
   reactivation:
     table_name: reactivation
@@ -5868,8 +5868,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1813412676874945185
-    last_analyzed: '2025-07-30T11:38:09.571149'
+    schema_hash: -6889285572519157153
+    last_analyzed: '2025-07-30T12:21:07.152022'
     primary_key: ReactivationNum
   recall:
     table_name: recall
@@ -5887,8 +5887,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4749321651297129215
-    last_analyzed: '2025-07-30T11:38:09.834507'
+    schema_hash: -9198685320122669003
+    last_analyzed: '2025-07-30T12:21:07.426688'
     primary_key: RecallNum
   recalltrigger:
     table_name: recalltrigger
@@ -5906,8 +5906,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -353328576134444170
-    last_analyzed: '2025-07-30T11:38:09.834507'
+    schema_hash: -3517681883025345861
+    last_analyzed: '2025-07-30T12:21:07.426688'
     primary_key: RecallTriggerNum
   recalltype:
     table_name: recalltype
@@ -5925,8 +5925,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4802294350320709370
-    last_analyzed: '2025-07-30T11:38:12.349447'
+    schema_hash: 8493404606649434357
+    last_analyzed: '2025-07-30T12:21:09.926818'
     primary_key: RecallTypeNum
   reconcile:
     table_name: reconcile
@@ -5943,8 +5943,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2278260082905948797
-    last_analyzed: '2025-07-30T11:38:12.349447'
+    schema_hash: -6094895051555344457
+    last_analyzed: '2025-07-30T12:21:09.926818'
     primary_key: ReconcileNum
   recurringcharge:
     table_name: recurringcharge
@@ -5961,13 +5961,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7898176664441941311
-    last_analyzed: '2025-07-30T11:38:12.461585'
+    schema_hash: 1548762707429379347
+    last_analyzed: '2025-07-30T12:21:10.041470'
     primary_key: RecurringChargeNum
   refattach:
     table_name: refattach
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 7531
     estimated_size_mb: 0.94
     batch_size: 5000
@@ -5981,13 +5981,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5085330639874880398
-    last_analyzed: '2025-07-30T11:38:12.609104'
+    schema_hash: -3207838333281233870
+    last_analyzed: '2025-07-30T12:21:10.181814'
     primary_key: RefAttachNum
   referral:
     table_name: referral
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 1158
     estimated_size_mb: 0.16
     batch_size: 5000
@@ -6001,8 +6001,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8615684751663563296
-    last_analyzed: '2025-07-30T11:38:12.734027'
+    schema_hash: -8208896411930306337
+    last_analyzed: '2025-07-30T12:21:10.312877'
     primary_key: ReferralNum
   referralcliniclink:
     table_name: referralcliniclink
@@ -6019,8 +6019,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5323377894625784711
-    last_analyzed: '2025-07-30T11:38:15.505068'
+    schema_hash: -460124327275688294
+    last_analyzed: '2025-07-30T12:21:13.010623'
     primary_key: ReferralClinicLinkNum
   registrationkey:
     table_name: registrationkey
@@ -6037,8 +6037,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2711409872124133123
-    last_analyzed: '2025-07-30T11:38:15.622275'
+    schema_hash: 3175578827110329126
+    last_analyzed: '2025-07-30T12:21:13.128063'
     primary_key: RegistrationKeyNum
   reminderrule:
     table_name: reminderrule
@@ -6055,8 +6055,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6576461786461797416
-    last_analyzed: '2025-07-30T11:38:15.623277'
+    schema_hash: 1280362958721766094
+    last_analyzed: '2025-07-30T12:21:13.128063'
     primary_key: ReminderRuleNum
   repeatcharge:
     table_name: repeatcharge
@@ -6073,8 +6073,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3764178025185043673
-    last_analyzed: '2025-07-30T11:38:15.623277'
+    schema_hash: 1460369165856237153
+    last_analyzed: '2025-07-30T12:21:13.128063'
     primary_key: RepeatChargeNum
   replicationserver:
     table_name: replicationserver
@@ -6091,8 +6091,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6686989173306564246
-    last_analyzed: '2025-07-30T11:38:15.624274'
+    schema_hash: -712223699944546242
+    last_analyzed: '2025-07-30T12:21:13.128063'
     primary_key: ReplicationServerNum
   reqneeded:
     table_name: reqneeded
@@ -6109,8 +6109,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4138227284187572655
-    last_analyzed: '2025-07-30T11:38:18.365338'
+    schema_hash: 8668875691934054308
+    last_analyzed: '2025-07-30T12:21:15.868225'
     primary_key: ReqNeededNum
   reqstudent:
     table_name: reqstudent
@@ -6127,8 +6127,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5327105222824906243
-    last_analyzed: '2025-07-30T11:38:18.365338'
+    schema_hash: -5997574157253575412
+    last_analyzed: '2025-07-30T12:21:15.868225'
     primary_key: ReqStudentNum
   requiredfield:
     table_name: requiredfield
@@ -6145,8 +6145,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2483776210587084935
-    last_analyzed: '2025-07-30T11:38:18.365338'
+    schema_hash: -1426794829885589286
+    last_analyzed: '2025-07-30T12:21:15.868225'
     primary_key: RequiredFieldNum
   requiredfieldcondition:
     table_name: requiredfieldcondition
@@ -6163,8 +6163,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6383874470443531220
-    last_analyzed: '2025-07-30T11:38:18.365338'
+    schema_hash: 8390102439617049655
+    last_analyzed: '2025-07-30T12:21:15.869427'
     primary_key: RequiredFieldConditionNum
   reseller:
     table_name: reseller
@@ -6181,8 +6181,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1697171951704726400
-    last_analyzed: '2025-07-30T11:38:18.366339'
+    schema_hash: 6259814855179636672
+    last_analyzed: '2025-07-30T12:21:15.869427'
     primary_key: ResellerNum
   resellerservice:
     table_name: resellerservice
@@ -6199,8 +6199,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7900656308881503399
-    last_analyzed: '2025-07-30T11:38:20.908160'
+    schema_hash: -6217804683930904200
+    last_analyzed: '2025-07-30T12:21:18.384227'
     primary_key: ResellerServiceNum
   rxalert:
     table_name: rxalert
@@ -6217,8 +6217,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8444686021066181267
-    last_analyzed: '2025-07-30T11:38:20.909405'
+    schema_hash: 8757730749091602480
+    last_analyzed: '2025-07-30T12:21:18.385227'
     primary_key: RxAlertNum
   rxdef:
     table_name: rxdef
@@ -6236,8 +6236,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1278221334956278707
-    last_analyzed: '2025-07-30T11:38:20.909405'
+    schema_hash: 2575698269198379340
+    last_analyzed: '2025-07-30T12:21:18.385227'
     primary_key: RxDefNum
   rxnorm:
     table_name: rxnorm
@@ -6255,13 +6255,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 6603252614865889313
-    last_analyzed: '2025-07-30T11:38:20.909405'
+    schema_hash: 4806964633850621419
+    last_analyzed: '2025-07-30T12:21:18.385227'
     primary_key: RxNormNum
   rxpat:
     table_name: rxpat
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 4978
     estimated_size_mb: 1.45
     batch_size: 5000
@@ -6275,8 +6275,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1668345856243990501
-    last_analyzed: '2025-07-30T11:38:21.056226'
+    schema_hash: 6306308655799066169
+    last_analyzed: '2025-07-30T12:21:18.526724'
     primary_key: RxNum
   schedule:
     table_name: schedule
@@ -6296,8 +6296,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2163722780362135276
-    last_analyzed: '2025-07-30T11:38:23.858049'
+    schema_hash: -8842456214821440452
+    last_analyzed: '2025-07-30T12:21:21.335567'
     primary_key: ScheduleNum
   scheduledprocess:
     table_name: scheduledprocess
@@ -6314,8 +6314,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3758091232013657376
-    last_analyzed: '2025-07-30T11:38:24.091986'
+    schema_hash: 288497567891430451
+    last_analyzed: '2025-07-30T12:21:21.568627'
     primary_key: ScheduledProcessNum
   scheduleop:
     table_name: scheduleop
@@ -6333,8 +6333,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6923836253057955851
-    last_analyzed: '2025-07-30T11:38:24.091986'
+    schema_hash: -6432770327153041353
+    last_analyzed: '2025-07-30T12:21:21.569675'
     primary_key: ScheduleOpNum
   schoolclass:
     table_name: schoolclass
@@ -6351,8 +6351,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6583899207640144435
-    last_analyzed: '2025-07-30T11:38:24.092988'
+    schema_hash: -4527404489470895730
+    last_analyzed: '2025-07-30T12:21:21.569675'
     primary_key: SchoolClassNum
   schoolcourse:
     table_name: schoolcourse
@@ -6369,8 +6369,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6891917883805096975
-    last_analyzed: '2025-07-30T11:38:24.092988'
+    schema_hash: 610751554205648543
+    last_analyzed: '2025-07-30T12:21:21.569675'
     primary_key: SchoolCourseNum
   screen:
     table_name: screen
@@ -6387,8 +6387,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2097153390921050432
-    last_analyzed: '2025-07-30T11:38:26.682475'
+    schema_hash: -7925782944643471213
+    last_analyzed: '2025-07-30T12:21:24.170607'
     primary_key: ScreenNum
   screengroup:
     table_name: screengroup
@@ -6405,8 +6405,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7330827956859561630
-    last_analyzed: '2025-07-30T11:38:26.683476'
+    schema_hash: 1187302678867665055
+    last_analyzed: '2025-07-30T12:21:24.170607'
     primary_key: ScreenGroupNum
   screenpat:
     table_name: screenpat
@@ -6423,15 +6423,15 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6955953627751019565
-    last_analyzed: '2025-07-30T11:38:26.683476'
+    schema_hash: 9065946751212279570
+    last_analyzed: '2025-07-30T12:21:24.170607'
     primary_key: ScreenPatNum
   securitylog:
     table_name: securitylog
     table_importance: audit
-    extraction_strategy: chunked_incremental
-    estimated_rows: 3809208
-    estimated_size_mb: 727.54
+    extraction_strategy: incremental_chunked
+    estimated_rows: 3809370
+    estimated_size_mb: 727.58
     batch_size: 100000
     incremental_columns:
     - LogDateTime
@@ -6443,15 +6443,15 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -9047080498025004505
-    last_analyzed: '2025-07-30T11:38:45.163186'
+    schema_hash: -5789490746376153305
+    last_analyzed: '2025-07-30T12:21:41.278576'
     primary_key: SecurityLogNum
   securityloghash:
     table_name: securityloghash
     table_importance: audit
     extraction_strategy: full_table
-    estimated_rows: 3809021
-    estimated_size_mb: 350.35
+    estimated_rows: 3809183
+    estimated_size_mb: 350.37
     batch_size: 100000
     incremental_columns: []
     incremental_strategy: none
@@ -6461,8 +6461,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 7785525740245227370
-    last_analyzed: '2025-07-30T11:38:45.163186'
+    schema_hash: 2873045739592690743
+    last_analyzed: '2025-07-30T12:21:41.279580'
     primary_key: SecurityLogHashNum
   sessiontoken:
     table_name: sessiontoken
@@ -6479,8 +6479,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6225740804487213889
-    last_analyzed: '2025-07-30T11:38:47.707210'
+    schema_hash: 3514331205264453298
+    last_analyzed: '2025-07-30T12:21:43.874065'
     primary_key: SessionTokenNum
   sheet:
     table_name: sheet
@@ -6500,8 +6500,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1556980132159096729
-    last_analyzed: '2025-07-30T11:38:48.001403'
+    schema_hash: -3210534253991058349
+    last_analyzed: '2025-07-30T12:21:44.178383'
     primary_key: SheetNum
   sheetdef:
     table_name: sheetdef
@@ -6519,13 +6519,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3380555737363970612
-    last_analyzed: '2025-07-30T11:38:48.115048'
+    schema_hash: -3858788972026685339
+    last_analyzed: '2025-07-30T12:21:44.307097'
     primary_key: SheetDefNum
   sheetfield:
     table_name: sheetfield
     table_importance: important
-    extraction_strategy: chunked_incremental
+    extraction_strategy: incremental_chunked
     estimated_rows: 1654705
     estimated_size_mb: 309.03
     batch_size: 100000
@@ -6539,8 +6539,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
-    schema_hash: 255895653222617167
-    last_analyzed: '2025-07-30T11:38:52.949456'
+    schema_hash: 3364467756941968693
+    last_analyzed: '2025-07-30T12:21:49.121155'
     primary_key: SheetFieldNum
   sheetfielddef:
     table_name: sheetfielddef
@@ -6558,8 +6558,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7308736639151626070
-    last_analyzed: '2025-07-30T11:38:52.950448'
+    schema_hash: 4039569759765460334
+    last_analyzed: '2025-07-30T12:21:49.121155'
     primary_key: SheetFieldDefNum
   sigbutdef:
     table_name: sigbutdef
@@ -6576,8 +6576,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 16562095457273707
-    last_analyzed: '2025-07-30T11:38:55.460088'
+    schema_hash: 7232370209093310142
+    last_analyzed: '2025-07-30T12:21:51.663826'
     primary_key: SigButDefNum
   sigelementdef:
     table_name: sigelementdef
@@ -6594,8 +6594,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6287089817136040353
-    last_analyzed: '2025-07-30T11:38:55.461090'
+    schema_hash: 7037843509682071362
+    last_analyzed: '2025-07-30T12:21:51.663826'
     primary_key: SigElementDefNum
   sigmessage:
     table_name: sigmessage
@@ -6612,14 +6612,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8005020553432436150
-    last_analyzed: '2025-07-30T11:38:55.687154'
+    schema_hash: -3724521337971306980
+    last_analyzed: '2025-07-30T12:21:51.911586'
     primary_key: SigMessageNum
   signalod:
     table_name: signalod
     table_importance: standard
-    extraction_strategy: small_table
-    estimated_rows: 7724
+    extraction_strategy: incremental
+    estimated_rows: 7834
     estimated_size_mb: 3.01
     batch_size: 5000
     incremental_columns:
@@ -6631,8 +6631,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6379047930936750350
-    last_analyzed: '2025-07-30T11:38:55.846166'
+    schema_hash: 3200892225514698780
+    last_analyzed: '2025-07-30T12:21:52.063659'
     primary_key: SignalNum
   site:
     table_name: site
@@ -6649,8 +6649,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1891394319068398091
-    last_analyzed: '2025-07-30T11:38:55.847161'
+    schema_hash: -1480038272034541182
+    last_analyzed: '2025-07-30T12:21:52.064662'
     primary_key: SiteNum
   smsblockphone:
     table_name: smsblockphone
@@ -6667,13 +6667,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4011530329102942431
-    last_analyzed: '2025-07-30T11:38:58.335634'
+    schema_hash: 7893599252585653624
+    last_analyzed: '2025-07-30T12:21:54.644632'
     primary_key: SmsBlockPhoneNum
   smsfrommobile:
     table_name: smsfrommobile
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 352
     estimated_size_mb: 0.11
     batch_size: 5000
@@ -6687,8 +6687,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8504873186904375260
-    last_analyzed: '2025-07-30T11:38:58.567176'
+    schema_hash: -9179400374498015909
+    last_analyzed: '2025-07-30T12:21:54.892522'
     primary_key: SmsFromMobileNum
   smsphone:
     table_name: smsphone
@@ -6705,13 +6705,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5335681515052755854
-    last_analyzed: '2025-07-30T11:38:58.794737'
+    schema_hash: 8196854278480860045
+    last_analyzed: '2025-07-30T12:21:55.147005'
     primary_key: SmsPhoneNum
   smstomobile:
     table_name: smstomobile
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 597
     estimated_size_mb: 0.29
     batch_size: 5000
@@ -6725,8 +6725,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7285232304062970068
-    last_analyzed: '2025-07-30T11:38:59.038510'
+    schema_hash: 2725544702738467822
+    last_analyzed: '2025-07-30T12:21:55.410495'
     primary_key: SmsToMobileNum
   snomed:
     table_name: snomed
@@ -6743,8 +6743,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 3787935189670526288
-    last_analyzed: '2025-07-30T11:38:59.039514'
+    schema_hash: 4652658138366458853
+    last_analyzed: '2025-07-30T12:21:55.411496'
     primary_key: SnomedNum
   sop:
     table_name: sop
@@ -6761,8 +6761,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2970496733786347878
-    last_analyzed: '2025-07-30T11:39:01.478185'
+    schema_hash: 1685903638774543555
+    last_analyzed: '2025-07-30T12:21:58.010104'
     primary_key: SopNum
   stateabbr:
     table_name: stateabbr
@@ -6779,14 +6779,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8358818999299301180
-    last_analyzed: '2025-07-30T11:39:01.478185'
+    schema_hash: -264662781811286238
+    last_analyzed: '2025-07-30T12:21:58.010104'
     primary_key: StateAbbrNum
   statement:
     table_name: statement
     table_importance: standard
     extraction_strategy: incremental
-    estimated_rows: 26717
+    estimated_rows: 26726
     estimated_size_mb: 4.75
     batch_size: 10000
     incremental_columns:
@@ -6800,14 +6800,14 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3307196267972305514
-    last_analyzed: '2025-07-30T11:39:01.691138'
+    schema_hash: -5898022459425889997
+    last_analyzed: '2025-07-30T12:21:58.225162'
     primary_key: StatementNum
   statementprod:
     table_name: statementprod
     table_importance: standard
     extraction_strategy: full_table
-    estimated_rows: 194628
+    estimated_rows: 194669
     estimated_size_mb: 23.64
     batch_size: 25000
     incremental_columns: []
@@ -6819,8 +6819,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -6688980684205983404
-    last_analyzed: '2025-07-30T11:39:01.692190'
+    schema_hash: -5010195508177115346
+    last_analyzed: '2025-07-30T12:21:58.225840'
     primary_key: StatementProdNum
   stmtlink:
     table_name: stmtlink
@@ -6837,8 +6837,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6927618664099416768
-    last_analyzed: '2025-07-30T11:39:01.692190'
+    schema_hash: 1940575567043731251
+    last_analyzed: '2025-07-30T12:21:58.225840'
     primary_key: StmtLinkNum
   substitutionlink:
     table_name: substitutionlink
@@ -6855,8 +6855,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5145174212363448911
-    last_analyzed: '2025-07-30T11:39:04.345051'
+    schema_hash: -455958547469875391
+    last_analyzed: '2025-07-30T12:22:00.903421'
     primary_key: SubstitutionLinkNum
   supplier:
     table_name: supplier
@@ -6873,8 +6873,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7348171286934524032
-    last_analyzed: '2025-07-30T11:39:04.346051'
+    schema_hash: 4142427389865435583
+    last_analyzed: '2025-07-30T12:22:00.904421'
     primary_key: SupplierNum
   supply:
     table_name: supply
@@ -6891,8 +6891,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1496384412416321988
-    last_analyzed: '2025-07-30T11:39:04.346051'
+    schema_hash: -5620788907928267248
+    last_analyzed: '2025-07-30T12:22:00.904421'
     primary_key: SupplyNum
   supplyneeded:
     table_name: supplyneeded
@@ -6909,8 +6909,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -3686351850030750555
-    last_analyzed: '2025-07-30T11:39:04.347052'
+    schema_hash: -658761466104513465
+    last_analyzed: '2025-07-30T12:22:00.904421'
     primary_key: SupplyNeededNum
   supplyorder:
     table_name: supplyorder
@@ -6927,8 +6927,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5160832605008644342
-    last_analyzed: '2025-07-30T11:39:04.347052'
+    schema_hash: -1238180462097418503
+    last_analyzed: '2025-07-30T12:22:00.904421'
     primary_key: SupplyOrderNum
   supplyorderitem:
     table_name: supplyorderitem
@@ -6945,13 +6945,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4158010854723906129
-    last_analyzed: '2025-07-30T11:39:06.851378'
+    schema_hash: 2315967167169510663
+    last_analyzed: '2025-07-30T12:22:03.490846'
     primary_key: SupplyOrderItemNum
   task:
     table_name: task
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 2212
     estimated_size_mb: 0.58
     batch_size: 5000
@@ -6967,8 +6967,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4602474443451379727
-    last_analyzed: '2025-07-30T11:39:07.111987'
+    schema_hash: -8405416285278035260
+    last_analyzed: '2025-07-30T12:22:03.776885'
     primary_key: TaskNum
   taskancestor:
     table_name: taskancestor
@@ -6985,8 +6985,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4713287534465718874
-    last_analyzed: '2025-07-30T11:39:07.112980'
+    schema_hash: 3080219306435647101
+    last_analyzed: '2025-07-30T12:22:03.776885'
     primary_key: TaskAncestorNum
   taskattachment:
     table_name: taskattachment
@@ -7003,13 +7003,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8977334676452239310
-    last_analyzed: '2025-07-30T11:39:07.112980'
+    schema_hash: -7426588740971411262
+    last_analyzed: '2025-07-30T12:22:03.776885'
     primary_key: TaskAttachmentNum
   taskhist:
     table_name: taskhist
     table_importance: audit
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 1731
     estimated_size_mb: 0.47
     batch_size: 5000
@@ -7025,8 +7025,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5638285210411775734
-    last_analyzed: '2025-07-30T11:39:07.495305'
+    schema_hash: -6798618907851978045
+    last_analyzed: '2025-07-30T12:22:04.206884'
     primary_key: TaskHistNum
   tasklist:
     table_name: tasklist
@@ -7044,13 +7044,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1741287650657540509
-    last_analyzed: '2025-07-30T11:39:09.855450'
+    schema_hash: -8156062608871243843
+    last_analyzed: '2025-07-30T12:22:06.643619'
     primary_key: TaskListNum
   tasknote:
     table_name: tasknote
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 267
     estimated_size_mb: 0.05
     batch_size: 5000
@@ -7064,8 +7064,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6957258373034258806
-    last_analyzed: '2025-07-30T11:39:09.976403'
+    schema_hash: 732662653808567231
+    last_analyzed: '2025-07-30T12:22:06.757051'
     primary_key: TaskNoteNum
   tasksubscription:
     table_name: tasksubscription
@@ -7083,8 +7083,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2339242056566090893
-    last_analyzed: '2025-07-30T11:39:09.977405'
+    schema_hash: 5860237278550248969
+    last_analyzed: '2025-07-30T12:22:06.758735'
     primary_key: TaskSubscriptionNum
   taskunread:
     table_name: taskunread
@@ -7102,8 +7102,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2603338836850012618
-    last_analyzed: '2025-07-30T11:39:09.977405'
+    schema_hash: -3273114791849103272
+    last_analyzed: '2025-07-30T12:22:06.758735'
     primary_key: TaskUnreadNum
   tempimageconv:
     table_name: tempimageconv
@@ -7120,8 +7120,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -7305142036512931441
-    last_analyzed: '2025-07-30T11:39:09.977405'
+    schema_hash: 414505039088809273
+    last_analyzed: '2025-07-30T12:22:06.758735'
   tempimageconv2:
     table_name: tempimageconv2
     table_importance: standard
@@ -7137,12 +7137,12 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -8364444659901961913
-    last_analyzed: '2025-07-30T11:39:12.373071'
+    schema_hash: 3658396332274960798
+    last_analyzed: '2025-07-30T12:22:09.289357'
   tempinsplan_bak_20200424:
     table_name: tempinsplan_bak_20200424
     table_importance: important
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 4190
     estimated_size_mb: 0.34
     batch_size: 5000
@@ -7155,8 +7155,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -645006019703549820
-    last_analyzed: '2025-07-30T11:39:12.520363'
+    schema_hash: 2480961946803078175
+    last_analyzed: '2025-07-30T12:22:09.450368'
   temppopup_bak_20200424:
     table_name: temppopup_bak_20200424
     table_importance: standard
@@ -7172,12 +7172,12 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7960440518399640249
-    last_analyzed: '2025-07-30T11:39:12.521363'
+    schema_hash: 9033667445064570398
+    last_analyzed: '2025-07-30T12:22:09.450368'
   tempprocedurecode_bak_20240617:
     table_name: tempprocedurecode_bak_20240617
     table_importance: important
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 1706
     estimated_size_mb: 0.17
     batch_size: 5000
@@ -7190,8 +7190,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: 6286822583808938961
-    last_analyzed: '2025-07-30T11:39:12.646784'
+    schema_hash: -54390818615860980
+    last_analyzed: '2025-07-30T12:22:09.580395'
   tempschedule_bak_20200424:
     table_name: tempschedule_bak_20200424
     table_importance: standard
@@ -7208,8 +7208,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5712949331432764270
-    last_analyzed: '2025-07-30T11:39:12.814819'
+    schema_hash: -6609555007723522407
+    last_analyzed: '2025-07-30T12:22:09.758858'
   tempscheduleop_bak_20200424:
     table_name: tempscheduleop_bak_20200424
     table_importance: standard
@@ -7225,8 +7225,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6171323609002944029
-    last_analyzed: '2025-07-30T11:39:15.203015'
+    schema_hash: 1871454378990755850
+    last_analyzed: '2025-07-30T12:22:12.364250'
   terminalactive:
     table_name: terminalactive
     table_importance: standard
@@ -7242,13 +7242,13 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6705182329024514420
-    last_analyzed: '2025-07-30T11:39:15.204016'
+    schema_hash: 3614195846776886315
+    last_analyzed: '2025-07-30T12:22:12.364250'
     primary_key: TerminalActiveNum
   timeadjust:
     table_name: timeadjust
     table_importance: standard
-    extraction_strategy: small_table
+    extraction_strategy: incremental
     estimated_rows: 530
     estimated_size_mb: 0.09
     batch_size: 5000
@@ -7262,8 +7262,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8195507710309606455
-    last_analyzed: '2025-07-30T11:39:15.318400'
+    schema_hash: 3487134090584250962
+    last_analyzed: '2025-07-30T12:22:12.506202'
     primary_key: TimeAdjustNum
   timecardrule:
     table_name: timecardrule
@@ -7280,8 +7280,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8759737430682115112
-    last_analyzed: '2025-07-30T11:39:15.318400'
+    schema_hash: 8980858166428000445
+    last_analyzed: '2025-07-30T12:22:12.507210'
     primary_key: TimeCardRuleNum
   tmpdocument:
     table_name: tmpdocument
@@ -7298,8 +7298,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 4715721093016707772
-    last_analyzed: '2025-07-30T11:39:15.319403'
+    schema_hash: 6564047969308074346
+    last_analyzed: '2025-07-30T12:22:12.507210'
   tmpimages:
     table_name: tmpimages
     table_importance: standard
@@ -7315,8 +7315,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: 8537713626831622070
-    last_analyzed: '2025-07-30T11:39:17.782880'
+    schema_hash: 8085535287453219958
+    last_analyzed: '2025-07-30T12:22:15.143413'
   tmppatient:
     table_name: tmppatient
     table_importance: standard
@@ -7332,8 +7332,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4564886962385175128
-    last_analyzed: '2025-07-30T11:39:17.782880'
+    schema_hash: -4223913816677867299
+    last_analyzed: '2025-07-30T12:22:15.144406'
   toolbutitem:
     table_name: toolbutitem
     table_importance: standard
@@ -7349,8 +7349,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6693016006164871201
-    last_analyzed: '2025-07-30T11:39:17.783925'
+    schema_hash: -1669064205988541807
+    last_analyzed: '2025-07-30T12:22:15.144406'
     primary_key: ToolButItemNum
   toothgridcell:
     table_name: toothgridcell
@@ -7367,8 +7367,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6678447093106487005
-    last_analyzed: '2025-07-30T11:39:17.783925'
+    schema_hash: 7274870228911625021
+    last_analyzed: '2025-07-30T12:22:15.144406'
     primary_key: ToothGridCellNum
   toothgridcol:
     table_name: toothgridcol
@@ -7385,8 +7385,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7311298925393916100
-    last_analyzed: '2025-07-30T11:39:17.783925'
+    schema_hash: -3239222196413645090
+    last_analyzed: '2025-07-30T12:22:15.144406'
     primary_key: ToothGridColNum
   toothgriddef:
     table_name: toothgriddef
@@ -7403,8 +7403,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8621705874184829054
-    last_analyzed: '2025-07-30T11:39:20.341420'
+    schema_hash: 5308005299746358346
+    last_analyzed: '2025-07-30T12:22:17.795198'
     primary_key: ToothGridDefNum
   toothinitial:
     table_name: toothinitial
@@ -7424,8 +7424,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: true
-    schema_hash: -3112194136875502705
-    last_analyzed: '2025-07-30T11:39:21.549211'
+    schema_hash: -8567879353033618443
+    last_analyzed: '2025-07-30T12:22:18.918115'
     primary_key: ToothInitialNum
   transaction:
     table_name: transaction
@@ -7443,8 +7443,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7705213948432188418
-    last_analyzed: '2025-07-30T11:39:21.665610'
+    schema_hash: 8091595785077173515
+    last_analyzed: '2025-07-30T12:22:19.052393'
     primary_key: TransactionNum
   transactioninvoice:
     table_name: transactioninvoice
@@ -7461,8 +7461,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 302393207128585581
-    last_analyzed: '2025-07-30T11:39:21.666189'
+    schema_hash: 3879640314521365214
+    last_analyzed: '2025-07-30T12:22:19.052393'
     primary_key: TransactionInvoiceNum
   treatplan:
     table_name: treatplan
@@ -7482,8 +7482,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2756089200743217912
-    last_analyzed: '2025-07-30T11:39:22.032257'
+    schema_hash: 4382626847919741945
+    last_analyzed: '2025-07-30T12:22:19.431768'
     primary_key: TreatPlanNum
   treatplanattach:
     table_name: treatplanattach
@@ -7501,8 +7501,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5946700346199973748
-    last_analyzed: '2025-07-30T11:39:24.503009'
+    schema_hash: -1018043622781313851
+    last_analyzed: '2025-07-30T12:22:22.016457'
     primary_key: TreatPlanAttachNum
   treatplanparam:
     table_name: treatplanparam
@@ -7520,8 +7520,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8591870258368884769
-    last_analyzed: '2025-07-30T11:39:24.503916'
+    schema_hash: 7083801671337773299
+    last_analyzed: '2025-07-30T12:22:22.016457'
     primary_key: TreatPlanParamNum
   tsitranslog:
     table_name: tsitranslog
@@ -7538,8 +7538,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2527803956622815264
-    last_analyzed: '2025-07-30T11:39:24.613136'
+    schema_hash: 1053990011123470516
+    last_analyzed: '2025-07-30T12:22:22.142443'
     primary_key: TsiTransLogNum
   ucum:
     table_name: ucum
@@ -7556,8 +7556,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2473088824309184642
-    last_analyzed: '2025-07-30T11:39:24.614137'
+    schema_hash: 6787676942593870505
+    last_analyzed: '2025-07-30T12:22:22.143444'
     primary_key: UcumNum
   updatehistory:
     table_name: updatehistory
@@ -7574,8 +7574,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -2704253824077056040
-    last_analyzed: '2025-07-30T11:39:24.729171'
+    schema_hash: 186675830792612156
+    last_analyzed: '2025-07-30T12:22:22.259607'
     primary_key: UpdateHistoryNum
   userclinic:
     table_name: userclinic
@@ -7592,8 +7592,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -4452955018878271435
-    last_analyzed: '2025-07-30T11:39:27.169897'
+    schema_hash: -4514865929634887780
+    last_analyzed: '2025-07-30T12:22:24.851982'
     primary_key: UserClinicNum
   usergroup:
     table_name: usergroup
@@ -7611,8 +7611,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -639666300065242088
-    last_analyzed: '2025-07-30T11:39:27.169897'
+    schema_hash: 3538410035453432342
+    last_analyzed: '2025-07-30T12:22:24.851982'
     primary_key: UserGroupNum
   usergroupattach:
     table_name: usergroupattach
@@ -7630,8 +7630,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 2846543365831082454
-    last_analyzed: '2025-07-30T11:39:27.170901'
+    schema_hash: -7778470300749098064
+    last_analyzed: '2025-07-30T12:22:24.851982'
     primary_key: UserGroupAttachNum
   userod:
     table_name: userod
@@ -7649,8 +7649,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7796199196818374041
-    last_analyzed: '2025-07-30T11:39:27.389176'
+    schema_hash: -4423249841073163916
+    last_analyzed: '2025-07-30T12:22:25.096768'
     primary_key: UserNum
   userodapptview:
     table_name: userodapptview
@@ -7668,8 +7668,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 1092109394060356420
-    last_analyzed: '2025-07-30T11:39:27.390184'
+    schema_hash: 805149869403081163
+    last_analyzed: '2025-07-30T12:22:25.096768'
     primary_key: UserodApptViewNum
   userodpref:
     table_name: userodpref
@@ -7687,8 +7687,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -7989637123939704340
-    last_analyzed: '2025-07-30T11:39:29.865503'
+    schema_hash: -7254013738229818546
+    last_analyzed: '2025-07-30T12:22:27.677390'
     primary_key: UserOdPrefNum
   userquery:
     table_name: userquery
@@ -7705,8 +7705,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8507575593642966139
-    last_analyzed: '2025-07-30T11:39:29.866499'
+    schema_hash: 5232790001326575841
+    last_analyzed: '2025-07-30T12:22:27.677390'
     primary_key: QueryNum
   userweb:
     table_name: userweb
@@ -7723,8 +7723,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5763684749995207217
-    last_analyzed: '2025-07-30T11:39:29.975232'
+    schema_hash: 8347806575319628048
+    last_analyzed: '2025-07-30T12:22:27.809000'
     primary_key: UserWebNum
   utm:
     table_name: utm
@@ -7741,8 +7741,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6619173658750823873
-    last_analyzed: '2025-07-30T11:39:29.975232'
+    schema_hash: 2043862065008053968
+    last_analyzed: '2025-07-30T12:22:27.810001'
     primary_key: UtmNum
   vaccinedef:
     table_name: vaccinedef
@@ -7759,8 +7759,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8932981207513232790
-    last_analyzed: '2025-07-30T11:39:29.975232'
+    schema_hash: 3817968430042261750
+    last_analyzed: '2025-07-30T12:22:27.810001'
     primary_key: VaccineDefNum
   vaccineobs:
     table_name: vaccineobs
@@ -7777,8 +7777,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 5686600261295288822
-    last_analyzed: '2025-07-30T11:39:32.702499'
+    schema_hash: 1250513030041086048
+    last_analyzed: '2025-07-30T12:22:30.629158'
     primary_key: VaccineObsNum
   vaccinepat:
     table_name: vaccinepat
@@ -7795,8 +7795,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4732825280536836644
-    last_analyzed: '2025-07-30T11:39:32.811313'
+    schema_hash: 4485367927967496609
+    last_analyzed: '2025-07-30T12:22:30.764255'
     primary_key: VaccinePatNum
   vitalsign:
     table_name: vitalsign
@@ -7813,8 +7813,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -8789539271811764072
-    last_analyzed: '2025-07-30T11:39:32.811313'
+    schema_hash: -3503938270474029095
+    last_analyzed: '2025-07-30T12:22:30.765254'
     primary_key: VitalsignNum
   webschedcarrierrule:
     table_name: webschedcarrierrule
@@ -7831,8 +7831,8 @@ tables:
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: false
-    schema_hash: -7432676035496043359
-    last_analyzed: '2025-07-30T11:39:32.811313'
+    schema_hash: -5968379104256295983
+    last_analyzed: '2025-07-30T12:22:30.765254'
     primary_key: WebSchedCarrierRuleNum
   webschedrecall:
     table_name: webschedrecall
@@ -7849,8 +7849,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -6831410016040580461
-    last_analyzed: '2025-07-30T11:39:33.039224'
+    schema_hash: 3565886449547587015
+    last_analyzed: '2025-07-30T12:22:31.009221'
     primary_key: WebSchedRecallNum
   wikilistheaderwidth:
     table_name: wikilistheaderwidth
@@ -7867,8 +7867,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -9160257871972232046
-    last_analyzed: '2025-07-30T11:39:35.705889'
+    schema_hash: -2948561059849113183
+    last_analyzed: '2025-07-30T12:22:33.843984'
     primary_key: WikiListHeaderWidthNum
   wikilisthist:
     table_name: wikilisthist
@@ -7885,8 +7885,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 7552429627779500522
-    last_analyzed: '2025-07-30T11:39:35.817015'
+    schema_hash: -8460556871120740220
+    last_analyzed: '2025-07-30T12:22:33.963661'
     primary_key: WikiListHistNum
   wikipage:
     table_name: wikipage
@@ -7903,8 +7903,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -5511843746606954524
-    last_analyzed: '2025-07-30T11:39:35.926502'
+    schema_hash: -4414036470979373771
+    last_analyzed: '2025-07-30T12:22:34.078579'
     primary_key: WikiPageNum
   wikipagehist:
     table_name: wikipagehist
@@ -7921,8 +7921,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: -1634631602790317059
-    last_analyzed: '2025-07-30T11:39:36.041127'
+    schema_hash: 1839403586013082862
+    last_analyzed: '2025-07-30T12:22:34.218266'
     primary_key: WikiPageNum
   xchargetransaction:
     table_name: xchargetransaction
@@ -7939,8 +7939,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 8308801839538320049
-    last_analyzed: '2025-07-30T11:39:36.152512'
+    schema_hash: -8418590200962916482
+    last_analyzed: '2025-07-30T12:22:34.346608'
     primary_key: XChargeTransactionNum
   xwebresponse:
     table_name: xwebresponse
@@ -7957,8 +7957,8 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 6719031248558960814
-    last_analyzed: '2025-07-30T11:39:38.122789'
+    schema_hash: -523407539649907253
+    last_analyzed: '2025-07-30T12:22:36.398807'
     primary_key: XWebResponseNum
   zipcode:
     table_name: zipcode
@@ -7976,6 +7976,6 @@ tables:
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
-    schema_hash: 4624373992034636325
-    last_analyzed: '2025-07-30T11:39:38.122789'
+    schema_hash: 3847337409108679486
+    last_analyzed: '2025-07-30T12:22:36.400399'
     primary_key: ZipCodeNum
