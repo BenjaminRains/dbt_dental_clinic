@@ -10,7 +10,7 @@ Key Features:
 - Rate limiting to prevent overwhelming source database
 - Optimized batch sizes based on table characteristics
 - Settings-centric architecture for environment-agnostic operation
-- Multiple copy strategies: small (direct), medium (chunked), large (progress-tracked)
+- Multiple copy methods: small (direct), medium (chunked), large (progress-tracked)
 - True incremental updates with change data capture
 - Last processed tracking for minimal downtime
 - Connection health checks and fresh connections on retry
@@ -22,15 +22,15 @@ ConnectionManager Benefits:
 - Proper connection cleanup and resource management
 - Robust error handling for transient network issues
 
-Copy Strategies:
+Copy Methods (HOW to copy - performance-based):
 - SMALL (< 1MB): Direct INSERT ... SELECT with retry logic
 - MEDIUM (1-100MB): Chunked INSERT with LIMIT/OFFSET and rate limiting
 - LARGE (> 100MB): Progress-tracked chunked INSERT with optimized batch sizes
 
-Extraction Strategies:
+Extraction Strategies (WHAT to copy - business logic-based):
 - full_table: Drop and recreate entire table with optimized batch sizes
 - incremental: Only copy new/changed data using incremental column
-- chunked_incremental: Smaller batches for very large tables
+- incremental_chunked: Smaller batches for very large tables
 """
 
 import yaml
@@ -68,14 +68,15 @@ class SimpleMySQLReplicator:
     - No direct environment variable access
     - Environment-agnostic (works for both production and test)
     
-    Copy Strategies:
+    Copy Methods (HOW to copy - performance-based):
     - SMALL (< 1MB): Direct INSERT ... SELECT
     - MEDIUM (1-100MB): Chunked INSERT with LIMIT/OFFSET
     - LARGE (> 100MB): Chunked INSERT with WHERE conditions
     
-    Extraction Strategies:
+    Extraction Strategies (WHAT to copy - business logic-based):
     - full_table: Drop and recreate entire table
     - incremental: Only copy new/changed data using incremental column
+    - incremental_chunked: Smaller batches for very large tables
     """
     
     def __init__(self, settings: Optional[Settings] = None, tables_config_path: Optional[str] = None):
@@ -232,6 +233,7 @@ class SimpleMySQLReplicator:
                     "copy_status": copy_status
                 })
                 conn.commit()
+                logger.info(f"📋 Tracking table updated: etl_copy_status for {table_name}")
                 logger.info(f"Updated copy status for {table_name}: {rows_copied} rows, {copy_status}, primary_value={last_primary_value}")
                 return True
                 
@@ -342,15 +344,15 @@ class SimpleMySQLReplicator:
         else:
             return base_batch_size
     
-    def get_copy_strategy(self, table_name: str) -> str:
+    def get_copy_method(self, table_name: str) -> str:
         """
-        Determine copy strategy based on table size.
+        Determine copy method based on table size (HOW to copy).
         
         Args:
             table_name: Name of the table
             
         Returns:
-            Copy strategy: 'small', 'medium', or 'large'
+            Copy method: 'small', 'medium', or 'large'
         """
         config = self.table_configs.get(table_name, {})
         size_mb = config.get('estimated_size_mb', 0)
@@ -364,16 +366,28 @@ class SimpleMySQLReplicator:
     
     def get_extraction_strategy(self, table_name: str) -> str:
         """
-        Get extraction strategy from table configuration.
+        Get extraction strategy from table configuration (WHAT to copy).
         
         Args:
             table_name: Name of the table
             
         Returns:
-            Extraction strategy: 'full_table', 'incremental', or 'chunked_incremental'
+            Extraction strategy: 'full_table', 'incremental', or 'incremental_chunked'
         """
         config = self.table_configs.get(table_name, {})
-        return config.get('extraction_strategy', 'full_table')
+        strategy = config.get('extraction_strategy', 'full_table')
+        
+        # Validate the strategy
+        if not self._validate_extraction_strategy(strategy):
+            logger.warning(f"Invalid extraction strategy '{strategy}' for {table_name}, using 'full_table' as fallback")
+            return 'full_table'
+        
+        return strategy
+    
+    def _validate_extraction_strategy(self, strategy: str) -> bool:
+        """Validate that the extraction strategy is supported."""
+        valid_strategies = ['full_table', 'incremental', 'incremental_chunked']
+        return strategy in valid_strategies
     
     def copy_table(self, table_name: str, force_full: bool = False) -> bool:
         """
@@ -407,27 +421,19 @@ class SimpleMySQLReplicator:
             # Log the strategy being used
             self._log_incremental_strategy(table_name, primary_column, incremental_columns)
             
-            # Determine extraction strategy
+            # 1. Determine WHAT to copy (extraction strategy)
             extraction_strategy = self.get_extraction_strategy(table_name)
             if force_full:
                 extraction_strategy = 'full_table'
                 logger.info(f"Forcing full table copy for {table_name}")
             
-            logger.info(f"Using {extraction_strategy} extraction strategy for {table_name}")
+            # 2. Determine HOW to copy (copy method based on size)
+            copy_method = self.get_copy_method(table_name)
             
-            # Copy data based on extraction strategy
-            success = False
-            rows_copied = 0
+            logger.info(f"Using {extraction_strategy} extraction strategy and {copy_method} copy method for {table_name}")
             
-            if extraction_strategy == 'full_table':
-                success, rows_copied = self._copy_full_table(table_name, config)
-            elif extraction_strategy == 'incremental':
-                success, rows_copied = self._copy_incremental_table(table_name, config)
-            elif extraction_strategy == 'chunked_incremental':
-                success, rows_copied = self._copy_chunked_incremental_table(table_name, config)
-            else:
-                logger.error(f"Unknown extraction strategy: {extraction_strategy}")
-                return False
+            # 3. Execute the appropriate copy operation
+            success, rows_copied = self._execute_copy_operation(table_name, extraction_strategy, copy_method, config)
             
             if success:
                 # Get the maximum value of the primary column from copied data
@@ -462,6 +468,37 @@ class SimpleMySQLReplicator:
             self._update_copy_status(table_name, 0, 'failed', None, None)
             return False
     
+    def _execute_copy_operation(self, table_name: str, extraction_strategy: str, copy_method: str, config: Dict) -> tuple[bool, int]:
+        """
+        Execute copy operation with clear separation of concerns.
+        
+        Args:
+            table_name: Name of the table to copy
+            extraction_strategy: WHAT to copy ('full_table', 'incremental', 'incremental_chunked')
+            copy_method: HOW to copy ('small', 'medium', 'large')
+            config: Table configuration
+            
+        Returns:
+            Tuple of (success, rows_copied)
+        """
+        try:
+            logger.info(f"Executing {extraction_strategy} extraction with {copy_method} copy method for {table_name}")
+            
+            # Execute based on extraction strategy (WHAT to copy)
+            if extraction_strategy == 'full_table':
+                return self._copy_full_table(table_name, config)
+            elif extraction_strategy == 'incremental':
+                return self._copy_incremental_table(table_name, config)
+            elif extraction_strategy == 'incremental_chunked':
+                return self._copy_chunked_incremental_table(table_name, config)
+            else:
+                logger.error(f"Unknown extraction strategy: {extraction_strategy}")
+                return False, 0
+                
+        except Exception as e:
+            logger.error(f"Error in copy operation for {table_name}: {str(e)}")
+            return False, 0
+    
 
     
   
@@ -470,21 +507,21 @@ class SimpleMySQLReplicator:
         try:
             logger.info(f"Starting full table copy for {table_name}")
             
-            # Get copy strategy based on table size
-            copy_strategy = self.get_copy_strategy(table_name)
+            # Get copy method based on table size (HOW to copy)
+            copy_method = self.get_copy_method(table_name)
             
             # Use optimized batch size based on table characteristics
             optimized_batch_size = self._get_optimized_batch_size(table_name, config)
             
-            logger.info(f"Using {copy_strategy} copy strategy for {table_name} with batch size: {optimized_batch_size}")
+            logger.info(f"Using {copy_method} copy method for {table_name} with batch size: {optimized_batch_size}")
             
             # Drop and recreate table structure
             self._recreate_table_structure(table_name)
             
-            # Copy all data based on copy strategy
-            if copy_strategy == 'small':
+            # Copy all data based on copy method
+            if copy_method == 'small':
                 success, rows_copied = self._copy_small_table(table_name)
-            elif copy_strategy == 'medium':
+            elif copy_method == 'medium':
                 success, rows_copied = self._copy_medium_table(table_name, optimized_batch_size)
             else:  # large
                 success, rows_copied = self._copy_large_table(table_name, optimized_batch_size)
