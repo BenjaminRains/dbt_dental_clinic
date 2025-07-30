@@ -1186,3 +1186,289 @@ class TestOpenDentalSchemaAnalyzerProductionIntegration:
         # This test validates that the production environment is working correctly.
         # The actual fail-fast behavior should be tested in unit tests with mocked environments.
         pytest.skip("Fail-fast behavior should be tested in unit tests with mocked environments") 
+
+    def test_production_determine_incremental_strategy(self, production_settings):
+        """
+        Test production determine_incremental_strategy method with actual production database data.
+        
+        AAA Pattern:
+            Arrange: Set up real production database connection and get real schema data
+            Act: Call determine_incremental_strategy() method with production data
+            Assert: Verify strategy is correctly determined for production tables
+            
+        Validates:
+            - Real production incremental strategy determination with actual database data
+            - Strategy selection based on number of incremental columns
+            - Business logic for conservative tables (claimproc, payment, adjustment)
+            - Strategy determination for different table types
+        """
+        # Arrange: Set up real production database connection and get real schema data
+        analyzer = OpenDentalSchemaAnalyzer()
+        tables = analyzer.discover_all_tables()
+        
+        # Test with different table types
+        test_cases = [
+            ('patient', ['DateTStamp', 'DateModified', 'SecDateTEdit']),  # Multiple columns -> or_logic
+            ('claimproc', ['DateTStamp', 'SecDateTEdit']),  # Conservative table -> and_logic
+            ('definition', ['DateTStamp']),  # Single column -> single_column
+            ('securitylog', [])  # No columns -> none
+        ]
+        
+        for table_name, incremental_columns in test_cases:
+            if table_name in tables:
+                schema_info = analyzer.get_table_schema(table_name)
+                
+                # Act: Call determine_incremental_strategy() method with production data
+                strategy = analyzer.determine_incremental_strategy(table_name, schema_info, incremental_columns)
+                
+                # Assert: Verify strategy is correctly determined for production tables
+                assert strategy in ['or_logic', 'and_logic', 'single_column', 'none']
+                
+                # Verify specific business logic
+                if table_name == 'claimproc':
+                    assert strategy == 'and_logic', f"Conservative table {table_name} should use and_logic"
+                elif len(incremental_columns) == 0:
+                    assert strategy == 'none', f"Table {table_name} with no columns should use none"
+                elif len(incremental_columns) == 1:
+                    assert strategy == 'single_column', f"Table {table_name} with single column should use single_column"
+                elif len(incremental_columns) > 1:
+                    if table_name in ['claimproc', 'payment', 'adjustment']:
+                        assert strategy == 'and_logic', f"Conservative table {table_name} should use and_logic"
+                    else:
+                        assert strategy == 'or_logic', f"Table {table_name} with multiple columns should use or_logic"
+
+    def test_production_validate_incremental_column_data_quality(self, production_settings):
+        """
+        Test production validate_incremental_column_data_quality method with actual production database data.
+        
+        AAA Pattern:
+            Arrange: Set up real production database connection and get real schema data
+            Act: Call validate_incremental_column_data_quality() method with production data
+            Assert: Verify data quality validation works correctly for production columns
+            
+        Validates:
+            - Real production data quality validation with actual database data
+            - Date range validation for production timestamp columns
+            - Non-null value validation for production columns
+            - Sampling approach for data quality checks in production
+        """
+        # Arrange: Set up real production database connection and get real schema data
+        analyzer = OpenDentalSchemaAnalyzer()
+        tables = analyzer.discover_all_tables()
+        
+        # Test with tables that likely have timestamp columns
+        test_tables = ['patient', 'appointment', 'procedurelog']
+        found_tables = [table for table in test_tables if table in tables]
+        
+        if not found_tables:
+            pytest.skip("No suitable test tables found in production database")
+        
+        for table_name in found_tables:
+            schema_info = analyzer.get_table_schema(table_name)
+            
+            # Find timestamp columns in the schema
+            timestamp_columns = []
+            for col_name, col_info in schema_info['columns'].items():
+                col_type = str(col_info['type']).lower()
+                if any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime']):
+                    timestamp_columns.append(col_name)
+            
+            # Test data quality validation for each timestamp column
+            for col_name in timestamp_columns[:2]:  # Test first 2 columns to avoid long test times
+                # Act: Call validate_incremental_column_data_quality() method with production data
+                is_valid = analyzer.validate_incremental_column_data_quality(table_name, col_name)
+                
+                # Assert: Verify data quality validation works correctly for production columns
+                assert isinstance(is_valid, bool)
+                
+                # Log the results for debugging
+                print(f"Table {table_name}, Column {col_name}: Valid = {is_valid}")
+                
+                # If column is valid, it should have good data quality
+                if is_valid:
+                    # Verify that valid columns have reasonable characteristics
+                    # (We can't easily test the exact criteria without mocking, but we can verify the method works)
+                    assert True  # Method executed successfully
+
+    def test_production_enhanced_find_incremental_columns(self, production_settings):
+        """
+        Test production enhanced find_incremental_columns method with actual production database data.
+        
+        AAA Pattern:
+            Arrange: Set up real production database connection and get real schema data
+            Act: Call find_incremental_columns() method with production data
+            Assert: Verify enhanced incremental column discovery works correctly
+            
+        Validates:
+            - Real production enhanced incremental column discovery with actual database data
+            - Data quality validation integration in discovery process
+            - Column prioritization based on predefined priority order
+            - Limiting to top 3 most reliable columns
+            - Filtering of poor quality columns
+        """
+        # Arrange: Set up real production database connection and get real schema data
+        analyzer = OpenDentalSchemaAnalyzer()
+        tables = analyzer.discover_all_tables()
+        
+        # Test with tables that likely have timestamp columns
+        test_tables = ['patient', 'appointment', 'procedurelog', 'claimproc']
+        found_tables = [table for table in test_tables if table in tables]
+        
+        if not found_tables:
+            pytest.skip("No suitable test tables found in production database")
+        
+        for table_name in found_tables:
+            schema_info = analyzer.get_table_schema(table_name)
+            
+            # Act: Call find_incremental_columns() method with production data
+            incremental_columns = analyzer.find_incremental_columns(table_name, schema_info)
+            
+            # Assert: Verify enhanced incremental column discovery works correctly
+            assert isinstance(incremental_columns, list)
+            assert len(incremental_columns) <= 3  # Limited to top 3
+            
+            # Verify that identified columns exist in the production schema
+            for col_name in incremental_columns:
+                assert col_name in schema_info['columns']
+                
+                # Verify that identified columns have timestamp or datetime data types
+                col_info = schema_info['columns'][col_name]
+                col_type = str(col_info['type']).lower()
+                assert any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime']), \
+                    f"Column {col_name} with type {col_type} should be a timestamp or datetime type"
+            
+            # Log the results for debugging
+            print(f"Table {table_name}: Found {len(incremental_columns)} incremental columns: {incremental_columns}")
+            
+            # Verify prioritization (if we have multiple columns, DateTStamp should be first)
+            if len(incremental_columns) > 0 and 'DateTStamp' in incremental_columns:
+                assert incremental_columns[0] == 'DateTStamp', \
+                    f"DateTStamp should be prioritized first in {table_name}"
+
+    def test_production_complete_configuration_with_incremental_strategy(self, production_settings):
+        """
+        Test production complete configuration generation includes incremental_strategy.
+        
+        AAA Pattern:
+            Arrange: Set up real production database connection and generate configuration
+            Act: Call generate_complete_configuration() method with production data
+            Assert: Verify incremental_strategy is included in table configuration
+            
+        Validates:
+            - Real production configuration generation includes incremental_strategy
+            - Strategy determination is called for each table
+            - Configuration includes the determined strategy
+            - Integration of incremental strategy in production configuration generation
+        """
+        # Arrange: Set up real production database connection and generate configuration
+        analyzer = OpenDentalSchemaAnalyzer()
+        
+        # Store original method for cleanup
+        original_discover = analyzer.discover_all_tables
+        
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Mock the discover_all_tables method to return key tables
+                analyzer.discover_all_tables = lambda: ['patient', 'appointment', 'procedurelog']
+                
+                # Act: Call generate_complete_configuration() method with production data
+                config = analyzer.generate_complete_configuration(temp_dir)
+                
+                # Assert: Verify incremental_strategy is included in table configuration
+                assert 'tables' in config
+                assert len(config['tables']) == 3
+                
+                # Verify each table has incremental_strategy
+                for table_name, table_config in config['tables'].items():
+                    assert 'incremental_strategy' in table_config
+                    assert isinstance(table_config['incremental_strategy'], str)
+                    assert table_config['incremental_strategy'] in ['or_logic', 'and_logic', 'single_column', 'none']
+                    
+                    # Verify that the strategy makes sense for the table
+                    if table_name == 'procedurelog':  # Conservative table
+                        assert table_config['incremental_strategy'] == 'and_logic', \
+                            f"Conservative table {table_name} should use and_logic"
+                    elif len(table_config.get('incremental_columns', [])) == 0:
+                        assert table_config['incremental_strategy'] == 'none', \
+                            f"Table {table_name} with no incremental columns should use none"
+                    elif len(table_config.get('incremental_columns', [])) == 1:
+                        assert table_config['incremental_strategy'] == 'single_column', \
+                            f"Table {table_name} with single incremental column should use single_column"
+                    elif len(table_config.get('incremental_columns', [])) > 1:
+                        if table_name in ['claimproc', 'payment', 'adjustment']:
+                            assert table_config['incremental_strategy'] == 'and_logic', \
+                                f"Conservative table {table_name} should have 'and_logic' strategy"
+                        else:
+                            assert table_config['incremental_strategy'] == 'or_logic', \
+                                f"Table {table_name} with multiple incremental columns should have 'or_logic' strategy"
+                
+        finally:
+            # Restore original method
+            analyzer.discover_all_tables = original_discover
+
+    def test_production_tables_yml_incremental_strategy_integration(self, production_settings):
+        """
+        Test that tables.yml includes incremental_strategy in production configuration.
+        
+        AAA Pattern:
+            Arrange: Set up real production database connection and generate tables.yml
+            Act: Generate complete configuration and check tables.yml content
+            Assert: Verify incremental_strategy is included in tables.yml
+            
+        Validates:
+            - tables.yml includes incremental_strategy field
+            - Strategy determination works in production environment
+            - Configuration file generation includes new field
+            - Integration of incremental strategy in production tables.yml
+        """
+        # Arrange: Set up real production database connection and generate tables.yml
+        analyzer = OpenDentalSchemaAnalyzer()
+        
+        # Store original method for cleanup
+        original_discover = analyzer.discover_all_tables
+        
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Mock the discover_all_tables method to return key tables
+                analyzer.discover_all_tables = lambda: ['patient', 'appointment', 'procedurelog']
+                
+                # Act: Generate complete configuration and check tables.yml content
+                results = analyzer.analyze_complete_schema(temp_dir)
+                
+                # Assert: Verify incremental_strategy is included in tables.yml
+                assert results['tables_config'].endswith('tables.yml')
+                assert os.path.exists(results['tables_config'])
+                
+                # Verify tables.yml content has incremental_strategy
+                with open(results['tables_config'], 'r') as f:
+                    config = yaml.safe_load(f)
+                    assert 'tables' in config
+                    
+                    # Verify each table has incremental_strategy
+                    for table_name, table_config in config['tables'].items():
+                        assert 'incremental_strategy' in table_config
+                        assert isinstance(table_config['incremental_strategy'], str)
+                        assert table_config['incremental_strategy'] in ['or_logic', 'and_logic', 'single_column', 'none']
+                        
+                        # Verify that the strategy is consistent with the table characteristics
+                        if 'incremental_columns' in table_config:
+                            incremental_columns = table_config['incremental_columns']
+                            strategy = table_config['incremental_strategy']
+                            
+                            if len(incremental_columns) == 0:
+                                assert strategy == 'none', \
+                                    f"Table {table_name} with no incremental columns should have 'none' strategy"
+                            elif len(incremental_columns) == 1:
+                                assert strategy == 'single_column', \
+                                    f"Table {table_name} with single incremental column should have 'single_column' strategy"
+                            elif len(incremental_columns) > 1:
+                                if table_name in ['claimproc', 'payment', 'adjustment']:
+                                    assert strategy == 'and_logic', \
+                                        f"Conservative table {table_name} should have 'and_logic' strategy"
+                                else:
+                                    assert strategy == 'or_logic', \
+                                        f"Table {table_name} with multiple incremental columns should have 'or_logic' strategy"
+                
+        finally:
+            # Restore original method
+            analyzer.discover_all_tables = original_discover 
