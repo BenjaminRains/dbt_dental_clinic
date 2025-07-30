@@ -116,94 +116,94 @@ class TestSimpleMySQLReplicatorConfigurationMethods:
                 replicator.target_engine = mock_target_engine
                 return replicator
 
-    def test_get_copy_strategy_small_table(self, replicator_with_config):
+    def test_get_copy_method_small_table(self, replicator_with_config):
         """
-        Test copy strategy determination for small tables using provider pattern.
+        Test copy method determination for small tables using provider pattern.
         
         Validates:
-            - Small table strategy determination with provider pattern
+            - Small table method determination with provider pattern
             - Configuration access with provider pattern
-            - Strategy logic based on table size
+            - Method logic based on table size
             - Provider pattern integration
             
         ETL Pipeline Context:
-            - Small table strategy for efficient copying
+            - Small table method for efficient copying
             - Optimized for dental clinic data with small tables
             - Uses provider pattern for configuration access
         """
-        strategy = replicator_with_config.get_copy_strategy('small_table')
+        strategy = replicator_with_config.get_copy_method('small_table')
         assert strategy == 'small'
 
-    def test_get_copy_strategy_medium_table(self, replicator_with_config):
+    def test_get_copy_method_medium_table(self, replicator_with_config):
         """
-        Test copy strategy determination for medium tables using provider pattern.
+        Test copy method determination for medium tables using provider pattern.
         
         Validates:
-            - Medium table strategy determination with provider pattern
+            - Medium table method determination with provider pattern
             - Configuration access with provider pattern
-            - Strategy logic based on table size
+            - Method logic based on table size
             - Provider pattern integration
             
         ETL Pipeline Context:
-            - Medium table strategy for balanced copying
+            - Medium table method for balanced copying
             - Optimized for dental clinic data with medium tables
             - Uses provider pattern for configuration access
         """
-        strategy = replicator_with_config.get_copy_strategy('medium_table')
+        strategy = replicator_with_config.get_copy_method('medium_table')
         assert strategy == 'medium'
 
-    def test_get_copy_strategy_large_table(self, replicator_with_config):
+    def test_get_copy_method_large_table(self, replicator_with_config):
         """
-        Test copy strategy determination for large tables using provider pattern.
+        Test copy method determination for large tables using provider pattern.
         
         Validates:
-            - Large table strategy determination with provider pattern
+            - Large table method determination with provider pattern
             - Configuration access with provider pattern
-            - Strategy logic based on table size
+            - Method logic based on table size
             - Provider pattern integration
             
         ETL Pipeline Context:
-            - Large table strategy for efficient copying
+            - Large table method for efficient copying
             - Optimized for dental clinic data with large tables
             - Uses provider pattern for configuration access
         """
-        strategy = replicator_with_config.get_copy_strategy('large_table')
+        strategy = replicator_with_config.get_copy_method('large_table')
         assert strategy == 'large'
 
-    def test_get_copy_strategy_no_size_config(self, replicator_with_config):
+    def test_get_copy_method_no_size_config(self, replicator_with_config):
         """
-        Test copy strategy determination for tables without size configuration.
+        Test copy method determination for tables without size configuration.
         
         Validates:
-            - Default strategy for tables without size config
+            - Default method for tables without size config
             - Fallback behavior with provider pattern
             - Configuration access with provider pattern
             - Default value handling
             
         ETL Pipeline Context:
-            - Defaults to 'small' strategy for unknown sizes
+            - Defaults to 'small' method for unknown sizes
             - Safe fallback for dental clinic data
             - Uses provider pattern for configuration access
         """
-        strategy = replicator_with_config.get_copy_strategy('no_size_table')
+        strategy = replicator_with_config.get_copy_method('no_size_table')
         assert strategy == 'small'
 
-    def test_get_copy_strategy_unknown_table(self, replicator_with_config):
+    def test_get_copy_method_unknown_table(self, replicator_with_config):
         """
-        Test copy strategy determination for unknown tables.
+        Test copy method determination for unknown tables.
         
         Validates:
-            - Default strategy for unknown tables
+            - Default method for unknown tables
             - Fallback behavior with provider pattern
             - Configuration retrieval from provider
             - Default value handling
             
         ETL Pipeline Context:
-            - Defaults to 'small' strategy for unknown tables
+            - Defaults to 'small' method for unknown tables
             - Safe fallback for dental clinic data
             - Uses provider pattern for configuration access
         """
-        strategy = replicator_with_config.get_copy_strategy('unknown_table')
+        strategy = replicator_with_config.get_copy_method('unknown_table')
         assert strategy == 'small'
 
     def test_get_extraction_strategy_incremental(self, replicator_with_config):
@@ -260,28 +260,28 @@ class TestSimpleMySQLReplicatorConfigurationMethods:
         strategy = replicator_with_config.get_extraction_strategy('unknown_table')
         assert strategy == 'full_table'
 
-    def test_get_extraction_strategy_chunked_incremental(self, replicator_with_config):
+    def test_get_extraction_strategy_incremental_chunked(self, replicator_with_config):
         """
-        Test extraction strategy retrieval for chunked incremental tables.
+        Test extraction strategy retrieval for incremental chunked tables.
         
         Validates:
-            - Chunked incremental strategy retrieval from provider
+            - Incremental chunked strategy retrieval from provider
             - Configuration access with provider pattern
             - Strategy determination logic
             - Provider pattern integration
             
         ETL Pipeline Context:
-            - Chunked incremental strategy for very large tables
+            - Incremental chunked strategy for very large tables
             - Optimized for dental clinic data with large datasets
             - Uses provider pattern for configuration access
         """
-        # Add chunked_incremental table to config
+        # Add incremental_chunked table to config
         replicator_with_config.table_configs['large_chunked_table'] = {
-            'extraction_strategy': 'chunked_incremental',
+            'extraction_strategy': 'incremental_chunked',
             'incremental_columns': ['DateTStamp'],
             'batch_size': 1000,
             'estimated_size_mb': 200
         }
         
         strategy = replicator_with_config.get_extraction_strategy('large_chunked_table')
-        assert strategy == 'chunked_incremental' 
+        assert strategy == 'incremental_chunked' 
