@@ -202,7 +202,13 @@ class PostgresLoader:
             self.table_configs = self._load_configuration()
             
             # Get database connections using unified interface with Settings injection
-            self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+            # In test environment, only create analytics connection (replication not needed for tracking tests)
+            if use_test_environment:
+                self.replication_engine = None
+                logger.info("Skipping replication connection in test environment")
+            else:
+                self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+            
             self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
             print(f"[ETL DEBUG] PostgresLoader analytics_engine id: {id(self.analytics_engine)}")
             
@@ -231,16 +237,29 @@ class PostgresLoader:
             elif self.analytics_schema == 'marts':
                 schema_enum = ConfigPostgresSchema.MARTS
             
-            self.schema_adapter = PostgresSchema(
-                postgres_schema=schema_enum,
-                settings=self.settings
-            )
+            # Skip schema adapter creation in test environment (not needed for unit tests)
+            if use_test_environment:
+                self.schema_adapter = None
+                logger.info("Skipping PostgresSchema adapter creation in test environment")
+            else:
+                self.schema_adapter = PostgresSchema(
+                    postgres_schema=schema_enum,
+                    settings=self.settings
+                )
             
             self.target_schema = analytics_config.get('schema', 'raw')
             self.staging_schema = replication_config.get('schema', 'raw')
             
-            # Ensure tracking tables exist
-            self._ensure_tracking_tables_exist()
+            # Validate tracking tables exist (only in production, not in test environment)
+            if not use_test_environment:
+                if not self._validate_tracking_tables_exist():
+                    logger.error("PostgreSQL tracking tables not found. Run initialize_etl_tracking_tables.py to create them.")
+                    raise ConfigurationError(
+                        message="PostgreSQL tracking tables not found",
+                        details={"error_type": "missing_tracking_tables", "solution": "Run initialize_etl_tracking_tables.py"}
+                    )
+            else:
+                logger.info("Skipping tracking table validation in test environment")
             
             logger.info(f"PostgresLoader initialized with {len(self.table_configs)} table configurations")
             
@@ -253,7 +272,7 @@ class PostgresLoader:
         except Exception as e:
             logger.error(f"Unexpected error in PostgresLoader initialization: {str(e)}")
             raise
-    
+
     def _load_configuration(self) -> Dict:
         """Load table configuration from tables.yml."""
         try:
@@ -276,59 +295,6 @@ class PostgresLoader:
                 config_file=self.tables_config_path,
                 details={"error": str(e)}
             )
-    
-    def _ensure_tracking_tables_exist(self):
-        """Ensure PostgreSQL tracking tables exist with primary column support in analytics database."""
-        try:
-            with self.analytics_engine.connect() as conn:
-                # Drop existing tables to ensure correct schema
-                logger.info(f"Dropping existing tracking tables in {self.analytics_schema} to ensure correct schema")
-                conn.execute(text(f"DROP TABLE IF EXISTS {self.analytics_schema}.etl_load_status CASCADE"))
-                conn.execute(text(f"DROP TABLE IF EXISTS {self.analytics_schema}.etl_transform_status CASCADE"))
-                
-                # Create enhanced etl_load_status table with primary column support
-                create_load_status_sql = f"""
-                CREATE TABLE {self.analytics_schema}.etl_load_status (
-                    id SERIAL PRIMARY KEY,
-                    table_name VARCHAR(255) NOT NULL UNIQUE,
-                    last_loaded TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
-                    last_primary_value VARCHAR(255) NULL,
-                    primary_column_name VARCHAR(255) NULL,
-                    rows_loaded INTEGER DEFAULT 0,
-                    load_status VARCHAR(50) DEFAULT 'pending',
-                    _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-                conn.execute(text(create_load_status_sql))
-                logger.info(f"Created {self.analytics_schema}.etl_load_status with primary column support")
-                
-                # Create enhanced etl_transform_status table with primary column support
-                create_transform_status_sql = f"""
-                CREATE TABLE {self.analytics_schema}.etl_transform_status (
-                    id SERIAL PRIMARY KEY,
-                    table_name VARCHAR(255) NOT NULL UNIQUE,
-                    last_transformed TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
-                    last_primary_value VARCHAR(255) NULL,
-                    primary_column_name VARCHAR(255) NULL,
-                    rows_transformed INTEGER DEFAULT 0,
-                    transformation_status VARCHAR(50) DEFAULT 'pending',
-                    _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-                conn.execute(text(create_transform_status_sql))
-                logger.info(f"Created {self.analytics_schema}.etl_transform_status with primary column support")
-                
-                conn.commit()
-                logger.info("PostgreSQL tracking tables created with primary column support")
-                return True
-                
-        except Exception as e:
-            logger.error(f"Error creating PostgreSQL tracking tables: {str(e)}")
-            return False
     
     def get_table_config(self, table_name: str) -> Dict:
         """Get table configuration."""
@@ -442,6 +408,11 @@ class PostgresLoader:
 
     def stream_mysql_data(self, table_name: str, query: str, chunk_size: int = 100000):  # Increased from 50000 to 100000
         """Stream data from MySQL without loading into memory."""
+        # In test environment, return empty generator since replication_engine is None
+        if self.replication_engine is None:
+            logger.info(f"Skipping MySQL data streaming for {table_name} in test environment")
+            return
+        
         try:
             with self.replication_engine.connect() as conn:
                 # Use server-side cursor for streaming
@@ -635,7 +606,7 @@ class PostgresLoader:
             return None
     
     def _build_improved_load_query_max(self, table_name: str, incremental_columns: List[str], 
-                                      force_full: bool = False, use_or_logic: bool = True) -> str:
+                                      force_full: bool = False, incremental_strategy: str = 'or_logic') -> str:
         """Build query with improved incremental logic using maximum timestamp across all columns."""
         
         # Get replication database name from settings
@@ -653,15 +624,24 @@ class PostgresLoader:
         if not last_load:
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
         
-        # Build conditions with OR logic (configurable)
+        # Build conditions based on incremental strategy
         conditions = []
         for col in valid_columns:
             conditions.append(f"{col} > '{last_load}'")
         
-        if use_or_logic:
+        if incremental_strategy == 'or_logic':
             where_clause = " OR ".join(conditions)
-        else:
+        elif incremental_strategy == 'and_logic':
             where_clause = " AND ".join(conditions)
+        elif incremental_strategy == 'single_column':
+            # Use only the first column (primary incremental column)
+            if valid_columns:
+                where_clause = f"{valid_columns[0]} > '{last_load}'"
+            else:
+                where_clause = "1=0"  # No valid columns
+        else:
+            # Default to OR logic
+            where_clause = " OR ".join(conditions)
         
         return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
     
@@ -678,6 +658,11 @@ class PostgresLoader:
         """
         if not columns:
             return []
+        
+        # In test environment, skip data quality validation since replication_engine is None
+        if self.replication_engine is None:
+            logger.info(f"Skipping data quality validation for {table_name} in test environment")
+            return columns
         
         valid_columns = []
         
@@ -839,15 +824,22 @@ class PostgresLoader:
                 logger.error(f"No configuration found for table: {table_name}")
                 return False
             
+            # Get primary incremental column
+            primary_column = self._get_primary_incremental_column(table_config)
+            incremental_columns = table_config.get('incremental_columns', [])
+            
+            # Get incremental strategy from configuration
+            incremental_strategy = self._get_incremental_strategy(table_config)
+            
+            # Log the strategy being used
+            self._log_incremental_strategy(table_name, primary_column, incremental_columns, incremental_strategy)
+            
             # Get MySQL schema from replication database
             mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
             
             # Create or verify PostgreSQL table
             if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
                 return False
-            
-            # Get incremental columns from configuration
-            incremental_columns = table_config.get('incremental_columns', [])
             
             # Apply data quality validation to incremental columns
             if incremental_columns:
@@ -922,14 +914,26 @@ class PostgresLoader:
                     
                     logger.info(f"Loaded {len(rows_data)} rows to {self.analytics_schema}.{table_name} using {'full' if force_full else 'incremental'} strategy")
             
-            # After successful load, update tracking record
+            # After successful load, update tracking record with primary column value
             if rows_data:
-                self._update_load_status(table_name, len(rows_data))
+                # Get the maximum value of the primary column from loaded data
+                last_primary_value = None
+                if primary_column and primary_column != 'none':
+                    # Extract the maximum value of the primary column from loaded data
+                    primary_values = [row.get(primary_column) for row in rows_data if row.get(primary_column) is not None]
+                    if primary_values:
+                        last_primary_value = str(max(primary_values))
+                
+                self._update_load_status(
+                    table_name, len(rows_data), 'success', last_primary_value, primary_column
+                )
             
             return True
             
         except Exception as e:
             logger.error(f"Error in standard load for {table_name}: {str(e)}")
+            # Update tracking record with failure status
+            self._update_load_status(table_name, 0, 'failed', None, None)
             return False
     
     def load_table_chunked(self, table_name: str, force_full: bool = False, 
@@ -946,11 +950,26 @@ class PostgresLoader:
             bool: True if successful
         """
         try:
+            # Ensure tracking record exists before loading
+            if not self._ensure_tracking_record_exists(table_name):
+                logger.error(f"Failed to ensure tracking record for {table_name}")
+                return False
+            
             # Get table configuration
             table_config = self.get_table_config(table_name)
             if not table_config:
                 logger.error(f"No configuration found for table: {table_name}")
                 return False
+            
+            # Get primary incremental column
+            primary_column = self._get_primary_incremental_column(table_config)
+            incremental_columns = table_config.get('incremental_columns', [])
+            
+            # Get incremental strategy from configuration
+            incremental_strategy = self._get_incremental_strategy(table_config)
+            
+            # Log the strategy being used
+            self._log_incremental_strategy(table_name, primary_column, incremental_columns, incremental_strategy)
             
             # Get MySQL schema from replication database
             mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
@@ -959,8 +978,12 @@ class PostgresLoader:
             if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
                 return False
             
-            # Get incremental columns from configuration
-            incremental_columns = table_config.get('incremental_columns', [])
+            # Apply data quality validation to incremental columns
+            if incremental_columns:
+                valid_columns = self._filter_valid_incremental_columns(table_name, incremental_columns)
+                if len(valid_columns) != len(incremental_columns):
+                    logger.warning(f"Data quality validation filtered {len(incremental_columns) - len(valid_columns)} columns for {table_name}")
+                incremental_columns = valid_columns
             
             # Check if this is a table without incremental columns (needs full refresh)
             if not incremental_columns and not force_full:
@@ -1017,6 +1040,7 @@ class PostgresLoader:
             # Process in chunks
             total_loaded = 0
             chunk_num = 0
+            all_primary_values = []  # Track primary column values across all chunks
             
             # Handle full load truncation
             if force_full:
@@ -1048,6 +1072,12 @@ class PostgresLoader:
                         row_dict = self._convert_sqlalchemy_row_to_dict(row, column_names)
                         converted_row = self.schema_adapter.convert_row_data_types(table_name, row_dict)
                         rows_data.append(converted_row)
+                        
+                        # Track primary column values if available
+                        if primary_column and primary_column != 'none':
+                            primary_value = converted_row.get(primary_column)
+                            if primary_value is not None:
+                                all_primary_values.append(primary_value)
                 
                 # Insert chunk
                 with self.analytics_engine.begin() as target_conn:
@@ -1075,20 +1105,39 @@ class PostgresLoader:
                 if chunk_rows < chunk_size:
                     break
             
+            # After successful load, update tracking record with primary column value
+            if total_loaded > 0:
+                # Get the maximum value of the primary column from loaded data
+                last_primary_value = None
+                if primary_column and primary_column != 'none' and all_primary_values:
+                    last_primary_value = str(max(all_primary_values))
+                
+                self._update_load_status(
+                    table_name, total_loaded, 'success', last_primary_value, primary_column
+                )
+            
             logger.info(f"Successfully loaded {total_loaded} rows to {self.analytics_schema}.{table_name}")
             return True
             
         except DataLoadingError as e:
             logger.error(f"Data loading failed in chunked load for table {table_name}: {e}")
+            # Update tracking record with failure status
+            self._update_load_status(table_name, 0, 'failed', None, None)
             return False
         except DatabaseConnectionError as e:
             logger.error(f"Database connection failed in chunked load for table {table_name}: {e}")
+            # Update tracking record with failure status
+            self._update_load_status(table_name, 0, 'failed', None, None)
             return False
         except DatabaseTransactionError as e:
             logger.error(f"Database transaction failed in chunked load for table {table_name}: {e}")
+            # Update tracking record with failure status
+            self._update_load_status(table_name, 0, 'failed', None, None)
             return False
         except DatabaseQueryError as e:
             logger.error(f"Database query failed in chunked load for table {table_name}: {e}")
+            # Update tracking record with failure status
+            self._update_load_status(table_name, 0, 'failed', None, None)
             return False
         except Exception as e:
             logger.error(f"Unexpected error in chunked load for table {table_name}: {str(e)}")
@@ -1136,6 +1185,61 @@ class PostgresLoader:
     
 
     
+    def _build_enhanced_load_query(self, table_name: str, incremental_columns: List[str], 
+                                  primary_column: Optional[str] = None,
+                                  force_full: bool = False, incremental_strategy: str = 'or_logic') -> str:
+        """Build query with enhanced incremental logic supporting primary column and strategy configuration."""
+        
+        # Get replication database name from settings
+        replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+        replication_db = replication_config.get('database', 'opendental_replication')
+        
+        # Data quality validation
+        valid_columns = self._filter_valid_incremental_columns(table_name, incremental_columns)
+        
+        if force_full or not valid_columns:
+            return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+        
+        # Use primary column logic if available
+        if primary_column and primary_column != 'none':
+            last_primary_value = self._get_last_primary_value(table_name)
+            if last_primary_value:
+                # Use primary column for incremental logic
+                return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {primary_column} > '{last_primary_value}'"
+            else:
+                # No primary value found, use timestamp fallback
+                last_load = self._get_last_load_time(table_name)
+                if last_load:
+                    return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {primary_column} > '{last_load}'"
+                else:
+                    return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+        else:
+            # Use multi-column logic with strategy-based logic
+            last_load = self._get_last_load_time_max(table_name, valid_columns)
+            if not last_load:
+                return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+            
+            # Build conditions based on incremental strategy
+            conditions = []
+            for col in valid_columns:
+                conditions.append(f"{col} > '{last_load}'")
+            
+            if incremental_strategy == 'or_logic':
+                where_clause = " OR ".join(conditions)
+            elif incremental_strategy == 'and_logic':
+                where_clause = " AND ".join(conditions)
+            elif incremental_strategy == 'single_column':
+                # Use only the first column (primary incremental column)
+                if valid_columns:
+                    where_clause = f"{valid_columns[0]} > '{last_load}'"
+                else:
+                    where_clause = "1=0"  # No valid columns
+            else:
+                # Default to OR logic
+                where_clause = " OR ".join(conditions)
+            
+            return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
+
     def _build_load_query(self, table_name: str, incremental_columns: List[str], force_full: bool = False) -> str:
         """
         Build query to get data from MySQL.
@@ -1148,8 +1252,15 @@ class PostgresLoader:
         Returns:
             str: SQL query
         """
-        # Use improved incremental logic
-        return self._build_improved_load_query_max(table_name, incremental_columns, force_full, use_or_logic=True)
+        # Get configuration and strategy
+        table_config = self.get_table_config(table_name)
+        primary_column = self._get_primary_incremental_column(table_config) if table_config else None
+        incremental_strategy = self._get_incremental_strategy(table_config) if table_config else 'or_logic'
+        
+        # Log the strategy being used
+        self._log_incremental_strategy(table_name, primary_column, incremental_columns, incremental_strategy)
+        
+        return self._build_enhanced_load_query(table_name, incremental_columns, primary_column, force_full, incremental_strategy)
     
     def _build_count_query(self, table_name: str, incremental_columns: List[str], force_full: bool = False) -> str:
         """
@@ -1163,6 +1274,10 @@ class PostgresLoader:
         Returns:
             str: SQL count query
         """
+        # Get configuration and strategy
+        table_config = self.get_table_config(table_name)
+        incremental_strategy = self._get_incremental_strategy(table_config) if table_config else 'or_logic'
+        
         # Get replication database name from settings
         replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
         replication_db = replication_config.get('database', 'opendental_replication')
@@ -1180,10 +1295,23 @@ class PostgresLoader:
             for col in incremental_columns:
                 conditions.append(f"{col} > '{last_load}'")
             
-            # Use OR logic - if any column is newer than last_load, include the record
-            where_clause = " OR ".join(conditions)
+            # Use strategy-based logic
+            if incremental_strategy == 'or_logic':
+                where_clause = " OR ".join(conditions)
+            elif incremental_strategy == 'and_logic':
+                where_clause = " AND ".join(conditions)
+            elif incremental_strategy == 'single_column':
+                # Use only the first column
+                if incremental_columns:
+                    where_clause = f"{incremental_columns[0]} > '{last_load}'"
+                else:
+                    where_clause = "1=0"
+            else:
+                # Default to OR logic
+                where_clause = " OR ".join(conditions)
+            
             query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
-            logger.info(f"DEBUG: Incremental count query for {table_name}: {query}")
+            logger.info(f"DEBUG: Incremental count query for {table_name} ({incremental_strategy}): {query}")
             return query
         
         query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"
@@ -1531,4 +1659,109 @@ class PostgresLoader:
             report.append("")
         
         return "\n".join(report)
+ 
+    def _get_last_primary_value(self, table_name: str) -> Optional[str]:
+        """Get the last primary column value for incremental loading."""
+        try:
+            with self.analytics_engine.connect() as conn:
+                result = conn.execute(text(f"""
+                    SELECT last_primary_value, primary_column_name
+                    FROM {self.analytics_schema}.etl_load_status
+                    WHERE table_name = :table_name
+                    AND load_status = 'success'
+                    ORDER BY last_loaded DESC
+                    LIMIT 1
+                """), {"table_name": table_name}).fetchone()
+                
+                if result:
+                    last_primary_value, primary_column_name = result
+                    logger.debug(f"Retrieved last primary value for {table_name}: {last_primary_value} (column: {primary_column_name})")
+                    return last_primary_value
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting last primary value for {table_name}: {str(e)}")
+            return None
+
+    def _get_primary_incremental_column(self, config: Dict) -> Optional[str]:
+        """Get the primary incremental column from configuration with fallback logic."""
+        primary_column = config.get('primary_incremental_column')
+        
+        # Check if primary column is valid (not null, 'none', or empty)
+        if primary_column and primary_column != 'none' and primary_column.strip():
+            return primary_column
+        
+        # Fallback: if no primary column specified, return None to use multi-column logic
+        return None
+
+    def _get_incremental_strategy(self, config: Dict) -> str:
+        """Get the incremental strategy from table configuration."""
+        return config.get('incremental_strategy', 'or_logic')
+
+    def _log_incremental_strategy(self, table_name: str, primary_column: Optional[str], incremental_columns: List[str], strategy: str):
+        """Log which incremental strategy is being used."""
+        if primary_column and primary_column != 'none':
+            logger.info(f"Table {table_name}: Using {strategy} logic with primary incremental column '{primary_column}' for optimized incremental loading")
+        else:
+            logger.info(f"Table {table_name}: Using {strategy} logic with multi-column incremental logic: {incremental_columns}")
+ 
+    def _validate_tracking_tables_exist(self) -> bool:
+        """Validate that PostgreSQL tracking tables exist in analytics database."""
+        try:
+            with self.analytics_engine.connect() as conn:
+                # Check if etl_load_status table exists
+                result = conn.execute(text(f"""
+                    SELECT COUNT(*) 
+                    FROM information_schema.tables 
+                    WHERE table_schema = '{self.analytics_schema}' 
+                    AND table_name = 'etl_load_status'
+                """)).scalar()
+                
+                if result == 0:
+                    logger.error(f"PostgreSQL tracking table '{self.analytics_schema}.etl_load_status' not found")
+                    return False
+                
+                # Check if etl_transform_status table exists
+                result = conn.execute(text(f"""
+                    SELECT COUNT(*) 
+                    FROM information_schema.tables 
+                    WHERE table_schema = '{self.analytics_schema}' 
+                    AND table_name = 'etl_transform_status'
+                """)).scalar()
+                
+                if result == 0:
+                    logger.error(f"PostgreSQL tracking table '{self.analytics_schema}.etl_transform_status' not found")
+                    return False
+                
+                # Check if tables have the expected structure with primary column support
+                result = conn.execute(text(f"""
+                    SELECT COUNT(*) 
+                    FROM information_schema.columns 
+                    WHERE table_schema = '{self.analytics_schema}' 
+                    AND table_name = 'etl_load_status' 
+                    AND column_name IN ('last_primary_value', 'primary_column_name')
+                """)).scalar()
+                
+                if result < 2:
+                    logger.error(f"PostgreSQL tracking table '{self.analytics_schema}.etl_load_status' missing primary column support columns")
+                    return False
+                
+                result = conn.execute(text(f"""
+                    SELECT COUNT(*) 
+                    FROM information_schema.columns 
+                    WHERE table_schema = '{self.analytics_schema}' 
+                    AND table_name = 'etl_transform_status' 
+                    AND column_name IN ('last_primary_value', 'primary_column_name')
+                """)).scalar()
+                
+                if result < 2:
+                    logger.error(f"PostgreSQL tracking table '{self.analytics_schema}.etl_transform_status' missing primary column support columns")
+                    return False
+                
+                logger.info("PostgreSQL tracking tables validated successfully")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error validating PostgreSQL tracking tables: {str(e)}")
+            return False
  
