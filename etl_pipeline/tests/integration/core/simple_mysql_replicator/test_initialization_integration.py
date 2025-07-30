@@ -235,7 +235,7 @@ class TestSimpleMySQLReplicatorInitializationIntegration:
             
             # Validate configuration values
             assert config['batch_size'] > 0, f"Invalid batch_size for {table_name}"
-            assert config['extraction_strategy'] in ['incremental', 'full_table', 'chunked_incremental'], f"Invalid extraction_strategy for {table_name}"
+            assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], f"Invalid extraction_strategy for {table_name}"
             # Accept all importance values from schema analyzer
             assert config['table_importance'] in ['important', 'standard', 'audit', 'reference', 'critical'], f"Invalid table_importance for {table_name}"
         

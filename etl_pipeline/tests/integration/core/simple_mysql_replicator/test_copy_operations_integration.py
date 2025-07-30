@@ -230,7 +230,7 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
             
             # Test copy strategy for different tables
             for table_name in replicator.table_configs.keys():
-                strategy = replicator.get_copy_strategy(table_name)
+                strategy = replicator.get_copy_method(table_name)
                 assert strategy in ['small', 'medium', 'large'], f"Invalid strategy for {table_name}: {strategy}"
                 
                 # Get table configuration
@@ -365,7 +365,7 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
                 assert strategy == expected_strategy, f"Strategy mismatch for {table_name}: expected {expected_strategy}, got {strategy}"
                 
                 # Test that strategy is valid
-                assert strategy in ['incremental', 'full_table', 'chunked_incremental'], f"Invalid strategy for {table_name}: {strategy}"
+                assert strategy in ['incremental', 'full_table', 'incremental_chunked'], f"Invalid strategy for {table_name}: {strategy}"
             
             logger.info("Extraction strategy handling working correctly for all tables")
             

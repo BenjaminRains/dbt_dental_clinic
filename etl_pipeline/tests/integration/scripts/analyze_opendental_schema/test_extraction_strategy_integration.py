@@ -125,7 +125,7 @@ class TestExtractionStrategyIntegration:
             strategy = analyzer.determine_extraction_strategy('patient', schema_info, size_info)
             
             # Assert: Verify strategy is correctly determined for production tables
-            assert strategy in ['full_table', 'incremental', 'chunked_incremental']
+            assert strategy in ['full_table', 'incremental', 'incremental_chunked']
 
     def setup_method(self, method):
         """Set up each test method with proper isolation."""

@@ -260,7 +260,7 @@ class TestSimpleMySQLReplicatorPerformanceIntegration:
             
             # Test copy strategy for different tables
             for table_name in replicator.table_configs.keys():
-                strategy = replicator.get_copy_strategy(table_name)
+                strategy = replicator.get_copy_method(table_name)
                 assert strategy in ['small', 'medium', 'large'], f"Invalid strategy for {table_name}: {strategy}"
                 
                 # Get table configuration
@@ -463,7 +463,7 @@ class TestSimpleMySQLReplicatorPerformanceIntegration:
             # Test large table handling logic
             config = replicator.table_configs[largest_table]
             batch_size = config.get('batch_size', 1000)
-            strategy = replicator.get_copy_strategy(largest_table)
+            strategy = replicator.get_copy_method(largest_table)
             
             # Validate large table configuration
             assert batch_size > 0, f"Batch size should be positive: {batch_size}"

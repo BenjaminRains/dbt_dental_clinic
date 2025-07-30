@@ -279,7 +279,7 @@ class TestSimpleMySQLReplicatorIntegration:
             
             # Validate configuration values
             assert config['batch_size'] > 0, f"Invalid batch_size for {table_name}"
-            assert config['extraction_strategy'] in ['incremental', 'full_table', 'chunked_incremental'], f"Invalid extraction_strategy for {table_name}"
+            assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], f"Invalid extraction_strategy for {table_name}"
             # Accept all importance values from schema analyzer
             assert config['table_importance'] in ['important', 'standard', 'audit', 'reference', 'critical'], f"Invalid table_importance for {table_name}"
         
@@ -335,7 +335,7 @@ class TestSimpleMySQLReplicatorIntegration:
             assert strategy == expected_strategy, f"Strategy mismatch for {table_name}: expected {expected_strategy}, got {strategy}"
             
             # Test that strategy is valid
-            assert strategy in ['incremental', 'full_table', 'chunked_incremental'], f"Invalid strategy for {table_name}: {strategy}"
+            assert strategy in ['incremental', 'full_table', 'incremental_chunked'], f"Invalid strategy for {table_name}: {strategy}"
         
         logger.info("Extraction strategy handling working correctly for all tables")
 

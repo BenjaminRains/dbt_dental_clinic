@@ -880,7 +880,7 @@ class TestConfigReaderValidation:
                 assert 'batch_size' in config, f"Missing batch_size for {table_name}"
                 
                 # Validate dental clinic specific values
-                assert config['extraction_strategy'] in ['incremental', 'full_table', 'chunked_incremental'], \
+                assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], \
                     f"Invalid extraction_strategy for {table_name}"
                 assert config['table_importance'] in ['important', 'audit', 'standard'], \
                     f"Invalid table_importance for {table_name}"

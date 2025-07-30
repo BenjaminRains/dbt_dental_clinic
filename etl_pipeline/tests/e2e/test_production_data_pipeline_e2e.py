@@ -669,7 +669,7 @@ class PipelineDataValidator:
         - _get_new_records_count_max method
         - _copy_new_records_max method
         - _copy_incremental_table method
-        - _copy_chunked_incremental_table method
+        - _copy_chunked_incremental_table method (now handles incremental_chunked strategy)
         """
         logger.info(f"Validating SimpleMySQLReplicator incremental methods for {table_name}")
         

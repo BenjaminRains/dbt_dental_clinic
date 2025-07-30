@@ -364,7 +364,7 @@ class TestOpenDentalSchemaAnalyzerProductionIntegration:
             strategy = analyzer.determine_extraction_strategy('patient', schema_info, size_info)
             
             # Assert: Verify strategy is correctly determined for production tables
-            assert strategy in ['full_table', 'incremental', 'chunked_incremental']
+            assert strategy in ['full_table', 'incremental', 'incremental_chunked']
 
     def test_production_incremental_column_discovery(self, production_settings):
         """

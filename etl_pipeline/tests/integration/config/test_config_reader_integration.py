@@ -152,7 +152,7 @@ class TestConfigReaderIntegration:
                 assert 'estimated_size_mb' in config, f"Missing estimated_size_mb for {table_name}"
                 
                 # Validate configuration values
-                assert config['extraction_strategy'] in ['incremental', 'full_table', 'chunked_incremental'], \
+                assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], \
                     f"Invalid extraction_strategy for {table_name}: {config['extraction_strategy']}"
                 assert config['table_importance'] in ['important', 'audit', 'standard'], \
                     f"Invalid table_importance for {table_name}: {config['table_importance']}"
@@ -222,7 +222,7 @@ class TestConfigReaderIntegration:
         config_reader = ConfigReader()
         
         # Test all extraction strategies
-        strategies = ['incremental', 'full_table', 'chunked_incremental']
+        strategies = ['incremental', 'full_table', 'incremental_chunked']
         
         for strategy in strategies:
             tables = config_reader.get_tables_by_strategy(strategy)
@@ -661,7 +661,7 @@ class TestConfigReaderIntegration:
                 assert 'batch_size' in config, f"Missing batch_size for {table_name}"
                 
                 # Validate dental clinic specific values
-                assert config['extraction_strategy'] in ['incremental', 'full_table', 'chunked_incremental'], \
+                assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], \
                     f"Invalid extraction_strategy for {table_name}"
                 assert config['table_importance'] in ['important', 'audit', 'standard'], \
                     f"Invalid table_importance for {table_name}"

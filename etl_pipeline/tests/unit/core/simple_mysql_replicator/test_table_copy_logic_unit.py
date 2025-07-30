@@ -248,26 +248,26 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
             assert result is True
             mock_copy.assert_called_once_with('procedurelog', replicator.table_configs['procedurelog'])
 
-    def test_copy_table_chunked_incremental_strategy(self, replicator_with_mock_engines):
+    def test_copy_table_incremental_chunked_strategy(self, replicator_with_mock_engines):
         """
-        Test table copy with chunked_incremental strategy using provider pattern.
+        Test table copy with incremental_chunked strategy using provider pattern.
         
         Validates:
-            - Chunked incremental strategy implementation with provider pattern
+            - Incremental chunked strategy implementation with provider pattern
             - Settings injection for database operations
             - Provider pattern configuration access
-            - Chunked incremental data copying
+            - Incremental chunked data copying
             
         ETL Pipeline Context:
-            - Chunked incremental strategy for very large tables
+            - Incremental chunked strategy for very large tables
             - Used for dental clinic data with large datasets
             - Uses provider pattern for configuration access
         """
         replicator = replicator_with_mock_engines
         
-        # Add chunked_incremental table to config
+        # Add incremental_chunked table to config
         replicator.table_configs['large_chunked_table'] = {
-            'extraction_strategy': 'chunked_incremental',
+            'extraction_strategy': 'incremental_chunked',
             'incremental_columns': ['DateTStamp'],
             'batch_size': 1000,
             'estimated_size_mb': 200

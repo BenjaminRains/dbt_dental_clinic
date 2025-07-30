@@ -274,7 +274,7 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
                 assert batch_size > 0, f"batch_size should be positive for {table_name}"
                 
                 extraction_strategy = config.get('extraction_strategy')
-                assert extraction_strategy in ['incremental', 'full_table', 'chunked_incremental'], f"Invalid extraction_strategy for {table_name}"
+                assert extraction_strategy in ['incremental', 'full_table', 'incremental_chunked'], f"Invalid extraction_strategy for {table_name}"
                 
                 table_importance = config.get('table_importance')
                 assert table_importance in ['important', 'standard', 'audit', 'reference', 'critical'], f"Invalid table_importance for {table_name}"
