@@ -178,7 +178,7 @@ class TestConnectionFactoryUnit:
             test_provider = DictConfigProvider(
                 env={
                     'ETL_ENVIRONMENT': 'test',
-                    'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                    'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
                     'TEST_OPENDENTAL_SOURCE_PORT': '3306',
                     'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                     'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
@@ -193,7 +193,7 @@ class TestConnectionFactoryUnit:
             assert result == mock_engine
             mock_create_engine.assert_called_once()
             call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://test_user:test_pass@test-host:3306/test_opendental' in call_args
+            assert 'mysql+pymysql://test_user:test_pass@localhost:3306/test_opendental' in call_args
 
     def test_get_source_connection_missing_env_vars_with_provider(self):
         """
@@ -234,7 +234,7 @@ class TestConnectionFactoryUnit:
             test_provider = DictConfigProvider(
                 env={
                     'ETL_ENVIRONMENT': 'test',
-                    'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                    'TEST_MYSQL_REPLICATION_HOST': 'localhost',
                     'TEST_MYSQL_REPLICATION_PORT': '3306',
                     'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
                     'TEST_MYSQL_REPLICATION_USER': 'test_replication_user',
@@ -249,7 +249,7 @@ class TestConnectionFactoryUnit:
             assert result == mock_engine
             mock_create_engine.assert_called_once()
             call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://test_replication_user:test_repl_pass@test-repl-host:3306/test_opendental_replication' in call_args
+            assert 'mysql+pymysql://test_replication_user:test_repl_pass@localhost:3306/test_opendental_replication' in call_args
 
     def test_get_replication_connection_missing_env_vars_with_provider(self):
         """
@@ -290,7 +290,7 @@ class TestConnectionFactoryUnit:
             test_provider = DictConfigProvider(
                 env={
                     'ETL_ENVIRONMENT': 'test',
-                    'TEST_POSTGRES_ANALYTICS_HOST': 'test-pg-host',
+                    'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
                     'TEST_POSTGRES_ANALYTICS_PORT': '5432',
                     'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
                     'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
@@ -306,7 +306,7 @@ class TestConnectionFactoryUnit:
             assert result == mock_engine
             mock_create_engine.assert_called_once()
             call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@test-pg-host:5432/test_opendental_analytics' in call_args
+            assert 'postgresql+psycopg2://test_analytics_user:test_analytics_pass@localhost:5432/test_opendental_analytics' in call_args
 
     def test_get_analytics_connection_different_schemas_with_provider(self):
         """
@@ -331,7 +331,7 @@ class TestConnectionFactoryUnit:
             # Create test provider
             test_provider = DictConfigProvider(
                 env={
-                    'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                    'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
                     'TEST_POSTGRES_ANALYTICS_PORT': '5432',
                     'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
                     'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
@@ -400,7 +400,7 @@ class TestConnectionFactoryUnit:
             # Test environment variables with provider pattern
             test_provider = DictConfigProvider(
                 env={
-                    'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                    'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
                     'TEST_OPENDENTAL_SOURCE_PORT': '3306',
                     'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                     'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
@@ -424,7 +424,7 @@ class TestConnectionFactoryUnit:
             test_settings = Settings(environment='test', provider=test_provider)
             ConnectionFactory.get_source_connection(test_settings)
             test_call_args = mock_create_engine.call_args[0][0]
-            assert 'test-host' in test_call_args
+            assert 'localhost' in test_call_args
             assert 'test_user' in test_call_args
             assert 'test_opendental' in test_call_args
 
@@ -495,12 +495,12 @@ class TestConnectionFactoryUnit:
         """
         test_provider = DictConfigProvider(
             env={
-                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
                 'TEST_OPENDENTAL_SOURCE_PORT': '3306',
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
                 'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
                 'TEST_POSTGRES_ANALYTICS_PORT': '5432',
                 'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
                 'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
@@ -514,7 +514,7 @@ class TestConnectionFactoryUnit:
         
         # Test valid enum usage
         source_config = settings.get_database_config(DatabaseType.SOURCE)
-        assert source_config['host'] == 'test-host'
+        assert source_config['host'] == 'localhost'
         
         analytics_config = settings.get_database_config(DatabaseType.ANALYTICS, PostgresSchema.RAW)
         assert analytics_config is not None
@@ -543,7 +543,7 @@ class TestConnectionFactoryUnit:
         """
         test_provider = DictConfigProvider(
             env={
-                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
                 'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
@@ -581,7 +581,7 @@ class TestConnectionFactoryUnit:
             - Provider pattern maintains validation consistency
         """
         params = {
-            'host': 'test-host',
+            'host': 'localhost',
             'port': '3306',
             'database': 'test_db',
             'user': 'test_user',
@@ -606,7 +606,7 @@ class TestConnectionFactoryUnit:
             - Provider pattern maintains error handling consistency
         """
         params = {
-            'host': 'test-host',
+            'host': 'localhost',
             'port': '',  # Empty
             'database': None,  # None
             'user': 'test_user',
@@ -636,7 +636,7 @@ class TestConnectionFactoryUnit:
             - Provider pattern ensures consistent connection string format
         """
         config = {
-            'host': 'test-host',
+            'host': 'localhost',
             'port': 3306,
             'database': 'test_db',
             'user': 'test_user',
@@ -650,7 +650,7 @@ class TestConnectionFactoryUnit:
         result = ConnectionFactory._build_mysql_connection_string(config)
         
         expected = (
-            "mysql+pymysql://test_user:test_pass@test-host:3306/test_db"
+            "mysql+pymysql://test_user:test_pass@localhost:3306/test_db"
             "?connect_timeout=15&read_timeout=45&write_timeout=30&charset=utf8mb4"
         )
         assert result == expected
@@ -671,7 +671,7 @@ class TestConnectionFactoryUnit:
             - Provider pattern ensures consistent connection string format
         """
         config = {
-            'host': 'test-host',
+            'host': 'localhost',
             'port': 5432,
             'database': 'test_db',
             'user': 'test_user',
@@ -684,7 +684,7 @@ class TestConnectionFactoryUnit:
         result = ConnectionFactory._build_postgres_connection_string(config)
         
         expected = (
-            "postgresql+psycopg2://test_user:test_pass@test-host:5432/test_db"
+            "postgresql+psycopg2://test_user:test_pass@localhost:5432/test_db"
             "?connect_timeout=15&application_name=etl_pipeline"
             "&options=-csearch_path%3Draw"
         )
@@ -706,7 +706,7 @@ class TestConnectionFactoryUnit:
             - Provider pattern ensures consistent connection string format
         """
         config = {
-            'host': 'test-host',
+            'host': 'localhost',
             'port': 5432,
             'database': 'test_db',
             'user': 'test_user',
@@ -718,7 +718,7 @@ class TestConnectionFactoryUnit:
         result = ConnectionFactory._build_postgres_connection_string(config)
         
         expected = (
-            "postgresql+psycopg2://test_user:test_pass@test-host:5432/test_db"
+            "postgresql+psycopg2://test_user:test_pass@localhost:5432/test_db"
             "?connect_timeout=15&application_name=etl_pipeline"
         )
         assert result == expected
@@ -745,7 +745,7 @@ class TestConnectionFactoryUnit:
             mock_create_engine.return_value = mock_engine
             
             result = ConnectionFactory.create_mysql_engine(
-                host='test-host',
+                host='localhost',
                 port=3306,
                 database='test_db',
                 user='test_user',
@@ -755,7 +755,7 @@ class TestConnectionFactoryUnit:
             assert result == mock_engine
             mock_create_engine.assert_called_once()
             call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://test_user:test_pass@test-host:3306/test_db' in call_args
+            assert 'mysql+pymysql://test_user:test_pass@localhost:3306/test_db' in call_args
 
     def test_create_mysql_engine_with_pool_settings_with_provider(self):
         """
@@ -779,7 +779,7 @@ class TestConnectionFactoryUnit:
             mock_create_engine.return_value = mock_engine
             
             result = ConnectionFactory.create_mysql_engine(
-                host='test-host',
+                host='localhost',
                 port=3306,
                 database='test_db',
                 user='test_user',
@@ -818,7 +818,7 @@ class TestConnectionFactoryUnit:
             
             with pytest.raises(Exception) as exc_info:
                 ConnectionFactory.create_mysql_engine(
-                    host='test-host',
+                    host='localhost',
                     port=3306,
                     database='test_db',
                     user='test_user',
@@ -847,7 +847,7 @@ class TestConnectionFactoryUnit:
             mock_create_engine.return_value = mock_engine
             
             result = ConnectionFactory.create_postgres_engine(
-                host='test-host',
+                host='localhost',
                 port=5432,
                 database='test_db',
                 schema='test_schema',
@@ -858,7 +858,7 @@ class TestConnectionFactoryUnit:
             assert result == mock_engine
             mock_create_engine.assert_called_once()
             call_args = mock_create_engine.call_args[0][0]
-            assert 'postgresql+psycopg2://test_user:test_pass@test-host:5432/test_db' in call_args
+            assert 'postgresql+psycopg2://test_user:test_pass@localhost:5432/test_db' in call_args
             
             # Check connect_args for schema
             call_kwargs = mock_create_engine.call_args[1]
@@ -884,7 +884,7 @@ class TestConnectionFactoryUnit:
             mock_create_engine.return_value = mock_engine
             
             result = ConnectionFactory.create_postgres_engine(
-                host='test-host',
+                host='localhost',
                 port=5432,
                 database='test_db',
                 schema='',  # Empty schema
@@ -916,7 +916,7 @@ class TestConnectionFactoryUnit:
             mock_create_engine.return_value = mock_engine
             
             result = ConnectionFactory.create_postgres_engine(
-                host='test-host',
+                host='localhost',
                 port=5432,
                 database='test_db',
                 schema=None,  # None schema
@@ -948,7 +948,7 @@ class TestConnectionFactoryUnit:
             
             with pytest.raises(Exception) as exc_info:
                 ConnectionFactory.create_postgres_engine(
-                    host='test-host',
+                    host='localhost',
                     port=5432,
                     database='test_db',
                     schema='test_schema',
