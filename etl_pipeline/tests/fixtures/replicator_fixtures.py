@@ -356,7 +356,7 @@ def replicator_with_settings(mock_source_engine, mock_target_engine, mock_config
     } if importance == 'important' else {
         'procedurelog': True
     } if importance == 'standard' else {})
-    replicator.get_copy_strategy = MagicMock(side_effect=lambda table: {
+    replicator.get_copy_method = MagicMock(side_effect=lambda table: {
         'claim': 'small',
         'appointment': 'medium',
         'procedurelog': 'large'
