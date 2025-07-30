@@ -90,6 +90,12 @@ from .test_data_fixtures import (
     patient_with_all_fields_test_data
 )
 
+from .schema_analyzer_fixtures import (
+    mock_schema_data,
+    mock_size_data,
+    mock_dbt_models
+)
+
 __all__ = [
     # Test data definitions
     'get_test_patient_data',
@@ -161,5 +167,10 @@ __all__ = [
     'composite_pk_test_data',
     'large_table_test_data',
     'simple_test_table_data',
-    'patient_with_all_fields_test_data'
+    'patient_with_all_fields_test_data',
+    
+    # Schema analyzer fixtures
+    'mock_schema_data',
+    'mock_size_data',
+    'mock_dbt_models'
 ] 
