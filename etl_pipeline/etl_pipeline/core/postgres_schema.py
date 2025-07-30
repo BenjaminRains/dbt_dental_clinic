@@ -671,6 +671,9 @@ class PostgresSchema:
                     type_str = type_str.lower()
                     # Handle character varying vs varchar
                     type_str = type_str.replace('character varying', 'varchar')
+                    # Handle CHAR vs character (PostgreSQL sometimes returns CHAR in uppercase)
+                    # Use regex to match CHAR only when it's a standalone type, not part of "character varying"
+                    type_str = re.sub(r'\bchar\b', 'character', type_str, flags=re.IGNORECASE)
                     # Remove all spaces inside parentheses (e.g., numeric(10, 2) -> numeric(10,2))
                     type_str = re.sub(r'\(\s*([0-9]+)\s*,\s*([0-9]+)\s*\)', r'(\1,\2)', type_str)
                     return type_str
