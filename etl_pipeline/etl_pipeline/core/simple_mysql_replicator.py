@@ -58,8 +58,7 @@ from ..exceptions.database import DatabaseConnectionError, DatabaseQueryError
 from ..exceptions.data import DataExtractionError
 from ..exceptions.configuration import ConfigurationError
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Get logger (uses proper configuration from logging module)
 logger = logging.getLogger(__name__)
 
 class SimpleMySQLReplicator:
@@ -243,7 +242,7 @@ class SimpleMySQLReplicator:
                     "copy_status": copy_status
                 })
                 conn.commit()
-                logger.info(f"📋 Tracking table updated: etl_copy_status for {table_name}")
+                logger.info(f"Tracking table updated: etl_copy_status for {table_name}")
                 logger.info(f"Updated copy status for {table_name}: {rows_copied} rows, {copy_status}, primary_value={last_primary_value}")
                 return True
                 
