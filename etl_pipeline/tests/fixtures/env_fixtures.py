@@ -49,21 +49,21 @@ def test_env_vars():
         'ETL_ENVIRONMENT': 'test',
         
         # OpenDental Source (Test) - following architecture naming
-        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+        'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
         'TEST_OPENDENTAL_SOURCE_PORT': '3306',
         'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
         'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
         'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
         
         # MySQL Replication (Test) - following architecture naming
-        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
-        'TEST_MYSQL_REPLICATION_PORT': '3306',
+        'TEST_MYSQL_REPLICATION_HOST': 'localhost',
+        'TEST_MYSQL_REPLICATION_PORT': '3305',
         'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
         'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
         'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
         
         # PostgreSQL Analytics (Test) - following architecture naming
-        'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+        'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
         'TEST_POSTGRES_ANALYTICS_PORT': '5432',
         'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
         'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
@@ -180,6 +180,33 @@ def production_settings_with_config(production_env_vars, valid_pipeline_config, 
     return Settings(environment='production', provider=production_provider)
 
 
+@pytest.fixture
+def production_settings_with_file_provider(load_production_environment_file):
+    """Production settings with FileConfigProvider using loaded .env_production file.
+    
+    This fixture creates production settings using FileConfigProvider with the actual
+    .env_production file, which is what integration tests need for real production
+    database connections.
+    
+    This is different from the production_settings fixture which uses DictConfigProvider
+    with hardcoded values for unit testing.
+    """
+    from etl_pipeline.config.providers import FileConfigProvider
+    from etl_pipeline.config.settings import Settings
+    from pathlib import Path
+    
+    # Get the etl_pipeline root directory
+    config_dir = Path(__file__).parent.parent.parent  # etl_pipeline directory
+    
+    # Create FileConfigProvider that will load from .env_production
+    provider = FileConfigProvider(config_dir, environment='production')
+    
+    # Create Settings with FileConfigProvider for real production connections
+    settings = Settings(environment='production', provider=provider)
+    
+    return settings
+
+
 @pytest.fixture(autouse=True)
 def setup_test_environment(monkeypatch, request):
     """Set up test environment with proper isolation following connection architecture.
@@ -247,6 +274,45 @@ def load_test_environment_file():
     else:
         print(f"Warning: .env_test file not found at {env_test_path}")
         print("Integration tests may fail due to missing environment variables")
+    
+    yield
+    
+    # No cleanup needed - environment variables persist for the test session
+
+
+@pytest.fixture
+def load_production_environment_file():
+    """Load environment variables from .env_production file for production integration tests.
+    
+    This fixture loads the actual .env_production file and sets the environment variables
+    in os.environ for integration tests that need real production database connections.
+    """
+    from pathlib import Path
+    from dotenv import load_dotenv
+    import os
+    
+    # Find the .env_production file
+    etl_pipeline_dir = Path(__file__).parent.parent.parent  # Go to etl_pipeline root
+    env_production_path = etl_pipeline_dir / '.env_production'
+    
+    if env_production_path.exists():
+        # Load environment variables from .env_production file
+        load_dotenv(env_production_path, override=True)
+        print(f"Loaded production environment variables from: {env_production_path}")
+        # Debug print for production variables
+        print("DEBUG: OPENDENTAL_SOURCE_HOST =", os.environ.get("OPENDENTAL_SOURCE_HOST"))
+        print("DEBUG: OPENDENTAL_SOURCE_PORT =", os.environ.get("OPENDENTAL_SOURCE_PORT"))
+        print("DEBUG: OPENDENTAL_SOURCE_DB =", os.environ.get("OPENDENTAL_SOURCE_DB"))
+        print("DEBUG: OPENDENTAL_SOURCE_USER =", os.environ.get("OPENDENTAL_SOURCE_USER"))
+        print("DEBUG: OPENDENTAL_SOURCE_PASSWORD =", os.environ.get("OPENDENTAL_SOURCE_PASSWORD"))
+        # Verify that ETL_ENVIRONMENT is set to 'production'
+        if os.environ.get('ETL_ENVIRONMENT') != 'production':
+            os.environ['ETL_ENVIRONMENT'] = 'production'
+            print("Set ETL_ENVIRONMENT=production for production integration tests")
+    else:
+        print(f"Warning: .env_production file not found at {env_production_path}")
+        print("Production integration tests may fail due to missing environment variables")
+        print("Please copy .env_production.template to .env_production and configure it")
     
     yield
     

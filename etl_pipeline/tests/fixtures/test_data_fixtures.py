@@ -48,21 +48,21 @@ def test_environment_vars():
         'ETL_ENVIRONMENT': 'test',
         
         # OpenDental Source (Test) - following architecture naming
-        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+        'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
         'TEST_OPENDENTAL_SOURCE_PORT': '3306',
         'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
         'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
         'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
         
         # MySQL Replication (Test) - following architecture naming
-        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
-        'TEST_MYSQL_REPLICATION_PORT': '3306',
+        'TEST_MYSQL_REPLICATION_HOST': 'localhost',
+        'TEST_MYSQL_REPLICATION_PORT': '3305',
         'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
         'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
         'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
         
         # PostgreSQL Analytics (Test) - following architecture naming
-        'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+        'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
         'TEST_POSTGRES_ANALYTICS_PORT': '5432',
         'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
         'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
@@ -255,7 +255,7 @@ def database_connection_test_data():
     return {
         'source': {
             'database_type': DatabaseType.SOURCE,
-            'host': 'test-source-host',
+            'host': 'localhost',
             'port': 3306,
             'database': 'test_opendental',
             'user': 'test_source_user',
@@ -263,8 +263,8 @@ def database_connection_test_data():
         },
         'replication': {
             'database_type': DatabaseType.REPLICATION,
-            'host': 'test-repl-host',
-            'port': 3306,
+            'host': 'localhost',
+            'port': 3305,
             'database': 'test_opendental_replication',
             'user': 'test_repl_user',
             'password': 'test_repl_pass'
@@ -272,7 +272,7 @@ def database_connection_test_data():
         'analytics_raw': {
             'database_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.RAW,
-            'host': 'test-analytics-host',
+            'host': 'localhost',
             'port': 5432,
             'database': 'test_opendental_analytics',
             'user': 'test_analytics_user',

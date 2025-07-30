@@ -66,7 +66,7 @@ class TestConnectionFactoryComprehensive:
         # Create test provider with injected configuration using TEST_ prefixed variables
         test_provider = DictConfigProvider(
             env={
-                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_HOST': 'localhost',
                 'TEST_MYSQL_REPLICATION_PORT': '3305',
                 'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
                 'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
@@ -85,7 +85,7 @@ class TestConnectionFactoryComprehensive:
             assert result == mock_engine
             mock_create_engine.assert_called_once()
             call_args = mock_create_engine.call_args[0][0]
-            assert 'mysql+pymysql://test_repl_user:test_repl_pass@test-repl-host:3305/test_opendental_replication' in call_args
+            assert 'mysql+pymysql://test_repl_user:test_repl_pass@localhost:3305/test_opendental_replication' in call_args
 
     def test_get_analytics_connection_with_provider_pattern(self):
         """Test analytics connection creation with provider pattern dependency injection."""
@@ -269,7 +269,7 @@ class TestConnectionFactoryComprehensive:
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
                 'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_HOST': 'localhost',
                 'TEST_MYSQL_REPLICATION_PORT': '3305',
                 'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
                 'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
@@ -598,7 +598,7 @@ class TestConnectionFactoryComprehensive:
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
                 'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_HOST': 'localhost',
                 'TEST_MYSQL_REPLICATION_PORT': '3305',
                 'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
                 'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
@@ -702,7 +702,7 @@ class TestConnectionFactoryComprehensive:
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
                 'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_HOST': 'localhost',
                 'TEST_MYSQL_REPLICATION_PORT': '3305',
                 'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
                 'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
@@ -744,7 +744,7 @@ class TestConnectionFactoryComprehensive:
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
                 'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+                'TEST_MYSQL_REPLICATION_HOST': 'localhost',
                 'TEST_MYSQL_REPLICATION_PORT': '3305',
                 'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
                 'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',

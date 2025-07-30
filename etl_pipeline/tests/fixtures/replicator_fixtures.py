@@ -67,7 +67,7 @@ def mock_source_engine():
     # Create a mock URL object following connection architecture
     mock_url = MagicMock()
     mock_url.database = 'test_opendental'
-    mock_url.host = 'test-source-host'
+    mock_url.host = 'localhost'
     mock_url.port = 3306
     engine.url = mock_url
     return engine
@@ -81,7 +81,7 @@ def mock_target_engine():
     # Create a mock URL object following connection architecture
     mock_url = MagicMock()
     mock_url.database = 'test_opendental_replication'
-    mock_url.host = 'test-repl-host'
+    mock_url.host = 'localhost'
     mock_url.port = 3306
     engine.url = mock_url
     return engine
@@ -251,14 +251,14 @@ def test_replication_env_vars():
         'ETL_ENVIRONMENT': 'test',
         
         # OpenDental Source (Test) - following architecture naming
-        'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+        'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
         'TEST_OPENDENTAL_SOURCE_PORT': '3306',
         'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
         'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
         'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
         
         # MySQL Replication (Test) - following architecture naming
-        'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+        'TEST_MYSQL_REPLICATION_HOST': 'localhost',
         'TEST_MYSQL_REPLICATION_PORT': '3306',
         'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
         'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',

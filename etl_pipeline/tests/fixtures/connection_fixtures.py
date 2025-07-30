@@ -96,18 +96,15 @@ def test_connection_config():
     """
     return {
         'source': {
-            'host': 'test-source-host',
+            'host': 'localhost',
             'port': 3306,
             'database': 'test_opendental',
             'user': 'test_source_user',
-            'password': 'test_source_pass',
-            'pool_size': 5,
-            'max_overflow': 10,
-            'connect_timeout': 30
+            'password': 'test_source_pass'
         },
         'replication': {
-            'host': 'test-repl-host',
-            'port': 3306,
+            'host': 'localhost',
+            'port': 3305,
             'database': 'test_opendental_replication',
             'user': 'test_repl_user',
             'password': 'test_repl_pass',
@@ -116,7 +113,7 @@ def test_connection_config():
             'connect_timeout': 30
         },
         'analytics': {
-            'host': 'test-analytics-host',
+            'host': 'localhost',
             'port': 5432,
             'database': 'test_opendental_analytics',
             'user': 'test_analytics_user',
@@ -414,9 +411,9 @@ def mock_connection_pool():
 def mock_database_urls():
     """Mock database URLs for testing following connection architecture naming."""
     return {
-        'source': 'mysql://test_source_user:test_source_pass@test-source-host:3306/test_opendental',
-        'replication': 'mysql://test_repl_user:test_repl_pass@test-repl-host:3306/test_opendental_replication',
-        'analytics': 'postgresql://test_analytics_user:test_analytics_pass@test-analytics-host:5432/test_opendental_analytics'
+        'source': 'mysql://test_source_user:test_source_pass@localhost:3306/test_opendental',
+        'replication': 'mysql://test_repl_user:test_repl_pass@localhost:3305/test_opendental_replication',
+        'analytics': 'postgresql://test_analytics_user:test_analytics_pass@localhost:5432/test_opendental_analytics'
     }
 
 

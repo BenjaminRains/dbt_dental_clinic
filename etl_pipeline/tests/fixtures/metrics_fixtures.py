@@ -106,7 +106,8 @@ def test_metrics_settings():
         env={
             # Test environment variables for metrics
             'ETL_ENVIRONMENT': 'test',
-            'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+            # PostgreSQL Analytics (Test) - following architecture naming
+            'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
             'TEST_POSTGRES_ANALYTICS_PORT': '5432',
             'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
             'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
@@ -445,7 +446,7 @@ def mock_analytics_engine_for_metrics(test_metrics_settings):
     # Create a mock URL object
     mock_url = MagicMock()
     mock_url.database = 'test_opendental_analytics'
-    mock_url.host = 'test-analytics-host'
+    mock_url.host = 'localhost'
     mock_url.port = 5432
     engine.url = mock_url
     

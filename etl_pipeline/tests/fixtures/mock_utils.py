@@ -125,11 +125,27 @@ def mock_environment_variables():
         @wraps(func)
         @patch.dict('os.environ', {
             'ETL_ENVIRONMENT': 'test',
+            # OpenDental Source (Test) - following architecture naming
             'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
             'TEST_OPENDENTAL_SOURCE_PORT': '3306',
             'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
-            'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+            'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+            'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
+            
+            # MySQL Replication (Test) - following architecture naming
+            'TEST_MYSQL_REPLICATION_HOST': 'localhost',
+            'TEST_MYSQL_REPLICATION_PORT': '3305',
+            'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+            'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+            'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+            
+            # PostgreSQL Analytics (Test) - following architecture naming
+            'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
+            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
         })
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
@@ -188,19 +204,19 @@ def create_mock_settings_with_provider(environment='test'):
         },
         env={
             # Test environment variables (TEST_ prefixed)
-            'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+            'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
             'TEST_OPENDENTAL_SOURCE_PORT': '3306',
             'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
             'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
             'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
             
-            'TEST_MYSQL_REPLICATION_HOST': 'test-repl-host',
+            'TEST_MYSQL_REPLICATION_HOST': 'localhost',
             'TEST_MYSQL_REPLICATION_PORT': '3306',
             'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
             'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
             'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
             
-            'TEST_POSTGRES_ANALYTICS_HOST': 'test-analytics-host',
+            'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
             'TEST_POSTGRES_ANALYTICS_PORT': '5432',
             'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
             'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
@@ -448,7 +464,7 @@ def create_mock_provider():
             }
         },
         'env': {
-            'TEST_OPENDENTAL_SOURCE_HOST': 'test-source-host',
+            'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
             'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental'
         }
     }

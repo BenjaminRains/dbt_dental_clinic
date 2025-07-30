@@ -369,9 +369,9 @@ TEST_ENVIRONMENT_DATA = {
     'source_database': 'test_opendental',
     'replication_database': 'test_opendental_replication',
     'analytics_database': 'test_opendental_analytics',
-    'source_host': 'test-source-host',
-    'replication_host': 'test-repl-host',
-    'analytics_host': 'test-analytics-host'
+    'source_host': 'localhost',
+    'replication_host': 'localhost',
+    'analytics_host': 'localhost'
 }
 
 # Settings injection test data
