@@ -365,7 +365,7 @@ class PostgresLoader:
                     "load_status": load_status
                 })
                 conn.commit()
-                logger.info(f"📊 Tracking table updated: {self.analytics_schema}.etl_load_status for {table_name}")
+                logger.info(f"Tracking table updated: {self.analytics_schema}.etl_load_status for {table_name}")
                 logger.info(f"Updated load status for {table_name}: {rows_loaded} rows, {load_status}, primary_value={last_primary_value}")
                 return True
                 
