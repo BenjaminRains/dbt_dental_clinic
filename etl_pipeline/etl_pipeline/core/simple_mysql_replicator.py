@@ -754,9 +754,10 @@ class SimpleMySQLReplicator:
                             # Execute bulk insert using executemany pattern
                             # Use direct connection for executemany since ConnectionManager doesn't support it
                             with target_mgr.engine.connect() as conn:
-                                # Use the underlying database driver connection for executemany
-                                raw_conn = conn.connection
-                                raw_conn.executemany(insert_sql, values_list)
+                                # Get the underlying DBAPI connection for executemany
+                                dbapi_conn = conn.connection.connection  # This gets the actual PyMySQL connection
+                                cursor = dbapi_conn.cursor()
+                                cursor.executemany(insert_sql, values_list)
                                 conn.commit()
                         else:
                             # Single row insert (fallback for small tables)
