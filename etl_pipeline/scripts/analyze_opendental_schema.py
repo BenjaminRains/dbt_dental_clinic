@@ -34,7 +34,7 @@ import os
 import yaml
 import json
 import hashlib
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 import logging
 from typing import Dict, List, Optional, Tuple
@@ -132,9 +132,8 @@ def setup_environment():
                 break
         
         if not loaded:
-            # Set a default environment if no files found
-            logger.warning("No environment files found, setting ETL_ENVIRONMENT=production")
-            os.environ['ETL_ENVIRONMENT'] = 'production'
+            # Fail fast if no environment is set and no files found
+            raise ValueError("ETL_ENVIRONMENT environment variable is not set")
         else:
             logger.info(f"Environment loaded, ETL_ENVIRONMENT={os.getenv('ETL_ENVIRONMENT')}")
     
@@ -409,11 +408,110 @@ class OpenDentalSchemaAnalyzer:
         if estimated_row_count > 10_000:
             return 'incremental'
         
-        # For small tables (< 10k rows), use full table - simpler and faster for small datasets
-        return 'full_table'
+        # For small tables (< 10k rows), use small_table strategy
+        return 'small_table'
     
+    def determine_incremental_strategy(self, table_name: str, schema_info: Dict, incremental_columns: List[str]) -> str:
+        """
+        Determine the optimal incremental strategy for a table.
+        
+        Strategies:
+        - 'or_logic': Use OR logic for multiple incremental columns (captures more updates)
+        - 'and_logic': Use AND logic for multiple incremental columns (more conservative)
+        - 'single_column': Use only the primary incremental column
+        - 'none': No incremental strategy (fallback to full table)
+        
+        Args:
+            table_name: Name of the table
+            schema_info: Schema information for the table
+            incremental_columns: List of available incremental columns
+            
+        Returns:
+            str: The determined incremental strategy
+        """
+        if not incremental_columns:
+            return 'none'
+        
+        # If only one column, use single_column strategy
+        if len(incremental_columns) == 1:
+            return 'single_column'
+        
+        # For multiple columns, determine based on data quality and business logic
+        # Use OR logic for most tables to capture more incremental updates
+        # Use AND logic only for tables where we need to be very conservative
+        
+        # Tables that should use AND logic (more conservative)
+        conservative_tables = {
+            'claimproc', 'payment', 'adjustment', 'claim', 'patplan'
+        }
+        
+        if table_name.lower() in conservative_tables:
+            return 'and_logic'
+        
+        # Default to OR logic for most tables (captures more updates)
+        return 'or_logic'
+    
+    def validate_incremental_column_data_quality(self, table_name: str, column_name: str) -> bool:
+        """
+        Validate data quality for an incremental column.
+        
+        Args:
+            table_name: Name of the table
+            column_name: Name of the column to validate
+            
+        Returns:
+            bool: True if column passes data quality validation
+        """
+        try:
+            with create_connection_manager(self.source_engine) as conn_manager:
+                # Sample the column to check data quality
+                sample_query = f"""
+                    SELECT MIN({column_name}), MAX({column_name}), COUNT(*)
+                    FROM `{self.source_db}`.`{table_name}`
+                    WHERE {column_name} IS NOT NULL
+                    LIMIT 1000
+                """
+                
+                result = conn_manager.execute_with_retry(sample_query)
+                if not result:
+                    return False
+                
+                row = result.fetchone()
+                if not row:
+                    return False
+                
+                min_date = row[0]
+                max_date = row[1]
+                count = row[2]
+                
+                # Skip columns with obviously bad dates
+                if isinstance(min_date, (datetime, date)):
+                    if min_date.year < 2000 or max_date.year > 2030:
+                        logger.debug(f"Column {column_name} in {table_name} has bad date range: {min_date} to {max_date}")
+                        return False
+                
+                # Skip columns with too many NULL values (indicating poor data quality)
+                if count < 100:  # Less than 100 non-null values in sample
+                    logger.debug(f"Column {column_name} in {table_name} has poor data quality: only {count} non-null values")
+                    return False
+                
+                return True
+                
+        except Exception as e:
+            logger.warning(f"Could not validate data quality for column {column_name} in {table_name}: {str(e)}")
+            # If validation fails, return False (fail closed) to avoid using unreliable columns
+            return False
+
     def find_incremental_columns(self, table_name: str, schema_info: Dict) -> List[str]:
-        """Find timestamp and datetime columns for incremental loading (excludes simple date columns and workflow-specific columns)."""
+        """
+        Find timestamp and datetime columns for incremental loading with data quality validation.
+        
+        This method now includes:
+        - Data quality validation (date range checks)
+        - Column prioritization (limit to most reliable columns)
+        - Business logic for column selection
+        - Exclusion of workflow-specific columns
+        """
         columns = schema_info.get('columns', {})
         timestamp_columns = []
         
@@ -431,7 +529,20 @@ class OpenDentalSchemaAnalyzer:
             'DateTRequest', 'DateTAcceptDeny', 'DateTAppend', 'DischargeDate', 'DateTPracticeSigned'
         }
         
-        # Check each column for timestamp/datetime data types only
+        # Priority order for column selection (most reliable first)
+        priority_order = [
+            'DateTStamp',      # Most recent timestamp - highest priority
+            'SecDateTEdit',    # Security date edit - second priority
+            'SecDateTEntry',   # Security date entry - third priority
+            'DateTEntry',      # Date entry - fourth priority
+            'DateTimeModified', # Date time modified
+            'DateModified',    # Date modified
+            'DateTimeCreated', # Date time created
+            'DateCreated'      # Date created
+        ]
+        
+        # First pass: collect all timestamp/datetime columns
+        candidate_columns = []
         for column_name, column_info in columns.items():
             # Handle None values safely
             data_type = column_info.get('type')
@@ -441,13 +552,37 @@ class OpenDentalSchemaAnalyzer:
             data_type_str = str(data_type).lower()
             
             # Only include timestamp and datetime columns, exclude simple date columns
-            # This ensures we only get columns that can track when records were modified
             if any(dt in data_type_str for dt in ['timestamp', 'datetime']):
                 # Skip workflow-specific datetime columns
                 if column_name not in excluded_columns:
-                    timestamp_columns.append(column_name)
+                    candidate_columns.append(column_name)
         
-        return timestamp_columns
+        # Second pass: validate data quality and prioritize
+        for column_name in candidate_columns:
+            # Validate data quality
+            if self.validate_incremental_column_data_quality(table_name, column_name):
+                timestamp_columns.append(column_name)
+        
+        # Third pass: prioritize and limit to most reliable columns
+        prioritized_columns = []
+        
+        # First, add columns in priority order
+        for priority_column in priority_order:
+            if priority_column in timestamp_columns:
+                prioritized_columns.append(priority_column)
+        
+        # Then, add any remaining columns
+        for column_name in timestamp_columns:
+            if column_name not in prioritized_columns:
+                prioritized_columns.append(column_name)
+        
+        # Limit to 2-3 most reliable columns to avoid complexity
+        final_columns = prioritized_columns[:3]
+        
+        if len(final_columns) != len(timestamp_columns):
+            logger.info(f"Filtered incremental columns for {table_name}: {len(timestamp_columns)} -> {len(final_columns)} columns")
+        
+        return final_columns
     
     def select_primary_incremental_column(self, incremental_columns: List[str]) -> Optional[str]:
         """
@@ -616,6 +751,10 @@ class OpenDentalSchemaAnalyzer:
             logger.warning(f"Failed to generate schema hash: {e}")
             return "unknown"
     
+    def generate_schema_hash(self, table_name: str) -> str:
+        """Generate a hash for a single table's schema (public interface)."""
+        return self._generate_schema_hash([table_name])
+    
     def generate_complete_configuration(self, output_dir: str) -> Dict:
         """Generate complete configuration for all tables with batch processing."""
         logger.info("Generating complete configuration...")
@@ -711,6 +850,9 @@ class OpenDentalSchemaAnalyzer:
                         extraction_strategy = self.determine_extraction_strategy(table_name, schema_info, size_info)
                         incremental_columns = self.find_incremental_columns(table_name, schema_info)
                         
+                        # Determine incremental strategy based on columns and business logic
+                        incremental_strategy = self.determine_incremental_strategy(table_name, schema_info, incremental_columns)
+                        
                         # Select primary incremental column based on priority order
                         primary_incremental_column = self.select_primary_incremental_column(incremental_columns)
                         
@@ -765,6 +907,7 @@ class OpenDentalSchemaAnalyzer:
                             'estimated_size_mb': size_info.get('size_mb', 0),
                             'batch_size': batch_size,
                             'incremental_columns': incremental_columns,
+                            'incremental_strategy': incremental_strategy,
                             'primary_incremental_column': primary_incremental_column,
                             'is_modeled': is_modeled,
                             'dbt_model_types': dbt_model_types,
