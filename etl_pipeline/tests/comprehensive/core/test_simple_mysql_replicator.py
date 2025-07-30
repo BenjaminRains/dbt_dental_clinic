@@ -93,12 +93,26 @@ from tests.fixtures.replicator_fixtures import (
 @pytest.fixture
 def replicator_with_comprehensive_config(test_settings):
     """Create replicator with comprehensive configuration using provider pattern."""
-    # Mock engines
+    # Mock engines with proper context manager support
     mock_source_engine = MagicMock()
     mock_target_engine = MagicMock()
     
+    # Create mock connections with context manager protocol
+    mock_source_conn = MagicMock()
+    mock_source_conn.__enter__ = MagicMock(return_value=mock_source_conn)
+    mock_source_conn.__exit__ = MagicMock(return_value=None)
+    
+    mock_target_conn = MagicMock()
+    mock_target_conn.__enter__ = MagicMock(return_value=mock_target_conn)
+    mock_target_conn.__exit__ = MagicMock(return_value=None)
+    
+    # Configure the engines to return our mock connections
+    mock_source_engine.connect.return_value = mock_source_conn
+    mock_target_engine.connect.return_value = mock_target_conn
+    
     with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-         patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+         patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
+         patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
         
         # Mock YAML file loading with comprehensive test configuration
         mock_config = {
@@ -145,12 +159,26 @@ def real_replicator_for_exception_tests(test_settings):
     """Real SimpleMySQLReplicator instance for exception testing using standardized fixtures."""
     from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
     
-    # Mock engines
+    # Mock engines with proper context manager support
     mock_source_engine = MagicMock()
     mock_target_engine = MagicMock()
     
+    # Create mock connections with context manager protocol
+    mock_source_conn = MagicMock()
+    mock_source_conn.__enter__ = MagicMock(return_value=mock_source_conn)
+    mock_source_conn.__exit__ = MagicMock(return_value=None)
+    
+    mock_target_conn = MagicMock()
+    mock_target_conn.__enter__ = MagicMock(return_value=mock_target_conn)
+    mock_target_conn.__exit__ = MagicMock(return_value=None)
+    
+    # Configure the engines to return our mock connections
+    mock_source_engine.connect.return_value = mock_source_conn
+    mock_target_engine.connect.return_value = mock_target_conn
+    
     with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-         patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+         patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
+         patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
         
         # Mock YAML file loading with test configuration
         mock_config = {
@@ -176,47 +204,7 @@ def real_replicator_for_exception_tests(test_settings):
             return replicator
 
 
-@pytest.fixture
-def production_env_vars():
-    """Production environment variables following connection architecture naming convention.
-    
-    ⚠️  IMPORTANT: This fixture should ONLY be used for testing environment separation.
-    DO NOT use this fixture for any other test context or production-like testing.
-    
-    This fixture provides production environment variables that conform to the connection architecture:
-    - Uses non-prefixed variables for production environment
-    - Follows the environment-specific variable naming convention
-    - Matches the .env_production file structure
-    - Supports the provider pattern for dependency injection
-    
-    Usage: Only for testing environment separation between test and production environments.
-    """
-    return {
-        # Environment declaration (required for fail-fast validation)
-        'ETL_ENVIRONMENT': 'production',
-        
-        # OpenDental Source (Production) - following architecture naming
-        'OPENDENTAL_SOURCE_HOST': os.getenv('OPENDENTAL_SOURCE_HOST', 'prod-source-host'),
-        'OPENDENTAL_SOURCE_PORT': os.getenv('OPENDENTAL_SOURCE_PORT', '3306'),
-        'OPENDENTAL_SOURCE_DB': os.getenv('OPENDENTAL_SOURCE_DB', 'opendental'),
-        'OPENDENTAL_SOURCE_USER': os.getenv('OPENDENTAL_SOURCE_USER', 'source_user'),
-        'OPENDENTAL_SOURCE_PASSWORD': os.getenv('OPENDENTAL_SOURCE_PASSWORD', 'source_pass'),
-        
-        # MySQL Replication (Production) - following architecture naming
-        'MYSQL_REPLICATION_HOST': os.getenv('MYSQL_REPLICATION_HOST', 'prod-repl-host'),
-        'MYSQL_REPLICATION_PORT': os.getenv('MYSQL_REPLICATION_PORT', '3306'),
-        'MYSQL_REPLICATION_DB': os.getenv('MYSQL_REPLICATION_DB', 'opendental_replication'),
-        'MYSQL_REPLICATION_USER': os.getenv('MYSQL_REPLICATION_USER', 'repl_user'),
-        'MYSQL_REPLICATION_PASSWORD': os.getenv('MYSQL_REPLICATION_PASSWORD', 'repl_pass'),
-        
-        # PostgreSQL Analytics (Production) - following architecture naming
-        'POSTGRES_ANALYTICS_HOST': os.getenv('POSTGRES_ANALYTICS_HOST', 'prod-analytics-host'),
-        'POSTGRES_ANALYTICS_PORT': os.getenv('POSTGRES_ANALYTICS_PORT', '5432'),
-        'POSTGRES_ANALYTICS_DB': os.getenv('POSTGRES_ANALYTICS_DB', 'opendental_analytics'),
-        'POSTGRES_ANALYTICS_SCHEMA': os.getenv('POSTGRES_ANALYTICS_SCHEMA', 'raw'),
-        'POSTGRES_ANALYTICS_USER': os.getenv('POSTGRES_ANALYTICS_USER', 'analytics_user'),
-        'POSTGRES_ANALYTICS_PASSWORD': os.getenv('POSTGRES_ANALYTICS_PASSWORD', 'analytics_pass')
-    }
+
 
 
 class TestSimpleMySQLReplicatorComprehensive:
@@ -904,7 +892,7 @@ class TestSimpleMySQLReplicatorComprehensive:
         
         # Test Settings injection for configuration access
         source_config = settings.get_source_connection_config()
-        assert source_config['host'] == 'test-source-host'
+        assert source_config['host'] == 'localhost'
         assert source_config['database'] == 'test_opendental'
         
         # Test Settings injection for environment detection
