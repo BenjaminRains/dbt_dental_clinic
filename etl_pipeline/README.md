@@ -57,6 +57,24 @@ The pipeline follows a **two-phase architecture** with clear separation between 
                         └─────────────────────┘
 ```
 
+## ETL Pipeline Architecture
+
+### SimpleMySQLReplicator
+
+The replicator uses two complementary systems:
+
+#### Copy Methods (Performance-Based)
+Determine **HOW** to copy data based on table size:
+- `small`: Direct INSERT...SELECT (< 1MB)
+- `medium`: Chunked with LIMIT/OFFSET (1-100MB)  
+- `large`: Progress-tracked chunks (> 100MB)
+
+#### Extraction Strategies (Business Logic)
+Determine **WHAT** to copy based on configuration:
+- `full_table`: Complete table replacement
+- `incremental`: Copy only new/changed records
+- `incremental_chunked`: Small batches for large incremental tables
+
 ## Core Components
 
 ### **Phase 1: Management & Setup Components** (`scripts/`)
@@ -80,7 +98,7 @@ The brain of the pipeline that coordinates all operations:
 #### 2. **Core Components** (`core/`)
 Essential pipeline building blocks with **modern static configuration**:
 
-- **`simple_mysql_replicator.py`**: **SimpleMySQLReplicator** - Efficient MySQL-to-MySQL replication using static configuration (10 methods)
+- **`simple_mysql_replicator.py`**: **SimpleMySQLReplicator** - Efficient MySQL-to-MySQL replication with clear separation of copy methods and extraction strategies (10 methods)
 - **`connections.py`**: **ConnectionFactory** - Explicit environment separation and connection management (25 methods)
 - **`postgres_schema.py`**: **PostgresSchema** - Schema conversion and adaptation utilities (10 methods)
 
