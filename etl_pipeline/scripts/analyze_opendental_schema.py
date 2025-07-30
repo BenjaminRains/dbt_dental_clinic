@@ -388,6 +388,16 @@ class OpenDentalSchemaAnalyzer:
         
         return initial_importance
     
+    def _validate_extraction_strategy(self, strategy: str) -> bool:
+        """Validate that the extraction strategy is supported by SimpleMySQLReplicator."""
+        # These must match the strategies in SimpleMySQLReplicator
+        valid_strategies = ['full_table', 'incremental', 'incremental_chunked']
+        
+        if strategy not in valid_strategies:
+            logger.warning(f"Invalid extraction strategy generated: {strategy}. Using 'full_table' as fallback.")
+            return False
+        return True
+
     def determine_extraction_strategy(self, table_name: str, schema_info: Dict, size_info: Dict) -> str:
         """Determine optimal extraction strategy for a table based on size and available incremental columns."""
         estimated_row_count = size_info.get('estimated_row_count', 0)
@@ -396,20 +406,22 @@ class OpenDentalSchemaAnalyzer:
         incremental_columns = self.find_incremental_columns(table_name, schema_info)
         has_incremental_columns = len(incremental_columns) > 0
         
-        # If no incremental columns, use full table
+        # Determine strategy
         if not has_incremental_columns:
-            return 'full_table'
+            strategy = 'full_table'
+        elif estimated_row_count > 1_000_000:
+            strategy = 'incremental_chunked'  # ✅ FIXED: Consistent naming
+        elif estimated_row_count > 10_000:
+            strategy = 'incremental'
+        else:
+            strategy = 'incremental'  # ✅ FIXED: Clear business logic
         
-        # Chunked incremental for very large tables (> 1M rows)
-        if estimated_row_count > 1_000_000:
-            return 'chunked_incremental'
+        # Validate the strategy before returning
+        if not self._validate_extraction_strategy(strategy):
+            strategy = 'full_table'  # Safe fallback
+            logger.warning(f"Using fallback strategy 'full_table' for {table_name}")
         
-        # Incremental for medium to large tables (> 10k rows)
-        if estimated_row_count > 10_000:
-            return 'incremental'
-        
-        # For small tables (< 10k rows), use small_table strategy
-        return 'small_table'
+        return strategy
     
     def determine_incremental_strategy(self, table_name: str, schema_info: Dict, incremental_columns: List[str]) -> str:
         """
@@ -848,6 +860,12 @@ class OpenDentalSchemaAnalyzer:
                         # Determine table characteristics
                         importance = self.determine_table_importance(table_name, schema_info, size_info)
                         extraction_strategy = self.determine_extraction_strategy(table_name, schema_info, size_info)
+                        
+                        # Validate extraction strategy
+                        if not self._validate_extraction_strategy(extraction_strategy):
+                            extraction_strategy = 'full_table'
+                            logger.warning(f"Using fallback strategy 'full_table' for {table_name}")
+                        
                         incremental_columns = self.find_incremental_columns(table_name, schema_info)
                         
                         # Determine incremental strategy based on columns and business logic
@@ -1154,7 +1172,7 @@ DBT Modeling Status:
 Extraction Strategies:
 - Incremental: {strategy_stats.get('incremental', 0)}
 - Full Table: {strategy_stats.get('full_table', 0)}
-- Chunked Incremental: {strategy_stats.get('chunked_incremental', 0)}
+- Incremental Chunked: {strategy_stats.get('incremental_chunked', 0)}
 
 Tables with Monitoring: {monitored_tables}
 
