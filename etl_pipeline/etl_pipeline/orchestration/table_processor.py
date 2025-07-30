@@ -178,12 +178,26 @@ class TableProcessor:
             
             # 1. Extract to replication using SimpleMySQLReplicator
             logger.info(f"Extracting {table_name} to replication database")
-            if not self._extract_to_replication(table_name, force_full):
+            extraction_success, rows_extracted = self._extract_to_replication(table_name, force_full)
+            
+            if not extraction_success:
                 logger.error(f"Extraction failed for table: {table_name}")
                 return False
+            
+            # Check if any rows were extracted
+            if rows_extracted == 0 and not force_full:
+                logger.info(f"No new data extracted for {table_name}, skipping load phase")
+                processing_time = (time.time() - start_time) / 60
+                logger.info(f"Successfully completed ETL pipeline for table: {table_name} (no new data) in {processing_time:.2f} minutes")
+                return True
                 
             # 2. Load to analytics using PostgresLoader
-            logger.info(f"Loading {table_name} to analytics database")
+            # For force_full mode, always run load phase even if row count is 0 (due to potential counting bugs)
+            if force_full and rows_extracted == 0:
+                logger.info(f"Force-full mode: Loading {table_name} to analytics database (row count may be incorrect)")
+            else:
+                logger.info(f"Loading {table_name} to analytics database ({rows_extracted} rows)")
+                
             if not self._load_to_analytics(table_name, force_full):
                 logger.error(f"Load to analytics failed for table: {table_name}")
                 return False
@@ -213,12 +227,15 @@ class TableProcessor:
             logger.error(f"Unexpected error in ETL pipeline for table {table_name} after {processing_time:.2f} minutes: {str(e)}")
             return False
             
-    def _extract_to_replication(self, table_name: str, force_full: bool) -> bool:
+    def _extract_to_replication(self, table_name: str, force_full: bool) -> tuple[bool, int]:
         """
         Extract data from source to replication database using SimpleMySQLReplicator.
         
         MODERN ARCHITECTURE: Uses Settings injection for environment-agnostic operation.
         SimpleMySQLReplicator handles its own connections using Settings injection.
+        
+        Returns:
+            tuple: (success: bool, rows_extracted: int)
         """
         try:
             # Import SimpleMySQLReplicator from core module
@@ -233,20 +250,56 @@ class TableProcessor:
             
             if not success:
                 logger.error(f"Extraction failed for {table_name}")
-                return False
-                
-            logger.info(f"Successfully extracted {table_name} to replication database")
-            return True
+                return False, 0
+            
+            # Get the number of rows extracted from the replication database
+            rows_extracted = self._get_extracted_row_count(table_name)
+            
+            logger.info(f"Successfully extracted {table_name} to replication database ({rows_extracted} rows)")
+            return True, rows_extracted
             
         except DataExtractionError as e:
             logger.error(f"Data extraction failed for {table_name}: {e}")
-            return False
+            return False, 0
         except DatabaseConnectionError as e:
             logger.error(f"Database connection failed during extraction for {table_name}: {e}")
-            return False
+            return False, 0
         except Exception as e:
             logger.error(f"Unexpected error during extraction for {table_name}: {str(e)}")
-            return False
+            return False, 0
+    
+    def _get_extracted_row_count(self, table_name: str) -> int:
+        """
+        Get the number of rows that were extracted to the replication database.
+        
+        This method queries the etl_copy_status table to get the rows_copied count
+        from the most recent successful copy operation.
+        """
+        try:
+            from ..core.connections import ConnectionFactory
+            
+            # Get replication connection using the correct method
+            replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+            
+            with replication_engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT rows_copied 
+                    FROM etl_copy_status 
+                    WHERE table_name = :table_name 
+                    AND copy_status = 'success'
+                    ORDER BY last_copied DESC 
+                    LIMIT 1
+                """), {"table_name": table_name})
+                
+                row = result.fetchone()
+                if row:
+                    return row[0] or 0
+                else:
+                    return 0
+                    
+        except Exception as e:
+            logger.warning(f"Could not get extracted row count for {table_name}: {str(e)}")
+            return 0
             
     def _load_to_analytics(self, table_name: str, force_full: bool) -> bool:
         """
