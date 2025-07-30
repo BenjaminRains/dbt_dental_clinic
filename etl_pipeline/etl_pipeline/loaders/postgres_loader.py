@@ -123,6 +123,7 @@ from sqlalchemy import text, inspect
 from sqlalchemy.exc import SQLAlchemyError
 import os
 import yaml
+import time
 
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.postgres_schema import PostgresSchema
@@ -364,6 +365,7 @@ class PostgresLoader:
                     "load_status": load_status
                 })
                 conn.commit()
+                logger.info(f"📊 Tracking table updated: {self.analytics_schema}.etl_load_status for {table_name}")
                 logger.info(f"Updated load status for {table_name}: {rows_loaded} rows, {load_status}, primary_value={last_primary_value}")
                 return True
                 
@@ -371,7 +373,7 @@ class PostgresLoader:
             logger.error(f"Error updating load status for {table_name}: {str(e)}")
             return False
 
-    def bulk_insert_optimized(self, table_name: str, rows_data: List[Dict], chunk_size: int = 100000) -> bool:  # Increased from 50000 to 100000
+    def bulk_insert_optimized(self, table_name: str, rows_data: List[Dict], chunk_size: int = 25000, use_upsert: bool = True) -> bool:  # Further reduced from 50000 to 25000 to prevent timeouts
         """Optimized bulk INSERT using executemany with larger chunks."""
         try:
             if not rows_data:
@@ -387,14 +389,31 @@ class PostgresLoader:
                 columns = ', '.join([f'"{col}"' for col in chunk[0].keys()])
                 placeholders = ', '.join([f':{col}' for col in chunk[0].keys()])
                 
-                insert_sql = f"""
-                    INSERT INTO {self.analytics_schema}.{table_name} ({columns})
-                    VALUES ({placeholders})
-                """
+                if use_upsert:
+                    # Use UPSERT to handle duplicate keys
+                    insert_sql = self._build_upsert_sql(table_name, list(chunk[0].keys()))
+                    logger.info(f"Using UPSERT for {table_name} chunk {i//chunk_size + 1} with {len(chunk)} rows")
+                    logger.debug(f"UPSERT SQL: {insert_sql}")
+                else:
+                    # Use simple INSERT (for full loads where table is truncated)
+                    insert_sql = f"""
+                        INSERT INTO {self.analytics_schema}.{table_name} ({columns})
+                        VALUES ({placeholders})
+                    """
+                    logger.info(f"Using simple INSERT for {table_name} chunk {i//chunk_size + 1} with {len(chunk)} rows")
+                    logger.debug(f"INSERT SQL: {insert_sql}")
                 
                 # Use executemany for bulk operation
-                with self.analytics_engine.begin() as conn:
-                    conn.execute(text(insert_sql), chunk)
+                try:
+                    with self.analytics_engine.begin() as conn:
+                        conn.execute(text(insert_sql), chunk)
+                except Exception as e:
+                    if "duplicate key" in str(e).lower() or "unique_violation" in str(e).lower():
+                        logger.error(f"Duplicate key violation in {table_name} chunk {i//chunk_size + 1}: {str(e)}")
+                        logger.error(f"First few rows in chunk: {chunk[:3] if chunk else 'No data'}")
+                        raise
+                    else:
+                        raise
                 
                 total_inserted += len(chunk)
                 logger.debug(f"Bulk inserted {len(chunk)} rows for {table_name} (total: {total_inserted})")
@@ -406,41 +425,63 @@ class PostgresLoader:
             logger.error(f"Error in bulk insert for {table_name}: {str(e)}")
             return False
 
-    def stream_mysql_data(self, table_name: str, query: str, chunk_size: int = 100000):  # Increased from 50000 to 100000
-        """Stream data from MySQL without loading into memory."""
+    def stream_mysql_data(self, table_name: str, query: str, chunk_size: int = 25000):  # Further reduced from 50000 to 25000 to prevent timeouts
+        """Stream data from MySQL without loading into memory with connection retry logic."""
         # In test environment, return empty generator since replication_engine is None
         if self.replication_engine is None:
             logger.info(f"Skipping MySQL data streaming for {table_name} in test environment")
             return
         
-        try:
-            with self.replication_engine.connect() as conn:
-                # Use server-side cursor for streaming
-                result = conn.execution_options(stream_results=True).execute(text(query))
-                
-                while True:
-                    try:
-                        chunk = result.fetchmany(chunk_size)
-                        if not chunk:
-                            break
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                with self.replication_engine.connect() as conn:
+                    # Set connection timeout and performance settings
+                    conn.execute(text("SET SESSION net_read_timeout = 300"))  # 5 minutes
+                    conn.execute(text("SET SESSION net_write_timeout = 300"))  # 5 minutes
+                    conn.execute(text("SET SESSION wait_timeout = 600"))  # 10 minutes
+                    
+                    # Use server-side cursor for streaming
+                    result = conn.execution_options(stream_results=True).execute(text(query))
+                    
+                    chunk_count = 0
+                    while True:
+                        try:
+                            chunk = result.fetchmany(chunk_size)
+                            if not chunk:
+                                break
+                                
+                            # Convert to list of dicts
+                            column_names = list(result.keys())
+                            chunk_dicts = [self._convert_sqlalchemy_row_to_dict(row, column_names) for row in chunk]
                             
-                        # Convert to list of dicts
-                        column_names = list(result.keys())
-                        chunk_dicts = [self._convert_sqlalchemy_row_to_dict(row, column_names) for row in chunk]
-                        
-                        yield chunk_dicts
-                        
+                            chunk_count += 1
+                            logger.debug(f"Fetched chunk {chunk_count} for {table_name} with {len(chunk_dicts)} rows")
+                            
+                            yield chunk_dicts
+                            
+                        except Exception as e:
+                            logger.error(f"Error fetching chunk {chunk_count + 1} for {table_name}: {e}")
+                            raise
+                            
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"MySQL connection attempt {attempt + 1} failed for {table_name}: {e}")
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"All {max_retries} connection attempts failed for {table_name}: {e}")
+                    raise
+            finally:
+                # Ensure result is closed
+                if 'result' in locals():
+                    try:
+                        result.close()
                     except Exception as e:
-                        logger.error(f"Error fetching chunk for {table_name}: {e}")
-                        raise
-                        
-        except Exception as e:
-            logger.error(f"Error in streaming for {table_name}: {e}")
-            raise
-        finally:
-            # Ensure result is closed
-            if 'result' in locals():
-                result.close()
+                        logger.debug(f"Error closing result: {e}")
 
     def load_table_streaming(self, table_name: str, force_full: bool = False) -> bool:
         """Streaming version of load_table for memory-efficient processing."""
@@ -483,6 +524,18 @@ class PostgresLoader:
             
             # Stream and process in chunks
             total_processed = 0
+            expected_rows = None
+            
+            # For force_full mode, get expected row count to prevent over-processing
+            if force_full:
+                try:
+                    with self.replication_engine.connect() as conn:
+                        count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        expected_rows = count_result.scalar()
+                        logger.info(f"Force-full mode: Expected {expected_rows} rows for {table_name}")
+                except Exception as e:
+                    logger.warning(f"Could not get expected row count for {table_name}: {e}")
+            
             for chunk in self.stream_mysql_data(table_name, query):
                 # Convert types for entire chunk
                 converted_chunk = [
@@ -490,8 +543,14 @@ class PostgresLoader:
                     for row in chunk
                 ]
                 
-                # Bulk insert chunk
-                self.bulk_insert_optimized(table_name, converted_chunk)
+                # Safety check: Prevent over-processing in force-full mode
+                if force_full and expected_rows and total_processed >= expected_rows:
+                    logger.warning(f"Force-full mode: Stopping processing after {total_processed} rows (expected {expected_rows})")
+                    break
+                
+                # Bulk insert chunk - use UPSERT for incremental loads to handle duplicate keys
+                use_upsert = not force_full  # Use UPSERT for incremental loads, simple INSERT for full loads
+                self.bulk_insert_optimized(table_name, converted_chunk, use_upsert=use_upsert)
                 
                 total_processed += len(chunk)
                 current_memory = psutil.Process().memory_info().rss / 1024 / 1024
@@ -502,7 +561,7 @@ class PostgresLoader:
             duration = end_time - start_time
             
             logger.info(f"Streaming load completed: {total_processed} rows in {duration:.2f}s, "
-                       f"Memory: {initial_memory:.1f}MB → {final_memory:.1f}MB")
+                       f"Memory: {initial_memory:.1f}MB -> {final_memory:.1f}MB")
             
             # Update load status
             if total_processed > 0:
@@ -777,7 +836,7 @@ class PostgresLoader:
             elif estimated_size_mb > 200:
                 logger.info(f"Using chunked loading for large table {table_name} ({estimated_size_mb}MB)")
                 strategy = "chunked"
-                success = self.load_table_chunked(table_name, force_full, chunk_size=100000)  # Increased from 50000 to 100000
+                success = self.load_table_chunked(table_name, force_full, chunk_size=25000)  # Reduced from 100000 to 25000 to prevent timeouts
             elif estimated_size_mb > 50:
                 logger.info(f"Using streaming loading for medium table {table_name} ({estimated_size_mb}MB)")
                 strategy = "streaming"
@@ -937,7 +996,7 @@ class PostgresLoader:
             return False
     
     def load_table_chunked(self, table_name: str, force_full: bool = False, 
-                          chunk_size: int = 50000) -> bool:
+                          chunk_size: int = 25000) -> bool:  # Further reduced from 50000 to 25000 to prevent timeouts
         """
         Load table in chunks for memory efficiency with large datasets.
         
@@ -1360,6 +1419,7 @@ class PostgresLoader:
         # Get primary key from table configuration
         table_config = self.get_table_config(table_name)
         primary_key = table_config.get('primary_key', 'id')
+        logger.debug(f"Building UPSERT for {table_name} with primary key: {primary_key}")
         
         # Build column lists
         columns = ', '.join([f'"{col}"' for col in column_names])
@@ -1481,7 +1541,7 @@ class PostgresLoader:
                     writer.writerow(column_names)
                     
                     # Stream rows directly to CSV
-                    chunk_size = 50000
+                    chunk_size = 25000  # Reduced from 50000 to 25000 to prevent timeouts
                     total_rows = 0
                     while True:
                         chunk = result.fetchmany(chunk_size)
@@ -1551,7 +1611,7 @@ class PostgresLoader:
             
             # Calculate optimal chunk size and worker count
             cpu_count = os.cpu_count() or 4
-            chunk_size = max(100000, total_rows // (cpu_count * 2))  # Increased from 50000 to 100000
+            chunk_size = max(25000, total_rows // (cpu_count * 2))  # Reduced from 100000 to 25000 to prevent timeouts
             
             # Create chunks
             chunks = [(i * chunk_size, min((i + 1) * chunk_size, total_rows)) 
