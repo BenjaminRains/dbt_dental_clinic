@@ -37,7 +37,8 @@ from tests.fixtures.integration_fixtures import (
     test_intermediate_engine,
     test_marts_engine,
     setup_patient_table,
-    setup_etl_tracking
+    setup_etl_tracking,
+    test_settings_with_file_provider
 )
 
 # Import config fixtures for settings (using config_fixtures for Settings injection)
@@ -46,6 +47,7 @@ from tests.fixtures.config_fixtures import (
     test_tables_config,
     test_config_provider,
     production_config_provider,
+    production_env_vars,
     valid_pipeline_config,
     minimal_pipeline_config,
     invalid_pipeline_config,
@@ -288,4 +290,15 @@ from tests.fixtures.test_data_definitions import (
     get_test_data_for_table,
     STANDARD_TEST_PATIENTS,
     STANDARD_TEST_APPOINTMENTS
-) 
+)
+
+# Import analyze_opendental_schema fixtures for schema analyzer tests
+from tests.fixtures.mock_utils import mock_environment_variables
+from tests.fixtures.config_fixtures import test_settings as mock_settings_with_dict_provider
+
+# Import schema analyzer fixtures from centralized location
+from tests.fixtures.schema_analyzer_fixtures import (
+    mock_schema_data,
+    mock_size_data,
+    mock_dbt_models
+)
