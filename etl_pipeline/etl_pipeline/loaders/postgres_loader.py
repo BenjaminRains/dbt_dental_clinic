@@ -498,15 +498,16 @@ class PostgresLoader:
                 logger.error(f"No configuration found for table: {table_name}")
                 return False
             
+            # Get primary incremental column
+            primary_column = self._get_primary_incremental_column(table_config)
+            incremental_columns = table_config.get('incremental_columns', [])
+            
             # Get MySQL schema from replication database
             mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
             
             # Create or verify PostgreSQL table
             if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
                 return False
-            
-            # Get incremental columns from configuration
-            incremental_columns = table_config.get('incremental_columns', [])
             
             # Check if this is a table without incremental columns (needs full refresh)
             if not incremental_columns and not force_full:
@@ -525,6 +526,7 @@ class PostgresLoader:
             # Stream and process in chunks
             total_processed = 0
             expected_rows = None
+            all_primary_values = []  # Track primary column values for last value calculation
             
             # For force_full mode, get expected row count to prevent over-processing
             if force_full:
@@ -542,6 +544,11 @@ class PostgresLoader:
                     self.schema_adapter.convert_row_data_types(table_name, row) 
                     for row in chunk
                 ]
+                
+                # Track primary column values if available
+                if primary_column and primary_column != 'none':
+                    chunk_primary_values = [row.get(primary_column) for row in converted_chunk if row.get(primary_column) is not None]
+                    all_primary_values.extend(chunk_primary_values)
                 
                 # Safety check: Prevent over-processing in force-full mode
                 if force_full and expected_rows and total_processed >= expected_rows:
@@ -563,9 +570,14 @@ class PostgresLoader:
             logger.info(f"Streaming load completed: {total_processed} rows in {duration:.2f}s, "
                        f"Memory: {initial_memory:.1f}MB -> {final_memory:.1f}MB")
             
+            # Calculate last primary value if available
+            last_primary_value = None
+            if primary_column and primary_column != 'none' and all_primary_values:
+                last_primary_value = str(max(all_primary_values))
+            
             # Update load status
             if total_processed > 0:
-                self._update_load_status(table_name, total_processed)
+                self._update_load_status(table_name, total_processed, 'success', last_primary_value, primary_column)
             
             return True
             
@@ -641,24 +653,49 @@ class PostgresLoader:
     def _get_last_load_time_max(self, table_name: str, incremental_columns: List[str]) -> Optional[datetime]:
         """Get the maximum last load time across all incremental columns."""
         try:
-            timestamps = []
-            
+            # Get the last primary value from the tracking table
             with self.analytics_engine.connect() as conn:
-                for column in incremental_columns:
-                    # Get last load time for this specific column
-                    result = conn.execute(text(f"""
-                        SELECT last_loaded
-                        FROM {self.analytics_schema}.etl_load_status
-                        WHERE table_name = :table_name
-                        AND load_status = 'success'
-                        ORDER BY last_loaded DESC
-                        LIMIT 1
-                    """), {"table_name": table_name}).scalar()
+                result = conn.execute(text(f"""
+                    SELECT last_primary_value, primary_column_name
+                    FROM {self.analytics_schema}.etl_load_status
+                    WHERE table_name = :table_name
+                    AND load_status = 'success'
+                    AND last_primary_value IS NOT NULL
+                    ORDER BY last_loaded DESC
+                    LIMIT 1
+                """), {"table_name": table_name}).fetchone()
+                
+                if result and result[0]:
+                    last_primary_value = result[0]
+                    primary_column_name = result[1]
                     
-                    if result:
-                        timestamps.append(result)
+                    logger.info(f"DEBUG: Found last_primary_value for {table_name}: '{last_primary_value}' (column: {primary_column_name})")
+                    
+                    # Convert the primary value to datetime if it's a timestamp
+                    try:
+                        # Try to parse as datetime
+                        if isinstance(last_primary_value, str):
+                            # Handle different datetime formats
+                            for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
+                                try:
+                                    parsed_datetime = datetime.strptime(last_primary_value, fmt)
+                                    logger.info(f"DEBUG: Successfully parsed '{last_primary_value}' as datetime: {parsed_datetime}")
+                                    return parsed_datetime
+                                except ValueError:
+                                    continue
+                        
+                        # If it's already a datetime object
+                        if isinstance(last_primary_value, datetime):
+                            logger.info(f"DEBUG: Using existing datetime object: {last_primary_value}")
+                            return last_primary_value
+                            
+                    except Exception as e:
+                        logger.warning(f"Could not parse last_primary_value '{last_primary_value}' as datetime for {table_name}: {str(e)}")
+                        return None
+                else:
+                    logger.info(f"DEBUG: No last_primary_value found for {table_name} in etl_load_status table")
             
-            return max(timestamps) if timestamps else None
+            return None
             
         except Exception as e:
             logger.error(f"Error getting max last load time for {table_name}: {str(e)}")
@@ -1337,6 +1374,8 @@ class PostgresLoader:
         table_config = self.get_table_config(table_name)
         incremental_strategy = self._get_incremental_strategy(table_config) if table_config else 'or_logic'
         
+        logger.info(f"DEBUG: Building count query for {table_name} with force_full={force_full}, incremental_columns={incremental_columns}, strategy={incremental_strategy}")
+        
         # Get replication database name from settings
         replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
         replication_db = replication_config.get('database', 'opendental_replication')
@@ -1348,6 +1387,8 @@ class PostgresLoader:
         
         # Get maximum last load timestamp across all columns
         last_load = self._get_last_load_time_max(table_name, incremental_columns)
+        
+        logger.info(f"DEBUG: Last load time for {table_name}: {last_load}")
         
         if last_load and incremental_columns:
             conditions = []
@@ -1510,15 +1551,16 @@ class PostgresLoader:
                 logger.error(f"No configuration found for table: {table_name}")
                 return False
             
+            # Get primary incremental column
+            primary_column = self._get_primary_incremental_column(table_config)
+            incremental_columns = table_config.get('incremental_columns', [])
+            
             # Get MySQL schema from replication database
             mysql_schema = self.schema_adapter.get_table_schema_from_mysql(table_name)
             
             # Create or verify PostgreSQL table
             if not self.schema_adapter.ensure_table_exists(table_name, mysql_schema):
                 return False
-            
-            # Get incremental columns from configuration
-            incremental_columns = table_config.get('incremental_columns', [])
             
             # Check if this is a table without incremental columns (needs full refresh)
             if not incremental_columns and not force_full:
@@ -1543,10 +1585,27 @@ class PostgresLoader:
                     # Stream rows directly to CSV
                     chunk_size = 25000  # Reduced from 50000 to 25000 to prevent timeouts
                     total_rows = 0
+                    all_primary_values = []  # Track primary column values for last value calculation
+                    
                     while True:
                         chunk = result.fetchmany(chunk_size)
                         if not chunk:
                             break
+                        
+                        # Track primary column values if available
+                        if primary_column and primary_column != 'none':
+                            chunk_primary_values = []
+                            for row in chunk:
+                                # Find the index of the primary column
+                                try:
+                                    primary_index = column_names.index(primary_column)
+                                    if primary_index < len(row) and row[primary_index] is not None:
+                                        chunk_primary_values.append(row[primary_index])
+                                except ValueError:
+                                    # Primary column not found in result set
+                                    pass
+                            all_primary_values.extend(chunk_primary_values)
+                        
                         writer.writerows(chunk)
                         total_rows += len(chunk)
                         logger.debug(f"Wrote {len(chunk)} rows to CSV for {table_name} (total: {total_rows})")
@@ -1568,9 +1627,14 @@ class PostgresLoader:
                     
                 logger.info(f"Successfully loaded {table_name} using COPY command: {total_rows} rows")
                 
+                # Calculate last primary value if available
+                last_primary_value = None
+                if primary_column and primary_column != 'none' and all_primary_values:
+                    last_primary_value = str(max(all_primary_values))
+                
                 # Update load status
                 if total_rows > 0:
-                    self._update_load_status(table_name, total_rows)
+                    self._update_load_status(table_name, total_rows, 'success', last_primary_value, primary_column)
                 
                 return True
                 
@@ -1596,7 +1660,8 @@ class PostgresLoader:
                 logger.error(f"No configuration found for table: {table_name}")
                 return False
             
-            # Get incremental columns from configuration
+            # Get primary incremental column
+            primary_column = self._get_primary_incremental_column(table_config)
             incremental_columns = table_config.get('incremental_columns', [])
             
             # Get total row count
@@ -1632,7 +1697,24 @@ class PostgresLoader:
             success = all(results)
             if success:
                 logger.info(f"Successfully processed {table_name} in parallel: {total_rows} rows")
-                self._update_load_status(table_name, total_rows)
+                
+                # For parallel processing, we need to get the last primary value from the database
+                # since we don't track it during parallel processing
+                last_primary_value = None
+                if primary_column and primary_column != 'none':
+                    try:
+                        with self.analytics_engine.connect() as conn:
+                            result = conn.execute(text(f"""
+                                SELECT MAX({primary_column}) 
+                                FROM {self.analytics_schema}.{table_name}
+                                WHERE {primary_column} IS NOT NULL
+                            """)).scalar()
+                            if result is not None:
+                                last_primary_value = str(result)
+                    except Exception as e:
+                        logger.warning(f"Could not get last primary value for {table_name}: {e}")
+                
+                self._update_load_status(table_name, total_rows, 'success', last_primary_value, primary_column)
             
             return success
             
