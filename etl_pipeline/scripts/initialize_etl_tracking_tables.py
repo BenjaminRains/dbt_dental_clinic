@@ -7,12 +7,19 @@ to create missing tracking records in both the MySQL replication database
 and the PostgreSQL analytics database.
 
 Usage:
-    python scripts/initialize_etl_tracking_tables.py
+    python scripts/initialize_etl_tracking_tables.py [environment]
+    
+    environment: 'test' or 'production' (default: 'production')
+    
+Examples:
+    python scripts/initialize_etl_tracking_tables.py production
+    python scripts/initialize_etl_tracking_tables.py test
 """
 
 import sys
 import os
 import yaml
+import argparse
 from pathlib import Path
 from datetime import datetime
 from sqlalchemy import text
@@ -20,12 +27,34 @@ from sqlalchemy import text
 # Add the etl_pipeline directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from etl_pipeline.config import get_settings
+from etl_pipeline.config import get_settings, create_settings
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config.settings import DatabaseType, PostgresSchema
 
 logger = get_logger(__name__)
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description='Initialize ETL tracking tables')
+    parser.add_argument(
+        'environment', 
+        nargs='?', 
+        default='production',
+        choices=['test', 'production'],
+        help='Environment to initialize tracking tables for (default: production)'
+    )
+    return parser.parse_args()
+
+def get_settings_for_environment(environment):
+    """Get settings for the specified environment."""
+    if environment == 'test':
+        # For test environment, we need to set ETL_ENVIRONMENT before getting settings
+        os.environ['ETL_ENVIRONMENT'] = 'test'
+        return create_settings(environment='test')
+    else:
+        # For production, use the default get_settings()
+        return get_settings()
 
 def load_tables_config():
     """Load the tables configuration file."""
@@ -261,13 +290,12 @@ def create_mysql_tracking_records(replication_engine, tables_config):
         logger.error(f"Error creating MySQL tracking records: {e}")
         raise
 
-def create_postgresql_tracking_records(tables_with_incremental):
+def create_postgresql_tracking_records(tables_with_incremental, settings):
     """Create missing tracking records in the PostgreSQL analytics database."""
     
     analytics_engine = None
     try:
-        # Get settings and connections using ETL pipeline infrastructure
-        settings = get_settings()
+        # Get connections using the provided settings
         analytics_engine = ConnectionFactory.get_analytics_connection(settings)
         
         # Get analytics database info from settings using proper enum
@@ -358,6 +386,13 @@ def main():
     """Main function to initialize tracking tables and records."""
     logger.info("Starting tracking records initialization...")
     
+    # Parse arguments
+    args = parse_arguments()
+    environment = args.environment
+    
+    # Get settings for the specified environment
+    settings = get_settings_for_environment(environment)
+    
     # Load configuration
     config = load_tables_config()
     if not config:
@@ -371,13 +406,12 @@ def main():
     # Initialize MySQL replication tracking
     logger.info("=== Initializing MySQL Replication Tracking Records ===")
     # Get settings and connections using ETL pipeline infrastructure
-    settings = get_settings()
     replication_engine = ConnectionFactory.get_replication_connection(settings)
     mysql_success = create_mysql_tracking_records(replication_engine, config)
     
     # Initialize PostgreSQL analytics tracking
     logger.info("=== Initializing PostgreSQL Analytics Tracking Records ===")
-    postgresql_success = create_postgresql_tracking_records(tables_with_incremental)
+    postgresql_success = create_postgresql_tracking_records(tables_with_incremental, settings)
     
     # Summary
     if mysql_success and postgresql_success:
