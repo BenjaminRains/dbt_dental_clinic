@@ -345,9 +345,9 @@ class TestSimpleMySQLReplicatorComprehensive:
             - Supports performance optimization for nightly ETL operations
         """
         # Test different copy strategies based on table size
-        small_strategy = replicator_with_comprehensive_config.get_copy_strategy('claim')  # 10MB
-        medium_strategy = replicator_with_comprehensive_config.get_copy_strategy('appointment')  # 25MB
-        large_strategy = replicator_with_comprehensive_config.get_copy_strategy('procedurelog')  # 100MB
+        small_strategy = replicator_with_comprehensive_config.get_copy_method('claim')  # 10MB
+        medium_strategy = replicator_with_comprehensive_config.get_copy_method('appointment')  # 25MB
+        large_strategy = replicator_with_comprehensive_config.get_copy_method('procedurelog')  # 100MB
         
         # Validate copy strategy optimization
         assert small_strategy == 'small'
