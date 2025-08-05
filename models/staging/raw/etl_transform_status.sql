@@ -20,9 +20,7 @@ renamed as (
         transformation_status,
         
         -- Metadata columns
-        _loaded_at,
-        _created_at,
-        _updated_at
+        _transformed_at
     from source
 )
 
