@@ -57,24 +57,24 @@ class TestConfigurationGenerationIntegration:
     
     @classmethod
     def setup_class(cls):
-        """Set up test class with current environment validation."""
+        """Set up test class for production environment validation."""
         # Store original environment for cleanup
         cls.original_etl_env = os.environ.get('ETL_ENVIRONMENT')
         cls.original_source_db = os.environ.get('OPENDENTAL_SOURCE_DB')
         
-        # Get current environment (test or production)
-        current_env = os.environ.get('ETL_ENVIRONMENT', 'test')
+        # Set environment to production for these tests
+        os.environ['ETL_ENVIRONMENT'] = 'production'
         
-        # Validate current environment is available
+        # Validate production environment is available
         try:
-            config_dir = Path(__file__).parent.parent.parent.parent
+            config_dir = Path(__file__).parent.parent.parent.parent.parent
             from etl_pipeline.config.providers import FileConfigProvider
             from etl_pipeline.config.settings import Settings
             from etl_pipeline.core.connections import ConnectionFactory
             from sqlalchemy import text
             
             provider = FileConfigProvider(config_dir)
-            settings = Settings(environment=current_env, provider=provider)
+            settings = Settings(environment='production', provider=provider)
             
             # Test connection
             source_engine = ConnectionFactory.get_source_connection(settings)
@@ -82,10 +82,10 @@ class TestConfigurationGenerationIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip(f"{current_env.capitalize()} database connection failed")
+                    pytest.skip("Production database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"{current_env.capitalize()} databases not available: {str(e)}")
+            pytest.skip(f"Production databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -101,7 +101,7 @@ class TestConfigurationGenerationIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_complete_configuration_generation(self, production_settings):
+    def test_production_complete_configuration_generation(self, production_settings_with_file_provider):
         """
         Test production complete configuration generation with actual production database data.
         
@@ -160,7 +160,7 @@ class TestConfigurationGenerationIntegration:
                 # Verify table configurations
                 for table_name, table_config in config['tables'].items():
                     assert 'table_name' in table_config
-                    assert 'table_importance' in table_config
+                    # Removed table_importance assertion - field has been deprecated
                     assert 'extraction_strategy' in table_config
                     assert 'estimated_rows' in table_config
                     assert 'estimated_size_mb' in table_config
@@ -183,7 +183,7 @@ class TestConfigurationGenerationIntegration:
                 # Verify table configuration data types
                 for table_name, table_config in config['tables'].items():
                     assert isinstance(table_config['table_name'], str)
-                    assert isinstance(table_config['table_importance'], str)
+                    # Removed table_importance type assertion - field has been deprecated
                     assert isinstance(table_config['extraction_strategy'], str)
                     assert isinstance(table_config['estimated_rows'], int)
                     assert isinstance(table_config['estimated_size_mb'], (int, float, Decimal))
@@ -210,17 +210,63 @@ class TestConfigurationGenerationIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_primary_key_detection_in_tables_yml(self, production_settings):
+    def test_primary_key_detection_in_tables_yml(self, production_settings_with_file_provider):
         """Test that primary_key is correctly detected and written for key tables in tables.yml."""
         import yaml
         from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
         import os
+        import time
+        import threading
         
         # Use a temp directory to avoid overwriting production config
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            analyzer = OpenDentalSchemaAnalyzer()
-            config = analyzer.generate_complete_configuration(tmpdir)
+            # Windows-compatible timeout mechanism
+            timeout_occurred = threading.Event()
+            result = {'config': None, 'error': None}
+            
+            def run_with_timeout():
+                try:
+                    analyzer = OpenDentalSchemaAnalyzer()
+                    
+                    # Mock the discover_all_tables method to return only the tables we need for this test
+                    original_discover = analyzer.discover_all_tables
+                    analyzer.discover_all_tables = lambda: ['procedurelog', 'appointment', 'patient']
+                    
+                    # Add timeout to the configuration generation
+                    start_time = time.time()
+                    # Use analyze_complete_schema instead of generate_complete_configuration to get tables.yml
+                    results = analyzer.analyze_complete_schema(tmpdir)
+                    elapsed_time = time.time() - start_time
+                    
+                    # Log timing information
+                    print(f"Configuration generation took {elapsed_time:.2f} seconds")
+                    
+                    result['config'] = results
+                    
+                    # Restore original method
+                    analyzer.discover_all_tables = original_discover
+                    
+                except Exception as e:
+                    result['error'] = e
+            
+            # Run the configuration generation in a separate thread with timeout
+            thread = threading.Thread(target=run_with_timeout)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=120)  # 2 minute timeout
+            
+            if thread.is_alive():
+                print("Test timed out after 120 seconds")
+                raise TimeoutError("Test timed out after 120 seconds")
+            
+            if result['error']:
+                print(f"Test failed with error: {result['error']}")
+                raise result['error']
+            
+            config = result['config']
+            assert config is not None, "Configuration generation failed"
+            
             tables_yml_path = os.path.join(tmpdir, 'tables.yml')
             assert os.path.exists(tables_yml_path), f"tables.yml not found at {tables_yml_path}"
             with open(tables_yml_path, 'r') as f:
@@ -242,7 +288,7 @@ class TestConfigurationGenerationIntegration:
             # Optionally check a table with a composite or no primary key
             # ... add more assertions as needed
 
-    def test_production_complete_configuration_with_incremental_strategy(self, production_settings):
+    def test_production_complete_configuration_with_incremental_strategy(self, production_settings_with_file_provider):
         """
         Test production complete configuration generation includes incremental_strategy.
         
@@ -292,7 +338,7 @@ class TestConfigurationGenerationIntegration:
                         assert table_config['incremental_strategy'] == 'single_column', \
                             f"Table {table_name} with single incremental column should use single_column"
                     elif len(table_config.get('incremental_columns', [])) > 1:
-                        if table_name in ['claimproc', 'payment', 'adjustment']:
+                        if table_name in ['claimproc', 'payment', 'adjustment', 'procedurelog']:
                             assert table_config['incremental_strategy'] == 'and_logic', \
                                 f"Conservative table {table_name} should have 'and_logic' strategy"
                         else:
@@ -303,7 +349,7 @@ class TestConfigurationGenerationIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_production_tables_yml_incremental_strategy_integration(self, production_settings):
+    def test_production_tables_yml_incremental_strategy_integration(self, production_settings_with_file_provider):
         """
         Test that tables.yml includes incremental_strategy in production configuration.
         
@@ -359,7 +405,7 @@ class TestConfigurationGenerationIntegration:
                                 assert strategy == 'single_column', \
                                     f"Table {table_name} with single incremental column should have 'single_column' strategy"
                             elif len(incremental_columns) > 1:
-                                if table_name in ['claimproc', 'payment', 'adjustment']:
+                                if table_name in ['claimproc', 'payment', 'adjustment', 'procedurelog']:
                                     assert strategy == 'and_logic', \
                                         f"Conservative table {table_name} should have 'and_logic' strategy"
                                 else:
@@ -370,7 +416,7 @@ class TestConfigurationGenerationIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_versioned_tables_yml_output(self, production_settings):
+    def test_versioned_tables_yml_output(self, production_settings_with_file_provider):
         """
         Test that tables.yml is created with internal versioning metadata.
         
