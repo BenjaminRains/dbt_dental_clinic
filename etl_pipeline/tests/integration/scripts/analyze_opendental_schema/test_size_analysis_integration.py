@@ -53,7 +53,7 @@ class TestSizeAnalysisIntegration:
     
 
 
-    def test_production_table_size_analysis(self, production_settings):
+    def test_production_table_size_analysis(self, production_settings_with_file_provider):
         """
         Test production table size analysis with actual production database data.
         
