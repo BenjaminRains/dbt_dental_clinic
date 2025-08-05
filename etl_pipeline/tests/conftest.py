@@ -18,6 +18,8 @@ from tests.fixtures.env_fixtures import (
     reset_global_settings,
     test_env_provider,
     production_env_provider,
+    production_settings_with_file_provider,
+    load_production_environment_file,
     comprehensive_test_isolation,
     mock_cleanup,
     load_test_environment_file
@@ -150,6 +152,7 @@ from tests.fixtures.replicator_fixtures import (
     test_replication_settings,
     replicator_with_settings,
     replicator,
+    replicator_with_real_settings,
     mock_replication_config,
     mock_replication_stats,
     sample_table_schemas,
