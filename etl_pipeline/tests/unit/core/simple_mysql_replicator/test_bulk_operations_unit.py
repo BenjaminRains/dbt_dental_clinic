@@ -76,35 +76,46 @@ class TestSimpleMySQLReplicatorBulkOperations:
         mock_target_engine = MagicMock()
         
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
-            # Mock YAML file loading with test configuration
+            # Mock configuration with test data (updated to remove table_importance)
             mock_config = {
-                'tables': {
-                    'patient': {
-                        'incremental_columns': ['DateTStamp'],
-                        'batch_size': 1000,
-                        'estimated_size_mb': 50,
-                        'extraction_strategy': 'incremental',
-                        'table_importance': 'critical'
-                    },
-                    'appointment': {
-                        'incremental_columns': ['AptDateTime'],
-                        'batch_size': 500,
-                        'estimated_size_mb': 25,
-                        'extraction_strategy': 'incremental',
-                        'table_importance': 'important'
-                    },
-                    'procedurelog': {
-                        'incremental_columns': ['ProcDate'],
-                        'batch_size': 2000,
-                        'estimated_size_mb': 100,
-                        'extraction_strategy': 'full_table',
-                        'table_importance': 'important'
-                    }
+                'patient': {
+                    'incremental_columns': ['DateTStamp'],
+                    'batch_size': 1000,
+                    'estimated_size_mb': 50,
+                    'extraction_strategy': 'incremental',
+                    'performance_category': 'medium',
+                    'processing_priority': 1,
+                    'estimated_processing_time_minutes': 5,
+                    'memory_requirements_mb': 100
+                },
+                'appointment': {
+                    'incremental_columns': ['AptDateTime'],
+                    'batch_size': 500,
+                    'estimated_size_mb': 25,
+                    'extraction_strategy': 'incremental',
+                    'performance_category': 'small',
+                    'processing_priority': 2,
+                    'estimated_processing_time_minutes': 3,
+                    'memory_requirements_mb': 50
+                },
+                'procedurelog': {
+                    'incremental_columns': ['ProcDate'],
+                    'batch_size': 2000,
+                    'estimated_size_mb': 100,
+                    'extraction_strategy': 'full_table',
+                    'performance_category': 'large',
+                    'processing_priority': 3,
+                    'estimated_processing_time_minutes': 10,
+                    'memory_requirements_mb': 200
                 }
             }
-            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
+            
+            # Mock the _load_configuration method at the class level to intercept during __init__
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config):
+                # Create replicator instance
                 replicator = SimpleMySQLReplicator(settings=test_settings)
                 replicator.source_engine = mock_source_engine
                 replicator.target_engine = mock_target_engine
@@ -194,8 +205,10 @@ class TestSimpleMySQLReplicatorBulkOperations:
             table_filter = ['unknown_table', 'another_unknown']
             results = replicator.copy_all_tables(table_filter)
             
-            # Verify no tables were processed (filtered out)
-            assert len(results) == 0
+            # Verify unknown tables return False (new behavior)
+            assert len(results) == 2
+            assert results['unknown_table'] is False
+            assert results['another_unknown'] is False
             assert mock_copy.call_count == 0
 
     def test_copy_all_tables_mixed_results(self, replicator_with_bulk_config):
@@ -259,117 +272,92 @@ class TestSimpleMySQLReplicatorBulkOperations:
             # Verify copy_table was called for each table
             assert mock_copy.call_count == 3
 
-    def test_copy_tables_by_importance_critical(self, replicator_with_bulk_config):
+    def test_copy_tables_by_processing_priority_high(self, replicator_with_bulk_config):
         """
-        Test copying tables by critical importance using provider pattern.
+        Test copying tables by high processing priority using provider pattern.
         
         Validates:
-            - Importance-based filtering with provider pattern
+            - Priority-based filtering with provider pattern
             - Settings injection for database operations
             - Provider pattern configuration access
-            - Importance level filtering logic
+            - Priority level filtering logic
             
         ETL Pipeline Context:
-            - Critical table copying for dental clinic data priority
-            - Optimized for dental clinic data with importance levels
+            - High priority table copying for dental clinic data priority
+            - Optimized for dental clinic data with priority levels
             - Uses provider pattern for configuration access
         """
         replicator = replicator_with_bulk_config
         
         # Mock copy_table method to return success
         with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
-            results = replicator.copy_tables_by_importance('critical')
+            results = replicator.copy_tables_by_processing_priority(max_priority=1)
             
-            # Verify only critical tables were processed
+            # Verify only high priority tables were processed (priority 1)
             assert len(results) == 1
             assert results['patient'] is True
             
-            # Verify copy_table was called only for critical tables
+            # Verify copy_table was called only for high priority tables
             assert mock_copy.call_count == 1
             mock_copy.assert_called_once_with('patient')
 
-    def test_copy_tables_by_importance_important(self, replicator_with_bulk_config):
+    def test_copy_tables_by_processing_priority_medium(self, replicator_with_bulk_config):
         """
-        Test copying tables by important importance using provider pattern.
+        Test copying tables by medium processing priority using provider pattern.
         
         Validates:
-            - Importance-based filtering with provider pattern
+            - Priority-based filtering with provider pattern
             - Settings injection for database operations
             - Provider pattern configuration access
-            - Importance level filtering logic
+            - Priority level filtering logic
             
         ETL Pipeline Context:
-            - Important table copying for dental clinic data priority
-            - Optimized for dental clinic data with importance levels
+            - Medium priority table copying for dental clinic data priority
+            - Optimized for dental clinic data with priority levels
             - Uses provider pattern for configuration access
         """
         replicator = replicator_with_bulk_config
         
         # Mock copy_table method to return success
         with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
-            results = replicator.copy_tables_by_importance('important')
+            results = replicator.copy_tables_by_processing_priority(max_priority=2)
             
-            # Verify only important tables were processed
+            # Verify only medium priority tables were processed (priority 1-2)
             assert len(results) == 2
+            assert results['patient'] is True
+            assert results['appointment'] is True
+            
+            # Verify copy_table was called only for medium priority tables
+            assert mock_copy.call_count == 2
+            mock_copy.assert_any_call('patient')
+            mock_copy.assert_any_call('appointment')
+
+    def test_copy_tables_by_processing_priority_all(self, replicator_with_bulk_config):
+        """
+        Test copying tables by all processing priorities using provider pattern.
+        
+        Validates:
+            - Priority-based filtering with provider pattern
+            - Settings injection for database operations
+            - Provider pattern configuration access
+            - Priority level filtering logic
+            
+        ETL Pipeline Context:
+            - All priority table copying for dental clinic data priority
+            - Optimized for dental clinic data with priority levels
+            - Uses provider pattern for configuration access
+        """
+        replicator = replicator_with_bulk_config
+        
+        # Mock copy_table method to return success
+        with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
+            results = replicator.copy_tables_by_processing_priority(max_priority=10)
+            
+            # Verify all tables were processed (priority 1-3)
+            assert len(results) == 3
+            assert results['patient'] is True
             assert results['appointment'] is True
             assert results['procedurelog'] is True
-            
-            # Verify copy_table was called only for important tables
-            assert mock_copy.call_count == 2
-            mock_copy.assert_any_call('appointment')
-            mock_copy.assert_any_call('procedurelog')
-
-    def test_copy_tables_by_importance_standard(self, replicator_with_bulk_config):
-        """
-        Test copying tables by standard importance using provider pattern.
-        
-        Validates:
-            - Importance-based filtering with provider pattern
-            - Settings injection for database operations
-            - Provider pattern configuration access
-            - Importance level filtering logic
-            
-        ETL Pipeline Context:
-            - Standard table copying for dental clinic data priority
-            - Optimized for dental clinic data with importance levels
-            - Uses provider pattern for configuration access
-        """
-        replicator = replicator_with_bulk_config
-        
-        # Mock copy_table method to return success
-        with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
-            results = replicator.copy_tables_by_importance('standard')
-            
-            # Verify only standard tables were processed
-            assert len(results) == 0
-            assert mock_copy.call_count == 0
-
-    def test_copy_tables_by_importance_unknown_level(self, replicator_with_bulk_config):
-        """
-        Test copying tables by unknown importance level using provider pattern.
-        
-        Validates:
-            - Unknown importance level handling with provider pattern
-            - Settings injection for database operations
-            - Provider pattern configuration access
-            - Empty result handling
-            
-        ETL Pipeline Context:
-            - Unknown importance level handling for dental clinic ETL reliability
-            - Optimized for dental clinic data with configuration validation
-            - Uses provider pattern for configuration access
-        """
-        replicator = replicator_with_bulk_config
-        
-        # Mock copy_table method to return success
-        with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
-            results = replicator.copy_tables_by_importance('unknown_level')
-            
-            # The actual implementation finds 0 tables with unknown importance,
-            # then calls copy_all_tables() which copies all tables
-            # This is the expected behavior based on the implementation
-            assert len(results) == 3  # All tables should be copied when no tables match importance
-            assert all(results.values())  # All should succeed
             
             # Verify copy_table was called for all tables
             assert mock_copy.call_count == 3
@@ -377,9 +365,121 @@ class TestSimpleMySQLReplicatorBulkOperations:
             for table in expected_tables:
                 mock_copy.assert_any_call(table)
 
-    def test_copy_tables_by_importance_mixed_results(self, replicator_with_bulk_config):
+    def test_copy_tables_by_performance_category_large(self, replicator_with_bulk_config):
         """
-        Test copying tables by importance with mixed results using provider pattern.
+        Test copying tables by large performance category using provider pattern.
+        
+        Validates:
+            - Performance category filtering with provider pattern
+            - Settings injection for database operations
+            - Provider pattern configuration access
+            - Category filtering logic
+            
+        ETL Pipeline Context:
+            - Large table copying for dental clinic data priority
+            - Optimized for dental clinic data with performance categories
+            - Uses provider pattern for configuration access
+        """
+        replicator = replicator_with_bulk_config
+        
+        # Mock copy_table method to return success
+        with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
+            results = replicator.copy_tables_by_performance_category('large')
+            
+            # Verify only large tables were processed
+            assert len(results) == 1
+            assert results['procedurelog'] is True
+            
+            # Verify copy_table was called only for large tables
+            assert mock_copy.call_count == 1
+            mock_copy.assert_called_once_with('procedurelog')
+
+    def test_copy_tables_by_performance_category_small(self, replicator_with_bulk_config):
+        """
+        Test copying tables by small performance category using provider pattern.
+        
+        Validates:
+            - Performance category filtering with provider pattern
+            - Settings injection for database operations
+            - Provider pattern configuration access
+            - Category filtering logic
+            
+        ETL Pipeline Context:
+            - Small table copying for dental clinic data priority
+            - Optimized for dental clinic data with performance categories
+            - Uses provider pattern for configuration access
+        """
+        replicator = replicator_with_bulk_config
+        
+        # Mock copy_table method to return success
+        with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
+            results = replicator.copy_tables_by_performance_category('small')
+            
+            # Verify only small tables were processed
+            assert len(results) == 1
+            assert results['appointment'] is True
+            
+            # Verify copy_table was called only for small tables
+            assert mock_copy.call_count == 1
+            mock_copy.assert_called_once_with('appointment')
+
+    def test_copy_tables_by_performance_category_medium(self, replicator_with_bulk_config):
+        """
+        Test copying tables by medium performance category using provider pattern.
+        
+        Validates:
+            - Performance category filtering with provider pattern
+            - Settings injection for database operations
+            - Provider pattern configuration access
+            - Category filtering logic
+            
+        ETL Pipeline Context:
+            - Medium table copying for dental clinic data priority
+            - Optimized for dental clinic data with performance categories
+            - Uses provider pattern for configuration access
+        """
+        replicator = replicator_with_bulk_config
+        
+        # Mock copy_table method to return success
+        with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
+            results = replicator.copy_tables_by_performance_category('medium')
+            
+            # Verify only medium tables were processed
+            assert len(results) == 1
+            assert results['patient'] is True
+            
+            # Verify copy_table was called only for medium tables
+            assert mock_copy.call_count == 1
+            mock_copy.assert_called_once_with('patient')
+
+    def test_copy_tables_by_performance_category_invalid(self, replicator_with_bulk_config):
+        """
+        Test copying tables by invalid performance category using provider pattern.
+        
+        Validates:
+            - Invalid category handling with provider pattern
+            - Settings injection for database operations
+            - Provider pattern configuration access
+            - Error handling for invalid categories
+            
+        ETL Pipeline Context:
+            - Invalid category handling for dental clinic ETL reliability
+            - Optimized for dental clinic data with configuration validation
+            - Uses provider pattern for configuration access
+        """
+        replicator = replicator_with_bulk_config
+        
+        # Mock copy_table method to return success
+        with patch.object(replicator, 'copy_table', return_value=True) as mock_copy:
+            results = replicator.copy_tables_by_performance_category('invalid_category')
+            
+            # Verify no tables were processed for invalid category
+            assert len(results) == 0
+            assert mock_copy.call_count == 0
+
+    def test_copy_tables_by_performance_category_mixed_results(self, replicator_with_bulk_config):
+        """
+        Test copying tables by performance category with mixed results using provider pattern.
         
         Validates:
             - Mixed result handling with provider pattern
@@ -396,22 +496,21 @@ class TestSimpleMySQLReplicatorBulkOperations:
         
         # Mock copy_table method to return mixed results
         def mock_copy_table(table_name):
-            return table_name == 'appointment'  # Only appointment succeeds
+            return table_name == 'patient'  # Only patient succeeds
         
         with patch.object(replicator, 'copy_table', side_effect=mock_copy_table) as mock_copy:
-            results = replicator.copy_tables_by_importance('important')
+            results = replicator.copy_tables_by_performance_category('medium')
             
             # Verify mixed results
-            assert len(results) == 2
-            assert results['appointment'] is True
-            assert results['procedurelog'] is False
+            assert len(results) == 1
+            assert results['patient'] is True
             
-            # Verify copy_table was called for each important table
-            assert mock_copy.call_count == 2
+            # Verify copy_table was called for the medium table
+            assert mock_copy.call_count == 1
 
-    def test_copy_tables_by_importance_all_failures(self, replicator_with_bulk_config):
+    def test_copy_tables_by_performance_category_all_failures(self, replicator_with_bulk_config):
         """
-        Test copying tables by importance with all failures using provider pattern.
+        Test copying tables by performance category with all failures using provider pattern.
         
         Validates:
             - All failure handling with provider pattern
@@ -428,11 +527,11 @@ class TestSimpleMySQLReplicatorBulkOperations:
         
         # Mock copy_table method to return failure for all tables
         with patch.object(replicator, 'copy_table', return_value=False) as mock_copy:
-            results = replicator.copy_tables_by_importance('important')
+            results = replicator.copy_tables_by_performance_category('large')
             
             # Verify all failures
-            assert len(results) == 2
+            assert len(results) == 1
             assert not any(results.values())  # All failed
             
-            # Verify copy_table was called for each important table
-            assert mock_copy.call_count == 2 
+            # Verify copy_table was called for the large table
+            assert mock_copy.call_count == 1 
