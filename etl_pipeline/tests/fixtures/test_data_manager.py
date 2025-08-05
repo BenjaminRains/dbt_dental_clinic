@@ -284,15 +284,27 @@ class IntegrationTestDataManager:
                 filtered_patient = {k: v for k, v in patient.items() if k in table_columns}
                 
                 # Convert integer boolean values to PostgreSQL boolean for specific fields
-                boolean_fields = ['PatStatus', 'Gender', 'Position', 'Guarantor', 'Premed', 
+                # Note: Some fields like 'AskToArriveEarly' are integer in PostgreSQL, not boolean
+                boolean_fields = ['PatStatus', 'Gender', 'Position', 'Premed', 
                                 'PlannedIsDone', 'PreferConfirmMethod', 'PreferContactMethod', 
                                 'PreferRecallMethod', 'TxtMsgOk', 'HasSuperBilling', 
-                                'HasSignedTil', 'ShortCodeOptIn', 'AskToArriveEarly', 
-                                'PreferContactConfidential', 'SuperFamily']
+                                'HasSignedTil', 'ShortCodeOptIn', 'PreferContactConfidential', 
+                                'CanadianEligibilityCode']
+                
+                # Fields that should remain as integers in PostgreSQL
+                integer_fields = ['AskToArriveEarly', 'SuperFamily']
+                
+                # Note: Guarantor is bigint in PostgreSQL, not boolean
+                # So we don't convert it to boolean
                 
                 for field in boolean_fields:
                     if field in filtered_patient and isinstance(filtered_patient[field], int):
                         filtered_patient[field] = bool(filtered_patient[field])
+                
+                # Ensure integer fields remain as integers
+                for field in integer_fields:
+                    if field in filtered_patient and isinstance(filtered_patient[field], bool):
+                        filtered_patient[field] = int(filtered_patient[field])
                 
                 columns = ', '.join(f'"{col}"' for col in filtered_patient.keys())
                 values = ', '.join(f':{col}' for col in filtered_patient.keys())
