@@ -50,6 +50,9 @@ from tests.fixtures.config_fixtures import temp_tables_config_dir
 
 logger = logging.getLogger(__name__)
 
+# Known test tables that exist in the test database
+KNOWN_TEST_TABLES = ['patient', 'appointment', 'procedurelog']
+
 @pytest.mark.integration
 @pytest.mark.order(2)  # After configuration tests, before data loading tests
 @pytest.mark.mysql
@@ -59,7 +62,7 @@ logger = logging.getLogger(__name__)
 class TestSimpleMySQLReplicatorDataIntegrityIntegration:
     """Integration tests for SimpleMySQLReplicator data integrity with real database connections."""
 
-    def test_data_integrity_validation(self, test_settings_with_file_provider):
+    def test_data_integrity_validation(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test data integrity between source and replication databases.
         
@@ -76,6 +79,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Instead of copying real data (which can hang),
@@ -126,7 +135,7 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_schema_validation(self, test_settings_with_file_provider):
+    def test_schema_validation(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test schema validation between source and target databases.
         
@@ -143,6 +152,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test schema validation logic
@@ -191,7 +206,7 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_row_count_validation(self, test_settings_with_file_provider):
+    def test_row_count_validation(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test row count validation between source and target databases.
         
@@ -208,6 +223,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test row count validation logic
@@ -254,7 +275,7 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_data_type_preservation(self, test_settings_with_file_provider):
+    def test_data_type_preservation(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test data type preservation during replication.
         
@@ -271,6 +292,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test data type preservation logic
@@ -322,7 +349,7 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_incremental_column_handling(self, test_settings_with_file_provider):
+    def test_incremental_column_handling(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test incremental column handling and validation.
         
@@ -339,6 +366,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test incremental column handling logic
@@ -392,7 +425,7 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_data_consistency_validation(self, test_settings_with_file_provider):
+    def test_data_consistency_validation(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test data consistency validation between source and target.
         
@@ -409,6 +442,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test data consistency validation logic
@@ -452,7 +491,7 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_constraint_validation(self, test_settings_with_file_provider):
+    def test_constraint_validation(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test constraint validation in target database.
         
@@ -469,6 +508,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test constraint validation logic
@@ -510,7 +555,7 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_data_quality_metrics(self, test_settings_with_file_provider):
+    def test_data_quality_metrics(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test data quality metrics collection and validation.
         
@@ -527,6 +572,12 @@ class TestSimpleMySQLReplicatorDataIntegrityIntegration:
             - Optimized for dental clinic data quality
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test data quality metrics logic
