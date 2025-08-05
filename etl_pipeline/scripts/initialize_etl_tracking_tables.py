@@ -170,9 +170,7 @@ def create_postgresql_tracking_tables(analytics_engine, analytics_schema):
                 primary_column_name VARCHAR(255) NULL,
                 rows_loaded INTEGER DEFAULT 0,
                 load_status VARCHAR(50) DEFAULT 'pending',
-                _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
             conn.execute(text(create_load_status_sql))
@@ -187,9 +185,7 @@ def create_postgresql_tracking_tables(analytics_engine, analytics_schema):
                 primary_column_name VARCHAR(255) NULL,
                 rows_transformed INTEGER DEFAULT 0,
                 transform_status VARCHAR(50) DEFAULT 'pending',
-                _transformed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                _updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                _transformed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
             conn.execute(text(create_transform_status_sql))
@@ -341,10 +337,10 @@ def create_postgresql_tracking_records(tables_with_incremental, settings):
                     conn.execute(text(f"""
                         INSERT INTO {analytics_schema}.etl_load_status (
                             table_name, last_loaded, last_primary_value, primary_column_name,
-                            rows_loaded, load_status, _loaded_at, _created_at, _updated_at
+                            rows_loaded, load_status, _loaded_at
                         ) VALUES (
                             :table_name, '1970-01-01 00:00:01', NULL, NULL,
-                            0, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                            0, 'pending', CURRENT_TIMESTAMP
                         )
                     """), {"table_name": table_name})
                     
@@ -363,13 +359,13 @@ def create_postgresql_tracking_records(tables_with_incremental, settings):
         with analytics_engine.connect() as conn:
             for table_name in missing_tables[:5]:  # Show first 5 for verification
                 result = conn.execute(text(f"""
-                    SELECT table_name, last_loaded, rows_loaded, load_status, _created_at
+                    SELECT table_name, last_loaded, rows_loaded, load_status, _loaded_at
                     FROM {analytics_schema}.etl_load_status 
                     WHERE table_name = :table_name
                 """), {"table_name": table_name}).fetchone()
                 
                 if result:
-                    logger.info(f"  {result.table_name}: {result.load_status} status, {result.rows_loaded} rows, created {result._created_at}")
+                    logger.info(f"  {result.table_name}: {result.load_status} status, {result.rows_loaded} rows, loaded {result._loaded_at}")
         
         return True
         
