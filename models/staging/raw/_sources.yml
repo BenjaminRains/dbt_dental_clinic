@@ -19,11 +19,7 @@ sources:
           - name: extraction_status
             description: "Current status of extraction"
           - name: _loaded_at
-            description: "When the record was loaded into PostgreSQL by ETL"
-          - name: _created_at
-            description: "When the record was created"
-          - name: _updated_at
-            description: "When the record was last updated"
+            description: "When the ETL pipeline processed this tracking record"
 
       - name: etl_transform_status
         description: "Tracks the status of ETL transform operations for each table"
@@ -38,9 +34,5 @@ sources:
             description: "Number of rows transformed in last run"
           - name: transformation_status
             description: "Current status of transformation"
-          - name: _loaded_at
-            description: "When the record was loaded into PostgreSQL by ETL"
-          - name: _created_at
-            description: "When the record was created"
-          - name: _updated_at
-            description: "When the record was last updated" 
+          - name: _transformed_at
+            description: "When the dbt pipeline processed this tracking record" 
