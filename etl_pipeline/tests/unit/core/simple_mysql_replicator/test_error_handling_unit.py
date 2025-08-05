@@ -75,25 +75,47 @@ class TestSimpleMySQLReplicatorErrorHandling:
         mock_source_engine = MagicMock()
         mock_target_engine = MagicMock()
         
+        # Mock connection context managers
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Set up the connection context manager mocks
+        mock_source_engine.connect.return_value.__enter__.return_value = mock_source_conn
+        mock_source_engine.connect.return_value.__exit__.return_value = None
+        mock_target_engine.connect.return_value.__enter__.return_value = mock_target_conn
+        mock_target_engine.connect.return_value.__exit__.return_value = None
+        
+        # Mock connection managers
+        mock_source_manager = MagicMock()
+        mock_target_manager = MagicMock()
+        
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
+             patch('etl_pipeline.core.simple_mysql_replicator.create_connection_manager') as mock_create_conn_manager:
             
-            # Mock YAML file loading with test configuration
+            # Configure the create_connection_manager mock to return our mock managers
+            mock_create_conn_manager.side_effect = lambda engine, **kwargs: mock_source_manager if engine == mock_source_engine else mock_target_manager
+            
+            # Mock configuration with test data
             mock_config = {
-                'tables': {
-                    'patient': {
-                        'incremental_columns': ['DateTStamp'],
-                        'batch_size': 1000,
-                        'estimated_size_mb': 50,
-                        'extraction_strategy': 'incremental',
-                        'table_importance': 'critical'
-                    }
+                'patient': {
+                    'incremental_columns': ['DateTStamp'],
+                    'batch_size': 1000,
+                    'estimated_size_mb': 50,
+                    'extraction_strategy': 'incremental'
                 }
             }
-            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
+            
+            # Mock the _load_configuration method at the class level to intercept during __init__
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config), \
+                 patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True), \
+                 patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._create_connection_managers', return_value=(mock_source_manager, mock_target_manager)):
+                
+                # Create replicator instance
                 replicator = SimpleMySQLReplicator(settings=test_settings)
                 replicator.source_engine = mock_source_engine
                 replicator.target_engine = mock_target_engine
+                
                 return replicator
 
     def test_copy_table_exception_handling(self, replicator_with_error_config):
@@ -161,13 +183,20 @@ class TestSimpleMySQLReplicatorErrorHandling:
         """
         replicator = replicator_with_error_config
         
-        # Mock database connection to raise exception
-        replicator.target_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        # Configure the mock target manager to raise exception
+        # The fixture already sets up create_connection_manager to return mock_target_manager
+        # We need to configure the mock manager that's already created
+        mock_target_manager = MagicMock()
+        mock_target_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
+        mock_target_manager.__enter__ = MagicMock(return_value=mock_target_manager)
+        mock_target_manager.__exit__ = MagicMock(return_value=None)
         
-        result = replicator._get_last_processed_value('patient', 'DateTStamp')
-        
-        # Verify None return due to exception
-        assert result is None
+        # Patch create_connection_manager to return our configured mock
+        with patch('etl_pipeline.core.simple_mysql_replicator.create_connection_manager', return_value=mock_target_manager):
+            result = replicator._get_last_processed_value('patient', 'DateTStamp')
+            
+            # Verify None return due to exception
+            assert result is None
 
     def test_get_new_records_count_exception_handling(self, replicator_with_error_config):
         """
@@ -186,13 +215,20 @@ class TestSimpleMySQLReplicatorErrorHandling:
         """
         replicator = replicator_with_error_config
         
-        # Mock database connection to raise exception
-        replicator.source_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        # Configure the mock source manager to raise exception
+        # The fixture already sets up create_connection_manager to return mock_source_manager
+        # We need to configure the mock manager that's already created
+        mock_source_manager = MagicMock()
+        mock_source_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
+        mock_source_manager.__enter__ = MagicMock(return_value=mock_source_manager)
+        mock_source_manager.__exit__ = MagicMock(return_value=None)
         
-        result = replicator._get_new_records_count('patient', 'DateTStamp', None)
-        
-        # Verify zero return due to exception
-        assert result == 0
+        # Patch create_connection_manager to return our configured mock
+        with patch('etl_pipeline.core.simple_mysql_replicator.create_connection_manager', return_value=mock_source_manager):
+            result = replicator._get_new_records_count('patient', 'DateTStamp', None)
+            
+            # Verify zero return due to exception
+            assert result == 0
 
     def test_copy_new_records_exception_handling(self, replicator_with_error_config):
         """
@@ -211,13 +247,26 @@ class TestSimpleMySQLReplicatorErrorHandling:
         """
         replicator = replicator_with_error_config
         
-        # Mock database connection to raise exception
-        replicator.source_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        # Mock the connection managers to raise exception
+        mock_source_manager = MagicMock()
+        mock_target_manager = MagicMock()
         
-        result = replicator._copy_new_records('patient', 'DateTStamp', '2024-01-01 10:00:00', 1000)
+        # Configure source manager to raise exception
+        mock_source_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
+        mock_source_manager.__enter__ = MagicMock(return_value=mock_source_manager)
+        mock_source_manager.__exit__ = MagicMock(return_value=None)
         
-        # Verify False return due to exception
-        assert result == (False, 0)
+        # Configure target manager with context manager support
+        mock_target_manager.__enter__ = MagicMock(return_value=mock_target_manager)
+        mock_target_manager.__exit__ = MagicMock(return_value=None)
+        
+        with patch.object(replicator, '_create_connection_managers') as mock_create_managers:
+            mock_create_managers.return_value = (mock_source_manager, mock_target_manager)
+            
+            result = replicator._copy_new_records('patient', 'DateTStamp', '2024-01-01 10:00:00', 1000)
+            
+            # Verify False return due to exception
+            assert result == (False, 0)
 
     def test_bulk_operations_exception_handling(self, replicator_with_error_config):
         """
@@ -301,8 +350,13 @@ class TestSimpleMySQLReplicatorErrorHandling:
         """
         replicator = replicator_with_error_config
         
-        # Mock database connection to raise exception
-        replicator.target_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        # Mock the target engine connection to raise exception
+        # This method uses self.target_engine.connect() directly
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = DatabaseConnectionError("Database error")
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=None)
+        replicator.target_engine.connect.return_value = mock_conn
         
         result = replicator._get_last_processed_value_max('patient', ['DateTStamp'])
         
@@ -326,8 +380,13 @@ class TestSimpleMySQLReplicatorErrorHandling:
         """
         replicator = replicator_with_error_config
         
-        # Mock database connection to raise exception
-        replicator.source_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        # Mock the source engine connection to raise exception
+        # This method uses self.source_engine.connect() directly
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = DatabaseConnectionError("Database error")
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=None)
+        replicator.source_engine.connect.return_value = mock_conn
         
         result = replicator._get_new_records_count_max('patient', ['DateTStamp'], None)
         
@@ -351,10 +410,23 @@ class TestSimpleMySQLReplicatorErrorHandling:
         """
         replicator = replicator_with_error_config
         
-        # Mock database connection to raise exception
-        replicator.source_engine.connect.return_value.__enter__.side_effect = DatabaseConnectionError("Database error")
+        # Mock the connection managers to raise exception
+        mock_source_manager = MagicMock()
+        mock_target_manager = MagicMock()
         
-        result = replicator._copy_new_records_max('patient', ['DateTStamp'], '2024-01-01 10:00:00', 1000)
+        # Configure source manager to raise exception
+        mock_source_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
+        mock_source_manager.__enter__ = MagicMock(return_value=mock_source_manager)
+        mock_source_manager.__exit__ = MagicMock(return_value=None)
         
-        # Verify False return due to exception
-        assert result == (False, 0) 
+        # Configure target manager with context manager support
+        mock_target_manager.__enter__ = MagicMock(return_value=mock_target_manager)
+        mock_target_manager.__exit__ = MagicMock(return_value=None)
+        
+        with patch.object(replicator, '_create_connection_managers') as mock_create_managers:
+            mock_create_managers.return_value = (mock_source_manager, mock_target_manager)
+            
+            result = replicator._copy_new_records_max('patient', ['DateTStamp'], '2024-01-01 10:00:00', 1000)
+            
+            # Verify False return due to exception
+            assert result == (False, 0) 
