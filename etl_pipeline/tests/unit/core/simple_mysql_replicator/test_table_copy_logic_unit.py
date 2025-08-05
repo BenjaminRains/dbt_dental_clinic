@@ -31,6 +31,7 @@ import os
 import yaml
 from typing import Dict, Any
 from datetime import datetime
+from sqlalchemy import text
 
 # Import ETL pipeline components
 from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
@@ -77,39 +78,53 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         mock_target_engine = MagicMock()
         
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
-            # Mock YAML file loading with test configuration
+            # Mock configuration with test data - include all required fields
             mock_config = {
-                'tables': {
-                    'patient': {
-                        'incremental_columns': ['DateTStamp'],
-                        'batch_size': 1000,
-                        'estimated_size_mb': 50,
-                        'extraction_strategy': 'incremental',
-                        'table_importance': 'critical'
-                    },
-                    'appointment': {
-                        'incremental_columns': ['AptDateTime'],
-                        'batch_size': 500,
-                        'estimated_size_mb': 25,
-                        'extraction_strategy': 'incremental',
-                        'table_importance': 'important'
-                    },
-                    'procedurelog': {
-                        'incremental_columns': ['ProcDate'],
-                        'batch_size': 2000,
-                        'estimated_size_mb': 100,
-                        'extraction_strategy': 'full_table',
-                        'table_importance': 'important'
-                    }
+                'patient': {
+                    'incremental_columns': ['DateTStamp'],
+                    'batch_size': 1000,
+                    'estimated_size_mb': 50,
+                    'extraction_strategy': 'incremental',
+                    'performance_category': 'medium',
+                    'processing_priority': 5,
+                    'estimated_processing_time_minutes': 0.1,
+                    'memory_requirements_mb': 10
+                },
+                'appointment': {
+                    'incremental_columns': ['AptDateTime'],
+                    'batch_size': 500,
+                    'estimated_size_mb': 25,
+                    'extraction_strategy': 'incremental',
+                    'performance_category': 'small',
+                    'processing_priority': 3,
+                    'estimated_processing_time_minutes': 0.05,
+                    'memory_requirements_mb': 5
+                },
+                'procedurelog': {
+                    'incremental_columns': ['ProcDate'],
+                    'batch_size': 2000,
+                    'estimated_size_mb': 100,
+                    'extraction_strategy': 'full_table',
+                    'performance_category': 'large',
+                    'processing_priority': 7,
+                    'estimated_processing_time_minutes': 0.5,
+                    'memory_requirements_mb': 50
                 }
             }
-            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
+            
+            # Mock the _load_configuration method at the class level to intercept during __init__
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config):
+                # Create replicator instance
                 replicator = SimpleMySQLReplicator(settings=test_settings)
                 replicator.source_engine = mock_source_engine
                 replicator.target_engine = mock_target_engine
-                return replicator
+                
+                # Mock the tracking table validation to return True for unit tests
+                with patch.object(replicator, '_validate_tracking_tables_exist', return_value=True):
+                    return replicator
 
     def test_copy_table_incremental_success(self, replicator_with_mock_engines):
         """
@@ -128,8 +143,9 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         """
         replicator = replicator_with_mock_engines
         
-        # Mock the incremental copy method
-        with patch.object(replicator, '_copy_incremental_table', return_value=(True, 100)) as mock_copy:
+        # Mock the performance optimizer methods to avoid MagicMock comparison issues
+        with patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch.object(replicator, '_copy_incremental_table', return_value=(True, 100)) as mock_copy:
             # Mock time for timing calculation with proper side_effect
             mock_time = MagicMock()
             mock_time.side_effect = [1000.0, 1002.5]
@@ -158,8 +174,9 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         """
         replicator = replicator_with_mock_engines
         
-        # Mock the incremental copy method to fail
-        with patch.object(replicator, '_copy_incremental_table', return_value=(False, 0)) as mock_copy:
+        # Mock the performance optimizer methods to avoid MagicMock comparison issues
+        with patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch.object(replicator, '_copy_incremental_table', return_value=(False, 0)) as mock_copy:
             # Mock time for timing calculation with proper side_effect
             mock_time = MagicMock()
             mock_time.side_effect = [1000.0, 1002.5]
@@ -240,8 +257,11 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         """
         replicator = replicator_with_mock_engines
         
-        # Mock the full table copy method
-        with patch.object(replicator, '_copy_full_table', return_value=(True, 1000)) as mock_copy:
+        # Mock the _get_last_copy_time method to avoid MagicMock comparison issues
+        # Mock the _recreate_table_structure method to avoid MagicMock string conversion issues
+        with patch.object(replicator, '_get_last_copy_time', return_value=None), \
+             patch.object(replicator, '_recreate_table_structure', return_value=True), \
+             patch.object(replicator, '_copy_full_table', return_value=(True, 1000)) as mock_copy:
             result = replicator.copy_table('procedurelog')
             
             # Verify success
@@ -270,11 +290,20 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
             'extraction_strategy': 'incremental_chunked',
             'incremental_columns': ['DateTStamp'],
             'batch_size': 1000,
-            'estimated_size_mb': 200
+            'estimated_size_mb': 200,
+            'performance_category': 'large',
+            'processing_priority': 8,
+            'estimated_processing_time_minutes': 1.0,
+            'memory_requirements_mb': 100
         }
         
-        # Mock the chunked incremental copy method
-        with patch.object(replicator, '_copy_chunked_incremental_table', return_value=(True, 500)) as mock_copy:
+        # Mock the performance optimizer to return False for should_use_full_refresh
+        # Mock the _get_last_copy_time method to avoid MagicMock comparison issues
+        # Mock the _recreate_table_structure method to avoid MagicMock string conversion issues
+        with patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch.object(replicator, '_get_last_copy_time', return_value=None), \
+             patch.object(replicator, '_recreate_table_structure', return_value=True), \
+             patch.object(replicator, '_copy_chunked_incremental_table', return_value=(True, 500)) as mock_copy:
             result = replicator.copy_table('large_chunked_table')
             
             # Verify success
@@ -326,8 +355,9 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         # Modify config to have no incremental columns
         replicator.table_configs['patient']['incremental_columns'] = []
         
-        # Mock the incremental copy method to return failure
-        with patch.object(replicator, '_copy_incremental_table', return_value=(False, 0)) as mock_copy:
+        # Mock the performance optimizer methods to avoid MagicMock comparison issues
+        with patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch.object(replicator, '_copy_incremental_table', return_value=(False, 0)) as mock_copy:
             result = replicator.copy_table('patient')
             
             # Verify failure due to no incremental columns
@@ -354,8 +384,9 @@ class TestSimpleMySQLReplicatorTableCopyLogic:
         # Modify config to have multiple incremental columns
         replicator.table_configs['patient']['incremental_columns'] = ['DateTStamp', 'DateModified', 'DateCreated']
         
-        # Mock the incremental copy method
-        with patch.object(replicator, '_copy_incremental_table', return_value=(True, 200)) as mock_copy:
+        # Mock the performance optimizer methods to avoid MagicMock comparison issues
+        with patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch.object(replicator, '_copy_incremental_table', return_value=(True, 200)) as mock_copy:
             result = replicator.copy_table('patient')
             
             # Verify success
@@ -374,21 +405,22 @@ class TestIncrementalLogicMethods:
         mock_target_engine = MagicMock()
         
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine):
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
-            # Mock YAML file loading with test configuration
+            # Mock configuration with test data
             mock_config = {
-                'tables': {
-                    'patient': {
-                        'incremental_columns': ['DateTStamp', 'DateModified', 'DateCreated'],
-                        'batch_size': 1000,
-                        'estimated_size_mb': 50,
-                        'extraction_strategy': 'incremental',
-                        'table_importance': 'critical'
-                    }
+                'patient': {
+                    'incremental_columns': ['DateTStamp', 'DateModified', 'DateCreated'],
+                    'batch_size': 1000,
+                    'estimated_size_mb': 50,
+                    'extraction_strategy': 'incremental'
                 }
             }
-            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
+            
+            # Mock the _load_configuration method at the class level to intercept during __init__
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config):
+                # Create replicator instance
                 replicator = SimpleMySQLReplicator(settings=test_settings)
                 replicator.source_engine = mock_source_engine
                 replicator.target_engine = mock_target_engine
@@ -619,20 +651,44 @@ class TestIncrementalLogicMethods:
         
         Validates:
             - Full table copy when no last processed value
-            - Delegation to _copy_full_table method
+            - Database query execution for complete table copy
             - Return value handling for complete copy
         """
         replicator = replicator_with_mock_engines
         
-        # Mock _copy_full_table method
-        with patch.object(replicator, '_copy_full_table', return_value=(True, 1500)) as mock_copy:
+        # Mock database connections and results
+        mock_source_conn = MagicMock()
+        mock_target_conn = MagicMock()
+        
+        # Mock source query result - return empty list to stop the loop after first batch
+        mock_source_result = MagicMock()
+        mock_source_result.fetchall.return_value = []  # Empty result to stop the loop
+        mock_source_result.keys.return_value = ['id', 'name', 'DateTStamp']
+        mock_source_conn.execute.return_value = mock_source_result
+        
+        # Mock the context manager pattern for both connections
+        mock_source_conn.__enter__.return_value = mock_source_conn
+        mock_source_conn.__exit__.return_value = None
+        mock_target_conn.__enter__.return_value = mock_target_conn
+        mock_target_conn.__exit__.return_value = None
+        
+        # Mock the engines to return the connections
+        replicator.source_engine.connect.return_value = mock_source_conn
+        replicator.target_engine.connect.return_value = mock_target_conn
+        
+        # Mock the _build_mysql_upsert_sql method
+        with patch.object(replicator, '_build_mysql_upsert_sql', return_value="INSERT INTO patient ..."):
             result = replicator._copy_new_records_max('patient', ['DateTStamp'], None, 1000)
             
-            # Verify result
-            assert result == (True, 1500)
+            # Verify result (should return True, 0 since no rows were copied)
+            assert result == (True, 0)
             
-            # Verify _copy_full_table was called
-            mock_copy.assert_called_once_with('patient', {})
+            # Verify source query was executed correctly
+            mock_source_conn.execute.assert_called_once()
+            call_args = mock_source_conn.execute.call_args[0][0]
+            assert 'SELECT *' in str(call_args)
+            assert 'FROM `patient`' in str(call_args)  # Note the backticks around table name
+            assert 'LIMIT 1000' in str(call_args)
 
     def test_copy_new_records_max_with_last_processed(self, replicator_with_mock_engines):
         """
@@ -682,7 +738,7 @@ class TestIncrementalLogicMethods:
             mock_source_conn.execute.assert_called()
             call_args = mock_source_conn.execute.call_args[0][0]
             assert 'SELECT *' in str(call_args)
-            assert 'FROM patient' in str(call_args)
+            assert 'FROM `patient`' in str(call_args)  # Note the backticks around table name
             assert 'WHERE' in str(call_args)
             # Should have OR logic for multiple columns
             assert 'DateTStamp > :last_processed' in str(call_args)
@@ -724,11 +780,12 @@ class TestIncrementalLogicMethods:
         """
         replicator = replicator_with_mock_engines
         
-        # Mock database connections and results that would cause infinite loop
+        # Mock database connections
         mock_source_conn = MagicMock()
         mock_target_conn = MagicMock()
         
-        # Mock source query result that always returns data (causing infinite loop)
+        # Mock source query result that returns data for a limited number of iterations
+        # This simulates the scenario that would trigger the safety limit
         mock_source_result = MagicMock()
         mock_source_result.fetchall.return_value = [(1, 'John', datetime(2024, 1, 16, 10, 30, 0))]
         mock_source_result.keys.return_value = ['id', 'name', 'DateTStamp']
@@ -747,12 +804,13 @@ class TestIncrementalLogicMethods:
         # Mock the _build_mysql_upsert_sql method
         with patch.object(replicator, '_build_mysql_upsert_sql', return_value="INSERT INTO patient ..."):
             with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
+                # Use a very large batch size to trigger the safety limit quickly
+                # The safety limit is offset > 1000000, so with batch_size=1000000, 
+                # it will hit the limit after just 1 iteration
                 last_processed = datetime(2024, 1, 15, 10, 30, 0)
-                result = replicator._copy_new_records_max('patient', ['DateTStamp'], last_processed, 1000)
+                result = replicator._copy_new_records_max('patient', ['DateTStamp'], last_processed, 1000000)
                 
                 # Verify result (should stop due to safety limit)
-                # The safety limit is based on offset > 1000000, but total_rows_copied will be much less
-                # Each batch copies 1 row, so it will copy about 1000 rows before hitting the safety limit
                 assert result[0] == True  # Success
                 assert result[1] > 0  # Some rows were copied
                 assert result[1] <= 1000000  # Should not exceed safety limit
