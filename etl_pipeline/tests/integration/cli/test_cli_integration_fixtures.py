@@ -106,7 +106,7 @@ def verify_test_environment_config(verbose=True, skip_on_failure=False):
         os.environ['ETL_ENVIRONMENT'] = 'test'
         
         # Create Settings with FileConfigProvider to test real environment loading
-        config_dir = Path(__file__).parent.parent.parent.parent  # etl_pipeline directory
+        config_dir = Path(__file__).parent.parent.parent.parent.parent  # etl_pipeline directory
         provider = FileConfigProvider(config_dir, 'test')
         settings = Settings(environment='test', provider=provider)
         
