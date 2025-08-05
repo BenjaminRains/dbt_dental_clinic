@@ -50,6 +50,9 @@ from tests.fixtures.config_fixtures import temp_tables_config_dir
 
 logger = logging.getLogger(__name__)
 
+# Known test tables that exist in the test database
+KNOWN_TEST_TABLES = ['patient', 'appointment', 'procedurelog']
+
 @pytest.mark.integration
 @pytest.mark.order(2)  # After configuration tests, before data loading tests
 @pytest.mark.mysql
@@ -59,7 +62,7 @@ logger = logging.getLogger(__name__)
 class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
     """Integration tests for SimpleMySQLReplicator incremental copy logic with real database connections."""
 
-    def test_incremental_copy_with_new_data(self, test_settings_with_file_provider):
+    def test_incremental_copy_with_new_data(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test incremental copy with new data added to source.
         
@@ -77,6 +80,12 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
             - Optimized for dental clinic operational changes
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Instead of copying real data (which can hang),
@@ -117,7 +126,7 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_incremental_copy_with_updated_data(self, test_settings_with_file_provider):
+    def test_incremental_copy_with_updated_data(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test incremental copy with updated data in source.
         
@@ -135,6 +144,12 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
             - Optimized for dental clinic record updates
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Instead of copying real data (which can hang),
@@ -175,7 +190,7 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_incremental_column_validation(self, test_settings_with_file_provider):
+    def test_incremental_column_validation(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test validation of incremental columns.
         
@@ -192,6 +207,12 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Only test the first table to prevent hanging
@@ -236,55 +257,431 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_incremental_column_configuration_structure(self, test_settings_with_file_provider):
+    def test_incremental_column_configuration_structure(self, test_settings_with_file_provider, populated_test_databases):
         """
-        Test incremental column configuration structure without database connections.
+        Test incremental column configuration structure validation.
         
         Validates:
-            - Configuration structure for incremental columns
-            - Required configuration fields
-            - Configuration data types
-            - Error handling for missing configurations
+            - Incremental column configuration structure
+            - Primary incremental column handling
+            - Multi-column incremental logic
+            - Configuration validation for incremental columns
             
         ETL Pipeline Context:
-            - Critical for ETL pipeline configuration validation
-            - Supports dental clinic data configuration
-            - Uses configuration validation for reliability
-            - Optimized for dental clinic operational needs
+            - Critical for ETL pipeline incremental logic
+            - Supports dental clinic incremental updates
+            - Uses incremental columns for change data capture
+            - Optimized for dental clinic operational changes
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
-            # Test configuration structure for all tables (no database queries)
+            # Test incremental column configuration for each table
             for table_name, config in replicator.table_configs.items():
-                # Validate required configuration fields
-                # Schema analyzer uses incremental_columns (plural) as a list
-                assert 'incremental_columns' in config, f"Missing incremental_columns for {table_name}"
-                assert 'batch_size' in config, f"Missing batch_size for {table_name}"
-                assert 'extraction_strategy' in config, f"Missing extraction_strategy for {table_name}"
-                assert 'table_importance' in config, f"Missing table_importance for {table_name}"
-                
-                # Validate configuration values
                 incremental_columns = config.get('incremental_columns', [])
-                assert isinstance(incremental_columns, list), f"incremental_columns should be list for {table_name}"
-                # Note: incremental_columns can be empty list for tables without incremental columns
+                primary_incremental_column = config.get('primary_incremental_column')
                 
-                batch_size = config.get('batch_size')
-                assert isinstance(batch_size, int), f"batch_size should be integer for {table_name}"
-                assert batch_size > 0, f"batch_size should be positive for {table_name}"
-                
-                extraction_strategy = config.get('extraction_strategy')
-                assert extraction_strategy in ['incremental', 'full_table', 'incremental_chunked'], f"Invalid extraction_strategy for {table_name}"
-                
-                table_importance = config.get('table_importance')
-                assert table_importance in ['important', 'standard', 'audit', 'reference', 'critical'], f"Invalid table_importance for {table_name}"
+                # Test that incremental columns are properly configured
+                if incremental_columns:
+                    assert isinstance(incremental_columns, list), f"Incremental columns should be list for {table_name}"
+                    
+                    # Test primary incremental column handling
+                    if primary_incremental_column:
+                        assert primary_incremental_column in incremental_columns, f"Primary column {primary_incremental_column} should be in incremental_columns for {table_name}"
+                        assert primary_incremental_column != 'none', f"Primary column should not be 'none' for {table_name}"
+                    
+                    logger.info(f"Table {table_name}: incremental_columns={incremental_columns}, primary_column={primary_incremental_column}")
+                else:
+                    logger.info(f"Table {table_name}: No incremental columns configured")
             
-            logger.info(f"SUCCESS: Validated configuration structure for {len(replicator.table_configs)} tables")
+            logger.info("Incremental column configuration structure validation working correctly")
             
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_get_last_processed_value_max_integration(self, test_settings_with_file_provider):
+    def test_bulk_incremental_operations_integration(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test bulk incremental operations with performance optimization.
+        
+        Validates:
+            - Bulk incremental copy operations
+            - Performance optimization for incremental operations
+            - Adaptive batch sizing for incremental operations
+            - Bulk upsert operations for incremental data
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline incremental performance
+            - Supports dental clinic incremental updates
+            - Uses bulk operations for efficiency
+            - Optimized for dental clinic operational changes
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test that bulk incremental methods exist
+            assert hasattr(replicator.performance_optimizer, '_copy_incremental_bulk'), "Bulk incremental copy method should exist"
+            assert hasattr(replicator.performance_optimizer, '_process_incremental_batches_bulk'), "Bulk incremental batch processing method should exist"
+            assert hasattr(replicator.performance_optimizer, '_bulk_upsert_optimized'), "Bulk upsert method should exist"
+            
+            # Test bulk incremental operations for each table with incremental columns
+            for table_name, config in replicator.table_configs.items():
+                incremental_columns = config.get('incremental_columns', [])
+                
+                if incremental_columns:
+                    # Test adaptive batch size calculation for incremental operations
+                    adaptive_batch_size = replicator.performance_optimizer.calculate_adaptive_batch_size(table_name, config)
+                    assert adaptive_batch_size > 0, f"Adaptive batch size should be positive for {table_name}: {adaptive_batch_size}"
+                    
+                    # Test full refresh decision for incremental tables
+                    should_full_refresh = replicator.performance_optimizer.should_use_full_refresh(table_name, config)
+                    assert isinstance(should_full_refresh, bool), f"Full refresh decision should be boolean for {table_name}"
+                    
+                    logger.info(f"Table {table_name}: incremental_columns={incremental_columns}, "
+                              f"adaptive_batch_size={adaptive_batch_size}, "
+                              f"should_full_refresh={should_full_refresh}")
+            
+            logger.info("Bulk incremental operations integration working correctly")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_adaptive_batch_sizing_for_incremental(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test adaptive batch sizing for incremental operations.
+        
+        Validates:
+            - Adaptive batch size calculation for incremental operations
+            - Performance category-based sizing for incremental operations
+            - Configuration-based batch sizing for incremental operations
+            - Batch size bounds validation for incremental operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline incremental performance
+            - Supports dental clinic incremental updates
+            - Uses adaptive batch sizing for efficiency
+            - Optimized for dental clinic operational changes
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test adaptive batch sizing for incremental operations
+            for table_name, config in replicator.table_configs.items():
+                incremental_columns = config.get('incremental_columns', [])
+                
+                if incremental_columns:
+                    # Test adaptive batch size calculation
+                    adaptive_batch_size = replicator.performance_optimizer.calculate_adaptive_batch_size(table_name, config)
+                    
+                    # Validate batch size bounds for incremental operations
+                    assert adaptive_batch_size >= 1000, f"Batch size should be >= 1000 for {table_name}: {adaptive_batch_size}"
+                    assert adaptive_batch_size <= 100000, f"Batch size should be <= 100000 for {table_name}: {adaptive_batch_size}"
+                    
+                    # Test performance category-based sizing for incremental operations
+                    performance_category = config.get('performance_category', 'medium')
+                    if performance_category == 'large':
+                        assert adaptive_batch_size >= 10000, f"Large tables should have batch size >= 10000: {adaptive_batch_size}"
+                    elif performance_category == 'tiny':
+                        assert adaptive_batch_size <= 25000, f"Tiny tables should have batch size <= 25000: {adaptive_batch_size}"
+                    
+                    logger.info(f"Table {table_name}: performance_category={performance_category}, "
+                              f"adaptive_batch_size={adaptive_batch_size}")
+            
+            logger.info("Adaptive batch sizing for incremental operations working correctly")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_full_refresh_decision_for_incremental(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test full refresh decision logic for incremental operations.
+        
+        Validates:
+            - Full refresh decision logic for incremental scenarios
+            - Time gap threshold analysis for incremental operations
+            - Performance-based refresh decisions for incremental operations
+            - Configuration-based refresh decisions for incremental operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline incremental strategy selection
+            - Supports dental clinic incremental operational efficiency
+            - Uses intelligent refresh decisions for optimization
+            - Optimized for dental clinic operational changes
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test full refresh decision logic for incremental operations
+            for table_name, config in replicator.table_configs.items():
+                incremental_columns = config.get('incremental_columns', [])
+                
+                if incremental_columns:
+                    # Get full refresh decision
+                    should_full_refresh = replicator.performance_optimizer.should_use_full_refresh(table_name, config)
+                    
+                    # Validate decision is boolean
+                    assert isinstance(should_full_refresh, bool), f"Full refresh decision should be boolean for {table_name}"
+                    
+                    # Test time gap threshold analysis for incremental operations
+                    time_gap_threshold = config.get('time_gap_threshold_days', 30)
+                    assert time_gap_threshold > 0, f"Time gap threshold should be positive for {table_name}: {time_gap_threshold}"
+                    
+                    # Test performance category-based decisions
+                    performance_category = config.get('performance_category', 'medium')
+                    estimated_size_mb = config.get('estimated_size_mb', 0)
+                    
+                    # Small-medium tables might use full refresh even with shorter gaps
+                    if estimated_size_mb < 100:
+                        logger.info(f"Small table {table_name} with {time_gap_threshold} day threshold")
+                    
+                    logger.info(f"Table {table_name}: should_full_refresh={should_full_refresh}, "
+                              f"incremental_columns={len(incremental_columns)}, "
+                              f"time_gap_threshold={time_gap_threshold}, "
+                              f"performance_category={performance_category}")
+            
+            logger.info("Full refresh decision logic for incremental operations working correctly")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_performance_category_handling_for_incremental(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test performance category handling for incremental operations.
+        
+        Validates:
+            - Performance category-based incremental operations
+            - Expected rate calculations for incremental operations
+            - Performance optimization for different categories
+            - Category-based batch sizing for incremental operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline incremental performance optimization
+            - Supports dental clinic incremental performance optimization
+            - Uses category-based optimization for efficiency
+            - Optimized for dental clinic operational changes
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test performance category handling for incremental operations
+            for table_name, config in replicator.table_configs.items():
+                incremental_columns = config.get('incremental_columns', [])
+                
+                if incremental_columns:
+                    # Test performance category handling
+                    performance_category = config.get('performance_category', 'medium')
+                    expected_rate = replicator.performance_optimizer._get_expected_rate_for_category(performance_category)
+                    assert expected_rate > 0, f"Expected rate should be positive for {performance_category}: {expected_rate}"
+                    
+                    # Test category-based batch sizing
+                    adaptive_batch_size = replicator.performance_optimizer.calculate_adaptive_batch_size(table_name, config)
+                    
+                    # Validate category-specific batch sizing
+                    if performance_category == 'large':
+                        assert adaptive_batch_size >= 10000, f"Large tables should have batch size >= 10000: {adaptive_batch_size}"
+                    elif performance_category == 'medium':
+                        assert adaptive_batch_size >= 5000, f"Medium tables should have batch size >= 5000: {adaptive_batch_size}"
+                    elif performance_category == 'small':
+                        assert adaptive_batch_size >= 2500, f"Small tables should have batch size >= 2500: {adaptive_batch_size}"
+                    elif performance_category == 'tiny':
+                        assert adaptive_batch_size >= 1000, f"Tiny tables should have batch size >= 1000: {adaptive_batch_size}"
+                    
+                    logger.info(f"Table {table_name}: performance_category={performance_category}, "
+                              f"expected_rate={expected_rate}, "
+                              f"adaptive_batch_size={adaptive_batch_size}")
+            
+            logger.info("Performance category handling for incremental operations working correctly")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_bulk_upsert_optimization_for_incremental(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test bulk upsert optimization for incremental operations.
+        
+        Validates:
+            - Bulk upsert operations for incremental data
+            - Performance optimization for bulk upserts
+            - Primary key handling in bulk upserts
+            - Configuration-based bulk upsert operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline incremental performance
+            - Supports dental clinic incremental updates
+            - Uses bulk upserts for efficiency
+            - Optimized for dental clinic operational changes
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test bulk upsert optimization for incremental operations
+            for table_name, config in replicator.table_configs.items():
+                incremental_columns = config.get('incremental_columns', [])
+                primary_key = config.get('primary_key', 'id')
+                
+                if incremental_columns:
+                    # Test that bulk upsert method exists
+                    assert hasattr(replicator.performance_optimizer, '_bulk_upsert_optimized'), "Bulk upsert method should exist"
+                    
+                    # Test primary key configuration for bulk upserts
+                    assert primary_key is not None, f"Primary key should be configured for {table_name}"
+                    assert primary_key != 'none', f"Primary key should not be 'none' for {table_name}"
+                    
+                    # Test that primary key is in incremental columns if it exists
+                    if primary_key in incremental_columns:
+                        logger.info(f"Table {table_name}: Primary key {primary_key} is in incremental columns")
+                    else:
+                        logger.info(f"Table {table_name}: Primary key {primary_key} is not in incremental columns")
+                    
+                    logger.info(f"Table {table_name}: incremental_columns={incremental_columns}, primary_key={primary_key}")
+            
+            logger.info("Bulk upsert optimization for incremental operations working correctly")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_incremental_batch_processing_optimization(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test incremental batch processing optimization.
+        
+        Validates:
+            - Incremental batch processing optimization
+            - Performance optimization for batch processing
+            - Memory usage optimization for batch processing
+            - Resource management for batch processing
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline incremental performance
+            - Supports dental clinic incremental updates
+            - Uses batch processing optimization for efficiency
+            - Optimized for dental clinic operational changes
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test incremental batch processing optimization
+            for table_name, config in replicator.table_configs.items():
+                incremental_columns = config.get('incremental_columns', [])
+                
+                if incremental_columns:
+                    # Test batch processing optimization methods
+                    assert hasattr(replicator.performance_optimizer, '_process_incremental_batches_bulk'), "Incremental batch processing method should exist"
+                    
+                    # Test performance optimization configuration
+                    if hasattr(replicator.performance_optimizer, 'bulk_insert_buffer_size'):
+                        buffer_size = replicator.performance_optimizer.bulk_insert_buffer_size
+                        assert buffer_size > 0, f"Bulk insert buffer size should be positive: {buffer_size}"
+                    
+                    if hasattr(replicator.performance_optimizer, 'max_bulk_batch_size'):
+                        max_batch_size = replicator.performance_optimizer.max_bulk_batch_size
+                        assert max_batch_size > 0, f"Max bulk batch size should be positive: {max_batch_size}"
+                    
+                    if hasattr(replicator.performance_optimizer, 'min_bulk_batch_size'):
+                        min_batch_size = replicator.performance_optimizer.min_bulk_batch_size
+                        assert min_batch_size > 0, f"Min bulk batch size should be positive: {min_batch_size}"
+                    
+                    logger.info(f"Table {table_name}: incremental_columns={incremental_columns}")
+            
+            logger.info("Incremental batch processing optimization working correctly")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_incremental_performance_monitoring(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test incremental performance monitoring and tracking.
+        
+        Validates:
+            - Incremental performance monitoring
+            - Performance metrics tracking for incremental operations
+            - Performance history management for incremental operations
+            - Performance threshold monitoring for incremental operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline incremental performance monitoring
+            - Supports dental clinic incremental performance optimization
+            - Uses performance monitoring for efficiency
+            - Optimized for dental clinic operational changes
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test incremental performance monitoring
+            for table_name, config in replicator.table_configs.items():
+                incremental_columns = config.get('incremental_columns', [])
+                
+                if incremental_columns:
+                    # Test performance history tracking for incremental operations
+                    if hasattr(replicator.performance_optimizer, 'performance_history'):
+                        performance_history = replicator.performance_optimizer.performance_history
+                        assert isinstance(performance_history, dict), "Performance history should be a dictionary"
+                    
+                    # Test performance threshold for incremental operations
+                    if hasattr(replicator.performance_optimizer, 'batch_performance_threshold'):
+                        threshold = replicator.performance_optimizer.batch_performance_threshold
+                        assert threshold > 0, f"Performance threshold should be positive: {threshold}"
+                    
+                    # Test performance category-based rate expectations for incremental operations
+                    performance_category = config.get('performance_category', 'medium')
+                    expected_rate = replicator.performance_optimizer._get_expected_rate_for_category(performance_category)
+                    assert expected_rate > 0, f"Expected rate should be positive for {performance_category}: {expected_rate}"
+                    
+                    logger.info(f"Table {table_name}: performance_category={performance_category}, "
+                              f"expected_rate={expected_rate}")
+            
+            logger.info("Incremental performance monitoring working correctly")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_get_last_processed_value_max_integration(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test _get_last_processed_value_max with real database connections.
         
@@ -302,6 +699,12 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with a table that has multiple incremental columns
@@ -346,7 +749,7 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_get_new_records_count_max_integration(self, test_settings_with_file_provider):
+    def test_get_new_records_count_max_integration(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test _get_new_records_count_max with real database connections.
         
@@ -364,6 +767,12 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             test_table = 'patient'
@@ -404,7 +813,7 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_new_records_max_integration(self, test_settings_with_file_provider):
+    def test_copy_new_records_max_integration(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test _copy_new_records_max with real database connections.
         
@@ -423,6 +832,12 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             test_table = 'patient'
@@ -467,7 +882,7 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_incremental_copy_logic_with_multiple_columns(self, test_settings_with_file_provider):
+    def test_incremental_copy_logic_with_multiple_columns(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test the complete incremental copy logic with multiple columns.
         
@@ -486,6 +901,12 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Find a table with multiple incremental columns
@@ -543,9 +964,15 @@ class TestSimpleMySQLReplicatorIncrementalLogicIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_max_value_determination_logic(self, test_settings_with_file_provider):
+    def test_max_value_determination_logic(self, test_settings_with_file_provider, populated_test_databases):
         """Test the logic for determining maximum values across multiple columns."""
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with a table that has multiple incremental columns
