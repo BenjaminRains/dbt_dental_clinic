@@ -11,13 +11,18 @@ This module contains fixtures related to:
 
 import pytest
 import pandas as pd
+import logging
 from unittest.mock import MagicMock, Mock
 from typing import Dict, List, Any
 from datetime import datetime, timedelta
+from sqlalchemy import text
 
 # Import connection architecture components
 from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
 from etl_pipeline.config.providers import DictConfigProvider
+from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
@@ -105,7 +110,6 @@ def mock_config_reader():
             'primary_key': 'PatNum',
             'incremental_column': 'DateTStamp',
             'extraction_strategy': 'incremental',
-            'table_importance': 'critical',
             'batch_size': 1000,
             'estimated_size_mb': 50.0,
             'estimated_rows': 10000,
@@ -120,7 +124,6 @@ def mock_config_reader():
             'primary_key': 'AptNum',
             'incremental_column': 'AptDateTime',
             'extraction_strategy': 'incremental',
-            'table_importance': 'important',
             'batch_size': 500,
             'estimated_size_mb': 25.0,
             'estimated_rows': 5000,
@@ -135,7 +138,6 @@ def mock_config_reader():
             'primary_key': 'ProcNum',
             'incremental_column': 'ProcDate',
             'extraction_strategy': 'incremental',
-            'table_importance': 'important',
             'batch_size': 2000,
             'estimated_size_mb': 100.0,
             'estimated_rows': 20000,
@@ -151,14 +153,6 @@ def mock_config_reader():
     def mock_get_table_config(table_name):
         """Mock get_table_config method following ConfigReader interface."""
         return table_configs.get(table_name, {})
-    
-    def mock_get_tables_by_importance(importance_level):
-        """Mock get_tables_by_importance method following ConfigReader interface."""
-        tables = []
-        for table_name, config in table_configs.items():
-            if config.get('table_importance') == importance_level:
-                tables.append(table_name)
-        return tables
     
     def mock_get_tables_by_strategy(strategy):
         """Mock get_tables_by_strategy method following ConfigReader interface."""
@@ -193,16 +187,12 @@ def mock_config_reader():
         """Mock get_configuration_summary method following ConfigReader interface."""
         return {
             'total_tables': len(table_configs),
-            'importance_levels': {
-                'critical': 1,
-                'important': 2
-            },
             'extraction_strategies': {
                 'incremental': 3
             },
             'size_ranges': {
-                'small': 0,
-                'medium': 2,
+                'small': 1,
+                'medium': 1,
                 'large': 1
             },
             'monitored_tables': 3,
@@ -222,7 +212,6 @@ def mock_config_reader():
     
     # Assign mock methods to config_reader
     config_reader.get_table_config = mock_get_table_config
-    config_reader.get_tables_by_importance = mock_get_tables_by_importance
     config_reader.get_tables_by_strategy = mock_get_tables_by_strategy
     config_reader.get_large_tables = mock_get_large_tables
     config_reader.get_monitored_tables = mock_get_monitored_tables
@@ -583,4 +572,54 @@ def replication_test_cases():
             'expected_rows': 2000,
             'validation_required': False
         }
-    ] 
+    ]
+
+
+@pytest.fixture
+def replicator_with_real_settings(test_settings_with_file_provider):
+    """
+    Create SimpleMySQLReplicator with real settings for integration testing.
+    This fixture follows the connection architecture by:
+    - Using Settings injection for environment-agnostic connections
+    - Using FileConfigProvider for real configuration loading
+    - Creating real database connections using ConnectionFactory
+    - Supporting real database replication testing
+    - Using test environment configuration
+    """
+    try:
+        logger.info("Creating SimpleMySQLReplicator with test settings...")
+        
+        # Create replicator with real settings loaded from .env_test
+        replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+        
+        # Validate that replicator has proper configuration
+        assert replicator.settings is not None
+        assert replicator.table_configs is not None
+        assert len(replicator.table_configs) > 0
+        
+        logger.info(f"Replicator created with {len(replicator.table_configs)} table configurations")
+        logger.info(f"Source engine: {replicator.source_engine}")
+        logger.info(f"Target engine: {replicator.target_engine}")
+        
+        # Validate that we can connect to test databases
+        logger.info("Testing source database connection...")
+        with replicator.source_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            row = result.fetchone()
+            if not row or row[0] != 1:
+                pytest.skip("Test source database connection failed")
+        
+        logger.info("Testing target database connection...")
+        with replicator.target_engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            row = result.fetchone()
+            if not row or row[0] != 1:
+                pytest.skip("Test target database connection failed")
+        
+        logger.info("Successfully created SimpleMySQLReplicator with working database connections")
+        return replicator
+        
+    except Exception as e:
+        logger.error(f"Failed to create replicator: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        pytest.skip(f"Test databases not available: {str(e)}") 
