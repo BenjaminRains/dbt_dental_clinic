@@ -64,7 +64,7 @@ class TestIncrementalStrategyIntegration:
         
         # Validate production environment is available
         try:
-            config_dir = Path(__file__).parent.parent.parent.parent
+            config_dir = Path(__file__).parent.parent.parent.parent.parent
             from etl_pipeline.config.providers import FileConfigProvider
             from etl_pipeline.config.settings import Settings
             from etl_pipeline.core.connections import ConnectionFactory
