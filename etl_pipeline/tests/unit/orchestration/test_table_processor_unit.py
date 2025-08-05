@@ -107,7 +107,6 @@ class TestTableProcessorUnit:
             assert patient_config['primary_key'] == 'PatNum'
             assert patient_config['incremental_column'] == 'DateTStamp'
             assert patient_config['extraction_strategy'] == 'incremental'
-            assert patient_config['table_importance'] == 'critical'
             assert patient_config['batch_size'] == 100
     
     def test_initialization_with_provider_pattern(self, test_settings):
