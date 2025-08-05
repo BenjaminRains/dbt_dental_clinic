@@ -226,30 +226,46 @@ def _execute_dry_run(orchestrator: PipelineOrchestrator, config: Optional[str],
         
         # Get table information from settings
         settings = orchestrator.settings
-        importance_levels = ['important', 'audit', 'standard']
-        
         total_tables = 0
-        for importance in importance_levels:
-            try:
-                tables_in_level = settings.get_tables_by_importance(importance)
-                if tables_in_level:
-                    total_tables += len(tables_in_level)
-                    click.echo(f"  • {importance.upper()}: {len(tables_in_level)} tables")
-                    
-                    # Show first few tables in each level
-                    if len(tables_in_level) <= 5:
-                        for table in tables_in_level:
-                            click.echo(f"    - {table}")
-                    else:
-                        for table in tables_in_level[:3]:
-                            click.echo(f"    - {table}")
-                        click.echo(f"    ... and {len(tables_in_level) - 3} more")
-            except ConfigurationError as e:
-                click.echo(f"  • {importance.upper()}: Configuration Error - {e}")
-            except EnvironmentError as e:
-                click.echo(f"  • {importance.upper()}: Environment Error - {e}")
-            except Exception as e:
-                click.echo(f"  • {importance.upper()}: Error getting tables - {str(e)}")
+        # Show table distribution by size instead of importance
+        large_tables = []
+        medium_tables = []
+        small_tables = []
+        
+        for table_name in settings.list_tables():
+            config = settings.get_table_config(table_name)
+            estimated_rows = config.get('estimated_rows', 0)
+            
+            if estimated_rows > 1000000:  # >1M rows
+                large_tables.append(table_name)
+            elif estimated_rows > 10000:  # 10K-1M rows
+                medium_tables.append(table_name)
+            else:  # <10K rows
+                small_tables.append(table_name)
+        
+        if large_tables:
+            total_tables += len(large_tables)
+            click.echo(f"  • LARGE (>1M rows): {len(large_tables)} tables")
+            for table in large_tables[:3]:
+                click.echo(f"    - {table}")
+            if len(large_tables) > 3:
+                click.echo(f"    ... and {len(large_tables) - 3} more")
+        
+        if medium_tables:
+            total_tables += len(medium_tables)
+            click.echo(f"  • MEDIUM (10K-1M rows): {len(medium_tables)} tables")
+            for table in medium_tables[:3]:
+                click.echo(f"    - {table}")
+            if len(medium_tables) > 3:
+                click.echo(f"    ... and {len(medium_tables) - 3} more")
+        
+        if small_tables:
+            total_tables += len(small_tables)
+            click.echo(f"  • SMALL (<10K rows): {len(small_tables)} tables")
+            for table in small_tables[:3]:
+                click.echo(f"    - {table}")
+            if len(small_tables) > 3:
+                click.echo(f"    ... and {len(small_tables) - 3} more")
         
         click.echo(f"\n📈 Total tables to process: {total_tables}")
     
