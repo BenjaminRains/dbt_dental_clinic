@@ -97,13 +97,14 @@ from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .table_processor import TableProcessor
 from ..config import get_settings, ConfigReader
+from ..config.logging import get_logger
 
 # Import custom exceptions for structured error handling
 from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError
 from ..exceptions.data import DataExtractionError, DataLoadingError
 from ..exceptions.configuration import ConfigurationError, EnvironmentError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class PriorityProcessor:
     def __init__(self, config_reader: ConfigReader):
@@ -173,75 +174,99 @@ class PriorityProcessor:
                           max_workers: int = 5,
                           force_full: bool = False) -> Dict[str, Dict[str, List[str]]]:
         """
-        Process tables by priority with intelligent parallelization.
+        Process tables by performance category (UPDATED).
         
-        REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
-        via TableProcessor for improved performance and reliability.
+        REFACTORED: Uses performance_category from analyze_opendental_schema.py:
+        - Large tables: Process in parallel for speed
+        - Medium tables: Process sequentially
+        - Small tables: Process sequentially
+        - Tiny tables: Process sequentially (NEW)
         
         CONNECTION ARCHITECTURE COMPLIANCE:
         - Uses Settings injection for environment-agnostic operation
-        - Validates environment configuration before processing
-        - Uses unified interface for database connections via TableProcessor
-        
-        PROCESSING STRATEGY:
-        - Critical tables: Processed in parallel for speed
-        - Other tables: Processed sequentially to manage resources
-        - Failure handling: Stops processing if critical tables fail
-        - Environment validation: Validates configuration before processing
-        
-        Args:
-            importance_levels: List of importance levels to process
-            max_workers: Maximum number of parallel workers
-            force_full: Whether to force full extraction
-            
-        Returns:
-            Dict with success/failure lists for each importance level
+        - Each TableProcessor uses unified ConnectionFactory interface
         """
         try:
             # ✅ CONNECTION ARCHITECTURE: Validate environment before processing
             self._validate_environment()
             
-            if importance_levels is None:
-                # Real config has: important, audit, standard (no critical)
-                importance_levels = ['important', 'audit', 'standard']
+            # Validate performance categories from schema analyzer
+            self._validate_performance_categories()
+            
+            # Get all tables and categorize by performance_category
+            all_tables = self.settings.list_tables()
+            large_tables = []
+            medium_tables = []
+            small_tables = []
+            tiny_tables = []  # NEW: Support for tiny tables
+            
+            for table_name in all_tables:
+                config = self.settings.get_table_config(table_name)
+                performance_category = config.get('performance_category', 'tiny')
                 
+                if performance_category == 'large':
+                    large_tables.append(table_name)
+                elif performance_category == 'medium':
+                    medium_tables.append(table_name)
+                elif performance_category == 'small':
+                    small_tables.append(table_name)
+                else:  # tiny
+                    tiny_tables.append(table_name)
+            
             results = {}
             
-            for importance in importance_levels:
-                # Use Settings class for table priority lookup
-                tables = self.settings.get_tables_by_importance(importance)
-                if not tables:
-                    logger.info(f"No tables found for importance level: {importance}")
-                    continue
-                    
-                logger.info(f"Processing {len(tables)} {importance} tables using integrated approach")
-                
-                if importance == 'important' and len(tables) > 1:
-                    # Process important tables in parallel for speed (since no critical tables exist)
-                    success_tables, failed_tables = self._process_parallel(
-                        tables,
-                        max_workers,
-                        force_full
-                    )
-                else:
-                    # Process other tables sequentially to manage resources
-                    success_tables, failed_tables = self._process_sequential(
-                        tables,
-                        force_full
-                    )
-                
-                results[importance] = {
+            # Process large tables in parallel for speed
+            if large_tables:
+                logger.info(f"Processing {len(large_tables)} large tables in parallel")
+                success_tables, failed_tables = self._process_parallel(
+                    large_tables,
+                    max_workers,
+                    force_full
+                )
+                results['large'] = {
                     'success': success_tables,
                     'failed': failed_tables,
-                    'total': len(tables)
+                    'total': len(large_tables)
                 }
-                
-                logger.info(f"{importance.capitalize()} tables: {len(success_tables)}/{len(tables)} successful")
-                
-                # Stop processing if important tables failed (since no critical tables exist)
-                if importance == 'important' and failed_tables:
-                    logger.error("Important table failures detected. Stopping pipeline.")
-                    break
+            
+            # Process medium tables sequentially
+            if medium_tables:
+                logger.info(f"Processing {len(medium_tables)} medium tables sequentially")
+                success_tables, failed_tables = self._process_sequential(
+                    medium_tables,
+                    force_full
+                )
+                results['medium'] = {
+                    'success': success_tables,
+                    'failed': failed_tables,
+                    'total': len(medium_tables)
+                }
+            
+            # Process small tables sequentially
+            if small_tables:
+                logger.info(f"Processing {len(small_tables)} small tables sequentially")
+                success_tables, failed_tables = self._process_sequential(
+                    small_tables,
+                    force_full
+                )
+                results['small'] = {
+                    'success': success_tables,
+                    'failed': failed_tables,
+                    'total': len(small_tables)
+                }
+            
+            # Process tiny tables sequentially (NEW)
+            if tiny_tables:
+                logger.info(f"Processing {len(tiny_tables)} tiny tables sequentially")
+                success_tables, failed_tables = self._process_sequential(
+                    tiny_tables,
+                    force_full
+                )
+                results['tiny'] = {
+                    'success': success_tables,
+                    'failed': failed_tables,
+                    'total': len(tiny_tables)
+                }
             
             return results
             
@@ -260,7 +285,25 @@ class PriorityProcessor:
         except Exception as e:
             logger.error(f"Unexpected error during priority processing: {str(e)}")
             return {}
+    
+    def _validate_performance_categories(self):
+        """Validate that all tables have performance_category from schema analyzer."""
+        all_tables = self.settings.list_tables()
+        missing_categories = []
         
+        for table_name in all_tables:
+            config = self.settings.get_table_config(table_name)
+            performance_category = config.get('performance_category')
+            
+            if not performance_category:
+                missing_categories.append(table_name)
+        
+        if missing_categories:
+            logger.warning(f"Tables missing performance_category: {missing_categories}")
+            logger.warning("Run analyze_opendental_schema.py to generate proper configuration")
+        
+        return len(missing_categories) == 0
+    
     def _process_parallel(self, tables: List[str],
                          max_workers: int,
                          force_full: bool) -> Tuple[List[str], List[str]]:
