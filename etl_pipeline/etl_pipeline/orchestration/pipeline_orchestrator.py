@@ -61,13 +61,14 @@ from ..monitoring.unified_metrics import UnifiedMetricsCollector
 from .table_processor import TableProcessor
 from .priority_processor import PriorityProcessor
 from ..config import Settings, DatabaseType, ConfigReader
+from ..config.logging import get_logger
 
 # Import custom exceptions for structured error handling
 from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionError
 from ..exceptions.data import DataExtractionError, DataLoadingError
 from ..exceptions.configuration import ConfigurationError, EnvironmentError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class PipelineOrchestrator:
     def __init__(self, config_path: Optional[str] = None, environment: str = 'production', 
@@ -247,6 +248,77 @@ class PipelineOrchestrator:
             logger.error(f"Unexpected error in pipeline for table {table_name}: {str(e)}")
             return False
         
+    def process_tables_by_performance_category(self, category: str, 
+                                             max_workers: int = 5,
+                                             force_full: bool = False) -> Dict[str, bool]:
+        """
+        Process tables by performance category using SimpleMySQLReplicator.
+        
+        Args:
+            category: 'tiny', 'small', 'medium', 'large'
+            max_workers: Maximum parallel workers
+            force_full: Force full refresh
+            
+        Returns:
+            Dictionary mapping table names to success status
+        """
+        if not self._initialized:
+            raise RuntimeError("Pipeline not initialized. Call initialize_connections() first.")
+        
+        if self.table_processor is None:
+            raise RuntimeError("TableProcessor not initialized")
+        
+        try:
+            logger.info(f"Processing tables by performance category: {category}")
+            
+            # Get all tables with the specified performance category
+            all_tables = self.settings.list_tables()
+            target_tables = []
+            
+            for table_name in all_tables:
+                config = self.settings.get_table_config(table_name)
+                if config.get('performance_category') == category:
+                    target_tables.append(table_name)
+            
+            if not target_tables:
+                logger.info(f"No tables found with performance category: {category}")
+                return {}
+            
+            logger.info(f"Found {len(target_tables)} tables with performance category: {category}")
+            
+            # Process tables using appropriate strategy
+            results = {}
+            if category == 'large' and max_workers > 1:
+                # Use parallel processing for large tables
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(self.table_processor.process_table, table, force_full): table 
+                              for table in target_tables}
+                    
+                    for future in futures:
+                        table_name = futures[future]
+                        try:
+                            success = future.result()
+                            results[table_name] = success
+                        except Exception as e:
+                            logger.error(f"Error processing {table_name}: {e}")
+                            results[table_name] = False
+            else:
+                # Use sequential processing for other categories
+                for table_name in target_tables:
+                    try:
+                        success = self.table_processor.process_table(table_name, force_full)
+                        results[table_name] = success
+                    except Exception as e:
+                        logger.error(f"Error processing {table_name}: {e}")
+                        results[table_name] = False
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Unexpected error during performance category processing: {str(e)}")
+            return {}
+    
     def process_tables_by_priority(self, importance_levels: Optional[List[str]] = None, 
                                  max_workers: int = 5, force_full: bool = False) -> Dict[str, Dict[str, List[str]]]:
         """
