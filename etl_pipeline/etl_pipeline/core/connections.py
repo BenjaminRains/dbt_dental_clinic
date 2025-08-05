@@ -131,13 +131,56 @@ class ConnectionFactory:
         try:
             with engine.connect() as conn:
                 # Critical for bulk operations
-                conn.execute(text("SET SESSION bulk_insert_buffer_size = 268435456"))  # 256MB
-                conn.execute(text("SET SESSION innodb_flush_log_at_trx_commit = 2"))
-                conn.execute(text("SET SESSION autocommit = 0"))
-                conn.execute(text("SET SESSION unique_checks = 0"))
-                conn.execute(text("SET SESSION foreign_key_checks = 0"))
+                try:
+                    conn.execute(text("SET SESSION bulk_insert_buffer_size = 268435456"))  # 256MB
+                except Exception as e:
+                    if "Access denied" in str(e) or "SUPER" in str(e) or "SYSTEM_VARIABLES_ADMIN" in str(e):
+                        logger.warning(f"Failed to set bulk_insert_buffer_size due to privilege restrictions: {e}")
+                    else:
+                        logger.warning(f"Failed to set bulk_insert_buffer_size: {e}")
+                
+                # Try to set innodb_flush_log_at_trx_commit, but handle GLOBAL variable gracefully
+                try:
+                    conn.execute(text("SET SESSION innodb_flush_log_at_trx_commit = 2"))
+                except Exception as e:
+                    if "GLOBAL variable" in str(e) or "Access denied" in str(e):
+                        logger.warning("innodb_flush_log_at_trx_commit requires GLOBAL privileges, skipping")
+                    else:
+                        logger.warning(f"Failed to set innodb_flush_log_at_trx_commit: {e}")
+                
+                try:
+                    conn.execute(text("SET SESSION autocommit = 0"))
+                except Exception as e:
+                    if "Access denied" in str(e):
+                        logger.warning(f"Failed to set autocommit due to privilege restrictions: {e}")
+                    else:
+                        logger.warning(f"Failed to set autocommit: {e}")
+                
+                try:
+                    conn.execute(text("SET SESSION unique_checks = 0"))
+                except Exception as e:
+                    if "Access denied" in str(e):
+                        logger.warning(f"Failed to set unique_checks due to privilege restrictions: {e}")
+                    else:
+                        logger.warning(f"Failed to set unique_checks: {e}")
+                
+                try:
+                    conn.execute(text("SET SESSION foreign_key_checks = 0"))
+                except Exception as e:
+                    if "Access denied" in str(e):
+                        logger.warning(f"Failed to set foreign_key_checks due to privilege restrictions: {e}")
+                    else:
+                        logger.warning(f"Failed to set foreign_key_checks: {e}")
+                
                 # Set SQL mode for proper handling of zero values in auto-increment columns
-                conn.execute(text("SET SESSION sql_mode = 'NO_AUTO_VALUE_ON_ZERO'"))
+                try:
+                    conn.execute(text("SET SESSION sql_mode = 'NO_AUTO_VALUE_ON_ZERO'"))
+                except Exception as e:
+                    if "Access denied" in str(e):
+                        logger.warning(f"Failed to set sql_mode due to privilege restrictions: {e}")
+                    else:
+                        logger.warning(f"Failed to set sql_mode: {e}")
+                
                 logger.debug("Applied MySQL performance optimizations")
         except Exception as e:
             logger.warning(f"Failed to apply MySQL performance settings: {e}")
