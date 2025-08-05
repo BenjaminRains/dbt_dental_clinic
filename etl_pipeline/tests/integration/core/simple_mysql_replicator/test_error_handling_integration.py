@@ -1,15 +1,15 @@
 # type: ignore  # SQLAlchemy type handling in integration tests
 
 """
-Integration tests for SimpleMySQLReplicator error handling and failure scenarios.
+Integration tests for SimpleMySQLReplicator error handling and recovery.
 
 This module tests:
 - Connection failure handling
-- Database error recovery
+- Database query error handling
 - Configuration error handling
-- Graceful failure with clear error messages
+- Data extraction error handling
+- Schema validation error handling
 - Error recovery mechanisms
-- Connection retry logic
 """
 
 import pytest
@@ -50,6 +50,9 @@ from tests.fixtures.config_fixtures import temp_tables_config_dir
 
 logger = logging.getLogger(__name__)
 
+# Known test tables that exist in the test database
+KNOWN_TEST_TABLES = ['patient', 'appointment', 'procedurelog']
+
 @pytest.mark.integration
 @pytest.mark.order(2)  # After configuration tests, before data loading tests
 @pytest.mark.mysql
@@ -59,23 +62,29 @@ logger = logging.getLogger(__name__)
 class TestSimpleMySQLReplicatorErrorHandlingIntegration:
     """Integration tests for SimpleMySQLReplicator error handling with real database connections."""
 
-    def test_connection_failure_handling(self, test_settings_with_file_provider):
+    def test_connection_failure_handling(self, test_settings_with_file_provider, populated_test_databases):
         """
-        Test handling of database connection failures.
+        Test handling of connection failures.
         
         Validates:
-            - Error handling for connection failures
-            - Graceful failure with clear error messages
+            - Connection failure detection
             - Connection retry logic
-            - Error recovery mechanisms
+            - Error message clarity
+            - Recovery mechanisms
             
         ETL Pipeline Context:
             - Critical for ETL pipeline reliability
             - Supports dental clinic operational stability
-            - Uses graceful error handling for reliability
+            - Uses connection error handling for reliability
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test that the replicator can handle real connections properly
@@ -103,7 +112,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_table_without_incremental_column(self, test_settings_with_file_provider):
+    def test_copy_table_without_incremental_column(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for tables without incremental column.
         
@@ -120,6 +129,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Instead of copying real data (which can hang),
@@ -161,7 +176,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_nonexistent_table(self, test_settings_with_file_provider):
+    def test_copy_nonexistent_table(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for non-existent tables.
         
@@ -178,6 +193,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test copying non-existent table
@@ -189,7 +210,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_invalid_table_configuration(self, test_settings_with_file_provider):
+    def test_invalid_table_configuration(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for invalid table configurations.
         
@@ -206,6 +227,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with invalid table configuration
@@ -247,7 +274,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_database_query_error_handling(self, test_settings_with_file_provider):
+    def test_database_query_error_handling(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for database query errors.
         
@@ -264,6 +291,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test error handling for invalid SQL queries
@@ -294,7 +327,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_connection_timeout_handling(self, test_settings_with_file_provider):
+    def test_connection_timeout_handling(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for connection timeouts.
         
@@ -311,6 +344,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test connection timeout handling
@@ -333,7 +372,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_missing_table_configuration(self, test_settings_with_file_provider):
+    def test_missing_table_configuration(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for missing table configurations.
         
@@ -350,6 +389,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with missing table configuration
@@ -370,7 +415,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_invalid_incremental_column(self, test_settings_with_file_provider):
+    def test_invalid_incremental_column(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for invalid incremental columns.
         
@@ -387,6 +432,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with invalid incremental column
@@ -427,7 +478,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_database_permission_error_handling(self, test_settings_with_file_provider):
+    def test_database_permission_error_handling(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for database permission errors.
         
@@ -444,6 +495,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational security
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test permission error handling
@@ -463,7 +520,7 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_configuration_error_handling(self, test_settings_with_file_provider):
+    def test_configuration_error_handling(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for configuration errors.
         
@@ -480,6 +537,12 @@ class TestSimpleMySQLReplicatorErrorHandlingIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             # Test with invalid settings
             invalid_settings = None
             
