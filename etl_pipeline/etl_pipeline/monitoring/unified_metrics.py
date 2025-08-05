@@ -158,39 +158,90 @@ class UnifiedMetricsCollector:
                               processing_time: float, success: bool, 
                               error: Optional[str] = None):
         """
-        Record metrics for a single table.
+        Record table processing metrics.
         
         Args:
-            table_name: Name of the table
+            table_name: Name of the table processed
             rows_processed: Number of rows processed
             processing_time: Time taken to process (seconds)
             success: Whether processing was successful
-            error: Error message if any
+            error: Error message if processing failed
         """
-        self.metrics['tables_processed'] += 1
-        self.metrics['total_rows_processed'] += rows_processed
+        if not self.pipeline_started:
+            logger.warning("Pipeline not started, starting automatically")
+            self.start_pipeline()
         
-        table_metric = {
-            'table_name': table_name,
-            'rows_processed': rows_processed,
-            'processing_time': processing_time,
-            'success': success,
-            'error': error,
-            'timestamp': datetime.now(),
-            'status': 'completed' if success else 'failed'
-        }
+        # Record in memory metrics
+        if table_name not in self.table_metrics:
+            self.table_metrics[table_name] = {
+                'total_rows': 0,
+                'total_time': 0.0,
+                'success_count': 0,
+                'error_count': 0,
+                'last_processed': None,
+                'errors': []
+            }
         
-        self.metrics['table_metrics'][table_name] = table_metric
+        self.table_metrics[table_name]['total_rows'] += rows_processed
+        self.table_metrics[table_name]['total_time'] += processing_time
+        self.table_metrics[table_name]['last_processed'] = datetime.now()
         
-        if not success and error:
-            self.metrics['errors'].append({
+        if success:
+            self.table_metrics[table_name]['success_count'] += 1
+        else:
+            self.table_metrics[table_name]['error_count'] += 1
+            if error:
+                self.table_metrics[table_name]['errors'].append({
+                    'timestamp': datetime.now(),
+                    'error': error
+                })
+        
+        # Record in pipeline metrics
+        self.pipeline_metrics['tables_processed'] += 1
+        self.pipeline_metrics['total_rows_processed'] += rows_processed
+        self.pipeline_metrics['total_processing_time'] += processing_time
+        
+        if not success:
+            self.pipeline_metrics['errors'].append({
+                'timestamp': datetime.now(),
                 'table': table_name,
-                'error': error,
-                'timestamp': datetime.now()
+                'error': error or 'Unknown error'
             })
         
-        logger.info(f"Table {table_name}: {rows_processed} rows in {processing_time:.2f}s "
-                   f"({'success' if success else 'failed'})")
+        logger.info(f"Recorded metrics for {table_name}: {rows_processed} rows, {processing_time:.2f}s, success={success}")
+    
+    def record_performance_metric(self, table_name: str, metric_name: str, value: float, 
+                                 category: str = 'general'):
+        """
+        Record a specific performance metric for a table.
+        
+        Args:
+            table_name: Name of the table
+            metric_name: Name of the metric (e.g., 'extraction_time', 'load_time')
+            value: Metric value
+            category: Metric category (e.g., 'extraction', 'loading', 'transformation')
+        """
+        if not self.pipeline_started:
+            logger.warning("Pipeline not started, starting automatically")
+            self.start_pipeline()
+        
+        # Initialize performance metrics if not exists
+        if 'performance_metrics' not in self.pipeline_metrics:
+            self.pipeline_metrics['performance_metrics'] = {}
+        
+        if table_name not in self.pipeline_metrics['performance_metrics']:
+            self.pipeline_metrics['performance_metrics'][table_name] = {}
+        
+        if category not in self.pipeline_metrics['performance_metrics'][table_name]:
+            self.pipeline_metrics['performance_metrics'][table_name][category] = {}
+        
+        # Record the metric
+        self.pipeline_metrics['performance_metrics'][table_name][category][metric_name] = {
+            'value': value,
+            'timestamp': datetime.now()
+        }
+        
+        logger.debug(f"Recorded performance metric for {table_name}.{category}.{metric_name}: {value}")
     
     def record_error(self, error: str, table_name: Optional[str] = None):
         """
