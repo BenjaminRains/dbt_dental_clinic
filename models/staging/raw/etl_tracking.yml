@@ -34,17 +34,7 @@ models:
               values: ['pending', 'in_progress', 'completed', 'failed']
       
       - name: _loaded_at
-        description: "When the record was loaded into PostgreSQL by ETL"
-        tests:
-          - not_null
-      
-      - name: _created_at
-        description: "When the record was created"
-        tests:
-          - not_null
-      
-      - name: _updated_at
-        description: "When the record was last updated"
+        description: "When the ETL pipeline processed this tracking record"
         tests:
           - not_null
 
@@ -80,17 +70,7 @@ models:
           - accepted_values:
               values: ['pending', 'in_progress', 'completed', 'failed']
       
-      - name: _loaded_at
-        description: "When the record was loaded into PostgreSQL by ETL"
-        tests:
-          - not_null
-      
-      - name: _created_at
-        description: "When the record was created"
-        tests:
-          - not_null
-      
-      - name: _updated_at
-        description: "When the record was last updated"
+      - name: _transformed_at
+        description: "When the dbt pipeline processed this tracking record"
         tests:
           - not_null 
