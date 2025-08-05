@@ -130,20 +130,18 @@ class TestCLIComprehensive:
             tables={
                 'tables': {
                     'patient': {
-                        'incremental_column': 'DateModified',
                         'batch_size': 1000,
                         'extraction_strategy': 'incremental',
-                        'table_importance': 'critical',
-                        'estimated_size_mb': 500,
-                        'estimated_rows': 100000
+                        'incremental_column': 'PatientNum',
+                        'estimated_rows': 50000,
+                        'estimated_size_mb': 25.5
                     },
                     'appointment': {
-                        'incremental_column': 'DateModified',
                         'batch_size': 500,
                         'extraction_strategy': 'incremental',
-                        'table_importance': 'important',
-                        'estimated_size_mb': 200,
-                        'estimated_rows': 50000
+                        'incremental_column': 'AptNum',
+                        'estimated_rows': 100000,
+                        'estimated_size_mb': 45.2
                     },
                     'procedurelog': {
                         'incremental_column': 'DateModified',
