@@ -171,33 +171,6 @@ class ConfigReader:
                 original_exception=e
             )
     
-    def get_tables_by_importance(self, importance_level: str) -> List[str]:
-        """
-        Get tables by importance level.
-        
-        Args:
-            importance_level: Importance level ('important', 'audit', 'standard')
-            
-        Returns:
-            List of table names with the specified importance level
-        """
-        try:
-            tables = []
-            for table_name, config in self.config.get('tables', {}).items():
-                if config.get('table_importance') == importance_level:
-                    tables.append(table_name)
-            
-            logger.info(f"Found {len(tables)} tables with importance level: {importance_level}")
-            return tables
-        except Exception as e:
-            logger.error(f"Error retrieving tables by importance level {importance_level}: {e}")
-            raise ConfigurationError(
-                message=f"Failed to retrieve tables by importance level {importance_level}",
-                config_file=self.config_path,
-                details={'operation': 'importance_filtering', 'importance_level': importance_level},
-                original_exception=e
-            )
-    
     def get_tables_by_strategy(self, strategy: str) -> List[str]:
         """
         Get tables by extraction strategy.
@@ -313,8 +286,11 @@ class ConfigReader:
             
             summary = {
                 'total_tables': len(tables),
-                'importance_levels': {},
-                'extraction_strategies': {},
+                'extraction_strategies': {
+                    'full_table': 0,
+                    'incremental': 0,
+                    'incremental_chunked': 0
+                },
                 'size_ranges': {
                     'small': 0,      # < 1MB
                     'medium': 0,     # 1-100MB
@@ -326,10 +302,6 @@ class ConfigReader:
             }
             
             for table_name, config in tables.items():
-                # Count by importance level
-                importance = config.get('table_importance', 'unknown')
-                summary['importance_levels'][importance] = summary['importance_levels'].get(importance, 0) + 1
-                
                 # Count by extraction strategy
                 strategy = config.get('extraction_strategy', 'unknown')
                 summary['extraction_strategies'][strategy] = summary['extraction_strategies'].get(strategy, 0) + 1
@@ -372,7 +344,6 @@ class ConfigReader:
             issues = {
                 'missing_batch_size': [],
                 'missing_extraction_strategy': [],
-                'missing_importance': [],
                 'invalid_batch_size': [],
                 'large_tables_without_monitoring': []
             }
@@ -385,10 +356,6 @@ class ConfigReader:
                 # Check for missing extraction_strategy
                 if 'extraction_strategy' not in config:
                     issues['missing_extraction_strategy'].append(table_name)
-                
-                # Check for missing table_importance
-                if 'table_importance' not in config:
-                    issues['missing_importance'].append(table_name)
                 
                 # Check for invalid batch_size
                 batch_size = config.get('batch_size', 0)
