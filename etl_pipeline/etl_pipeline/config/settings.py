@@ -319,7 +319,6 @@ class Settings:
             'incremental_column': None,
             'batch_size': 5000,
             'extraction_strategy': 'full_table',
-            'table_importance': 'standard',
             'estimated_size_mb': 0,
             'estimated_rows': 0
         }
@@ -327,14 +326,6 @@ class Settings:
     def list_tables(self) -> List[str]:
         """List all configured tables."""
         return list(self.tables_config.get('tables', {}).keys())
-    
-    def get_tables_by_importance(self, importance_level: str) -> List[str]:
-        """Get tables by importance level."""
-        tables = self.tables_config.get('tables', {})
-        return [
-            table_name for table_name, config in tables.items()
-            if config.get('table_importance') == importance_level
-        ]
     
     def should_use_incremental(self, table_name: str) -> bool:
         """Check if table should use incremental loading."""
