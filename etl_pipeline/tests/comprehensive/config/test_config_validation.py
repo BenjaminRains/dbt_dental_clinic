@@ -876,14 +876,11 @@ class TestConfigReaderValidation:
                 
                 # Validate dental clinic specific configuration patterns
                 assert 'extraction_strategy' in config, f"Missing extraction_strategy for {table_name}"
-                assert 'table_importance' in config, f"Missing table_importance for {table_name}"
                 assert 'batch_size' in config, f"Missing batch_size for {table_name}"
                 
                 # Validate dental clinic specific values
                 assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], \
                     f"Invalid extraction_strategy for {table_name}"
-                assert config['table_importance'] in ['important', 'audit', 'standard'], \
-                    f"Invalid table_importance for {table_name}"
                 assert config['batch_size'] > 0, f"Invalid batch_size for {table_name}"
         
         # Validate that we found some dental clinic tables
@@ -914,7 +911,7 @@ class TestConfigReaderValidation:
         
         # Validate summary structure
         required_fields = [
-            'total_tables', 'importance_levels', 'extraction_strategies',
+            'total_tables', 'extraction_strategies',
             'size_ranges', 'monitored_tables', 'modeled_tables', 'last_loaded'
         ]
         
@@ -923,7 +920,6 @@ class TestConfigReaderValidation:
         
         # Validate summary values
         assert summary['total_tables'] > 0, "Should have at least one table"
-        assert isinstance(summary['importance_levels'], dict), "importance_levels should be dict"
         assert isinstance(summary['extraction_strategies'], dict), "extraction_strategies should be dict"
         assert isinstance(summary['size_ranges'], dict), "size_ranges should be dict"
         assert summary['monitored_tables'] >= 0, "monitored_tables should be non-negative"
@@ -954,7 +950,7 @@ class TestConfigReaderValidation:
         
         # Validate issues structure
         required_issue_types = [
-            'missing_batch_size', 'missing_extraction_strategy', 'missing_importance',
+            'missing_batch_size', 'missing_extraction_strategy',
             'invalid_batch_size', 'large_tables_without_monitoring'
         ]
         
