@@ -72,7 +72,7 @@ class TestOpenDentalSchemaAnalyzerInitializationIntegration:
     
 
 
-    def test_production_schema_analyzer_initialization(self, production_settings):
+    def test_production_schema_analyzer_initialization(self, production_settings_with_file_provider):
         """
         Test production schema analyzer initialization with actual production database connection.
         
@@ -91,8 +91,6 @@ class TestOpenDentalSchemaAnalyzerInitializationIntegration:
             - Inspector initialization with real production database connection
             - Error handling works for real production database connection failures
         """
-        # Arrange: Set up real production environment with FileConfigProvider
-        settings = production_settings
         
         # Act: Create OpenDentalSchemaAnalyzer instance with production connection
         analyzer = OpenDentalSchemaAnalyzer()
@@ -123,7 +121,7 @@ class TestOpenDentalSchemaAnalyzerInitializationIntegration:
             row = result.fetchone()
             assert row is not None and row[0] == 1
 
-    def test_production_fail_fast_behavior(self, production_settings):
+    def test_production_fail_fast_behavior(self, production_settings_with_file_provider):
         """
         Test production FAIL FAST behavior when environment variables are missing.
         
