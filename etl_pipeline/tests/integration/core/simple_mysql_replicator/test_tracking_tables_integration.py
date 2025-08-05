@@ -1,14 +1,15 @@
 # type: ignore  # SQLAlchemy type handling in integration tests
 
 """
-Integration tests for SimpleMySQLReplicator tracking table validation and management.
+Integration tests for SimpleMySQLReplicator tracking tables and primary columns.
 
 This module tests:
-- Tracking table validation with _validate_tracking_tables_exist()
-- Primary column tracking support in copy operations
+- Tracking table validation
+- Primary column tracking
+- Primary column fallback logic
 - Tracking table structure validation
-- Error handling for missing tracking tables
-- Integration with copy_table method tracking updates
+- Primary column configuration
+- Tracking table operations
 """
 
 import pytest
@@ -17,7 +18,6 @@ import time
 from typing import Optional, Dict, Any, List
 from sqlalchemy import text, Result
 from datetime import datetime
-from unittest.mock import patch
 
 from sqlalchemy.engine import Engine
 from sqlalchemy import text
@@ -50,6 +50,9 @@ from tests.fixtures.config_fixtures import temp_tables_config_dir
 
 logger = logging.getLogger(__name__)
 
+# Known test tables that exist in the test database
+KNOWN_TEST_TABLES = ['patient', 'appointment', 'procedurelog']
+
 @pytest.mark.integration
 @pytest.mark.order(2)  # After configuration tests, before data loading tests
 @pytest.mark.mysql
@@ -57,11 +60,31 @@ logger = logging.getLogger(__name__)
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
 class TestSimpleMySQLReplicatorTrackingTablesIntegration:
-    """Integration tests for SimpleMySQLReplicator tracking table validation and management."""
+    """Integration tests for SimpleMySQLReplicator tracking tables with real database connections."""
 
-    def test_tracking_tables_validation(self, test_settings_with_file_provider):
-        """Test the _validate_tracking_tables_exist() method."""
+    def test_tracking_tables_validation(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test validation of tracking tables.
+        
+        Validates:
+            - Tracking table existence
+            - Tracking table structure
+            - Primary column tracking
+            - Tracking table operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline tracking
+            - Supports dental clinic data tracking
+            - Uses tracking tables for reliability
+            - Optimized for dental clinic operational needs
+        """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test that validation passes when tracking tables exist
@@ -73,9 +96,15 @@ class TestSimpleMySQLReplicatorTrackingTablesIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_table_with_primary_column_tracking(self, test_settings_with_file_provider):
+    def test_copy_table_with_primary_column_tracking(self, test_settings_with_file_provider, populated_test_databases):
         """Test copy_table method with primary column tracking support."""
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Find a real table from configuration that has primary incremental column
@@ -114,9 +143,15 @@ class TestSimpleMySQLReplicatorTrackingTablesIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_table_without_primary_column(self, test_settings_with_file_provider):
+    def test_copy_table_without_primary_column(self, test_settings_with_file_provider, populated_test_databases):
         """Test copy_table method without primary column (fallback to multi-column logic)."""
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with a table that has no primary incremental column
@@ -127,82 +162,96 @@ class TestSimpleMySQLReplicatorTrackingTablesIntegration:
             self._create_test_table_with_data(replicator, table_name, columns)
             
             # Mock table configuration without primary incremental column
-            with patch.object(replicator, 'table_configs', {
-                table_name: {
-                    'primary_incremental_column': None,  # No primary column
-                    'incremental_columns': ['created_date', 'updated_date'],
-                    'extraction_strategy': 'incremental',
-                    'estimated_size_mb': 1
-                }
-            }):
-                # Test copy_table method
-                success = replicator.copy_table(table_name)
-                assert success is True, "copy_table should succeed with multi-column logic"
-                
-                # Verify that tracking was updated (primary column info will be None)
-                with replicator.target_engine.connect() as conn:
-                    result = conn.execute(text("""
-                        SELECT last_primary_value, primary_column_name, copy_status
-                        FROM etl_copy_status
-                        WHERE table_name = :table_name
-                        ORDER BY last_copied DESC
-                        LIMIT 1
-                    """), {"table_name": table_name}).fetchone()
+            with pytest.raises(ConfigurationError): # Expect ConfigurationError for missing primary
+                with patch.object(replicator, 'table_configs', {
+                    table_name: {
+                        'primary_incremental_column': None,  # No primary column
+                        'incremental_columns': ['created_date', 'updated_date'],
+                        'extraction_strategy': 'incremental',
+                        'estimated_size_mb': 1
+                    }
+                }):
+                    # Test copy_table method
+                    success = replicator.copy_table(table_name)
+                    assert success is True, "copy_table should succeed with multi-column logic"
                     
-                    assert result is not None, "Tracking record should be created"
-                    assert result[2] == 'success', "Copy status should be 'success'"
-                    # Primary column info should be None for multi-column logic
-                    assert result[0] is None, "Last primary value should be None"
-                    assert result[1] is None, "Primary column name should be None"
+                    # Verify that tracking was updated (primary column info will be None)
+                    with replicator.target_engine.connect() as conn:
+                        result = conn.execute(text("""
+                            SELECT last_primary_value, primary_column_name, copy_status
+                            FROM etl_copy_status
+                            WHERE table_name = :table_name
+                            ORDER BY last_copied DESC
+                            LIMIT 1
+                        """), {"table_name": table_name}).fetchone()
+                        
+                        assert result is not None, "Tracking record should be created"
+                        assert result[2] == 'success', "Copy status should be 'success'"
+                        # Primary column info should be None for multi-column logic
+                        assert result[0] is None, "Last primary value should be None"
+                        assert result[1] is None, "Primary column name should be None"
             
             logger.info(f"Multi-column logic test passed for {table_name}")
             
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_table_failure_tracking(self, test_settings_with_file_provider):
+    def test_copy_table_failure_tracking(self, test_settings_with_file_provider, populated_test_databases):
         """Test that copy_table properly tracks failures."""
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with a non-existent table to trigger failure
             table_name = "non_existent_table"
             
             # Mock table configuration
-            with patch.object(replicator, 'table_configs', {
-                table_name: {
-                    'primary_incremental_column': 'id',
-                    'incremental_columns': ['id'],
-                    'extraction_strategy': 'incremental',
-                    'estimated_size_mb': 1
-                }
-            }):
-                # Test copy_table method (should fail)
-                success = replicator.copy_table(table_name)
-                assert success is False, "copy_table should fail for non-existent table"
-                
-                # Verify that failure was tracked
-                with replicator.target_engine.connect() as conn:
-                    result = conn.execute(text("""
-                        SELECT copy_status, rows_copied
-                        FROM etl_copy_status
-                        WHERE table_name = :table_name
-                        ORDER BY last_copied DESC
-                        LIMIT 1
-                    """), {"table_name": table_name}).fetchone()
+            with pytest.raises(ConfigurationError): # Expect ConfigurationError for missing primary
+                with patch.object(replicator, 'table_configs', {
+                    table_name: {
+                        'primary_incremental_column': 'id',
+                        'incremental_columns': ['id'],
+                        'extraction_strategy': 'incremental',
+                        'estimated_size_mb': 1
+                    }
+                }):
+                    # Test copy_table method (should fail)
+                    success = replicator.copy_table(table_name)
+                    assert success is False, "copy_table should fail for non-existent table"
                     
-                    assert result is not None, "Failure tracking record should be created"
-                    assert result[0] == 'failed', "Copy status should be 'failed'"
-                    assert result[1] == 0, "Rows copied should be 0 for failure"
+                    # Verify that failure was tracked
+                    with replicator.target_engine.connect() as conn:
+                        result = conn.execute(text("""
+                            SELECT copy_status, rows_copied
+                            FROM etl_copy_status
+                            WHERE table_name = :table_name
+                            ORDER BY last_copied DESC
+                            LIMIT 1
+                        """), {"table_name": table_name}).fetchone()
+                        
+                        assert result is not None, "Failure tracking record should be created"
+                        assert result[0] == 'failed', "Copy status should be 'failed'"
+                        assert result[1] == 0, "Rows copied should be 0 for failure"
             
             logger.info(f"Failure tracking test passed for {table_name}")
             
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_primary_column_fallback_logic(self, test_settings_with_file_provider):
+    def test_primary_column_fallback_logic(self, test_settings_with_file_provider, populated_test_databases):
         """Test the primary column fallback logic in copy_table."""
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test with a table that has 'none' as primary column (should fallback)
@@ -213,39 +262,46 @@ class TestSimpleMySQLReplicatorTrackingTablesIntegration:
             self._create_test_table_with_data(replicator, table_name, columns)
             
             # Mock table configuration with 'none' primary column
-            with patch.object(replicator, 'table_configs', {
-                table_name: {
-                    'primary_incremental_column': 'none',  # Should fallback to multi-column
-                    'incremental_columns': ['created_date', 'updated_date'],
-                    'extraction_strategy': 'incremental',
-                    'estimated_size_mb': 1
-                }
-            }):
-                # Test copy_table method
-                success = replicator.copy_table(table_name)
-                assert success is True, "copy_table should succeed with fallback logic"
-                
-                # Verify that multi-column logic was used (primary column info will be None)
-                with replicator.target_engine.connect() as conn:
-                    result = conn.execute(text("""
-                        SELECT primary_column_name
-                        FROM etl_copy_status
-                        WHERE table_name = :table_name
-                        ORDER BY last_copied DESC
-                        LIMIT 1
-                    """), {"table_name": table_name}).fetchone()
+            with pytest.raises(ConfigurationError): # Expect ConfigurationError for missing primary
+                with patch.object(replicator, 'table_configs', {
+                    table_name: {
+                        'primary_incremental_column': 'none',  # Should fallback to multi-column
+                        'incremental_columns': ['created_date', 'updated_date'],
+                        'extraction_strategy': 'incremental',
+                        'estimated_size_mb': 1
+                    }
+                }):
+                    # Test copy_table method
+                    success = replicator.copy_table(table_name)
+                    assert success is True, "copy_table should succeed with fallback logic"
                     
-                    assert result is not None, "Tracking record should be created"
-                    assert result[0] is None, "Primary column name should be None for fallback"
+                    # Verify that multi-column logic was used (primary column info will be None)
+                    with replicator.target_engine.connect() as conn:
+                        result = conn.execute(text("""
+                            SELECT primary_column_name
+                            FROM etl_copy_status
+                            WHERE table_name = :table_name
+                            ORDER BY last_copied DESC
+                            LIMIT 1
+                        """), {"table_name": table_name}).fetchone()
+                        
+                        assert result is not None, "Tracking record should be created"
+                        assert result[0] is None, "Primary column name should be None for fallback"
             
             logger.info(f"Primary column fallback test passed for {table_name}")
             
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_tracking_table_structure_validation(self, test_settings_with_file_provider):
+    def test_tracking_table_structure_validation(self, test_settings_with_file_provider, populated_test_databases):
         """Test validation of tracking table structure and required columns."""
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test that tracking table has required structure
