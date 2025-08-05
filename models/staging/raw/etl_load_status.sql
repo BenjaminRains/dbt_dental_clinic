@@ -20,9 +20,7 @@ renamed as (
         extraction_status,
         
         -- Metadata columns
-        _loaded_at,
-        _created_at,
-        _updated_at
+        _loaded_at
     from source
 )
 
