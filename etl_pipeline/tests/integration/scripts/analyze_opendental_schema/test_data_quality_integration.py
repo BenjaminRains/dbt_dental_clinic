@@ -53,24 +53,24 @@ class TestDataQualityIntegration:
     
     @classmethod
     def setup_class(cls):
-        """Set up test class with current environment validation."""
+        """Set up test class for production environment validation."""
         # Store original environment for cleanup
         cls.original_etl_env = os.environ.get('ETL_ENVIRONMENT')
         cls.original_source_db = os.environ.get('OPENDENTAL_SOURCE_DB')
         
-        # Get current environment (test or production)
-        current_env = os.environ.get('ETL_ENVIRONMENT', 'test')
+        # Set environment to production for these tests
+        os.environ['ETL_ENVIRONMENT'] = 'production'
         
-        # Validate current environment is available
+        # Validate production environment is available
         try:
-            config_dir = Path(__file__).parent.parent.parent.parent
+            config_dir = Path(__file__).parent.parent.parent.parent.parent
             from etl_pipeline.config.providers import FileConfigProvider
             from etl_pipeline.config.settings import Settings
             from etl_pipeline.core.connections import ConnectionFactory
             from sqlalchemy import text
             
             provider = FileConfigProvider(config_dir)
-            settings = Settings(environment=current_env, provider=provider)
+            settings = Settings(environment='production', provider=provider)
             
             # Test connection
             source_engine = ConnectionFactory.get_source_connection(settings)
@@ -78,10 +78,10 @@ class TestDataQualityIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip(f"{current_env.capitalize()} database connection failed")
+                    pytest.skip("Production database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"{current_env.capitalize()} databases not available: {str(e)}")
+            pytest.skip(f"Production databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -97,7 +97,7 @@ class TestDataQualityIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_validate_incremental_column_data_quality(self, production_settings):
+    def test_production_validate_incremental_column_data_quality(self, production_settings_with_file_provider):
         """
         Test production validate_incremental_column_data_quality method with actual production database data.
         
