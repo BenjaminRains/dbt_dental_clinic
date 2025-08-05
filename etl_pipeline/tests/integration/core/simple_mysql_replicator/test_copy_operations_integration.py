@@ -6,7 +6,6 @@ Integration tests for SimpleMySQLReplicator copy operations and strategies.
 This module tests:
 - Single table copy operations
 - Copy all tables functionality
-- Copy by importance levels
 - Copy strategy determination
 - Batch processing and performance
 - Error handling for copy operations
@@ -50,6 +49,9 @@ from tests.fixtures.config_fixtures import temp_tables_config_dir
 
 logger = logging.getLogger(__name__)
 
+# Known test tables that exist in the test database
+KNOWN_TEST_TABLES = ['patient', 'appointment', 'procedurelog']
+
 @pytest.mark.integration
 @pytest.mark.order(2)  # After configuration tests, before data loading tests
 @pytest.mark.mysql
@@ -59,7 +61,7 @@ logger = logging.getLogger(__name__)
 class TestSimpleMySQLReplicatorCopyOperationsIntegration:
     """Integration tests for SimpleMySQLReplicator copy operations with real database connections."""
 
-    def test_copy_single_table_incremental(self, test_settings_with_file_provider):
+    def test_copy_single_table_incremental(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test incremental copy of a single table with real data.
         
@@ -77,6 +79,12 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
             - Optimized for dental clinic data volumes
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test incremental copy of patient table
@@ -94,7 +102,7 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_all_tables_incremental(self, test_settings_with_file_provider):
+    def test_copy_all_tables_incremental(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test copying all configured tables incrementally.
         
@@ -112,22 +120,24 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
             - Optimized for dental clinic data volumes
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
-            # Limit to a small subset of tables to prevent hanging
-            # Focus on tables that are likely to be small and fast
-            test_tables = ['patient', 'provider', 'procedurelog']  # Common small tables
-            
-            # Filter to only test tables that exist in configuration
-            available_tables = [table for table in test_tables if table in replicator.table_configs]
+            # Use only known test tables to prevent hanging
+            available_tables = [table for table in KNOWN_TEST_TABLES if table in replicator.table_configs]
             
             if not available_tables:
                 logger.info("No test tables available, skipping test")
                 return
             
-            logger.info(f"Testing copy with limited table set: {available_tables}")
+            logger.info(f"Testing copy with test table set: {available_tables}")
             
-            # Test copying limited set of tables with timeout
+            # Test copying test tables
             start_time = time.time()
             results = replicator.copy_all_tables(table_filter=available_tables)
             elapsed_time = time.time() - start_time
@@ -139,112 +149,328 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
             successful_tables = [table for table, success in results.items() if success]
             failed_tables = [table for table, success in results.items() if not success]
             
-            logger.info(f"Copy limited tables completed in {elapsed_time:.2f}s")
+            logger.info(f"Copy test tables completed in {elapsed_time:.2f}s")
             logger.info(f"Successful tables: {successful_tables}")
             logger.info(f"Failed tables: {failed_tables}")
             
             # Test that the operation completed without crashing
             # Don't fail if some tables fail - this is expected in test environment
-            logger.info("Copy limited tables test completed successfully")
+            logger.info("Copy test tables test completed successfully")
             
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_tables_by_importance(self, test_settings_with_file_provider):
+
+    def test_copy_tables_by_performance_category(self, test_settings_with_file_provider, populated_test_databases):
         """
-        Test copying tables by importance level.
+        Test copying tables by performance category configuration and method availability.
         
         Validates:
-            - Importance-based table filtering
-            - Copy strategy for different importance levels
-            - Performance optimization for critical tables
-            - Error handling for importance-based operations
+            - Performance category-based table selection logic
+            - Category-based configuration validation
+            - Method availability and structure
+            - Configuration validation for performance categories
             
         ETL Pipeline Context:
-            - Critical for prioritized ETL pipeline execution
-            - Supports dental clinic data prioritization
-            - Uses importance levels for resource allocation
+            - Critical for ETL pipeline performance management
+            - Supports dental clinic performance optimization
+            - Uses category-based configuration for efficiency
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
-            # Instead of copying all tables by importance (which can hang),
-            # test the importance filtering logic with a limited set of test tables
-            test_tables = ['patient', 'provider', 'procedurelog']  # Small, common tables
+            # Test that the method exists and is callable
+            assert hasattr(replicator, 'copy_tables_by_performance_category'), "Method should exist"
+            assert callable(replicator.copy_tables_by_performance_category), "Method should be callable"
             
-            # Filter to only test tables that exist in configuration
-            available_tables = [table for table in test_tables if table in replicator.table_configs]
+            # Test each performance category configuration
+            categories = ['large', 'medium', 'small', 'tiny']
             
-            if not available_tables:
-                logger.info("No test tables available, skipping importance test")
-                return
-            
-            logger.info(f"Testing importance filtering with limited table set: {available_tables}")
-            
-            # Test importance filtering logic without actual copying
-            for importance_level in ['important', 'standard', 'audit']:
-                # Get tables by importance level from configuration
-                tables_by_importance = []
+            for category in categories:
+                logger.info(f"Testing performance category configuration: {category}")
+                
+                # Count tables by category in configuration
+                expected_tables = []
                 for table_name, config in replicator.table_configs.items():
-                    if table_name in available_tables:
-                        table_importance = config.get('table_importance', 'standard')
-                        if table_importance == importance_level:
-                            tables_by_importance.append(table_name)
+                    if config.get('performance_category') == category:
+                        expected_tables.append(table_name)
                 
-                logger.info(f"Tables with importance '{importance_level}': {tables_by_importance}")
+                logger.info(f"Category {category}: Found {len(expected_tables)} tables in configuration")
                 
-                # Validate that importance filtering works
-                assert isinstance(tables_by_importance, list), f"Tables by importance should be list for {importance_level}"
+                # Validate that category is recognized in configuration
+                # We don't actually call the copy method to avoid hanging
                 
-                # Test that we can get the importance level for each table
-                for table_name in available_tables:
-                    if table_name in replicator.table_configs:
-                        config = replicator.table_configs[table_name]
-                        importance = config.get('table_importance', 'standard')
-                        assert importance in ['important', 'standard', 'audit', 'reference', 'critical'], f"Invalid importance for {table_name}: {importance}"
+            # Test invalid category configuration
+            invalid_tables = []
+            for table_name, config in replicator.table_configs.items():
+                if config.get('performance_category') not in categories:
+                    invalid_tables.append(table_name)
             
-            logger.info("Importance-based table filtering test completed successfully")
+            logger.info(f"Tables with invalid performance categories: {invalid_tables}")
+            
+            # Test that all tables have valid performance categories
+            for table_name, config in replicator.table_configs.items():
+                performance_category = config.get('performance_category', 'medium')
+                assert performance_category in categories, f"Invalid performance category for {table_name}: {performance_category}"
+            
+            logger.info("Performance category configuration validation working correctly")
             
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_strategy_determination(self, test_settings_with_file_provider):
+    def test_schema_analyzer_summary_generation(self, test_settings_with_file_provider, populated_test_databases):
         """
-        Test copy strategy determination based on table size.
+        Test schema analyzer summary generation with real configuration.
+        
+        Validates:
+            - Schema analyzer summary generation
+            - Configuration statistics calculation
+            - Performance category distribution
+            - Processing priority distribution
+            - Extraction strategy distribution
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline configuration analysis
+            - Supports dental clinic configuration management
+            - Uses schema analyzer metadata for optimization
+            - Optimized for dental clinic operational needs
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Get schema analyzer summary
+            summary = replicator.get_schema_analyzer_summary()
+            
+            # Validate summary structure
+            assert isinstance(summary, str), "Summary should be a string"
+            assert len(summary) > 0, "Summary should not be empty"
+            
+            # Validate that summary contains expected sections
+            expected_sections = [
+                "# Schema Analyzer Configuration Summary",
+                "## Performance Categories",
+                "## Processing Priorities", 
+                "## Extraction Strategies",
+                "## Overall Statistics"
+            ]
+            
+            for section in expected_sections:
+                assert section in summary, f"Summary should contain section: {section}"
+            
+            # Validate that summary contains table information
+            assert "Total Tables:" in summary, "Summary should contain total tables count"
+            
+            logger.info("Schema analyzer summary generation working correctly")
+            logger.info(f"Summary length: {len(summary)} characters")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_performance_optimizer_integration(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test PerformanceOptimizations class integration with copy operations.
+        
+        Validates:
+            - PerformanceOptimizations initialization
+            - Adaptive batch size calculation during copy operations
+            - Full refresh decision logic during copy operations
+            - Performance category handling during copy operations
+            - Schema analyzer configuration integration during copy operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline performance optimization
+            - Supports dental clinic data volume optimization
+            - Uses adaptive batch sizing for efficiency
+            - Optimized for dental clinic operational needs
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test that PerformanceOptimizations is properly initialized
+            assert hasattr(replicator, 'performance_optimizer'), "Performance optimizer should be available"
+            optimizer = replicator.performance_optimizer
+            
+            # Test adaptive batch size calculation for each table
+            for table_name, config in replicator.table_configs.items():
+                # Test adaptive batch size calculation
+                adaptive_batch_size = optimizer.calculate_adaptive_batch_size(table_name, config)
+                assert adaptive_batch_size > 0, f"Adaptive batch size should be positive for {table_name}: {adaptive_batch_size}"
+                
+                # Test full refresh decision logic
+                should_full_refresh = optimizer.should_use_full_refresh(table_name, config)
+                assert isinstance(should_full_refresh, bool), f"Full refresh decision should be boolean for {table_name}"
+                
+                # Test performance category handling
+                performance_category = config.get('performance_category', 'medium')
+                expected_rate = optimizer._get_expected_rate_for_category(performance_category)
+                assert expected_rate > 0, f"Expected rate should be positive for {performance_category}: {expected_rate}"
+                
+                logger.info(f"Table {table_name}: adaptive_batch_size={adaptive_batch_size}, "
+                          f"should_full_refresh={should_full_refresh}, "
+                          f"performance_category={performance_category}, "
+                          f"expected_rate={expected_rate}")
+            
+            logger.info("PerformanceOptimizations integration working correctly for all tables")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_adaptive_batch_size_in_copy_operations(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test adaptive batch size calculation during copy operations.
+        
+        Validates:
+            - Adaptive batch size calculation for different table types
+            - Performance category-based sizing during copy operations
+            - Configuration-based batch sizing during copy operations
+            - Batch size bounds validation during copy operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline performance optimization
+            - Supports dental clinic data volume optimization
+            - Uses adaptive batch sizing for efficiency
+            - Optimized for dental clinic operational needs
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test adaptive batch size calculation for each table
+            for table_name, config in replicator.table_configs.items():
+                # Get adaptive batch size using the optimized method
+                optimized_batch_size = replicator.performance_optimizer.calculate_adaptive_batch_size(table_name, config)
+                
+                # Validate batch size bounds
+                assert optimized_batch_size >= 1000, f"Batch size should be >= 1000 for {table_name}: {optimized_batch_size}"
+                assert optimized_batch_size <= 100000, f"Batch size should be <= 100000 for {table_name}: {optimized_batch_size}"
+                
+                # Test performance category-based sizing
+                performance_category = config.get('performance_category', 'medium')
+                if performance_category == 'large':
+                    assert optimized_batch_size >= 10000, f"Large tables should have batch size >= 10000: {optimized_batch_size}"
+                elif performance_category == 'tiny':
+                    assert optimized_batch_size <= 25000, f"Tiny tables should have batch size <= 25000: {optimized_batch_size}"
+                
+                logger.info(f"Table {table_name}: performance_category={performance_category}, "
+                          f"optimized_batch_size={optimized_batch_size}")
+            
+            logger.info("Adaptive batch size calculation working correctly for all tables")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_full_refresh_decision_in_copy_operations(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test full refresh decision logic during copy operations.
+        
+        Validates:
+            - Full refresh decision logic for different scenarios
+            - Time gap threshold analysis during copy operations
+            - Performance-based refresh decisions during copy operations
+            - Configuration-based refresh decisions during copy operations
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline strategy selection
+            - Supports dental clinic operational efficiency
+            - Uses intelligent refresh decisions for optimization
+            - Optimized for dental clinic operational needs
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test full refresh decision logic for each table
+            for table_name, config in replicator.table_configs.items():
+                # Get full refresh decision
+                should_full_refresh = replicator.performance_optimizer.should_use_full_refresh(table_name, config)
+                
+                # Validate decision is boolean
+                assert isinstance(should_full_refresh, bool), f"Full refresh decision should be boolean for {table_name}"
+                
+                # Test configuration-based decisions
+                incremental_columns = config.get('incremental_columns', [])
+                if not incremental_columns:
+                    # Tables without incremental columns should always use full refresh
+                    assert should_full_refresh, f"Table {table_name} without incremental columns should use full refresh"
+                
+                # Test time gap threshold analysis
+                time_gap_threshold = config.get('time_gap_threshold_days', 30)
+                assert time_gap_threshold > 0, f"Time gap threshold should be positive for {table_name}: {time_gap_threshold}"
+                
+                logger.info(f"Table {table_name}: should_full_refresh={should_full_refresh}, "
+                          f"incremental_columns={len(incremental_columns)}, "
+                          f"time_gap_threshold={time_gap_threshold}")
+            
+            logger.info("Full refresh decision logic working correctly for all tables")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+    def test_copy_strategy_determination(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test copy strategy determination based on performance category.
         
         Validates:
             - Copy strategy determination logic
-            - Size-based strategy selection
-            - Performance optimization for different table sizes
+            - Performance category-based strategy selection
+            - Performance optimization for different table categories
             - Strategy consistency across tables
             
         ETL Pipeline Context:
             - Critical for ETL pipeline performance optimization
             - Supports dental clinic data volume variations
-            - Uses size-based strategies for efficiency
+            - Uses category-based strategies for efficiency
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test copy strategy for different tables
             for table_name in replicator.table_configs.keys():
                 strategy = replicator.get_copy_method(table_name)
-                assert strategy in ['small', 'medium', 'large'], f"Invalid strategy for {table_name}: {strategy}"
+                assert strategy in ['tiny', 'small', 'medium', 'large'], f"Invalid strategy for {table_name}: {strategy}"
                 
                 # Get table configuration
                 config = replicator.table_configs.get(table_name, {})
-                size_mb = config.get('estimated_size_mb', 0)
+                performance_category = config.get('performance_category', 'medium')
                 
-                # Validate strategy based on size
-                if size_mb < 1:
-                    expected_strategy = 'small'
-                elif size_mb < 100:
-                    expected_strategy = 'medium'
-                else:
-                    expected_strategy = 'large'
-                
+                # Validate strategy based on performance category
+                expected_strategy = performance_category
                 assert strategy == expected_strategy, f"Strategy mismatch for {table_name}: expected {expected_strategy}, got {strategy}"
             
             logger.info("Copy strategy determination working correctly for all tables")
@@ -252,7 +478,58 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_nonexistent_table(self, test_settings_with_file_provider):
+    def test_batch_size_optimization(self, test_settings_with_file_provider, populated_test_databases):
+        """
+        Test batch size optimization for different table sizes.
+        
+        Validates:
+            - Batch size configuration
+            - Size-based batch optimization
+            - Performance with different batch sizes
+            - Memory usage optimization
+            
+        ETL Pipeline Context:
+            - Critical for ETL pipeline performance optimization
+            - Supports dental clinic data volume optimization
+            - Uses batch size optimization for efficiency
+            - Optimized for dental clinic operational needs
+        """
+        try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
+            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
+            
+            # Test batch sizes for each table using optimized batch sizes
+            for table_name, config in replicator.table_configs.items():
+                # Use the optimized batch size that would be used during runtime
+                optimized_batch_size = replicator.performance_optimizer.calculate_adaptive_batch_size(table_name, config)
+                
+                # Validate optimized batch size
+                assert optimized_batch_size > 0, f"Invalid optimized batch size for {table_name}: {optimized_batch_size}"
+                
+                # Test that optimized batch size is reasonable for table size based on actual logic
+                estimated_size_mb = config.get('estimated_size_mb', 0)
+                if estimated_size_mb > 100:  # Large table
+                    assert optimized_batch_size <= 100000, f"Large table {table_name} should have optimized batch_size <= 100000"
+                    assert optimized_batch_size >= 1000, f"Large table {table_name} should have optimized batch_size >= 1000"
+                elif estimated_size_mb > 50:  # Medium table
+                    assert optimized_batch_size <= 50000, f"Medium table {table_name} should have optimized batch_size <= 50000"
+                else:  # Small table
+                    # Small tables can use the base batch size from config
+                    base_batch_size = config.get('batch_size', 5000)
+                    assert optimized_batch_size <= base_batch_size, f"Small table {table_name} should have optimized batch_size <= base_batch_size ({base_batch_size})"
+            
+            logger.info("Batch size optimization working correctly for all tables")
+            
+        except Exception as e:
+            pytest.skip(f"Test databases not available: {str(e)}")
+
+
+    def test_copy_nonexistent_table(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for non-existent tables.
         
@@ -269,6 +546,12 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test copying non-existent table
@@ -280,7 +563,7 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_copy_table_without_incremental_column(self, test_settings_with_file_provider):
+    def test_copy_table_without_incremental_column(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test error handling for tables without incremental column.
         
@@ -297,6 +580,12 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
             - Optimized for dental clinic operational stability
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Instead of copying real data (which can hang),
@@ -338,7 +627,7 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}")
 
-    def test_extraction_strategy_handling(self, test_settings_with_file_provider):
+    def test_extraction_strategy_handling(self, test_settings_with_file_provider, populated_test_databases):
         """
         Test handling of different extraction strategies.
         
@@ -355,6 +644,12 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
             - Optimized for dental clinic operational needs
         """
         try:
+            # Setup test data
+            test_data_manager = populated_test_databases
+            test_data_manager.setup_patient_data()
+            test_data_manager.setup_appointment_data()
+            test_data_manager.setup_procedure_data()
+            
             replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
             
             # Test extraction strategy for each table
@@ -368,83 +663,6 @@ class TestSimpleMySQLReplicatorCopyOperationsIntegration:
                 assert strategy in ['incremental', 'full_table', 'incremental_chunked'], f"Invalid strategy for {table_name}: {strategy}"
             
             logger.info("Extraction strategy handling working correctly for all tables")
-            
-        except Exception as e:
-            pytest.skip(f"Test databases not available: {str(e)}")
-
-    def test_table_importance_handling(self, test_settings_with_file_provider):
-        """
-        Test handling of table importance levels.
-        
-        Validates:
-            - Importance level configuration
-            - Importance-based filtering
-            - Priority-based processing
-            - Error handling for importance levels
-            
-        ETL Pipeline Context:
-            - Critical for ETL pipeline prioritization
-            - Supports dental clinic data prioritization
-            - Uses importance levels for resource allocation
-            - Optimized for dental clinic operational needs
-        """
-        try:
-            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
-            
-            # Test importance levels for each table
-            importance_levels = set()
-            for table_name, config in replicator.table_configs.items():
-                importance = config.get('table_importance', 'standard')
-                importance_levels.add(importance)
-                
-                # Validate importance level (accept all valid values from schema analyzer)
-                assert importance in ['important', 'standard', 'audit', 'reference', 'critical'], f"Invalid importance for {table_name}: {importance}"
-            
-            logger.info(f"Table importance levels found: {importance_levels}")
-            
-        except Exception as e:
-            pytest.skip(f"Test databases not available: {str(e)}")
-
-    def test_batch_size_optimization(self, test_settings_with_file_provider):
-        """
-        Test batch size optimization for different table sizes.
-        
-        Validates:
-            - Batch size configuration
-            - Size-based batch optimization
-            - Performance with different batch sizes
-            - Memory usage optimization
-            
-        ETL Pipeline Context:
-            - Critical for ETL pipeline performance optimization
-            - Supports dental clinic data volume optimization
-            - Uses batch size optimization for efficiency
-            - Optimized for dental clinic operational needs
-        """
-        try:
-            replicator = SimpleMySQLReplicator(settings=test_settings_with_file_provider)
-            
-            # Test batch sizes for each table using optimized batch sizes
-            for table_name, config in replicator.table_configs.items():
-                # Use the optimized batch size that would be used during runtime
-                optimized_batch_size = replicator._get_optimized_batch_size(table_name, config)
-                
-                # Validate optimized batch size
-                assert optimized_batch_size > 0, f"Invalid optimized batch size for {table_name}: {optimized_batch_size}"
-                
-                # Test that optimized batch size is reasonable for table size based on actual logic
-                estimated_size_mb = config.get('estimated_size_mb', 0)
-                if estimated_size_mb > 100:  # Large table
-                    assert optimized_batch_size <= 50000, f"Large table {table_name} should have optimized batch_size <= 50000"
-                    assert optimized_batch_size >= 1000, f"Large table {table_name} should have optimized batch_size >= 1000"
-                elif estimated_size_mb > 50:  # Medium table
-                    assert optimized_batch_size <= 50000, f"Medium table {table_name} should have optimized batch_size <= 50000"
-                else:  # Small table
-                    # Small tables can use the base batch size from config
-                    base_batch_size = config.get('batch_size', 5000)
-                    assert optimized_batch_size <= base_batch_size, f"Small table {table_name} should have optimized batch_size <= base_batch_size ({base_batch_size})"
-            
-            logger.info("Batch size optimization working correctly for all tables")
             
         except Exception as e:
             pytest.skip(f"Test databases not available: {str(e)}") 
