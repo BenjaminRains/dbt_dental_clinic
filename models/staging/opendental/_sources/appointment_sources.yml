@@ -8,10 +8,10 @@ sources:
     schema: raw  # Raw data from ETL pipeline
     
     # Global configuration for all tables
-    loaded_at_field: "_extracted_at"  # ETL pipeline timestamp
+    loaded_at_field: "_loaded_at"  # ETL pipeline processing time
     freshness:
       warn_after: {count: 24, period: hour}   # High-frequency updates for scheduling
-      error_after: {count: 48, period: hour}  # Maximum acceptable delay
+      error_after: {count: 720, period: hour}  # Maximum acceptable delay: 30 days
     
     tables:
     
