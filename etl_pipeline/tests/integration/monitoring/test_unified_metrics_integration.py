@@ -98,7 +98,7 @@ def test_settings_with_file_provider():
     """
     try:
         # Create FileConfigProvider that will load from .env_test
-        config_dir = Path(__file__).parent.parent.parent.parent  # Go to etl_pipeline root
+        config_dir = Path(__file__).parent.parent.parent.parent.parent  # Go to etl_pipeline root
         provider = FileConfigProvider(config_dir, environment='test')
         
         # Create settings with FileConfigProvider for real environment loading
