@@ -118,32 +118,32 @@ def replicator_with_comprehensive_config(test_settings):
         mock_config = {
             'tables': {
                 'patient': {
-                    'incremental_columns': ['DateTStamp'],
                     'batch_size': 1000,
-                    'estimated_size_mb': 50,
                     'extraction_strategy': 'incremental',
-                    'table_importance': 'important'
+                    'incremental_column': 'PatientNum',
+                    'estimated_rows': 50000,
+                    'estimated_size_mb': 25.5
                 },
                 'appointment': {
-                    'incremental_columns': ['DateTStamp'],
                     'batch_size': 500,
-                    'estimated_size_mb': 25,
                     'extraction_strategy': 'incremental',
-                    'table_importance': 'important'
+                    'incremental_column': 'AptNum',
+                    'estimated_rows': 100000,
+                    'estimated_size_mb': 45.2
                 },
                 'procedurelog': {
-                    'incremental_columns': ['DateTStamp'],
                     'batch_size': 2000,
-                    'estimated_size_mb': 100,
                     'extraction_strategy': 'incremental',
-                    'table_importance': 'standard'
+                    'incremental_column': 'ProcNum',
+                    'estimated_rows': 200000,
+                    'estimated_size_mb': 120.8
                 },
-                'claim': {
-                    'incremental_columns': ['DateTStamp'],
+                'claimproc': {
                     'batch_size': 1500,
-                    'estimated_size_mb': 0.5,  # Changed from 10 to 0.5 to match 'small' strategy
                     'extraction_strategy': 'incremental',
-                    'table_importance': 'important'
+                    'incremental_column': 'ClaimProcNum',
+                    'estimated_rows': 75000,
+                    'estimated_size_mb': 85.3
                 }
             }
         }
