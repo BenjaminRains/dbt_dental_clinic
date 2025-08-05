@@ -15,35 +15,54 @@ general:
   timezone: "UTC"
   max_retries: 3
   retry_delay_seconds: 300
-  batch_size: 50000  # Records per batch for data processing (increased from 25000 for better performance)
-  parallel_jobs: 6  # Number of parallel workers for table processing (increased for better throughput)
+  batch_size: 100000  # Increased for better performance (from 50000)
+  parallel_jobs: 8    # Increased for better throughput (from 6)
+
+# Performance category-specific settings
+performance_categories:
+  tiny:
+    batch_size: 5000      # Small batches for tiny tables (< 10K records)
+    timeout_minutes: 5     # Quick timeout for tiny tables
+    retry_delay_seconds: 60
+  small:
+    batch_size: 25000     # Medium batches for small tables (10K-100K records)
+    timeout_minutes: 15    # Moderate timeout for small tables
+    retry_delay_seconds: 120
+  medium:
+    batch_size: 50000     # Large batches for medium tables (100K-1M records)
+    timeout_minutes: 30    # Standard timeout for medium tables
+    retry_delay_seconds: 300
+  large:
+    batch_size: 100000    # Extra large batches for large tables (> 1M records)
+    timeout_minutes: 60    # Extended timeout for large tables
+    retry_delay_seconds: 600
 
 # Database connection overrides
 # These settings override the default connection parameters loaded from environment variables
 connections:
   # OpenDental source database connection settings
   source:
-    pool_size: 20        # 4x increase for performance
-    pool_timeout: 300    # 10x increase for bulk operations
-    pool_recycle: 3600  # Recycle connections every hour
+    pool_size: 30        # Increased for high-performance operations (from 20)
+    pool_timeout: 600    # Increased for large operations (from 300)
+    pool_recycle: 1800   # 30 minutes (from 3600)
     connect_timeout: 60
-    read_timeout: 300
-    write_timeout: 300
+    read_timeout: 600    # Increased for large queries (from 300)
+    write_timeout: 600   # Increased for large operations (from 300)
 
   # MySQL replication database connection settings
   replication:
-    pool_size: 20        # 4x increase for performance
-    pool_timeout: 300    # 10x increase for bulk operations
-    pool_recycle: 3600
+    pool_size: 30        # Increased for high-performance operations (from 20)
+    pool_timeout: 600    # Increased for large operations (from 300)
+    pool_recycle: 1800   # 30 minutes (from 3600)
     connect_timeout: 60
-    read_timeout: 300
-    write_timeout: 300
-
+    read_timeout: 600    # Increased for large queries (from 300)
+    write_timeout: 600   # Increased for large operations (from 300)
+    
   # PostgreSQL analytics database connection settings
   analytics:
-    pool_size: 20        # 4x increase for performance
-    pool_timeout: 300    # 10x increase for bulk operations
-    pool_recycle: 3600
+    pool_size: 30        # Increased for high-performance operations (from 20)
+    pool_timeout: 600    # Increased for large operations (from 300)
+    pool_recycle: 1800   # 30 minutes (from 3600)
     connect_timeout: 60
     application_name: "dental_clinic_etl"
 
