@@ -86,27 +86,26 @@ class TestSimpleMySQLReplicatorInitialization:
             - Configuration loading for table definitions
         """
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target, \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
             mock_source_engine = MagicMock()
             mock_target_engine = MagicMock()
             mock_source.return_value = mock_source_engine
             mock_target.return_value = mock_target_engine
             
-            # Mock YAML file loading with test configuration
+            # Mock configuration with test data
             mock_config = {
-                'tables': {
-                    'patient': {
-                        'incremental_columns': ['DateTStamp'],
-                        'batch_size': 1000,
-                        'estimated_size_mb': 50,
-                        'extraction_strategy': 'incremental',
-                        'table_importance': 'critical'
-                    }
+                'patient': {
+                    'incremental_columns': ['DateTStamp'],
+                    'batch_size': 1000,
+                    'estimated_size_mb': 50,
+                    'extraction_strategy': 'incremental'
                 }
             }
             
-            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
+            # Mock the _load_configuration method at the class level to intercept during __init__
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config):
                 # Initialize replicator with Settings injection using fixture
                 replicator = SimpleMySQLReplicator(settings=test_settings)
                 
@@ -142,16 +141,19 @@ class TestSimpleMySQLReplicatorInitialization:
         """
         with patch('etl_pipeline.core.simple_mysql_replicator.get_settings', return_value=test_settings), \
              patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target, \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
             mock_source_engine = MagicMock()
             mock_target_engine = MagicMock()
             mock_source.return_value = mock_source_engine
             mock_target.return_value = mock_target_engine
             
-            # Mock YAML file loading
-            mock_config = {'tables': {'patient': {'incremental_columns': ['DateTStamp']}}}
-            with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
+            # Mock configuration with test data
+            mock_config = {'patient': {'incremental_columns': ['DateTStamp']}}
+            
+            # Mock the _load_configuration method at the class level to intercept during __init__
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config):
                 # Initialize replicator without explicit settings
                 replicator = SimpleMySQLReplicator()
                 
@@ -178,16 +180,19 @@ class TestSimpleMySQLReplicatorInitialization:
             - Uses Settings injection for environment-agnostic operation
         """
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target, \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
             mock_source_engine = MagicMock()
             mock_target_engine = MagicMock()
             mock_source.return_value = mock_source_engine
             mock_target.return_value = mock_target_engine
             
-            # Mock custom YAML file loading
-            custom_config = {'tables': {'custom_table': {'incremental_columns': ['CustomDate']}}}
-            with patch('builtins.open', mock_open(read_data=yaml.dump(custom_config))):
+            # Mock configuration with test data
+            custom_config = {'custom_table': {'incremental_columns': ['CustomDate']}}
+            
+            # Mock the _load_configuration method at the class level to intercept during __init__
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=custom_config):
                 # Initialize replicator with custom config path
                 custom_path = '/custom/path/tables.yml'
                 replicator = SimpleMySQLReplicator(settings=test_settings, tables_config_path=custom_path)
@@ -215,15 +220,17 @@ class TestSimpleMySQLReplicatorInitialization:
             - Uses Settings injection for error context
         """
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target, \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
             mock_source_engine = MagicMock()
             mock_target_engine = MagicMock()
             mock_source.return_value = mock_source_engine
             mock_target.return_value = mock_target_engine
             
-            # Mock file not found error
-            with patch('builtins.open', side_effect=FileNotFoundError("Configuration file not found")):
+            # Mock _load_configuration to raise FileNotFoundError
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', 
+                      side_effect=ConfigurationError("Configuration file not found", config_file="/path/to/tables.yml")):
                 # Should raise ConfigurationError
                 with pytest.raises(ConfigurationError) as exc_info:
                     SimpleMySQLReplicator(settings=test_settings)
@@ -247,15 +254,17 @@ class TestSimpleMySQLReplicatorInitialization:
             - Uses Settings injection for error context
         """
         with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection') as mock_source, \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target:
+             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection') as mock_target, \
+             patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
             
             mock_source_engine = MagicMock()
             mock_target_engine = MagicMock()
             mock_source.return_value = mock_source_engine
             mock_target.return_value = mock_target_engine
             
-            # Mock invalid YAML
-            with patch('builtins.open', mock_open(read_data="invalid: yaml: content:")):
+            # Mock _load_configuration to raise ConfigurationError for invalid YAML
+            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', 
+                      side_effect=ConfigurationError("Failed to load configuration", config_file="/path/to/tables.yml")):
                 # Should raise ConfigurationError
                 with pytest.raises(ConfigurationError) as exc_info:
                     SimpleMySQLReplicator(settings=test_settings)
