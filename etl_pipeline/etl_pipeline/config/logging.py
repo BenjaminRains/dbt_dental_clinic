@@ -91,15 +91,23 @@ def setup_logging(
     
     # File handler (optional)
     if log_file:
-        if log_dir:
-            log_path = Path(log_dir) / log_file
-        else:
-            log_path = Path(log_file)
-        
-        file_handler = logging.FileHandler(log_path)
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(getattr(logging, log_level.upper()))
-        root_logger.addHandler(file_handler)
+        try:
+            if log_dir:
+                log_path = Path(log_dir) / log_file
+            else:
+                log_path = Path(log_file)
+            
+            # Ensure the directory exists
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            file_handler = logging.FileHandler(log_path, encoding='utf-8')
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(getattr(logging, log_level.upper()))
+            root_logger.addHandler(file_handler)
+            
+        except Exception as e:
+            # If file handler setup fails, log to console but don't fail completely
+            print(f"Warning: Could not set up file logging to {log_file}: {e}")
     
     # ETL specific logger
     etl_logger = logging.getLogger("etl_pipeline")
@@ -371,12 +379,27 @@ def init_default_logger():
         logger.info(f"ETL Pipeline run started - Log file: {log_file_path}")
         
     except Exception as e:
-        # Fallback to basic console logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        # IMPROVED FALLBACK: Don't override existing handlers, just add console logging
+        # Check if root logger already has handlers
+        root_logger = logging.getLogger()
+        
+        if not root_logger.handlers:
+            # Only set up basic config if no handlers exist
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+        
+        # Log the error to console
         print(f"Warning: Could not set up advanced logging: {e}")
+        
+        # Try to log the startup message even with basic config
+        try:
+            logger = get_logger("etl_pipeline")
+            logger.info("ETL Pipeline run started - Using basic logging configuration")
+        except Exception:
+            # If even basic logging fails, just print to console
+            print("ETL Pipeline run started - Using console output only")
 
 
 # Auto-initialize when module is imported
