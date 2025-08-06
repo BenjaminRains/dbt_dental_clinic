@@ -5,14 +5,15 @@ sources:
     description: "OpenDental data in PostgreSQL"
     database: opendental_analytics
     schema: raw  # Raw data from ETL pipeline
-    loaded_at_field: "SecDateTEdit"  # Default loaded_at_field for freshness checks
+    
+    # Global settings for all tables
+    loaded_at_field: "_loaded_at"
     freshness:
-      warn_after: {count: 24, period: day}
-      error_after: {count: 48, period: day}
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 720, period: hour}
     tables:
       - name: claim
         description: "Insurance claims submitted"
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -159,7 +160,6 @@ sources:
 
       - name: claimpayment
         description: "Payments received from insurance claims"
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -213,7 +213,6 @@ sources:
 
       - name: claimproc
         description: "Procedures included in insurance claims"
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -334,7 +333,6 @@ sources:
 
       - name: claimtracking
         description: "Tracking status of insurance claims"
-        loaded_at_field: "EntryDateTime"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -371,7 +369,6 @@ sources:
 
       - name: claimsnapshot
         description: "Historical snapshots of claim states and financial information"
-        loaded_at_field: "DateTEntry"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -451,7 +448,6 @@ sources:
 
       - name: eobattach
         description: "Explanation of Benefits (EOB) attachments associated with claim payments"
-        loaded_at_field: "DateTCreated"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}

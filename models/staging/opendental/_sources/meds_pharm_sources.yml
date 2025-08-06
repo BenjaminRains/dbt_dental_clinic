@@ -5,6 +5,13 @@ sources:
     description: "OpenDental data in PostgreSQL"
     database: opendental_analytics
     schema: raw  # Raw data from ETL pipeline
+    
+    # Global settings for all tables
+    loaded_at_field: "_loaded_at"
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 720, period: hour}
+    
     tables:
       - name: allergy
         description: "Patient allergy records containing allergy information including reactions and status"

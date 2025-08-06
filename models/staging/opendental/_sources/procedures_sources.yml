@@ -7,7 +7,9 @@ sources:
     database: opendental_analytics
     schema: raw  # Raw data from ETL pipeline
     loader: postgres
-    loaded_at_field: "DateTStamp"  # Using the timestamp field for freshness
+    
+    # Global settings for all tables
+    loaded_at_field: "_loaded_at"
     
     tables:
       - name: procedurecode

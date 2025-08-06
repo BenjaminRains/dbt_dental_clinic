@@ -7,10 +7,12 @@ sources:
     database: opendental_analytics
     schema: raw  # Raw data from ETL pipeline
     loader: postgres
-    loaded_at_field: "DateTStamp"  # Using the timestamp field from patient table
+    
+    # Global settings for all tables
+    loaded_at_field: "_loaded_at"
     freshness:
-      warn_after: {count: 24, period: day}
-      error_after: {count: 48, period: day}
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 720, period: hour}
     
     tables:
       - name: patient
@@ -148,7 +150,6 @@ sources:
       
       - name: toothinitial
         description: "Initial conditions of patient teeth"
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}

@@ -6,13 +6,19 @@ sources:
     description: "OpenDental data in PostgreSQL"
     database: opendental_analytics
     schema: raw  # Raw data from ETL pipeline
+    
+    # Global settings for all tables
+    loaded_at_field: "_loaded_at"
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 720, period: hour}
+    
     tables:
 
       - name: adjustment
         description: >
           Financial adjustments including insurance write-offs, discounts, refunds, and other account modifications.
           Core table for tracking all account balance adjustments and financial corrections.
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -95,7 +101,6 @@ sources:
 
       - name: payment
         description: "Patient payments for services"
-        loaded_at_field: "SecDateTEdit"  # Add freshness tracking
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -129,7 +134,6 @@ sources:
           Payment splits that allocate payments across procedures, adjustments, and payment plans.
           Contains detailed tracking of how payments are distributed, including special handling
           for unearned income types (288, 439) and discounts.
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -214,7 +218,6 @@ sources:
         description: >
           Patient billing statements including payment history, balance tracking, and delivery status.
           Used for generating and tracking patient invoices, receipts, and financial communications.
-        loaded_at_field: "DateTStamp"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -285,7 +288,6 @@ sources:
         description: >
           Links statements to various production items (procedures, adjustments, etc).
           Used to track what items are included in each statement for billing purposes.
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
@@ -335,7 +337,6 @@ sources:
       
       - name: fee
         description: "Fee amounts for procedures"
-        loaded_at_field: "SecDateTEdit"
         columns:
           - name: FeeNum
             description: Primary key for fees
@@ -372,7 +373,6 @@ sources:
         description: >
           Fee schedules defining pricing structures for dental procedures.
           Contains global and specific fee schedules for different insurance plans and scenarios.
-        loaded_at_field: "SecDateTEdit"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}

@@ -5,6 +5,13 @@ sources:
     description: "OpenDental data in PostgreSQL"
     database: opendental_analytics
     schema: raw  # Raw data from ETL pipeline
+    
+    # Global settings for all tables
+    loaded_at_field: "_loaded_at"
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 720, period: hour}
+    
     tables:
       - name: provider
         description: "Dental provider information including doctors, hygienists, and other clinical staff"
@@ -297,7 +304,6 @@ sources:
 
       - name: taskhist
         description: "Historical tracking of task changes and status updates"
-        loaded_at_field: "DateTStamp"
         freshness:
           warn_after: {count: 24, period: day}
           error_after: {count: 48, period: day}
