@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_project.json
+name: 'dbt_dental_clinic_prod'
+version: '1.0.0'
+config-version: 2
+
+# Make sure this matches exactly what's in your profiles.yml
+profile: 'dbt_dental_clinic_prod'
+
+# Paths configuration
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+docs-paths: ["dbt_docs"]
+
+# Build artifacts location
+target-path: "target"
+clean-targets:
+    - "target"
+    - "dbt_packages"
+
+# Variables configuration
+vars:
+  max_valid_date: current_date
+
+# Database/schema configuration
+models:
+  dbt_dental_clinic_prod  :
+    # Configure materializations by folder
+    staging:
+      +materialized: view  # Default materialization, some models override this to be tables
+      +schema: staging  # Simplified schema name
+      +description: "Staging models for raw data transformation"
+    
+    intermediate:
+      +materialized: table
+      +schema: intermediate  # Simplified schema name
+      +description: "Intermediate models for business logic implementation"
+    
+    marts:
+      +materialized: table
+      +schema: marts  # Simplified schema name
+      +description: "Mart models for business reporting and analytics"
+
+# Package dependencies - temporarily disabled for debugging
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.0
+  - package: metaplane/dbt_expectations
+    version: 0.10.8
+  - package: godatadriven/dbt_date
+    version: 0.13.0
+  - package: dbt-labs/audit_helper
+    version: 0.12.1
