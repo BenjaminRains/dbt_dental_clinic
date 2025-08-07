@@ -1,0 +1,163 @@
+version: 2
+
+models:
+  - name: stg_opendental__insbluebooklog
+    description: >
+      Staging model for insurance bluebook log entries that track historical changes to allowed fees 
+      for claim procedures. This table serves as an audit trail for fee adjustments and contains two 
+      primary types of records: UCR (Usual, Customary, Reasonable) fee calculations that don't link 
+      to specific claim procedures, and allowed fee records from actual received insurance claims.
+      
+      Each log entry represents a point-in-time calculation or adjustment of what an insurance 
+      carrier allows for a specific procedure. The model includes comprehensive historical data 
+      dating back to 2021, enabling analysis of fee trends, insurance payment patterns, and 
+      claim processing outcomes over time.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~195,000 total records (106,000+ since 2023-01-01)"
+      data_scope: "2023-01-01 onwards for incremental loads, full historical data available from 2021-08-30"
+      
+      known_issues:
+        - description: "Some log entries have ClaimProcNum references to procedures that may not exist in current data due to historical procedure deletions"
+          severity: "warn"
+          identified_date: "2024-12-01"
+          test: "relationships_with_source_filter test includes source_filter to handle this"
+        - description: "UCR Fee records (Rule Type: UCR Fee) do not correspond to actual claim procedures and will have claim_procedure_id that may not link to real claims"
+          severity: "warn"
+          identified_date: "2024-12-01"
+        - description: "Some allowed fees may be 0.00 when procedure fee exceeds UCR calculations (see description field for details)"
+          severity: "warn" 
+          identified_date: "2024-12-01"
+      
+      business_rules:
+        - rule: "Log entries are created automatically when insurance claims are processed or when UCR fee schedules are updated"
+          impact: "Provides audit trail for all allowed fee calculations and adjustments"
+        - rule: "UCR Fee records represent theoretical calculations and may not link to actual procedures"
+          impact: "Must be filtered appropriately when analyzing actual claim payments vs theoretical fee schedules"
+        - rule: "Allowed fees of 0.00 may indicate procedure fee was less than calculated UCR amount"
+          impact: "Requires checking description field to understand why allowed fee is zero"
+      
+      usage_notes: >
+        This model is essential for insurance analysis, fee schedule management, and claim payment reconciliation.
+        When analyzing actual insurance payments, filter out UCR Fee records by checking the description field
+        for 'Rule Type: UCR Fee'. The allowed_fee field represents the insurance carrier's determination of
+        the allowable amount for a procedure, which may differ from both the procedure fee and the actual
+        payment amount. Use this data in conjunction with claim payment data to understand complete payment flows.
+        Historical relationships to procedures are maintained even for deleted procedures to preserve audit integrity.
+    
+    tests:
+      # Model-level business rule validation
+      - dbt_utils.expression_is_true:
+          expression: "allowed_fee >= 0"
+          config:
+            severity: error
+      
+      # Date validation - ensure log entries are not in the future
+      - dbt_utils.expression_is_true:
+          expression: "date_created <= current_date"
+          config:
+            severity: error
+      
+      # Business rule - ensure metadata consistency
+      - dbt_utils.expression_is_true:
+          expression: "_created_at = _updated_at"
+          config:
+            severity: warn
+    
+    columns:
+      # Primary Key
+      - name: insbluebooklog_id
+        description: >
+          Primary key for insurance bluebook log entries. Maps to InsBlueBookLogNum in OpenDental.
+          Unique identifier for each fee calculation or adjustment event in the insurance processing system.
+          This ID provides traceability for all allowed fee determinations and changes over time.
+        tests:
+          - unique
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 1"
+
+      # Foreign Key Relationships
+      - name: claim_procedure_id
+        description: >
+          Foreign key to claim procedures table. Links this log entry to a specific claim procedure
+          when the log represents an actual insurance claim processing event. Note that UCR Fee
+          records may reference claim procedure IDs that don't correspond to actual submitted claims
+          but rather theoretical fee schedule calculations. May be null for system-generated entries.
+        tests:
+          - relationships_with_source_filter:
+              to: ref('stg_opendental__claimproc')
+              column_name: claim_procedure_id
+              field: claim_procedure_id
+              source_relation: source('opendental', 'claimproc')
+              source_column: '"ClaimProcNum"'
+              source_filter: '"ProcDate" >= ''2023-01-01'' and "ProcDate" is not null'
+              config:
+                severity: warn
+
+      # Business Data Fields
+      - name: allowed_fee
+        description: >
+          The allowed fee amount determined by the insurance carrier for this procedure.
+          Represents the maximum amount the insurance considers reasonable for the procedure
+          based on their fee schedule, UCR calculations, or contract terms. May be 0.00 when
+          the procedure's actual fee is less than the calculated UCR amount. Critical for
+          payment reconciliation and fee schedule analysis.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                severity: error
+
+      - name: description
+        description: >
+          Detailed text description of the fee calculation or adjustment event. Contains critical
+          information about the rule type (UCR Fee, contract rate, etc.), calculation method,
+          and reason for the allowed amount. Common patterns include 'Rule Type: UCR Fee' for
+          theoretical calculations and specific adjustment reasons for claim-based entries.
+          Essential for understanding the business logic behind each fee determination.
+        tests:
+          - not_null
+
+      # Date Fields
+      - name: date_created
+        description: >
+          Date and time when this log entry was created in OpenDental. Maps to DateTEntry column.
+          Represents when the fee calculation or adjustment was performed, not necessarily when
+          the associated procedure was completed. Used for temporal analysis of fee changes and
+          insurance processing patterns.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2021-01-01'"
+              config:
+                severity: error
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: >
+          Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column.
+          Provides audit trail for when each fee calculation was originally performed in the source system.
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTEntry column
+          since insurance bluebook log entries are typically immutable after creation.
+        tests:
+          - not_null
+
+      - name: _created_by_user_id
+        description: >
+          User who created the record in the source system (OpenDental). Set to null for this table
+          as insurance bluebook log entries are typically system-generated during claim processing
+          rather than manually created by users.
+

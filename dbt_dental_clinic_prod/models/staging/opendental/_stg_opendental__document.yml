@@ -1,0 +1,221 @@
+version: 2
+
+models:
+  - name: stg_opendental__document
+    description: >
+      Staging model for dental documents including images, files, and attachments associated with patient records.
+      
+      This model contains comprehensive information about various documents stored in the OpenDental system,
+      including clinical images, scanned documents, digital signatures, and other file attachments. Documents
+      can be linked to specific patients, procedures, or mount items. The model includes both document metadata
+      and binary content (Base64 encoded) along with image processing parameters like rotation, cropping, and
+      windowing settings for proper display and manipulation.
+    
+    meta:
+      record_count: "~50,000 active documents"
+      data_scope: "All documents from OpenDental system inception to present"
+      
+      known_issues:
+        - description: "Some legacy documents may have missing or corrupted thumbnail data"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "thumbnail_data_quality"
+        - description: "OCR response data is only populated for documents processed after 2022"
+          severity: "warn"
+          identified_date: "2024-01-20"
+        - description: "External GUID may be null for documents not imported from external systems"
+          severity: "warn"
+          identified_date: "2024-01-10"
+        - description: "Some documents have creation date after timestamp date due to processing workflow"
+          severity: "warn"
+          identified_date: "2024-01-20"
+          test: "document_created_before_or_equal_to_timestamp"
+      
+      business_rules:
+        - rule: "Provider ID of 0 in source system represents system-generated documents"
+          impact: "Converted to NULL in staging for proper foreign key relationships"
+        - rule: "Document categories link to definition table for standardized categorization"
+          impact: "Essential for document classification and filtering in downstream models"
+        - rule: "Mount items provide grouping for related images (like X-ray series)"
+          impact: "Critical for clinical workflow organization and image management"
+        - rule: "Document processing workflow allows creation date to be after timestamp date"
+          impact: "date_timestamp = when processing started, date_created = when finalized. Common for insurance documents and system-generated files that require approval workflows. Differences typically range from hours to days, with rare cases up to weeks for complex processing."
+      
+      usage_notes: >
+        Key considerations for analysts:
+        - Raw Base64 and Thumbnail columns contain large binary data - avoid selecting unless necessary
+        - Image processing parameters (crop, rotation, windowing) are used by OpenDental client for display
+        - Tooth numbers are stored as comma-separated strings and may need parsing for analysis
+        - Document dates represent creation and last modification in OpenDental, not file system dates
+        - OCR response data is only available for recent documents with text extraction capabilities
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "date_created <= date_timestamp"
+          name: "document_created_before_or_equal_to_timestamp"
+          severity: warn
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - patient_id
+            - file_name
+            - date_created
+          name: "document_patient_filename_date_unique"
+    
+    columns:
+      # Primary Key
+      - name: document_id
+        description: "Primary key - Unique identifier for each document record (maps to DocNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+
+      # Foreign Keys
+      - name: patient_id
+        description: "Foreign key to patient table - Links document to the patient it belongs to"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+
+      - name: document_category_id
+        description: "Foreign key to definition table - Categorizes the document type (e.g., Clinical Photo, X-ray, Insurance Form)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              severity: warn
+              where: "document_category_id IS NOT NULL"
+
+      - name: mount_item_id
+        description: "Foreign key to mount item table - Groups related images together (like X-ray series or photo sets). NULL for standalone documents."
+        # No relationship test as mount item staging model may not exist yet
+
+      - name: provider_id
+        description: "Foreign key to provider table - Provider associated with the document. NULL represents system-generated documents (originally 0 in source)."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "provider_id IS NOT NULL"
+
+      # String Fields
+      - name: description
+        description: "Text description of the document providing context about its content or purpose"
+
+      - name: file_name
+        description: "Original name of the stored file including extension, used for identification and display purposes"
+
+      - name: tooth_numbers
+        description: "Comma-separated list of tooth numbers that this document relates to (e.g., '1,2,3' for teeth 1, 2, and 3)"
+
+      - name: note
+        description: "Additional notes or comments about the document, often used for clinical context or special instructions"
+
+      - name: signature
+        description: "Digital signature data in proprietary format, used for document authentication and legal compliance"
+
+      - name: external_guid
+        description: "External system's unique identifier for documents imported from other systems or applications"
+
+      - name: external_source
+        description: "Name or identifier of the source system or application that originally created the document"
+
+      - name: raw_base64
+        description: "Base64 encoded binary content of the actual document/image file - avoid selecting unless necessary due to size"
+
+      - name: thumbnail
+        description: "Base64 encoded thumbnail image for quick preview - smaller than raw content but still substantial data"
+
+      - name: ocr_response_data
+        description: "OCR (Optical Character Recognition) extracted text from the document - only populated for documents processed after 2022"
+
+      # Numeric Fields
+      - name: image_type
+        description: "Numeric identifier for the image format type (e.g., JPEG, PNG, TIFF) used by OpenDental for proper rendering"
+
+      - name: degrees_rotated
+        description: "Number of degrees the image has been rotated for proper orientation (0, 90, 180, 270)"
+        tests:
+          - accepted_values:
+              values: [0, 90, 180, 270]
+              severity: warn
+
+      - name: crop_x
+        description: "X-coordinate of the crop starting point in pixels for image display cropping"
+
+      - name: crop_y
+        description: "Y-coordinate of the crop starting point in pixels for image display cropping"
+
+      - name: crop_width
+        description: "Width of the cropped area in pixels for image display"
+
+      - name: crop_height
+        description: "Height of the cropped area in pixels for image display"
+
+      - name: windowing_min
+        description: "Minimum window value for image brightness/contrast adjustment, particularly important for X-ray images"
+
+      - name: windowing_max
+        description: "Maximum window value for image brightness/contrast adjustment, particularly important for X-ray images"
+
+      - name: image_capture_type
+        description: "Numeric identifier for how the image was captured (e.g., intraoral camera, scanner, digital X-ray)"
+
+      # Boolean Fields
+      - name: is_flipped
+        description: "Indicates if the image has been horizontally flipped for proper orientation (converted from 0=No, 1=Yes to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_signature_topaz
+        description: "Indicates if the digital signature was captured using Topaz signature pad hardware (converted from 0=No, 1=Yes to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_crop_old
+        description: "Indicates if the crop parameters use the legacy format for backward compatibility (converted from 0=No, 1=Yes to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: print_heading
+        description: "Flag indicating whether to include header information when printing this document (converted from 0=No, 1=Yes to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      # Date Fields
+      - name: date_created
+        description: "Date when the document was originally created in OpenDental (maps to DateCreated in source)"
+        tests:
+          - not_null
+
+      - name: date_timestamp
+        description: "Date when the document record was last modified in OpenDental (maps to DateTStamp in source)"
+        tests:
+          - not_null
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the document was created in the source system (OpenDental). Maps to DateCreated column."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the document was last updated in the source system (OpenDental). Maps to DateTStamp column."
+        tests:
+          - not_null

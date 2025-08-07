@@ -1,0 +1,139 @@
+version: 2
+
+models:
+  - name: stg_opendental__claimsnapshot
+    description: >
+      Standardized staging model for claim snapshots from OpenDental.
+      This model represents point-in-time snapshots of claim data, capturing
+      the state of claims at specific moments for historical tracking and auditing.
+      
+      Claim snapshots are created when significant events occur in the claim processing
+      lifecycle, providing an audit trail of how claim values and statuses change over time.
+      This is critical for insurance reconciliation, appeals processes, and financial reporting.
+      Data is filtered to include only records from 2023-01-01 forward.
+    
+    meta:
+      record_count: "~50,000"
+      data_scope: "2023-01-01 forward, incremental updates"
+      
+      known_issues:
+        - description: "Some snapshots may have missing procedure or claim procedure references due to data entry timing"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "relationships tests with severity warn"
+        
+        - description: "Snapshot trigger values may contain non-standardized text entries"
+          severity: "warn" 
+          identified_date: "2024-01-10"
+      
+      business_rules:
+        - rule: "Snapshots are only created for claims with significant lifecycle events"
+          impact: "Not every claim state change will have a snapshot record"
+        
+        - rule: "Fee amounts should match the original procedure fee at time of snapshot"
+          impact: "Fee discrepancies may indicate data integrity issues"
+      
+      usage_notes: >
+        Use this model for historical claim analysis and audit trails. Be aware that
+        not all claims will have snapshot records - only those with significant events.
+        For current claim status, use the main claims table. Join with procedure and
+        claim procedure tables using the foreign keys, but be prepared for some 
+        historical records that may reference deleted procedures.
+
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "fee_amount >= 0"
+          name: "fee_amounts_non_negative"
+      
+      - dbt_utils.expression_is_true:
+          expression: "write_off_amount >= 0"
+          name: "write_off_amounts_non_negative"
+
+    columns:
+      - name: claim_snapshot_id
+        description: "Primary key for the claim snapshot record (maps to ClaimSnapshotNum in OpenDental). Unique identifier for each point-in-time snapshot of claim data."
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      - name: procedure_id
+        description: "Foreign key to the procedure record that this claim snapshot relates to. Links to the specific dental procedure that was performed and is being claimed."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedure')
+              field: procedure_id
+              severity: warn
+              where: "procedure_id is not null"
+
+      - name: claim_procedure_id
+        description: "Foreign key to the claim procedure record that this snapshot represents. Links to the specific claim procedure line item that contains the billing details."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claimprocedure')
+              field: claim_procedure_id
+              severity: warn
+              where: "claim_procedure_id is not null"
+
+      - name: claim_type
+        description: >
+          Type of claim being snapshotted. Indicates the nature of the insurance claim
+          (Primary, Secondary, PreAuth, Capitation, etc.). Maps to ClaimType in OpenDental.
+        tests:
+          - not_null
+
+      - name: write_off_amount
+        description: >
+          Amount written off for this claim at the time of snapshot. Represents the portion
+          of the fee that the practice has decided not to collect, often due to insurance
+          contract adjustments or patient financial hardship. Always in USD.
+        tests:
+          - not_null
+          - non_negative_or_null
+
+      - name: insurance_payment_estimate
+        description: >
+          Estimated payment amount from insurance at the time of snapshot. This represents
+          the practice's expectation of what the insurance will pay based on benefits,
+          deductibles, and coverage rules. May differ from actual payment received.
+        tests:
+          - not_null
+          - non_negative_or_null
+
+      - name: fee_amount
+        description: >
+          Fee amount for the claim at the time of snapshot. This is the total amount
+          being claimed for the procedure, typically matching the procedure fee at the
+          time the claim was created. Always in USD.
+        tests:
+          - not_null
+          - non_negative_or_null
+
+      - name: entry_timestamp
+        description: >
+          Timestamp when the snapshot was created in OpenDental. This indicates when
+          the specific claim state was captured, which is critical for understanding
+          the timeline of claim processing and status changes.
+        tests:
+          - not_null
+
+      - name: snapshot_trigger
+        description: >
+          Event or action that triggered the creation of this snapshot. Describes what
+          caused the system to capture this point-in-time state of the claim, such as
+          'Claim Sent', 'Payment Received', 'Status Changed', etc.
+
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the snapshot was created in OpenDental (maps to DateTEntry). Represents when this specific snapshot record was first entered into the source system."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the snapshot was last updated in OpenDental (maps to DateTEntry). For snapshots, this typically matches _created_at since snapshots are usually immutable records."
+        tests:
+          - not_null 

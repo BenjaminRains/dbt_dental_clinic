@@ -1,0 +1,243 @@
+version: 2
+
+models:
+  - name: stg_opendental__adjustment
+    description: >
+      Staged adjustment data from OpenDental system providing foundational data for accounts receivable analysis.
+      This staging model contains both procedure-specific and general account adjustments, supporting financial 
+      reporting and patient balance calculations.
+      
+      Business Context:
+      - Adjustments modify patient account balances through credits (positive) or debits (negative)
+      - General adjustments (procedure_id = NULL) affect overall patient balance
+      - Procedure-specific adjustments modify individual procedure charges
+      - Critical for accounts receivable, financial reporting, and patient statements
+      - Supports both historical analysis and real-time balance calculations
+      
+      Data Scope:
+      - Includes adjustments from 2023-01-01 onwards with incremental updates
+      - Covers all adjustment types: writeoffs, discounts, credits, and corrections
+      - Both active and historical adjustments are included
+      - Links to procedures, providers, clinics, and billing statements where applicable
+    
+    meta:
+      record_count: "~4,500 adjustments"
+      data_scope: "2023-01-01 onwards, incremental updates"
+      
+      business_rules:
+        - rule: "General adjustments (procedure_id = NULL) modify overall patient balance"
+          impact: "Critical for accurate AR aging and patient balance calculations"
+        - rule: "Adjustment amounts: positive = credits to patient, negative = charges to patient"
+          impact: "Affects patient balance calculations and financial reporting"
+        - rule: "Retroactive adjustments may have different adjustment_date vs procedure_date"
+          impact: "Important for understanding timing of financial impacts"
+      
+      known_issues:
+        - description: "Some adjustments lack provider assignment despite business requirements"
+          severity: "warn"
+          identified_date: "2023-09-15"
+          test: "provider_assignment_validation"
+      
+      usage_notes: >
+        Key considerations for analysts:
+        - General adjustments (procedure_id = NULL) are valid and important for AR analysis
+        - Positive amounts reduce patient balance, negative amounts increase patient balance
+        - Use is_retroactive_adjustment flag to identify timing discrepancies
+        - Link to int_adjustments for enhanced business logic and categorization
+        - Consider clinic_id for multi-location analysis
+
+    columns:
+      - name: adjustment_id
+        description: "Primary key - unique identifier for each adjustment record (maps to AdjNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      - name: patient_id
+        description: "Foreign key to patient - identifies which patient account is being adjusted"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+
+      - name: procedure_id
+        description: >
+          Foreign key to procedure - links adjustment to specific procedure when applicable.
+          NULL values indicate general account adjustments affecting overall patient balance.
+          Non-null values link to specific procedures for procedure-level adjustments.
+          Both types are valid and critical for comprehensive AR analysis.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              severity: warn
+              where: "procedure_id IS NOT NULL"
+
+      - name: provider_id
+        description: "Foreign key to provider - identifies the provider who authorized or is associated with the adjustment"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "provider_id IS NOT NULL"
+
+      - name: clinic_id
+        description: "Foreign key to clinic - identifies the clinic location where the adjustment was processed"
+
+      - name: statement_id
+        description: "Foreign key to billing statement - links adjustment to patient statement when applicable"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__statement')
+              field: statement_id
+              severity: warn
+              where: "statement_id IS NOT NULL"
+
+      - name: adjustment_type_id
+        description: >
+          Foreign key to definition table - categorizes the type of adjustment.
+          Common types include: writeoffs, discounts, credits, corrections, and refunds.
+          Critical for financial reporting and adjustment analysis.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              severity: error
+
+      - name: tax_transaction_id
+        description: "Foreign key to tax transaction - links adjustment to tax calculations when applicable"
+
+      - name: adjustment_amount
+        description: >
+          Monetary value of the adjustment affecting patient balance.
+          Positive amounts = credits to patient (reduce balance).
+          Negative amounts = charges to patient (increase balance).
+          Zero amounts are rare but may occur for administrative adjustments.
+        tests:
+          - not_null
+
+      - name: adjustment_note
+        description: >
+          Freetext note describing the reason or details of the adjustment.
+          Provides context for manual adjustments and business justification.
+          May be null for automated or routine adjustments.
+
+      - name: adjustment_date
+        description: >
+          Date when the adjustment was applied to the patient account.
+          Critical for financial reporting and accounts receivable aging.
+          May differ from procedure_date for retroactive adjustments.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              column_name: adjustment_date
+              min_value: "'2023-01-01'::date"
+              max_value: current_date
+
+      - name: procedure_date
+        description: >
+          Date of the associated procedure when adjustment is procedure-specific.
+          Null for general account adjustments.
+          Used to identify retroactive adjustments when different from adjustment_date.
+
+      - name: entry_date
+        description: >
+          Date when the adjustment was entered into OpenDental system.
+          May differ from adjustment_date for backdated entries.
+          Useful for audit trails and data entry analysis.
+
+      - name: adjustment_direction
+        description: >
+          Categorization of adjustment amount direction for analysis.
+          Values: 'positive' (credits), 'negative' (charges), 'zero' (administrative).
+          Simplifies filtering and reporting on adjustment types.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['positive', 'negative', 'zero']
+
+      - name: is_procedure_adjustment
+        description: >
+          Boolean flag indicating if adjustment is linked to a specific procedure.
+          true = procedure-specific adjustment (procedure_id IS NOT NULL).
+          false = general account adjustment (procedure_id IS NULL).
+          Essential for separating procedure-level vs account-level analysis.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_retroactive_adjustment
+        description: >
+          Boolean flag indicating if adjustment was applied after the procedure date.
+          true = adjustment_date differs from procedure_date (retroactive).
+          false = adjustment_date matches procedure_date (contemporaneous).
+          Important for understanding timing of financial impacts.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      # Required metadata columns (using standardize_metadata_columns macro)
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in OpenDental (maps to DateEntry). May be null for legacy records."
+        tests:
+          - not_null:
+              where: "adjustment_date >= '2023-01-01'"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in OpenDental (maps to SecDateTEdit)."
+        tests:
+          - not_null
+
+      - name: _created_by_user_id
+        description: "User who created the record in OpenDental (maps to SecUserNumEntry). May be null for system-generated adjustments."
+        tests:
+          - not_null:
+              where: "_created_at >= '2023-01-01' AND adjustment_note IS NOT NULL"
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 4410
+          max_value: 10000
+          config:
+            severity: warn
+      
+      - dbt_utils.expression_is_true:
+          expression: >
+            (procedure_id IS NULL AND is_procedure_adjustment = false) OR
+            (procedure_id IS NOT NULL AND is_procedure_adjustment = true)
+          config:
+            severity: error
+            description: "procedure_id and is_procedure_adjustment flags must be logically consistent"
+      
+      - dbt_utils.expression_is_true:
+          expression: >
+            (procedure_date IS NULL AND is_retroactive_adjustment = false) OR
+            (procedure_date IS NOT NULL AND 
+             ((adjustment_date = procedure_date AND is_retroactive_adjustment = false) OR
+              (adjustment_date != procedure_date AND is_retroactive_adjustment = true)))
+          config:
+            severity: error
+            description: "is_retroactive_adjustment flag must match date comparison logic"
+      
+      - dbt_utils.expression_is_true:
+          expression: >
+            CASE 
+              WHEN adjustment_amount > 0 THEN adjustment_direction = 'positive'
+              WHEN adjustment_amount < 0 THEN adjustment_direction = 'negative'
+              WHEN adjustment_amount = 0 THEN adjustment_direction = 'zero'
+            END
+          config:
+            severity: error
+            description: "adjustment_direction must match adjustment_amount sign"

@@ -1,0 +1,334 @@
+version: 2
+
+models:
+  - name: dim_procedure
+    description: >
+      Procedure dimension table providing comprehensive dental procedure attributes and categorizations.
+      This model serves as the foundation for procedure-based analysis in the dental practice,
+      supporting clinical, operational, and financial reporting needs.
+
+      ## Business Context
+      The procedure dimension is a critical component of our dimensional model, enabling:
+      - Procedure-based analysis across all business processes
+      - Clinical categorization and complexity assessment
+      - Revenue tier analysis and financial planning
+      - Treatment planning and scheduling optimization
+      - Insurance billing and claim processing
+      - Fee schedule management and standard fee analysis
+
+      ## Technical Specifications
+      - Grain: One row per unique procedure code
+      - Source: stg_opendental__procedurecode
+      - Refresh: Incremental (based on source updates)
+      - Dependencies: 
+        * stg_opendental__feesched
+        * stg_opendental__fee
+        * stg_opendental__definition
+
+      ## Business Logic
+      ### Procedure Categories
+      - Based on CDT code prefixes (D1-D8)
+      - Enhanced with clinical flags (hygiene, prosthetic, radiology)
+      - Supports both standard and custom procedure types
+
+      ### Complexity Levels
+      - Simple: Single visit, low base units
+      - Moderate: Multiple visits or medium base units
+      - Complex: Multi-visit procedures or high base units
+
+      ### Revenue Tiers
+      - High: Major procedures (prosthodontics, surgery, orthodontics)
+      - Medium: Specialty procedures (endodontics, periodontics)
+      - Low: Basic procedures (preventive, restorative, diagnostic)
+
+      ### Clinical Attributes
+      - Treatment area specifications
+      - Base unit calculations
+      - Default provider assignments
+      - Documentation requirements
+
+      ### Fee Schedule Management
+      - Standard fee tracking per procedure
+      - Fee schedule type categorization
+      - Fee statistics and validation
+      - Historical fee tracking
+
+    columns:
+      - name: procedure_code_id
+        description: Primary key for the procedure dimension
+        tests:
+          - unique
+          - not_null
+
+      - name: procedure_code
+        description: Standard dental procedure code (e.g., D0120)
+        tests:
+          - not_null
+
+      - name: description
+        description: Full description of the procedure
+        tests:
+          - not_null
+
+      - name: abbreviated_description
+        description: Short form of the procedure description
+        tests:
+          - not_null
+
+      - name: procedure_category_id
+        description: Foreign key to procedure category
+        tests:
+          - not_null
+
+      - name: treatment_area
+        description: Area of the mouth where procedure is performed
+        tests:
+          - not_null
+
+      - name: treatment_area_desc
+        description: Human-readable description of the treatment area
+        tests:
+          - not_null
+
+      - name: procedure_category
+        description: >
+          Enhanced categorization for BI analysis.
+          Values: Preventive, Restorative, Endodontics, Periodontics,
+          Prosthodontics, Oral Surgery, Orthodontics, Diagnostic, Other
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Preventive', 'Restorative', 'Endodontics', 'Periodontics',
+                      'Prosthodontics', 'Oral Surgery', 'Orthodontics', 'Diagnostic', 'Other']
+
+      - name: complexity_level
+        description: >
+          Procedure complexity assessment.
+          Values: Simple, Moderate, Complex
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Simple', 'Moderate', 'Complex']
+
+      - name: revenue_tier
+        description: >
+          Revenue categorization of the procedure.
+          Values: High, Medium, Low
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['High', 'Medium', 'Low']
+
+      - name: clinical_urgency
+        description: >
+          Clinical urgency level of the procedure.
+          Values: High, Medium, Low
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['High', 'Medium', 'Low']
+
+      - name: insurance_complexity
+        description: >
+          Complexity level for insurance billing.
+          Values: High, Medium, Low
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['High', 'Medium', 'Low']
+
+      - name: treatment_planning_category
+        description: >
+          Expected duration of treatment.
+          Values: Long-term, Medium-term, Short-term
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Long-term', 'Medium-term', 'Short-term']
+
+      - name: is_hygiene_flag
+        description: Boolean flag indicating if procedure is a hygiene service
+        tests:
+          - not_null
+
+      - name: is_prosthetic_flag
+        description: Boolean flag indicating if procedure is prosthetic
+        tests:
+          - not_null
+
+      - name: is_radiology_flag
+        description: Boolean flag indicating if procedure is radiological
+        tests:
+          - not_null
+
+      - name: is_multi_visit_flag
+        description: Boolean flag indicating if procedure requires multiple visits
+        tests:
+          - not_null
+
+      - name: base_units
+        description: Standard time units allocated for the procedure
+        tests:
+          - not_null
+
+      - name: default_provider_id
+        description: Default provider type for this procedure
+        tests:
+          - not_null
+
+      - name: default_revenue_code
+        description: Default revenue code for billing
+        tests:
+          - not_null
+
+      - name: standard_fee_id
+        description: ID of the most recent standard fee for this procedure
+        tests:
+          - not_null
+
+      - name: fee_schedule_id
+        description: ID of the associated fee schedule
+        tests:
+          - not_null
+
+      - name: standard_fee
+        description: Most recent standard fee amount for this procedure
+        tests:
+          - not_null
+
+      - name: fee_schedule_description
+        description: Description of the associated fee schedule
+        tests:
+          - not_null
+
+      - name: fee_schedule_type_id
+        description: ID of the fee schedule type
+        tests:
+          - not_null
+
+      - name: fee_schedule_type_desc
+        description: Description of the fee schedule type
+        tests:
+          - not_null
+
+      - name: available_fee_options
+        description: Number of different fee options available for this procedure
+        tests:
+          - not_null
+
+      - name: min_available_fee
+        description: Minimum fee amount available for this procedure
+        tests:
+          - not_null
+
+      - name: max_available_fee
+        description: Maximum fee amount available for this procedure
+        tests:
+          - not_null
+
+      - name: avg_fee_amount
+        description: Average fee amount across all fee options
+        tests:
+          - not_null
+
+      - name: has_standard_fee
+        description: Boolean flag indicating if a standard fee exists
+        tests:
+          - not_null
+
+      - name: default_claim_note
+        description: Standard note for insurance claims
+        tests:
+          - not_null
+
+      - name: default_treatment_plan_note
+        description: Standard note for treatment plans
+        tests:
+          - not_null
+
+      - name: layman_term
+        description: Patient-friendly description of the procedure
+        tests:
+          - not_null
+
+      - name: medical_code
+        description: Associated medical procedure code
+        tests:
+          - not_null
+
+      - name: diagnostic_codes
+        description: Associated diagnostic codes
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - procedure_code_id
+            - procedure_code
+
+      - relationships:
+          to: ref('dim_procedure')
+          field: procedure_code_id
+          config:
+            severity: error
+
+    meta:
+      owner: "Data Team"
+      contains_pii: false
+      contains_phi: false
+      refresh_frequency: "Daily"
+      business_owner: "Clinical Operations Team"
+      technical_owner: "Data Engineering Team"
+      usage_notes: >
+        This dimension table is used for all procedure-based analysis and reporting.
+        
+        ## Key Use Cases
+        - Clinical procedure analysis
+          * Procedure mix and volume
+          * Complexity distribution
+          * Treatment planning
+          * Clinical outcomes
+        
+        - Financial analysis
+          * Revenue by procedure type
+          * Procedure profitability
+          * Insurance reimbursement
+          * Fee schedule analysis
+          * Standard fee tracking
+          * Fee variation analysis
+        
+        - Operational metrics
+          * Procedure scheduling
+          * Provider productivity
+          * Chair time utilization
+          * Resource allocation
+        
+        - Insurance processing
+          * Claim submission
+          * Coverage verification
+          * Reimbursement tracking
+          * Denial analysis
+        
+        - Fee management
+          * Standard fee maintenance
+          * Fee schedule updates
+          * Fee variation tracking
+          * Historical fee analysis
+        
+        ## Common Analysis Patterns
+        - Procedure category distribution
+        - Complexity level analysis
+        - Revenue tier performance
+        - Treatment planning optimization
+        - Insurance billing efficiency
+        - Clinical outcome tracking
+        - Fee schedule analysis
+        - Standard fee compliance
+        
+        ## Performance Optimization
+        - Use procedure_code_id for joins to fact tables
+        - Leverage pre-calculated categorizations
+        - Utilize complexity levels for resource planning
+        - Apply revenue tiers for financial analysis
+        - Use fee statistics for pricing analysis 

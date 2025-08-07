@@ -1,0 +1,497 @@
+version: 2
+
+models:
+  - name: int_procedure_complete
+    description: >
+      Comprehensive procedure model that consolidates clinical procedure data with complete fee information and validation.
+      
+      This model provides clinical procedure tracking and supports fee processing workflows.
+      Part of System A: Fee Processing & Verification workflow.
+      
+      Key Features:
+      - Fee Validation: Compares actual procedure fees against standard fee schedules with tolerance checking
+      - Clinical Integration: Enriches procedures with notes, provider information, and treatment classifications
+      - Fee Statistics: Aggregates min, max, and average fees by procedure code for pricing analysis
+      - Status Tracking: Resolves coded values to human-readable descriptions using definition lookups
+      - Data Quality: Comprehensive validation flags and business rule enforcement
+      
+      Data Sources:
+      - stg_opendental__procedurelog: Base procedure records, statuses, fees, and patient assignments
+      - stg_opendental__procedurecode: ADA procedure code definitions, descriptions, and clinical flags
+      - stg_opendental__fee: Standard fee amounts, schedules, and clinic-specific pricing
+      - stg_opendental__feesched: Fee schedule definitions, types, and visibility settings
+      - stg_opendental__definition: Status descriptions, treatment areas, and fee type lookups
+      - stg_opendental__procnote: Clinical notes, timestamps, and documentation history
+      
+      Clinical Logic Features:
+      - Procedure Classification: Categorizes procedures by hygiene, prosthetic, and multi-visit flags
+      - Treatment Area Mapping: Links procedures to anatomical treatment areas with descriptions
+      - Provider Workflow: Associates procedures with performing providers and clinic locations
+      - Note Aggregation: Consolidates all clinical notes with count and timestamp tracking
+      
+      Fee Processing Features:
+      - Standard Fee Lookup: Retrieves most recent fee schedule entries by procedure code and clinic
+      - Fee Variance Analysis: Calculates differences between charged and standard fees
+      - Out-of-Network Logic: Accounts for clinic's 99.99% use of default fee schedule (ID 0)
+      - Fee Statistics: Provides comprehensive fee analytics per procedure code
+      
+      Data Quality Notes:
+      - procedure_id = 0 records excluded: These represent financial transactions rather than clinical procedures
+      - Fee Validation Tolerance: Uses 0.01 precision tolerance for decimal comparison accuracy
+      - Historical Data Handling: Includes procedures from November 2022 onwards with legacy data exceptions
+      - Known Fee Anomaly: D0180 in schedule 8290 shows $11,611.0 vs normal $116.11 (data entry error)
+      - Definition Dependencies: Category IDs assumed based on OpenDental standards (4=status, 5=treatment_area, 6=fee_type)
+      
+      Clinical Rules:
+      - Completed Procedures: Must have non-zero fees and valid procedure codes
+      - Fee Matching: Standard fee lookups prioritize most recent clinic-specific entries
+      - Note Requirements: Completed procedures should have associated clinical documentation
+    
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: procedure_id
+      on_schema_change: fail
+      incremental_strategy: merge
+    
+    columns:
+      - name: procedure_id
+        description: >
+          Primary key - Clinical procedure identifier (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase)
+          - Transformed to: procedure_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Uniquely identifies each clinical procedure record
+          - procedure_id = 0 records excluded as they represent financial transactions
+          - Used for linking procedures to notes, claims, and treatment plans
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+              column_name: procedure_id
+              config:
+                severity: error
+                description: "This model should not include procedure_id = 0 records"
+
+      - name: patient_id
+        description: >
+          Foreign key to patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedures to the patient who received the treatment
+          - Essential for patient care continuity and billing
+          - Used in clinical workflow and financial reporting
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: provider_id
+        description: >
+          Foreign key to provider (maps from "ProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProvNum" (CamelCase as stored)
+          - Transformed to: provider_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Identifies the provider who performed or is assigned to the procedure
+          - Critical for provider productivity tracking and clinical accountability
+          - May be null for procedures not yet assigned to a provider
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: clinic_id
+        description: >
+          Foreign key to clinic (maps from "ClinicNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClinicNum" (CamelCase as stored)
+          - Transformed to: clinic_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Identifies the clinic location where procedure was performed
+          - Used for clinic-specific fee schedules and productivity reporting
+          - Essential for multi-location practice management
+        tests:
+          - not_null
+
+      - name: procedure_code_id
+        description: >
+          Foreign key to procedure code (maps from "CodeNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "CodeNum" (CamelCase as stored)
+          - Transformed to: procedure_code_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links to ADA procedure code definitions and fee schedules
+          - Determines procedure description, category, and standard fees
+          - Critical for insurance billing and clinical documentation
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: procedure_code_id
+
+      - name: procedure_date
+        description: Date when procedure was performed or planned
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2022-11-01'"
+              max_value: "'2030-12-31'"  # Static future date that's far enough ahead
+              row_condition: "procedure_date >= '2022-11-01'"  # Only test records from Nov 2022 onwards
+        notes: >
+          The model filters for procedures from November 2022 onwards, but older procedures may still exist in the source data.
+          The test only validates dates for records that should be included in the model.
+          The max date is set to 2030 to accommodate future procedures while maintaining test stability.
+
+      - name: procedure_status
+        description: Raw status code from source system
+        tests:
+          - not_null
+
+      - name: procedure_fee
+        description: Fee amount from procedurelog
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "procedure_status = 2 AND procedure_code NOT IN ('D6114', 'D6115', 'MISC')"  # Standard threshold for non-implant procedures
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 30000
+              row_condition: "procedure_status = 2 AND procedure_code IN ('D6114', 'D6115')"  # Higher threshold for implant procedures
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              row_condition: "is_hygiene_flag = 1"
+              config:
+                severity: warn
+                name: warn_high_hygiene_fees
+        notes: >
+          Known patterns:
+          - Implant procedures (D6114, D6115) typically range $10,324 - $25,500
+          - Some MISC Quickpick Button procedures show unusually high fees ($51,000)
+          - Zero-base fees are common for certain procedures (e.g., D2919, D5109)
+
+      - name: tooth_number
+        description: Tooth number for the procedure (dental notation)
+
+      - name: surface
+        description: Tooth surface(s) involved in the procedure
+
+      - name: old_code
+        description: Legacy or alternative procedure code from the source system
+        tests:
+          - dbt_expectations.expect_column_values_to_match_regex:
+              regex: '^[A-Z0-9]+$'
+              severity: warn
+              name: warn_invalid_old_code_format
+
+      - name: procedure_code
+        description: ADA procedure code from procedure codes table
+        tests: []
+
+      - name: procedure_description
+        description: Detailed description of the procedure
+        tests:
+          - warn_procedures_missing_descriptions:
+              severity: warn
+
+      - name: abbreviated_description
+        description: Short description of the procedure
+
+      - name: is_hygiene_flag
+        description: Flag indicating if this is a hygiene procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: treatment_area
+        description: Area of treatment
+
+      - name: is_prosthetic_flag
+        description: Flag indicating if this is a prosthetic procedure
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: is_multi_visit_flag
+        description: Flag indicating if procedure requires multiple visits
+        tests:
+          - accepted_values:
+              values: [0, 1]
+
+      - name: standard_fee_id
+        description: ID of the standard fee record used
+        tests:
+          - relationships:
+              to: ref('stg_opendental__fee')
+              field: fee_id
+              severity: warn  # Some procedures might not have standard fees
+
+      - name: fee_schedule_id
+        description: ID of the fee schedule used
+        tests:
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+              severity: warn  # Some procedures might not have fee schedules
+
+      - name: standard_fee
+        description: Standard fee amount from fee schedule
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "has_standard_fee = true"
+              severity: warn  # Downgraded to warn since fees may vary for out-of-network
+
+      - name: fee_schedule_description
+        description: Name/description of the fee schedule
+
+      - name: fee_schedule_type_id
+        description: Type identifier for the fee schedule
+
+      - name: is_hidden
+        description: Flag indicating if the fee schedule is hidden
+
+      - name: available_fee_options
+        description: Count of different fee options available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+
+      - name: min_available_fee
+        description: Minimum fee amount available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: max_available_fee
+        description: Maximum fee amount available for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: avg_fee_amount
+        description: Average fee amount for this procedure code
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: has_standard_fee
+        description: Flag indicating if a standard fee was found for this procedure
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: fee_matches_standard
+        description: Flag indicating if the procedure fee matches the standard fee
+        tests:
+          - accepted_values:
+              values: [true, false]
+          - completed_procs_fee_matches:
+              procedure_status: procedure_status
+              procedure_fee: procedure_fee
+              standard_fee: standard_fee
+              config:
+                severity: warn
+                name: warn_completed_procedure_fee_mismatch
+
+      - name: procedure_notes
+        description: Aggregated clinical notes associated with the procedure
+
+      - name: note_count
+        description: Number of notes attached to this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+
+      - name: last_note_timestamp
+        description: Timestamp of the most recent note
+
+      - name: _extracted_at
+        description: >
+          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          
+          Source: ETL pipeline metadata (added during extraction process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+
+      - name: _created_at  
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null:
+              where: "procedure_status = 2"  # Completed procedures should have creation dates
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+
+      - name: treatment_area_desc
+        description: Human-readable description of the treatment area from definitions table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              config:
+                severity: warn
+
+      - name: fee_schedule_type_desc
+        description: Human-readable description of the fee schedule type from definitions table
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: item_name
+              config:
+                severity: warn
+
+    tests:
+      # Custom composite tests
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_fee = 0)"
+          severity: warn
+          name: warn_procedure_complete_zero_fee
+
+      - dbt_utils.expression_is_true:
+          expression: "not (has_standard_fee = false and procedure_status = 2)"
+          severity: warn
+          name: warn_procedure_complete_no_standard_fee
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            procedure_date >= '2022-11-01' or 
+            procedure_status = 1 or 
+            procedure_status in (4, 6) or
+            procedure_date is null
+          name: historical_procedures_must_be_recent_or_planned
+          severity: warn
+          config:
+            notes: >
+              Warning: Some procedures are from before November 2022 or have NULL dates.
+              This is expected as we maintain historical procedures that are:
+              - Referenced by recent insurance records
+              - Part of procedure groups
+              - Referenced by recent procedure notes
+              - Treatment plans (status = 1)
+              - Existing Prior procedures (status = 4) - these have no date by design
+              - Ordered/Planned procedures (status = 6) - these may have no date
+
+      # Updated test for completed procedures must have at least one code
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_code is null and old_code is null)"
+          severity: error
+          name: completed_procedures_must_have_codes
+
+      # New warning test for procedures using only old codes
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_code is null and old_code is not null)"
+          severity: warn
+          name: warn_completed_procedures_using_old_code_only
+
+      - dbt_utils.expression_is_true:
+          expression: "abs(procedure_fee - standard_fee) <= 100 or not has_standard_fee"
+          severity: warn
+          name: warn_large_fee_differences
+
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and fee_matches_standard = false and abs(procedure_fee - standard_fee) > 300)"
+          severity: warn
+          name: warn_extreme_fee_mismatches
+
+      - dbt_utils.expression_is_true:
+          expression: "not (is_hygiene_flag = 1 and procedure_fee > 500)"
+          severity: warn
+          name: warn_procedure_complete_high_hygiene_fees
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            (procedure_status = 2 and has_standard_fee = true) or
+            (procedure_status = 1 and has_standard_fee = true) or
+            (procedure_status not in (1, 2))
+          severity: warn
+          name: warn_key_procedures_missing_standard_fees
+
+      - dbt_utils.expression_is_true:
+          expression: "not (procedure_status = 2 and procedure_notes is null)"
+          severity: warn
+          name: warn_completed_procedures_without_notes
+
+      - dbt_utils.expression_is_true:
+          expression: "not (treatment_area_desc is null and treatment_area is not null)"
+          severity: warn
+          name: warn_missing_treatment_area_description
+
+      - dbt_utils.expression_is_true:
+          expression: "not (fee_schedule_type_desc is null and fee_schedule_type_id is not null)"
+          severity: warn
+          name: warn_missing_fee_schedule_type_description
+
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      business_process: "Clinical Procedure Management"
+      refresh_frequency: "incremental"
+      business_impact: "High"
+      system_integration: "System A: Fee Processing & Verification"
+      data_quality_requirements:
+        - "All completed procedures must have valid fees and procedure codes"
+        - "Fee validation must account for out-of-network clinic operations"
+        - "Clinical documentation must be preserved and accessible"
+        - "Provider and clinic associations must be accurate"
+        - "Fee statistics must be reliable for pricing analysis"
+      performance_requirements:
+        - "Incremental loading based on _updated_at metadata"
+        - "Efficient fee lookups with ranking for most recent rates"
+        - "Optimized joins for clinical and financial data integration"

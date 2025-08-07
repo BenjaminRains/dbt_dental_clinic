@@ -1,0 +1,133 @@
+version: 2
+
+models:
+  - name: stg_opendental__tasksubscription
+    description: >
+      Staging model for task subscriptions from OpenDental. Contains information about which
+      users are subscribed to receive notifications for specific tasks or task lists.
+      
+      Business Context:
+      - Task subscriptions enable notification and alert system for tasks
+      - Users can subscribe to individual tasks or entire task lists
+      - Supports task collaboration and information sharing
+      - Enables targeted notifications for task updates
+      - Helps maintain task visibility across the clinic
+      
+      Data Scope:
+      - Includes all active and historical subscriptions
+      - Captures both task-level and list-level subscriptions
+      - Maintains complete subscription history
+      
+      Key Relationships:
+      - Links to users through user_id
+      - Links to tasks through task_id (optional)
+      - Links to task lists through task_list_id (optional)
+      
+      Important Business Rules:
+      - Each subscription must have a valid user_id
+      - Subscriptions can be for either a task or a task list, but not both
+      - Zero values in source are converted to NULL
+      - Subscriptions are preserved even if referenced task/list is deleted
+
+    meta:
+      record_count: "Approximately 500 records (as of 2024)"
+      data_scope: "All task subscriptions in the system"
+      
+      known_issues:
+        - description: "6 task subscriptions reference non-existent task lists"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May affect list-level notification delivery"
+          test: "relationships_to_tasklist"
+          patterns:
+            - "Even distribution across 6 users (1 subscription per user)"
+            - "Affects 5 unique task lists"
+            - "No associated tasks (pure list subscriptions)"
+            - "Average of 1.33 subscriptions per list"
+            - "Maximum of 2 subscriptions for any single list"
+            - "Users affected: Assistants, Heidi, Kelly, Kristan, Melanie, Saandra"
+      
+      business_rules:
+        - rule: "Each subscription must have a valid user_id"
+          impact: "Ensures proper notification delivery"
+        - rule: "Subscriptions can be for either a task or a list, but not both"
+          impact: "Maintains clear notification scope"
+        - rule: "Zero values in source are converted to NULL"
+          impact: "Improves data quality and referential integrity"
+        - rule: "Subscriptions are preserved even if referenced task/list is deleted"
+          impact: "Maintains subscription history"
+        - rule: "List subscriptions are evenly distributed across users"
+          impact: "Suggests intentional subscription pattern"
+        - rule: "Orphaned list subscriptions have no associated tasks"
+          impact: "Indicates pure list-level subscriptions"
+      
+      usage_notes: >
+        - Use user_id to identify subscribed users
+        - Check task_id and task_list_id for subscription scope
+        - Be aware of the relationship warnings when joining to tasks/lists
+        - Orphaned list subscriptions are evenly distributed (1 per user)
+        - Most orphaned list subscriptions have 1-2 subscribers
+        - No associated tasks with orphaned list subscriptions
+        - Affects a small number of users (6) and lists (5)
+
+    columns:
+      # Primary Key
+      - name: task_subscription_id
+        description: "Primary key - unique identifier for each task subscription (maps to TaskSubscriptionNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Foreign Keys
+      - name: user_id
+        description: "Foreign key to the subscribed user (maps to UserNum in OpenDental, 0 values converted to NULL)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+
+      - name: task_list_id
+        description: "Foreign key to the task list (maps to TaskListNum in OpenDental, 0 values converted to NULL)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__tasklist')
+              field: task_list_id
+              severity: warn
+
+      - name: task_id
+        description: "Foreign key to the specific task (maps to TaskNum in OpenDental, 0 values converted to NULL)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__task')
+              field: task_id
+              severity: warn
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "(task_id is not null and task_list_id is null) or (task_id is null and task_list_id is not null)"
+          name: "subscription_scope_check"
+          config:
+            severity: warn
+            description: "Ensures subscriptions are for either a task or a list, but not both"
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: user_id
+          related_to: stg_opendental__userod.user_id
+        - relationship: many_to_one
+          field: task_list_id
+          related_to: stg_opendental__tasklist.task_list_id
+          severity: warn
+        - relationship: many_to_one
+          field: task_id
+          related_to: stg_opendental__task.task_id
+          severity: warn

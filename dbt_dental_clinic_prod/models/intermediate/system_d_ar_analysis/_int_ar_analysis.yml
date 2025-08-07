@@ -1,0 +1,1026 @@
+version: 2
+
+models:
+  - name: int_ar_analysis
+    description: >
+      Comprehensive Accounts Receivable analysis model that aggregates procedure-level balances
+      to provide a patient-level view of AR. This model serves as the foundation for AR reporting
+      and analysis, providing a complete view of both patient and insurance receivables.
+      
+      Key features:
+      - Aggregates financial data at the patient level from int_ar_balance
+      - Tracks aging buckets (0-30, 31-60, 61-90, 90+ days)
+      - Monitors insurance claim status and payments
+      - Tracks payment activity and types
+      - Records adjustment details
+      - Maintains one-to-one relationship with patients (32,700 records as of 2025)
+      - Includes only active patients
+      - Provides comprehensive insurance coverage information
+      - Tracks patient categories and demographics
+      - Calculates last visit date from both appointments and procedures
+      - Integrates with System B insurance models for claim tracking
+      - Integrates with System C payment models for payment processing
+      
+      Data Sources:
+      - int_ar_balance: Base procedure-level AR data
+      - int_ar_shared_calculations: Common payment and adjustment calculations
+      - stg_opendental__patient: Patient demographic information
+      - stg_opendental__procedurelog: Procedure and insurance information
+      - stg_opendental__histappointment: Historical appointment data
+      - int_patient_profile: Active patient validation
+      - int_claim_details: Insurance claim information
+      - int_claim_tracking: Claim status tracking with entry_timestamp
+      - int_claim_payments: Claim payment details with paid_amount
+      - int_insurance_coverage: Insurance coverage information
+      - int_payment_split: Payment splitting information
+      - int_insurance_payment_allocated: Insurance payment processing
+      
+      Business rules:
+      - Aggregates all financial metrics at the patient level
+      - Maintains one record per patient
+      - Record count must match active patients in int_patient_profile
+      - Only includes patients with status 0, 1, 2, or 3
+      - Uses COALESCE to handle NULL values in aggregations
+      - Insurance information is sourced from completed procedures
+      - Patient categories are derived from position codes
+      - Last visit date is calculated as the most recent date between:
+        * Latest appointment date from histappointment
+        * Latest procedure date from procedurelog
+      - Claim status changes are tracked using entry_timestamp from int_claim_tracking
+      - Claim payments are tracked using paid_amount from int_claim_payments
+      
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: patient_id
+    
+    columns:
+      - name: patient_id
+        description: >
+          Primary key - Unique identifier for the patient. This field maintains
+          a one-to-one relationship with the patient profile model.
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+
+      - name: total_ar_balance
+        description: >
+          Total outstanding AR balance for the patient, calculated by summing the current_balance
+          from int_ar_balance for all procedures. This represents the sum of all aging buckets
+          and must equal the sum of balance_0_30_days, balance_31_60_days, balance_61_90_days,
+          and balance_over_90_days.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+
+      - name: balance_0_30_days
+        description: >
+          AR balance aged 0-30 days, calculated by summing current_balance from int_ar_balance
+          where aging_bucket = '0-30'. This represents the portion of the total AR balance
+          that is less than 30 days old.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+
+      - name: balance_31_60_days
+        description: >
+          AR balance aged 31-60 days, calculated by summing current_balance from int_ar_balance
+          where aging_bucket = '31-60'. This represents the portion of the total AR balance
+          that is between 31 and 60 days old.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+
+      - name: balance_61_90_days
+        description: >
+          AR balance aged 61-90 days, calculated by summing current_balance from int_ar_balance
+          where aging_bucket = '61-90'. This represents the portion of the total AR balance
+          that is between 61 and 90 days old.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+
+      - name: balance_over_90_days
+        description: >
+          AR balance aged over 90 days, calculated by summing current_balance from int_ar_balance
+          where aging_bucket = '90+'. This represents the portion of the total AR balance
+          that is more than 90 days old. Negative values represent credits/refunds,
+          positive values represent outstanding balances.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+              config:
+                severity: warn
+                description: >
+                  Balance over 90 days should typically be between -$1,000 and $50,000.
+                  Values outside this range may indicate data quality issues or require review.
+
+      - name: estimated_insurance_ar
+        description: >
+          Estimated amount pending from insurance, calculated by summing insurance_pending_amount
+          from int_ar_balance. This represents the expected amount to be received from
+          insurance carriers for all procedures.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+
+      - name: patient_responsibility
+        description: >
+          Total amount owed by patient, calculated by summing patient_responsibility
+          from int_ar_balance. This represents the portion of the AR balance that is
+          the patient's responsibility across all procedures. Negative values typically
+          indicate credits, refunds, or insurance payments that exceeded the original
+          patient responsibility.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+              config:
+                severity: warn
+                description: >
+                  Patient responsibility should typically be between -$1,000 and $50,000.
+                  Negative values often represent credits or insurance overpayments.
+                  Values outside this range may indicate data quality issues or require review.
+
+      - name: insurance_responsibility
+        description: >
+          Total amount owed by insurance, calculated by summing current_balance from int_ar_balance
+          where responsible_party = 'INSURANCE'. This represents the portion of the AR balance
+          that is the insurance carrier's responsibility across all procedures.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 50000
+
+      - name: last_payment_date
+        description: Date of most recent payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: open_procedures_count
+        description: >
+          Number of procedures with outstanding balances, calculated by counting distinct
+          procedure_id from int_ar_balance where current_balance > 0. This represents
+          the count of procedures that have not been fully paid.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: active_claims_count
+        description: >
+          Number of active insurance claims, calculated by counting distinct claim_id
+          from int_ar_balance where claim_id is not null. This represents the count
+          of claims that are currently being processed.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: insurance_payment_count
+        description: Number of insurance payments received
+        tests:
+          - not_null:
+              where: "total_insurance_payments > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: patient_payment_count
+        description: Number of patient payments received
+        tests:
+          - not_null:
+              where: "total_patient_payments > 0 OR total_patient_payments IS NOT NULL"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: total_insurance_payments
+        description: Total payments received from insurance
+        tests:
+          - not_null:
+              where: "insurance_payment_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -25000
+              max_value: 25000
+
+      - name: total_patient_payments
+        description: Total payments received from patients
+        tests:
+          - not_null:
+              where: "patient_payment_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -50000
+              max_value: 50000
+
+      - name: last_insurance_payment_date
+        description: Date of most recent insurance payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: last_patient_payment_date
+        description: Date of most recent patient payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: writeoff_count
+        description: Number of write-off adjustments
+        tests:
+          - not_null:
+              where: "writeoff_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: discount_count
+        description: Number of discount adjustments
+        tests:
+          - not_null:
+              where: "total_discounts > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: total_writeoffs
+        description: Total amount of write-off adjustments
+        tests:
+          - not_null:
+              where: "writeoff_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -30000
+              max_value: 25000
+
+      - name: total_discounts
+        description: Total amount of discount adjustments
+        tests:
+          - not_null:
+              where: "discount_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -50000
+              max_value: 25000
+
+      - name: last_adjustment_date
+        description: Date of most recent adjustment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              config:
+                severity: error
+                description: "Last adjustment date must be between 2023-01-01 and current date"
+
+      - name: pending_claims_count
+        description: Number of pending insurance claims
+        tests:
+          - not_null:
+              where: "active_claims_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: denied_claims_count
+        description: Number of denied insurance claims
+        tests:
+          - not_null:
+              where: "active_claims_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: pending_claims_amount
+        description: Total amount of pending insurance claims
+        tests:
+          - not_null:
+              where: "active_claims_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: denied_claims_amount
+        description: Total amount of denied insurance claims
+        tests:
+          - not_null:
+              where: "denied_claims_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: last_pending_claim_date
+        description: Date of most recent pending claim
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: last_denied_claim_date
+        description: Date of most recent denied claim
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: patient_status
+        description: Current status of the patient (0-3 for active patients)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3]
+
+      - name: patient_category
+        description: >
+          Classification of the patient based on their relationship with the practice.
+          Derived from position_code:
+          - 0: Regular Patient
+          - 1: House Account
+          - 2: Staff Member
+          - 3: VIP Patient
+          - 4: Other
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Regular Patient', 'House Account', 'Staff Member', 'VIP Patient', 'Other', 'Unknown']
+
+      - name: preferred_name
+        description: "Patient's preferred name"
+        tests:
+          - not_null
+
+      - name: middle_initial
+        description: Patient's middle initial
+        tests:
+          - not_null
+
+      - name: birth_date
+        description: Patient's date of birth
+        tests:
+          - date_range_test:
+              min_date: "'1900-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "birth_date::date"
+              config:
+                severity: error
+                description: "Birth date must be between 1900-01-01 and current date"
+
+      - name: has_insurance_flag
+        expression: "has_insurance_flag = 'I' OR IS NULL"
+        config:
+          severity: error
+          description: "Insurance flag must be 'I' for insured patients or NULL for uninsured patients"
+
+      - name: primary_insurance_id
+        description: >
+          ID of patient's primary insurance plan, derived from insurance_plan_id
+          in int_insurance_coverage where ordinal = 1. This represents the active
+          primary insurance plan associated with the patient.
+        tests:
+          - dbt_utils.relationships_where:
+              column_name: primary_insurance_id
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+              to_condition: "hide_from_verify_list = false"
+
+      - name: secondary_insurance_id
+        description: >
+          ID of patient's secondary insurance plan, derived from insurance_plan_id
+          in int_insurance_coverage where ordinal = 2. This represents the active
+          secondary insurance plan associated with the patient.
+        tests:
+          - dbt_utils.relationships_where:
+              column_name: secondary_insurance_id
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+              to_condition: "hide_from_verify_list = false OR hide_from_verify_list IS NULL"
+              from_condition: "secondary_insurance_id IS NOT NULL"
+              config:
+                severity: error
+                description: "Secondary insurance plans must either be active (hide_from_verify_list = false) or historical (hide_from_verify_list IS NULL)"
+
+      - name: primary_insurance_group
+        description: >
+          Name of the primary insurance group/employer, derived from group_name
+          in int_insurance_coverage where ordinal = 1.
+        tests:
+          - not_null:
+              where: "primary_insurance_id is not null"
+
+      - name: secondary_insurance_group
+        description: >
+          Name of the secondary insurance group/employer, derived from group_name
+          in int_insurance_coverage where ordinal = 2.
+        tests:
+          - not_null:
+              where: "secondary_insurance_id is not null"
+
+      - name: primary_insurance_type
+        description: >
+          Type of the primary insurance plan, derived from plan_type in
+          int_insurance_coverage where ordinal = 1 (e.g., PPO, HMO).
+        tests:
+          - not_null:
+              where: "primary_insurance_id is not null"
+
+      - name: secondary_insurance_type
+        description: >
+          Type of the secondary insurance plan, derived from plan_type in
+          int_insurance_coverage where ordinal = 2 (e.g., PPO, HMO).
+        tests:
+          - not_null:
+              where: "secondary_insurance_id is not null"
+
+      - name: coverage_start_date
+        description: Date when the primary insurance coverage became effective
+        tests:
+          - date_range_test:
+              min_date: "'2020-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "coverage_start_date::date"
+              config:
+                severity: error
+                description: "Coverage start date must be between 2020-01-01 and max_valid_date"
+
+      - name: coverage_end_date
+        description: Date when the primary insurance coverage was terminated
+        tests:
+          - date_range_test:
+              min_date: "'2020-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "coverage_end_date::date"
+              config:
+                severity: error
+                description: "Coverage end date must be between 2020-01-01 and current date"
+
+      - name: benefit_percentage
+        description: Primary insurance coverage percentage
+        tests:
+          - numeric_range_test:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: error
+                description: "Benefit percentage must be between 0 and 100"
+
+      - name: deductible_met
+        description: Amount of primary insurance deductible that has been met
+        tests:
+          - numeric_range_test:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: error
+                description: "Deductible met must be between 0 and 10,000"
+
+      - name: deductible_remaining
+        description: Amount of primary insurance deductible remaining
+        tests:
+          - numeric_range_test:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: error
+                description: "Deductible remaining must be between 0 and 10,000"
+
+      - name: annual_max_met
+        description: Amount of primary insurance annual maximum that has been met
+        tests:
+          - numeric_range_test:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: error
+                description: "Annual maximum met must be between 0 and 10,000"
+
+      - name: annual_max_remaining
+        description: Amount of primary insurance annual maximum remaining
+        tests:
+          - numeric_range_test:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: error
+                description: "Annual maximum remaining must be between 0 and 10,000"
+
+      - name: procedures_with_primary_insurance
+        description: >
+          Count of completed procedures (status = 2) billed to primary insurance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: procedures_with_secondary_insurance
+        description: >
+          Count of completed procedures (status = 2) billed to secondary insurance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: last_visit_date
+        description: >
+          Date of most recent completed visit, calculated as the latest date between:
+          - Completed appointments (appointment_status = 'Completed')
+          - Completed procedures (procedure_status = 2)
+          Only considers actual completed visits, not planned/future appointments.
+        tests:
+          - date_range_test:
+              min_date: "'1900-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "last_visit_date::date"
+              config:
+                severity: error
+                description: "Last visit date must be between 1900-01-01 and current date"
+
+      - name: first_visit_date
+        description: Date of patient's first visit
+        tests:
+          - date_range_test:
+              min_date: "'1900-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "first_visit_date::date"
+              config:
+                severity: warn
+                description: "First visit dates should be between 1900-01-01 and max_valid_date. Future dates may indicate test data or data entry errors."
+          - dbt_utils.expression_is_true:
+              column_name: first_visit_date
+              expression: "::date <= CURRENT_DATE"
+              config:
+                severity: error
+                description: "First visit dates should not be in the future unless they are test records"
+
+      - name: model_created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+
+      - name: model_updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+
+      - name: split_payment_count
+        description: Number of split payments received
+        tests:
+          - not_null:
+              where: "payment_group_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: total_merchant_fees
+        description: Total merchant fees associated with payments
+        tests:
+          - not_null:
+              where: "total_merchant_fees > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: payment_group_count
+        description: Number of payment groups processed
+        tests:
+          - not_null:
+              where: "insurance_payment_count > 0 OR patient_payment_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: last_payment_type
+        description: Type of the most recent payment
+        tests:
+          - not_null:
+              where: "insurance_payment_count > 0 AND payment_group_count > 0"
+
+      - name: last_check_number
+        description: Check number of the most recent payment
+        tests:
+          - not_null:
+              where: "insurance_payment_count > 0 AND payment_group_count > 0"
+
+      - name: last_bank_branch
+        description: Bank branch of the most recent payment
+        tests:
+          - not_null:
+              where: "insurance_payment_count > 0 AND payment_group_count > 0"
+
+      - name: recent_status_changes
+        description: >
+          Number of claim status changes in the last 30 days, calculated using
+          entry_timestamp from int_claim_tracking
+        tests:
+          - not_null:
+              where: "active_claims_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: last_status_change_date
+        description: Date of most recent status change
+        tests:
+          - date_range_test:
+              min_date: "'2023-01-01'::date"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              column_name: "last_status_change_date::date"
+              config:
+                severity: error
+                description: "Last status change date must be between 2023-01-01 and current date"
+
+      - name: total_claim_payments
+        description: >
+          Total payments received for claims, calculated using paid_amount
+          from int_claim_payments
+        tests:
+          - not_null:
+              where: "claim_payment_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: claim_payment_count
+        description: >
+          Number of payments received for claims, counted using claim_payment_id
+          from int_claim_payments
+        tests:
+          - not_null:
+              where: "claim_payment_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: verified_claims_count
+        description: Number of verified insurance claims
+        tests:
+          - not_null:
+              where: "last_claim_verification is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: last_claim_verification
+        description: Date of most recent claim verification
+        tests:
+          - date_range_test:
+              min_date: "'2023-01-01'::timestamp"
+              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              config:
+                severity: error
+                description: "Last claim verification must be between 2023-01-01 and current date"
+
+      - name: total_benefits_used
+        description: >
+          Total insurance benefits used, calculated by summing the monetary_amount
+          field from the benefit_details JSON in int_claim_details. This represents
+          the total amount of benefits that have been utilized for claims.
+        tests:
+          - not_null:
+              where: "total_claim_payments > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: total_benefits_remaining
+        description: >
+          Total insurance benefits remaining, calculated by summing the remaining_amount
+          field from the benefit_details JSON in int_claim_details. This represents
+          the total amount of benefits still available for future claims.
+        tests:
+          - not_null:
+              where: "total_benefits_used > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: normal_payment_count
+        description: >
+          Number of normal payments received (excluding zero payments and reversals)
+        tests:
+          - not_null:
+              where: "total_claim_payments > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: zero_payment_count
+        description: >
+          Number of zero-amount payments received
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: reversal_count
+        description: >
+          Number of payment reversals received (negative amounts)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: normal_payment_amount
+        description: >
+          Total amount of normal payments received (excluding zero payments and reversals)
+        tests:
+          - not_null:
+              where: "normal_payment_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 25000
+
+      - name: reversal_amount
+        description: >
+          Total amount of payment reversals (should be negative)
+        tests:
+          - not_null:
+              where: "reversal_count > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -25000
+              max_value: 0
+
+    tests:
+      # AR balance validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            ABS(total_ar_balance - (balance_0_30_days + balance_31_60_days + 
+            balance_61_90_days + balance_over_90_days)) <= 0.01
+          config:
+            severity: error
+            description: >
+              Total AR balance should equal sum of aging buckets within 1 cent.
+              Using ABS() to handle any small rounding differences.
+
+      # Insurance AR validation
+      - dbt_utils.expression_is_true:
+          expression: "estimated_insurance_ar >= 0"
+          config:
+            severity: error
+            description: "Insurance AR must be non-negative"
+
+      # Payment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (total_insurance_payments >= -25000 AND total_insurance_payments <= 25000) AND
+            (total_patient_payments >= -50000 AND total_patient_payments <= 60000)
+          config:
+            severity: error
+            description: >
+              Payment amounts must be within acceptable ranges to allow for refunds/reversals
+              while preventing unreasonably large values
+
+      # Merchant fee validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            CASE
+              WHEN total_insurance_payments + total_patient_payments < 0 THEN true
+              ELSE total_merchant_fees <= total_insurance_payments + total_patient_payments
+            END
+          config:
+            severity: error
+            description: >
+              Merchant fees must not exceed total payments when payments are positive.
+              Negative total payments are handled separately as they represent refunds or reversals.
+
+      # Adjustment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            total_writeoffs <= 0 AND 
+            total_discounts <= 0
+          config:
+            severity: error
+            description: >
+              Write-offs and discounts should be negative or zero
+
+      # Claim validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            pending_claims_count >= 0 AND denied_claims_count >= 0 AND
+            pending_claims_amount >= 0 AND denied_claims_amount >= 0
+          config:
+            severity: error
+            description: "Claim counts and amounts must be non-negative"
+
+      # Date validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            first_visit_date <= last_visit_date AND
+            last_visit_date >= '1900-01-01'
+          config:
+            severity: error
+            description: "First visit date must be before last visit date, and last visit date must be valid"
+
+      # Patient record validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1 
+              FROM {{ ref('int_ar_analysis') }} ar
+              WHERE ar.patient_status NOT IN (0, 1, 2, 3)
+            )
+          config:
+            severity: error
+            description: "AR analysis should only include active, non-patient, inactive, or archived patients (status 0-3)"
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1 
+              FROM {{ ref('int_patient_profile') }} p
+              WHERE p.patient_status = 0
+                AND NOT EXISTS (
+                  SELECT 1 
+                  FROM {{ ref('int_ar_analysis') }} ar
+                  WHERE ar.patient_id = p.patient_id
+                )
+                AND p.total_balance > 0
+            )
+          config:
+            severity: error
+            description: "Active patients with balances should have AR records"
+
+      # Insurance validation
+      - insurance_validation_test:
+          config:
+            severity: error
+            description: "Patients with insurance flag should have at least one procedure with insurance"
+
+      # Patient category validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            CASE
+              WHEN position_code = 0 THEN patient_category = 'Regular Patient'
+              WHEN position_code = 1 THEN patient_category = 'House Account'
+              WHEN position_code = 2 THEN patient_category = 'Staff Member'
+              WHEN position_code = 3 THEN patient_category = 'VIP Patient'
+              WHEN position_code = 4 THEN patient_category = 'Other'
+              ELSE patient_category = 'Unknown'
+            END
+          config:
+            severity: error
+            description: "Patient category should match position code"
+
+      # Add new tests for System C integration
+      - dbt_utils.expression_is_true:
+          expression: >
+            CASE
+              WHEN payment_group_count = 0 THEN split_payment_count = 0
+              ELSE split_payment_count <= payment_group_count * 10
+            END
+          config:
+            severity: error
+            description: >
+              Split payment count should not exceed 10 times the payment group count.
+              This allows for multiple splits per payment group while preventing unreasonably high values.
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            ABS(total_claim_payments) <= ABS(total_insurance_payments) * 10.0
+            OR ABS(total_claim_payments - total_insurance_payments) <= 200
+            OR total_insurance_payments = 0
+            OR total_claim_payments = 0
+          config:
+            severity: warn
+            description: >
+              Warning: Significant discrepancies exist between claim payments and insurance payments.
+              This appears to be due to different data sources recording payments differently.
+
+      - dbt_utils.expression_is_true:
+          expression: "total_benefits_used + total_benefits_remaining >= 0"
+          config:
+            severity: error
+            description: "Total benefits must be non-negative"
+
+      # Modified test to check for duplicated claim payments with accurate data model structure
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1
+              FROM {{ ref('int_ar_analysis') }} ar
+              JOIN (
+                -- Count distinct claim_payment_id per patient directly from source
+                SELECT
+                  c.patient_id,
+                  COUNT(DISTINCT cp.claim_payment_id) as source_payment_count
+                FROM {{ ref('stg_opendental__claimproc') }} cp
+                JOIN {{ ref('stg_opendental__claim') }} c
+                  ON cp.claim_id = c.claim_id
+                WHERE cp.claim_payment_id IS NOT NULL
+                GROUP BY c.patient_id
+              ) source ON ar.patient_id = source.patient_id
+              WHERE ar.claim_payment_count != source.source_payment_count
+            )
+          config:
+            severity: error
+            description: >
+              Each claim_payment_id should be counted exactly once per patient.
+              This test verifies that payment counts in int_ar_analysis match the distinct count
+              of claim_payment_ids per patient in the source data.
+
+      # Modified test in _int_ar_analysis.yml
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1
+              FROM {{ ref('int_ar_analysis') }} ar
+              JOIN (
+                -- Get the expected count of distinct payments per patient directly from source
+                SELECT
+                  c.patient_id,
+                  COUNT(DISTINCT cp.claim_payment_id) as expected_payment_count
+                FROM {{ ref('stg_opendental__claimproc') }} cp
+                JOIN {{ ref('stg_opendental__claim') }} c
+                  ON cp.claim_id = c.claim_id
+                WHERE cp.claim_payment_id IS NOT NULL
+                GROUP BY c.patient_id
+              ) expected ON ar.patient_id = expected.patient_id
+              WHERE ar.claim_payment_count != expected.expected_payment_count
+            )
+          config:
+            severity: error
+            description: >
+              The claim_payment_count in int_ar_analysis should match the count of distinct
+              claim_payment_ids for each patient in the source data.
+
+      - dbt_utils.expression_is_true:
+          expression: >
+            NOT EXISTS (
+              SELECT 1
+              FROM {{ ref('int_ar_analysis') }} ar
+              JOIN (
+                SELECT
+                  patient_id,
+                  SUM(payment_amount) as expected_payment_amount
+                FROM (
+                  SELECT
+                    c.patient_id,
+                    cp.claim_payment_id,
+                    MAX(cp.insurance_payment_amount) as payment_amount
+                  FROM {{ ref('stg_opendental__claimproc') }} cp
+                  JOIN {{ ref('stg_opendental__claim') }} c
+                    ON cp.claim_id = c.claim_id
+                  WHERE cp.claim_payment_id IS NOT NULL
+                  GROUP BY c.patient_id, cp.claim_payment_id
+                ) distinct_payments
+                GROUP BY patient_id
+              ) expected ON ar.patient_id = expected.patient_id
+              WHERE ABS(ar.total_claim_payments - expected.expected_payment_amount) > 0.01
+            )
+          config:
+            severity: error
+            description: >
+              The total_claim_payments in int_ar_analysis should match the sum of
+              distinct payment amounts from source data.
+
+    meta:
+      business_owners: ["dental_finance_team", "insurance_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "Total AR balance must equal sum of aging buckets"
+        - "Insurance AR must be non-negative"
+        - "Payment amounts must be non-negative"
+        - "Adjustment amounts must be non-negative"
+        - "Claim counts and amounts must be non-negative"
+        - "Dates must be in chronological order"
+        - "Every active patient must have exactly one AR analysis record"
+        - "AR analysis record count must match active patient profile record count"
+        - "All financial metrics must be properly aggregated at the patient level"
+        - "Only active patients (status 0-3) should be included"
+        - "Insurance information must be properly sourced from completed procedures"
+        - "Patient categories must accurately reflect their relationship with the practice"
+        - "Insurance coverage must be properly tracked and validated"
+        - "Last visit date must be calculated from both appointments and procedures"
+        - "Insurance procedure counts must accurately reflect completed procedures"
+        - "Payment processing details must be accurately tracked"
+        - "Claim status changes must be properly recorded using entry_timestamp"
+        - "Claim payments must be accurately tracked using paid_amount"
+        - "Benefit utilization must be accurately calculated" 

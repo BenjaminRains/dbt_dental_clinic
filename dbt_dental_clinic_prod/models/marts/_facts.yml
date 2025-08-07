@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: fct_procedure
+    description: "Fact table containing procedure execution details and metrics"
+    columns:
+      - name: procedure_id
+        description: "Primary key for the procedure fact"
+        tests:
+          - unique
+          - not_null
+      - name: date_id
+        description: "Foreign key to dim_date"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: patient_id
+        description: "Foreign key to dim_patient"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+      - name: provider_id
+        description: "Foreign key to dim_provider"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+      - name: procedure_type_id
+        description: "Foreign key to dim_procedure"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_procedure')
+              field: procedure_id
+      - name: actual_fee
+        description: "Actual fee charged for the procedure"
+      - name: standard_fee
+        description: "Standard fee for the procedure"
+      - name: duration_minutes
+        description: "Duration of the procedure in minutes"
+      - name: _created_at
+        description: "When the procedure record was created"
+      - name: _updated_at
+        description: "When the procedure record was last updated" 

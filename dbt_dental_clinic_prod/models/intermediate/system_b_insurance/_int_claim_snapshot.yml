@@ -1,0 +1,468 @@
+version: 2
+
+models:
+  - name: int_claim_snapshot
+    description: >
+      Intermediate model for claim snapshot tracking and temporal analysis.
+      
+      This model manages claim state tracking and ensures comprehensive claims history preservation.
+      Part of System B: Insurance & Claims Processing workflow.
+      
+      Key Features:
+      - Snapshot Tracking: Captures claim states at critical lifecycle events for historical analysis
+      - Payment Variance Analysis: Compares estimated vs actual payments and write-offs for accuracy assessment  
+      - Temporal Analysis: Tracks time between snapshot creation and payment receipt for processing efficiency
+      - Data Deduplication: Ensures unique claim_snapshot_id values through systematic deduplication logic
+      
+      Data Sources:
+      - stg_opendental__claimsnapshot: Base snapshot information with trigger events and estimated amounts
+      - stg_opendental__claimproc: Actual claim procedure details with payment and adjustment data
+      - int_claim_tracking: Claim tracking events for audit trail and workflow monitoring
+      - int_claim_details: Comprehensive claim information including procedure codes and status
+      - int_claim_payments: Payment history for most recent payment calculations
+      
+      Insurance Logic Features:
+      - Snapshot Lifecycle Tracking: Captures INITIAL, RESUBMIT, PAYMENT, ADJUSTMENT, DENIAL, APPEAL events
+      - Payment Variance Calculation: Systematic comparison between estimated and actual insurance payments
+      - Write-off Analysis: Tracking of estimated vs actual write-off amounts for financial accuracy
+      - Processing Time Analysis: Days-to-payment calculations for workflow efficiency measurement
+      
+      Benefits Calculations:
+      - Payment Variance: (actual_payment_amount - insurance_payment_estimate) for reimbursement accuracy
+      - Write-off Variance: (actual_write_off - estimated_write_off) for financial reconciliation
+      - Processing Duration: Temporal analysis between snapshot creation and payment receipt
+      - Amount Reconciliation: Comprehensive tracking of fee amounts, estimates, and actuals
+      
+      Data Quality Notes:
+      - Allowed Amount Placeholders: actual_allowed_amount may be -1.0 for undetermined values, handled in validation
+      - Decimal Point Errors: Some records show formatting issues (252.00 recorded as 252252.00), validated through range tests
+      - Deduplication Strategy: Multiple claim procedures per snapshot are deduplicated using row_number() partitioning
+      - Historical Data Integrity: Payment dates before snapshot dates indicate data quality issues, handled with zero-day logic
+      
+      Insurance Rules:
+      - Snapshot Preservation: All claim state changes are preserved for regulatory compliance and audit requirements
+      - Variance Tolerance: Payment and write-off variances are monitored for acceptable business ranges
+      - Processing Standards: Days-to-payment calculations support operational efficiency and vendor performance metrics
+    
+    columns:
+      - name: claim_snapshot_id
+        description: >
+          Primary key - Unique identifier for each claim snapshot record (maps from "ClaimSnapshotNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimSnapshotNum" (CamelCase)
+          - Transformed to: claim_snapshot_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Uniqueness requirement: Each snapshot represents a distinct point-in-time claim state
+          - Usage in downstream processes: Links to claim tracking and audit workflows
+        tests:
+          - unique:
+              config:
+                description: "Business requirement: Each claim snapshot must be uniquely identifiable for audit trail integrity"
+          - not_null:
+              config:
+                description: "System requirement: Snapshot identification is mandatory for tracking and compliance"
+      
+      - name: claim_id
+        description: >
+          Foreign key to insurance claim (maps from "ClaimNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimNum" (CamelCase as stored)
+          - Transformed to: claim_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links snapshots to their parent insurance claims for comprehensive claim history
+          - Supports claim lifecycle tracking and audit trail requirements
+          - Enables claim-level aggregations and reporting
+          
+          Data Quality Considerations:
+          - Special case: claim_id = 0 represents pre-authorization requests or draft claims not yet submitted
+          - These placeholder records are excluded from referential integrity validation
+          - Historical data maintains claim linkage for regulatory compliance
+        tests:
+          - not_null:
+              config:
+                description: "Business requirement: All snapshots must be linked to a claim identifier for tracking"
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              where: "claim_id != 0"
+              config:
+                description: "Referential integrity: Valid claims must exist in source system (excluding system placeholders)"
+      
+      - name: procedure_id
+        description: >
+          Foreign key to dental procedure (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase as stored)
+          - Transformed to: procedure_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links snapshots to specific procedures for procedure-level claim tracking
+          - Supports procedure-based payment variance analysis
+          - Enables clinical and financial integration reporting
+          
+          Data Quality Considerations:
+          - All snapshots must reference valid procedures in the system
+          - Procedure linkage supports clinical workflow integration
+          - Required for financial reconciliation and audit processes
+        tests:
+          - not_null:
+              config:
+                description: "Business requirement: Snapshots must be linked to procedures for clinical context"
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              config:
+                description: "Clinical integrity: Referenced procedures must exist for valid claim processing"
+      
+      - name: patient_id
+        description: >
+          Foreign key to patient record (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links snapshots to patients for patient-level claim history and analysis
+          - Supports patient financial responsibility calculations
+          - Enables patient care coordination and billing workflows
+          
+          Data Quality Considerations:
+          - All snapshots must reference valid patients for billing integrity
+          - Patient linkage required for compliance and audit requirements
+          - Supports patient privacy and data governance policies
+        tests:
+          - not_null:
+              config:
+                description: "Business requirement: Patient identification mandatory for billing and compliance"
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              config:
+                description: "Patient integrity: All claim activities must be linked to valid patient records"
+      
+      - name: plan_id
+        description: >
+          Foreign key to insurance plan (maps from "PlanNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PlanNum" (CamelCase as stored)
+          - Transformed to: plan_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links snapshots to insurance plans for benefits determination and payment calculation
+          - Supports plan-specific coverage rules and limitations
+          - Enables carrier-level reporting and performance analysis
+          
+          Data Quality Considerations:
+          - All snapshots must reference valid insurance plans for accurate processing
+          - Plan linkage supports benefits verification and eligibility validation
+          - Required for regulatory compliance and audit trail maintenance
+        tests:
+          - not_null:
+              config:
+                description: "Insurance requirement: Plan identification mandatory for benefits processing"
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+              config:
+                description: "Insurance integrity: All claims must reference valid insurance plans for processing"
+      
+      - name: claim_tracking_id
+        description: Foreign key to the claim tracking event
+        tests:
+          - relationships:
+              to: ref('int_claim_tracking')
+              field: claim_tracking_id
+      
+      - name: tracking_type
+        description: Type of claim tracking event
+      
+      - name: tracking_note
+        description: Notes associated with the tracking event
+      
+      - name: procedure_code
+        description: Code for the procedure from claim details
+      
+      - name: claim_type
+        description: Type of claim (e.g., primary, secondary)
+        tests:
+          - not_null
+      
+      - name: claim_status
+        description: Current status of the claim
+      
+      - name: snapshot_claim_type
+        description: Type of claim at the time of the snapshot
+      
+      - name: estimated_write_off
+        description: Estimated write-off amount at snapshot time
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+      
+      - name: insurance_payment_estimate
+        description: Estimated insurance payment amount at snapshot time
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+      
+      - name: fee_amount
+        description: Fee amount at snapshot time
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+      
+      - name: entry_timestamp
+        description: Timestamp when the snapshot was created
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
+      
+      - name: actual_payment_amount
+        description: Actual insurance payment amount from claim procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+      
+      - name: actual_write_off
+        description: Actual write-off amount from claim procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+      
+      - name: actual_allowed_amount
+        description: |
+          Actual allowed amount from claim procedure.
+          Business rules:
+          - May be -1.0 as a placeholder for undetermined values
+          - Should be between 0 and 10000 for determined values
+          - Decimal point errors may occur (e.g., 252.00 recorded as 252252.00)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "actual_allowed_amount != -1.0"
+      
+      - name: claim_procedure_status
+        description: Status of the claim procedure
+      
+      - name: claim_adjustment_reason_codes
+        description: Codes explaining claim adjustments
+      
+      - name: most_recent_payment
+        description: Most recent payment amount received
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+      
+      - name: most_recent_payment_date
+        description: Date of the most recent payment
+      
+      - name: payment_variance
+        description: Difference between estimated and actual payment amounts
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+      
+      - name: write_off_variance
+        description: Difference between estimated and actual write-off amounts
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+      
+      - name: snapshot_trigger
+        description: >
+          Business trigger event that initiated this claim snapshot
+          
+          Valid Values:
+          - 'INITIAL': First submission of claim to insurance carrier
+          - 'RESUBMIT': Claim resubmission after rejection or request for additional information
+          - 'PAYMENT': Payment received from insurance carrier
+          - 'ADJUSTMENT': Claim amount or coding adjustments
+          - 'DENIAL': Claim denied by insurance carrier
+          - 'APPEAL': Appeal submitted for denied or underpaid claim
+          
+          Business Rules:
+          - Trigger events create audit trail for claim lifecycle tracking
+          - Each trigger represents a significant business event requiring documentation
+          - Supports regulatory compliance and workflow optimization
+          
+          Operational Impact:
+          - Enables workflow automation based on claim lifecycle events
+          - Supports performance measurement and process improvement
+          - Required for audit trail and compliance reporting
+        tests:
+          - not_null:
+              config:
+                description: "Business requirement: Trigger identification mandatory for workflow tracking"
+          - accepted_values:
+              values: ['INITIAL', 'RESUBMIT', 'PAYMENT', 'ADJUSTMENT', 'DENIAL', 'APPEAL']
+              config:
+                description: "Business validation: Only recognized claim lifecycle events are acceptable triggers"
+      
+      - name: days_to_payment
+        description: >
+          Calculated processing time between snapshot creation and payment receipt
+          
+          Calculation Logic:
+          - Input: entry_timestamp (snapshot creation) and most_recent_payment_date
+          - Method: EXTRACT(EPOCH FROM (payment_date - snapshot_date))/86400
+          - Output: Decimal days between events
+          
+          Business Rules:
+          - NULL when no payment received yet (pending claims)
+          - 0 when payment date precedes snapshot date (data quality issue)
+          - Positive values represent normal processing timeline
+          
+          Business Impact:
+          - Performance measurement for claims processing efficiency
+          - Vendor performance evaluation and contract compliance
+          - Operational optimization and workflow improvement
+          
+          Data Quality Notes:
+          - Historical data integrity issues may cause negative calculations
+          - Extremely high values indicate processing delays requiring investigation
+          - Supports operational monitoring and alert thresholds
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              row_condition: "days_to_payment IS NOT NULL"
+              config:
+                severity: warn
+                description: >
+                  Performance Monitor: Claims processing timeline validation
+                  
+                  Baseline: Normal processing should complete within 0-365 days
+                  Alert Threshold: Values outside range indicate processing delays or data quality issues
+                  Action Required: Investigate claims with extended processing times for workflow optimization 
+      
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the snapshot record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null:
+              config:
+                description: "Metadata requirement: Creation timestamp mandatory for audit trail"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
+              config:
+                description: "Data quality validation: Creation dates must be within valid business operating range"
+      
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading support
+        tests:
+          - not_null:
+              config:
+                description: "Metadata requirement: Update timestamp mandatory for change tracking"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
+              config:
+                description: "Data quality validation: Update dates must be within valid business operating range"
+      
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null:
+              config:
+                description: "Processing requirement: Transformation timestamp mandatory for pipeline monitoring"
+    
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: claim_snapshot_id
+    
+    tests:
+      - dbt_expectations.expression_is_true:
+          expression: "payment_variance = (actual_payment_amount - insurance_payment_estimate)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Payment Variance Calculation Integrity
+              
+              Requirement: Payment variance must accurately reflect the difference between actual and estimated amounts
+              Impact: Incorrect variance calculations compromise financial analysis and reporting accuracy
+              Enforcement: Validates core business logic for payment variance analysis
+      
+      - dbt_expectations.expression_is_true:
+          expression: "write_off_variance = (actual_write_off - estimated_write_off)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Write-off Variance Calculation Integrity
+              
+              Requirement: Write-off variance must accurately reflect the difference between actual and estimated write-offs
+              Impact: Incorrect calculations affect financial reconciliation and audit processes
+              Enforcement: Ensures accurate write-off variance tracking for financial integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "(days_to_payment IS NULL AND most_recent_payment_date IS NULL) OR (days_to_payment IS NOT NULL AND most_recent_payment_date IS NOT NULL)"
+          config:
+            severity: error
+            description: >
+              Data Quality Monitor: Payment Timeline Consistency
+              
+              Expectation: Days to payment and payment date should be consistently null or non-null
+              Tolerance: No tolerance for inconsistent payment timeline data
+              Action Required: Investigate data processing logic if payment timeline fields are inconsistent
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1000000
+          config:
+            severity: warn
+            description: >
+              Performance Monitor: Claim Snapshot Volume Validation
+              
+              Baseline: Normal snapshot volume should be between 1,000 and 1,000,000 records
+              Alert Threshold: Volumes outside range may indicate data processing issues
+              Action Required: Investigate pipeline if volume is significantly outside expected range
+    
+    meta:
+      owner: "insurance_team"
+      contains_pii: true
+      business_process: "Claims Processing and Payment Tracking"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System B: Insurance & Claims Processing"
+      data_quality_requirements:
+        - "All snapshots must maintain accurate variance calculations"
+        - "Payment timeline tracking must be consistent and reliable"
+        - "Deduplication logic must ensure unique snapshot identifiers"
+        - "Referential integrity must be maintained across all related entities"
+        - "Historical data preservation required for regulatory compliance" 

@@ -1,0 +1,277 @@
+version: 2
+
+models:
+  - name: stg_opendental__statement
+    description: >
+      Staging model for patient statements from OpenDental. Contains information about patient statements, including their content, status, and delivery details.
+      
+      Business Context:
+      - Statements are generated for patients to communicate financial information
+      - Can be sent via various channels (email, SMS, paper)
+      - May include insurance estimates and payment information
+      - Supports both single-patient and family statements
+      - Large negative balances typically represent credits, refunds, or insurance overpayments
+      
+      Data Scope:
+      - Records from 2023-01-01 onwards
+      - Includes all statement types (receipts, invoices, regular statements)
+      - Captures both sent and unsent statements
+      
+      Key Relationships:
+      - Links to patients through patient_id
+      - May reference documents through document_id
+      - Can be grouped by super_family_id for family statements
+      
+      Important Business Rules:
+      - Statements must have a valid date_sent
+      - Balance information is validated through is_balance_valid flag
+      - Payment information can be hidden for certain statement types
+      - Family statements can be intermingled or limited to specific family members
+      - Negative balances are valid and typically represent credits or refunds
+      - Large negative balances (>$10,000) may indicate significant credits or refunds
+
+    meta:
+      record_count: "Approximately 10,000 records (as of 2024)"
+      data_scope: "Statements from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: "25 statement records reference non-existent documents (document_id points to missing records in the document table)"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May affect document retrieval and statement history tracking"
+          test: "relationships_to_document"
+        - description: "11 patients have statements with large negative balances (over $10,000) that may need review"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May indicate large credits or refunds that need verification"
+          test: "large_negative_balance_check"
+        - description: "One patient has duplicate statements with identical large negative balances on the same day"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May indicate duplicate statements or intentional multiple credits"
+          test: "duplicate_negative_balance_check"
+      
+      business_rules:
+        - rule: "Statements must have a valid date_sent"
+          impact: "Ensures accurate statement delivery tracking"
+        - rule: "Balance information must be validated"
+          impact: "Prevents incorrect financial reporting"
+        - rule: "Family statements can be intermingled or limited"
+          impact: "Affects how statements are grouped and delivered"
+        - rule: "Negative balances are valid for credits and refunds"
+          impact: "Affects financial reporting and patient communication"
+        - rule: "Large negative balances may require additional verification"
+          impact: "Ensures accuracy of significant financial adjustments"
+        - rule: "Duplicate statements with identical negative balances may need review"
+          impact: "Prevents unintended duplicate credits or refunds"
+      
+      usage_notes: >
+        - Use is_balance_valid to filter out statements with invalid balances
+        - Check is_payment_hidden before displaying payment information
+        - Consider statement_type when analyzing different statement categories
+        - Use date_range_from and date_range_to for statement period analysis
+        - Be aware of the document relationship warning when joining to documents
+        - Large negative balances may indicate credits or refunds that need verification
+        - Multiple statements with identical negative balances on the same day may need review
+        - Most large negative balance statements are regular statements (not receipts/invoices)
+        - Only a small percentage of large negative balance statements have insurance estimates
+
+    columns:
+      # Primary Key
+      - name: statement_id
+        description: "Primary key - unique identifier for each statement (maps to StatementNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Foreign Keys
+      - name: patient_id
+        description: "Foreign key to patient table - identifies the patient associated with the statement"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+        meta:
+          contains_pii: true
+
+      - name: document_id
+        description: "Foreign key to document table - links to associated document if exists"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__document')
+              field: document_id
+              severity: warn
+
+      - name: super_family_id
+        description: "Identifier for the super family group - used for family statement grouping"
+
+      # Timestamps and Dates
+      - name: date_sent
+        description: "Date when the statement was sent to the patient"
+        tests:
+          - not_null
+          - test_date_after:
+              compare_column: "2000-01-01"
+              allow_null: false
+
+      - name: date_range_from
+        description: "Start date of the statement period - beginning of the billing cycle"
+
+      - name: date_range_to
+        description: "End date of the statement period - end of the billing cycle"
+
+      # Text Fields
+      - name: note
+        description: "General notes about the statement - may contain important context or instructions"
+
+      - name: note_bold
+        description: "Notes that should be displayed in bold - typically contains critical information"
+
+      - name: email_subject
+        description: "Subject line for email statements - used when statement is sent via email"
+
+      - name: email_body
+        description: "Body content for email statements - contains the email message"
+
+      - name: statement_type
+        description: "Type classification of the statement - determines format and content"
+
+      - name: short_guid
+        description: "Short unique identifier for external reference - used in URLs and tracking"
+
+      - name: statement_short_url
+        description: "Shortened URL for statement access - used in communications"
+
+      - name: statement_url
+        description: "Full URL for statement access - direct link to statement"
+
+      # Numeric Fields
+      - name: mode
+        description: "Statement delivery mode code - indicates how the statement was/will be delivered"
+        tests:
+          - not_null
+
+      - name: insurance_estimate
+        description: "Estimated insurance portion of the balance - may be null if no insurance"
+
+      - name: balance_total
+        description: "Total balance amount on the statement - represents the amount due (negative values indicate credits or refunds)"
+
+      # Boolean/Status Fields
+      - name: is_payment_hidden
+        description: "Indicates if payment information should be hidden (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_single_patient
+        description: "Indicates if statement is for a single patient (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_intermingled
+        description: "Indicates if statement includes multiple patients (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_sent
+        description: "Indicates if statement has been sent (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_receipt
+        description: "Indicates if statement is a receipt (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_invoice
+        description: "Indicates if statement is an invoice (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_invoice_copy
+        description: "Indicates if statement is an invoice copy (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_balance_valid
+        description: "Indicates if the balance is valid (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: sms_send_status
+        description: "Status of SMS delivery if applicable (0=Not Sent, 1=Sent, 2=Failed)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2]
+
+      - name: limited_custom_family
+        description: "Indicates if statement is for a limited custom family (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTStamp."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp."
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "date_sent >= '2023-01-01'::date"
+          name: "statement_date_range_check"
+          config:
+            severity: warn
+            description: "Ensures all statements are from 2023-01-01 onwards as per business requirements"
+
+      - dbt_utils.expression_is_true:
+          expression: "insurance_estimate >= 0 or insurance_estimate is null"
+          name: "insurance_estimate_non_negative"
+          config:
+            severity: warn
+            description: "Insurance estimates should be non-negative when present"
+
+      - dbt_utils.expression_is_true:
+          expression: "balance_total < -10000"
+          name: "large_negative_balance_check"
+          config:
+            severity: warn
+            description: "Identifies statements with large negative balances (over $10,000) that may need review"
+
+      - dbt_utils.expression_is_true:
+          expression: "not exists (select 1 from staging.stg_opendental__statement s2 where s2.patient_id = stg_opendental__statement.patient_id and s2.date_sent = stg_opendental__statement.date_sent and s2.balance_total = stg_opendental__statement.balance_total and s2.statement_id != stg_opendental__statement.statement_id and s2.balance_total < -10000)"
+          name: "duplicate_negative_balance_check"
+          config:
+            severity: warn
+            description: "Identifies cases where multiple statements have identical large negative balances for the same patient on the same day"
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: patient_id
+          related_to: stg_opendental__patient.patient_id
+        - relationship: many_to_one
+          field: document_id
+          related_to: stg_opendental__document.document_id
+          severity: warn

@@ -1,0 +1,626 @@
+version: 2
+
+models:
+  - name: int_claim_payments
+    description: >
+      Comprehensive insurance claim payment tracking with procedure-level financial breakdowns.
+      
+      This model manages insurance payment processing and ensures optimal payment reconciliation.
+      Part of System B: Insurance & Claims Processing workflow.
+      
+      Key Features:
+      - Payment allocation: Tracks how insurance payments are distributed across individual procedures within claims
+      - EOB integration: Links explanation of benefits attachments for comprehensive documentation
+      - Financial reconciliation: Provides detailed breakdown of billed, allowed, paid, and write-off amounts
+      - Payment tracking: Maintains complete payment history with check details and payment types
+      
+      Data Sources:
+      - stg_opendental__claimproc: Procedure-level claim processing data with financial details
+      - stg_opendental__claimpayment: Insurance payment transactions and check information
+      - stg_opendental__claim: Base claim information for patient linking
+      - stg_opendental__eobattach: Explanation of benefits attachment documentation
+      
+      Insurance Logic Features:
+      - Payment allocation: Distributes insurance payments across multiple procedures within a single claim payment
+      - Financial validation: Ensures payment amounts align with billed and allowed amounts
+      - Deduplication processing: Maintains one record per unique claim payment detail using composite key priority
+      - EOB attachment tracking: Links supporting documentation to payment records
+      
+      Benefits Calculations:
+      - Allowed amount determination: Tracks insurance-approved amounts per procedure
+      - Patient responsibility calculation: Determines patient portion after insurance payments and write-offs
+      - Payment allocation methodology: Distributes check amounts across covered procedures
+      - Write-off tracking: Monitors provider adjustments and contractual allowances
+      
+      Data Quality Notes:
+      - Payment filtering: Only includes records with valid claim_payment_id to ensure payment linkage
+      - Decimal precision handling: Identifies and handles decimal point errors in allowed amounts (e.g., 252.00 vs 252252.00)
+      - Deduplication logic: Uses payment amount priority to resolve duplicate composite key combinations
+      - EOB date filtering: Includes attachments from 2023+ to match active payment processing period
+      
+      Insurance Rules:
+      - Payment completeness: All claim payments must have valid payment identifiers and amounts
+      - Financial reconciliation: Billed amounts must align with sum of paid, write-off, and patient responsibility
+      - Attachment compliance: EOB documentation must be properly linked to payment records
+    
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: claim_payment_detail_id
+    
+    columns:
+      - name: claim_payment_detail_id
+        description: >
+          Primary key - Unique identifier for each claim payment detail record
+          
+          Source Transformation:
+          - Generated using: dbt_utils.generate_surrogate_key(['claim_id', 'procedure_id', 'claim_procedure_id', 'claim_payment_id'])
+          - Purpose: Creates deterministic unique identifier for payment allocation tracking
+          - Business rule: Ensures one record per unique payment-procedure combination
+        tests:
+          - unique
+          - not_null
+      
+      - name: claim_id
+        description: >
+          Foreign key to insurance claim (maps from "ClaimNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimNum" (CamelCase as stored)
+          - Transformed to: claim_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links payment details to specific insurance claims
+          - Enables claim-level payment analysis and reconciliation
+          - Critical for insurance reporting and audit trails
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              config:
+                severity: error
+                description: "All payment details must reference valid claims for insurance reporting integrity"
+
+      - name: procedure_id
+        description: >
+          Foreign key to procedure (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase as stored)
+          - Transformed to: procedure_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links payment allocation to specific dental procedures
+          - Enables procedure-level revenue analysis and cost tracking
+          - Essential for fee schedule validation and reimbursement analysis
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              config:
+                severity: error
+                description: "Payment allocations must reference valid procedures for financial reporting accuracy"
+      
+      - name: claim_procedure_id
+        description: >
+          Identifier for specific claim procedure processing record (maps from "ClaimProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimProcNum" (CamelCase as stored)
+          - Transformed to: claim_procedure_id (snake_case per naming conventions)
+          
+          Business Context:
+          - Represents unique instance of procedure being processed through insurance claim
+          - Enables tracking of procedure-specific insurance processing decisions
+          - Critical for payment allocation and benefits determination
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claimproc')
+              field: claim_procedure_id
+              config:
+                severity: error
+                description: "Payment details must reference valid claim procedure records for processing integrity"
+              
+      - name: claim_payment_id
+        description: >
+          Insurance payment transaction identifier (maps from "ClaimPaymentNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimPaymentNum" (CamelCase as stored)
+          - Transformed to: claim_payment_id (snake_case per naming conventions)
+          
+          Business Context:
+          - Represents single insurance payment that may cover multiple procedures
+          - Enables payment reconciliation across procedure-level allocations
+          - Links to check details and payment method information
+          
+          Data Quality Considerations:
+          - Only records with valid payment IDs are included in this model
+          - Zero values indicate missing payment linkage and are filtered out
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claimpayment')
+              field: claim_payment_id
+              config:
+                severity: error
+                description: "Payment allocations must reference valid payment transactions for financial reconciliation"
+
+      - name: patient_id
+        description: >
+          Foreign key to patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Context:
+          - Links payment allocations to specific patients for account management
+          - Enables patient-level insurance benefit tracking and reporting
+          - Critical for patient responsibility calculations and billing
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              config:
+                severity: error
+                description: "Payment records must reference valid patients for account management accuracy"
+      
+      - name: billed_amount
+        description: >
+          Amount originally billed to insurance for this specific procedure
+          
+          Financial Context:
+          - Currency: USD with standard precision (2 decimal places)
+          - Calculation: Represents provider's submitted charge for procedure
+          - Business Rules: Must align with fee schedule and procedure coding
+          
+          Accounting Impact:
+          - Forms basis for insurance reimbursement calculations
+          - Used in fee schedule analysis and contract negotiations
+          - Critical for revenue recognition and accounts receivable
+          
+          Common Values:
+          - Range typically $10-$5000 for most dental procedures
+          - Zero amounts valid for monitoring codes (N-codes, Z-codes)
+          - Outliers may indicate fee schedule errors or special circumstances
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "claim_id not in (21546)"
+              config:
+                description: "Billed amounts must be within reasonable range for dental procedures"
+
+      - name: allowed_amount
+        description: >
+          Amount approved by insurance for payment on this procedure
+          
+          Financial Context:
+          - Currency: USD representing insurance-approved amount for procedure
+          - Calculation: Determined by insurance plan benefits and fee schedules
+          - Business Rules: May be less than, equal to, or occasionally more than billed amount
+          
+          Insurance Processing:
+          - Represents maximum amount insurance will contribute to procedure cost
+          - Used to calculate patient responsibility and provider write-offs
+          - May reflect contractual allowances and benefit limitations
+          
+          Special Values:
+          - -1.0: Placeholder value indicating undetermined or pending approval
+          - 0: Valid for procedures with no insurance coverage
+          - Values exceeding billed amount may indicate decimal point data entry errors
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "allowed_amount != -1.0 and claim_id not in (21561, 25085, 24286)"
+              config:
+                description: "Allowed amounts must be within reasonable range, excluding undetermined values and known data quality exceptions"
+
+      - name: paid_amount
+        description: >
+          Actual amount paid by insurance for this procedure
+          
+          Financial Context:
+          - Currency: USD representing actual insurance payment received
+          - Calculation: Amount allocated from insurance check to this specific procedure
+          - Business Rules: Typically equals or is less than allowed amount
+          
+          Payment Processing:
+          - Represents confirmed payment received from insurance carrier
+          - Used for cash flow analysis and payment posting
+          - May include adjustments and recoupments (negative values)
+          
+          Common Values:
+          - Positive values: Standard insurance payments
+          - Zero: No payment made (patient responsibility or non-covered procedure)
+          - Negative values: Recoupments, adjustments, or payment reversals
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+              config:
+                description: "Paid amounts must be within reasonable range including recoupments and reversals"
+
+      - name: write_off_amount
+        description: >
+          Amount written off by provider for this procedure
+          
+          Financial Context:
+          - Currency: USD representing provider adjustment amount
+          - Calculation: Difference between billed and allowed amounts (contractual adjustment)
+          - Business Rules: Typically non-negative representing provider concessions
+          
+          Accounting Impact:
+          - Reduces accounts receivable without cash collection
+          - Represents contractual allowances and provider adjustments
+          - Used in fee schedule analysis and contract evaluation
+          
+          Common Scenarios:
+          - Contractual adjustments: Difference between fee schedule and allowed amount
+          - Goodwill adjustments: Provider-initiated patient assistance
+          - Bad debt: Uncollectible patient portions written off
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                description: "Write-off amounts must be non-negative and within reasonable procedure cost range"
+
+      - name: patient_responsibility
+        description: >
+          Amount patient owes for this procedure after insurance processing
+          
+          Financial Context:
+          - Currency: USD representing patient's financial obligation
+          - Calculation: Remaining balance after insurance payment and write-offs
+          - Business Rules: Includes deductibles, coinsurance, and non-covered amounts
+          
+          Patient Financial Management:
+          - Used for patient billing and account balance calculations
+          - Includes copayments, deductibles, and coinsurance obligations
+          - May reflect benefit limitations and non-covered procedures
+          
+          Special Values:
+          - -1.0: Placeholder indicating undetermined patient responsibility
+          - 0: No patient responsibility (fully covered or written off)
+          - Positive values: Standard patient financial obligation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "patient_responsibility != -1.0"
+              config:
+                description: "Patient responsibility must be non-negative and reasonable, excluding undetermined values"
+
+      - name: check_amount
+        description: >
+          Total amount of insurance payment check (maps from "CheckAmount" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "CheckAmount" (CamelCase as stored)
+          - Represents: Total check amount that may cover multiple procedures
+          
+          Payment Processing:
+          - Represents total payment received from insurance carrier
+          - May be allocated across multiple procedures and claims
+          - Used for payment reconciliation and deposit matching
+          
+          Business Context:
+          - Critical for cash flow management and payment posting
+          - Enables validation of payment allocation accuracy
+          - Used in bank reconciliation and audit processes
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+              config:
+                description: "Check amounts must be present for all valid payment records"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+              where: "claim_payment_id != 0"
+              config:
+                description: "Check amounts must be within reasonable range for insurance payments"
+
+      - name: check_date
+        description: >
+          Date of insurance payment check (maps from "CheckDate" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "CheckDate" (CamelCase as stored)
+          - Represents: Official date of insurance payment transaction
+          
+          Business Context:
+          - Used for cash flow analysis and payment timing tracking
+          - Critical for aging reports and payment performance metrics
+          - Enables analysis of insurance payment patterns and delays
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+              config:
+                description: "Check dates must be present for all valid payment transactions"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date + interval '30 days'"
+              where: "claim_payment_id != 0"
+              config:
+                description: "Check dates must be within reasonable business date range"
+
+      - name: payment_type_id
+        description: >
+          Payment method identifier (maps from "PaymentType" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PaymentType" (CamelCase as stored)
+          - Represents: Method of payment delivery (check, EFT, etc.)
+          
+          Business Context:
+          - Enables analysis of payment method preferences and processing times
+          - Used for reconciliation and payment processing optimization
+          - Critical for bank deposit categorization and audit trails
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+              config:
+                description: "Payment type must be specified for all valid payment transactions"
+
+      - name: is_partial
+        description: >
+          Flag indicating partial payment status (converted from OpenDental 0/1 integer)
+          
+          Source Transformation:
+          - OpenDental source: "IsPartial" (0/1 integer as stored)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false/null)
+          
+          Business Logic:
+          - true when: Payment represents partial settlement of claim amount
+          - false when: Payment represents full settlement of claim amount
+          - null when: Payment status is undetermined
+          
+          Operational Usage:
+          - Used for follow-up processing and additional payment expectations
+          - Enables analysis of payment completion patterns
+          - Critical for accounts receivable management and claim status tracking
+        tests:
+          - accepted_values:
+              values: [true, false]
+              where: "claim_payment_id != 0"
+              config:
+                description: "Partial payment flag must be valid boolean for business logic integrity"
+
+      - name: eob_attachment_count
+        description: >
+          Number of explanation of benefits attachments linked to this payment
+          
+          Business Context:
+          - Represents count of supporting documentation for payment transaction
+          - Used for compliance monitoring and audit trail completeness
+          - Enables analysis of documentation patterns and carrier requirements
+          
+          Data Quality:
+          - Zero values indicate payments without supporting EOB documentation
+          - Higher counts may indicate complex payment scenarios or disputes
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              config:
+                description: "EOB attachment counts must be reasonable for payment processing"
+      
+      - name: eob_attachment_ids
+        description: >
+          Array of EOB attachment identifiers linked to this payment
+          
+          Technical Context:
+          - Contains list of all EOB attachment IDs for detailed documentation access
+          - Enables traceability to source documentation and audit support
+          - Used for document retrieval and compliance verification
+      
+      - name: eob_attachment_file_names
+        description: >
+          Array of EOB attachment file names for this payment
+          
+          Business Context:
+          - Provides human-readable reference to supporting documentation
+          - Used for document organization and retrieval processes
+          - Enables audit trail and compliance documentation
+      
+      - name: _extracted_at
+        description: >
+          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          
+          Source: ETL pipeline metadata (added during extraction process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+              config:
+                description: "Extraction timestamps must be within reasonable data processing window"
+      
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" or equivalent creation field
+          - Represents: When the payment record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null:
+              where: "claim_payment_id != 0"
+              config:
+                description: "Creation timestamps must be present for payment audit trails"
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp + interval '1 hour'"
+              config:
+                description: "Update timestamps must be within reasonable business date range"
+      
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+
+    tests:
+      # Data Volume Monitoring
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 100000
+          config:
+            severity: warn
+            description: >
+              Insurance Payment Volume Monitor: Tracks expected volume of claim payment records
+              
+              Baseline: Normal processing range for insurance payment allocations
+              Alert Threshold: Volume outside range may indicate processing issues
+              Action Required: Investigate ETL pipeline and insurance processing workflows
+
+      # Financial Integrity Tests
+      - dbt_utils.expression_is_true:
+          expression: "billed_amount >= paid_amount + write_off_amount + patient_responsibility"
+          config:
+            severity: warn
+            name: warn_financial_allocation_integrity
+            description: >
+              Financial Integrity: Validates proper allocation of billed amounts
+              
+              Business Rule: Total allocations should not exceed billed amount
+              Accounting Requirement: Ensures accurate financial reporting and reconciliation
+              Audit Significance: Critical for insurance reimbursement validation
+
+      # Payment Completeness Tests
+      - dbt_utils.expression_is_true:
+          expression: "not (check_amount is null and claim_payment_id != 0)"
+          config:
+            severity: error
+            name: check_payment_completeness_amount
+            description: >
+              Payment Completeness: All valid payments must have check amounts
+              
+              Business Rule: Payment records require complete financial information
+              Impact: Missing amounts prevent proper reconciliation and reporting
+              Enforcement: Critical for cash flow management and audit compliance
+
+      - dbt_utils.expression_is_true:
+          expression: "not (check_date is null and claim_payment_id != 0)"
+          config:
+            severity: error
+            name: check_payment_completeness_date
+            description: >
+              Payment Completeness: All valid payments must have transaction dates
+              
+              Business Rule: Payment timing is required for cash flow analysis
+              Impact: Missing dates prevent aging reports and performance metrics
+              Enforcement: Essential for financial reporting and audit trails
+
+      - dbt_utils.expression_is_true:
+          expression: "not (payment_type_id is null and claim_payment_id != 0)"
+          config:
+            severity: error
+            name: check_payment_method_completeness
+            description: >
+              Payment Method Integrity: All payments must specify payment method
+              
+              Business Rule: Payment categorization required for reconciliation
+              Impact: Missing types prevent proper bank reconciliation
+              Enforcement: Critical for financial controls and audit compliance
+
+      # Data Quality Monitoring Tests
+      - dbt_utils.expression_is_true:
+          expression: "not (allowed_amount > billed_amount * 10 and allowed_amount != -1.0 and billed_amount > 0)"
+          config:
+            severity: warn
+            name: monitor_decimal_point_errors
+            description: >
+              Data Quality Monitor: Identifies potential decimal point entry errors
+              
+              Expectation: Allowed amounts should not exceed 10x billed amounts
+              Tolerance: Excludes undetermined values (-1.0) and zero billings
+              Action Required: Review data entry processes and validate insurance processing
+
+      - dbt_utils.expression_is_true:
+          expression: "not (billed_amount = 0 and allowed_amount > 0 and allowed_amount != -1.0)"
+          config:
+            severity: warn
+            name: monitor_zero_billing_anomalies
+            description: >
+              Data Quality Monitor: Flags unusual zero billing with positive allowances
+              
+              Expectation: Insurance typically doesn't allow payment for unbilled procedures
+              Tolerance: Some monitoring codes (N-codes, Z-codes) may have zero fees
+              Action Required: Validate procedure coding and insurance processing logic
+
+      # Business Rule Validation
+      - dbt_utils.expression_is_true:
+          expression: "claim_payment_detail_id IS NOT NULL"
+          config:
+            severity: error
+            name: validate_surrogate_key_generation
+            description: >
+              Business Rule: Every payment detail must have unique identifier
+              
+              Requirement: Surrogate key generation must succeed for all records
+              Impact: Missing keys prevent proper data relationships and tracking
+              Enforcement: Critical for data integrity and downstream model functionality
+
+      # EOB Documentation Compliance
+      - dbt_utils.expression_is_true:
+          expression: "eob_attachment_count >= 0"
+          config:
+            severity: error
+            name: validate_eob_attachment_counts
+            description: >
+              Documentation Compliance: EOB attachment counts must be valid
+              
+              Business Rule: Attachment counts cannot be negative
+              Impact: Invalid counts indicate aggregation or data quality issues
+              Enforcement: Required for audit documentation and compliance tracking
+
+    meta:
+      owner: "insurance_team"
+      contains_pii: true
+      business_process: "Insurance Payment Processing"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System B: Insurance & Claims Processing"
+      data_quality_requirements:
+        - "All payment records must have complete financial information"
+        - "Payment allocations must align with insurance processing rules"
+        - "EOB documentation must be properly linked to payments"
+        - "Financial integrity must be maintained across payment components"
+        - "Surrogate key generation must succeed for all payment details"
+      performance_requirements:
+        - "Model execution must complete within 15 minutes"
+        - "Data freshness must be within 24 hours of source updates"
+        - "Query performance must support real-time payment lookup"
+      compliance_requirements:
+        - "Payment audit trails must be complete and traceable"
+        - "Financial reconciliation must be accurate and verifiable"
+        - "Insurance documentation must meet regulatory standards"

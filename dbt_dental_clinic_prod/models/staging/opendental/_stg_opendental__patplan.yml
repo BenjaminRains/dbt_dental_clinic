@@ -1,0 +1,129 @@
+version: 2
+
+models:
+  - name: stg_opendental__patplan
+    description: >
+      Staging model for patient insurance plan assignments that links patients to their insurance subscriptions.
+      This table manages the relationship between patients and their insurance plans, including plan priority 
+      (primary, secondary, etc.) and coverage details. Each record represents a specific insurance plan 
+      assignment for a patient, enabling proper insurance billing and claims processing.
+    
+    meta:
+      record_count: "~850 active records"
+      data_scope: "Records from 2023-01-01 onwards (filtered for performance optimization)"
+      
+      known_issues:
+        - description: "2 records reference insurance_subscriber_id values that don't exist in stg_opendental__inssub (old terminated subscriptions IDs: 10665, 11041 filtered out by staging model performance optimization)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "relationships_stg_opendental__patplan_insurance_subscriber_id__inssub_id__ref_stg_opendental__inssub_"
+          test_result: "Got 2 results, configured to warn if != 0"
+        - description: "Some historical records may have null relationship codes for legacy data"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Ordinal field determines insurance billing priority (1=primary, 2=secondary, etc.)"
+          impact: "Critical for proper insurance claim sequencing and billing workflows"
+        - rule: "Only records from 2023-01-01 onwards are included for performance optimization"
+          impact: "Historical analysis before 2023 requires direct source table access"
+      
+      usage_notes: >
+        This model is essential for insurance billing workflows and patient coverage analysis.
+        Use in conjunction with stg_opendental__inssub and stg_opendental__insplan for complete 
+        insurance coverage information. The ordinal field is critical for determining billing 
+        sequence. Be aware that historical data before 2023 is filtered out for performance.
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "ordinal >= 1"
+          name: "patplan_ordinal_valid_priority"
+          config:
+            severity: error
+            description: "Validates that ordinal values are valid priority numbers (must be >= 1)"
+      
+      - dbt_utils.expression_is_true:
+          expression: "_updated_at >= _created_at"
+          name: "patplan_updated_after_created"
+          config:
+            severity: warn
+            description: "Validates that records were updated after or at the same time they were created"
+    
+    columns:
+      - name: patplan_id
+        description: "Primary key - Unique identifier for each patient insurance plan assignment (maps to PatPlanNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      - name: patient_id
+        description: "Foreign key to stg_opendental__patient - Links to the patient who has this insurance plan assignment"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+
+      - name: insurance_subscriber_id
+        description: "Foreign key to stg_opendental__inssub - Links to the specific insurance subscription for this plan assignment"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: inssub_id
+              severity: warn
+              # Note: 2 records reference old terminated subscriptions (IDs: 10665, 11041) 
+              # that are filtered out by our staging model performance optimization.
+              # These subscribers were terminated in 2021 but patplan records reference them.
+              # This is expected behavior due to our intentional filtering logic.
+
+      - name: ordinal
+        description: >
+          Insurance plan priority order for the patient, determining billing sequence.
+          1 = Primary insurance, 2 = Secondary insurance, 3 = Tertiary insurance, etc.
+          Critical for proper insurance claim processing and coordination of benefits.
+        tests:
+          - not_null
+
+      - name: is_pending
+        description: "Flag indicating if the insurance plan assignment is pending approval or activation (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: relationship
+        description: >
+          Code indicating the relationship between the patient and the insurance subscriber.
+          Common values include: Self, Spouse, Child, Other.
+          May be null for some historical records.
+
+      - name: patient_external_id
+        description: "External identifier for the patient as used by insurance systems or other external systems (maps to PatID in OpenDental)"
+
+      - name: ortho_auto_fee_billed_override
+        description: >
+          Override amount for automatic orthodontic fee billing. When set, this amount 
+          overrides the standard orthodontic billing calculations for this patient's plan.
+          Used in specialized orthodontic billing workflows.
+
+      - name: ortho_auto_next_claim_date
+        description: >
+          Next scheduled date for automatic orthodontic claim submission for this patient's plan.
+          Used by automated billing systems to schedule recurring orthodontic claims.
+
+      - name: _loaded_at
+        description: "Timestamp when the record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateTEntry. Records without creation dates are excluded."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit."
+        tests:
+          - not_null

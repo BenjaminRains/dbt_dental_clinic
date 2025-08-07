@@ -1,0 +1,213 @@
+version: 2
+
+models:
+  - name: stg_opendental__sheet
+    description: >
+      Staging model for sheet records from OpenDental. Contains information about forms, documents, and other sheet-based records in the system.
+      
+      This model includes:
+      - Forms and documents used in patient care
+      - Web-based forms and their configurations
+      - Sheet layout and formatting information
+      - Document metadata and revision tracking
+      
+      Data is filtered from 2023-01-01 onwards and is incrementally loaded based on the last update timestamp.
+    
+    meta:
+      record_count: "[To be updated with current count]"
+      data_scope: "Data from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: "Sheet records may have null values for optional relationships (patient_id, sheet_def_id, doc_id, clinic_id)"
+          severity: "warn"
+          identified_date: "2024-03-19"
+          test: "relationships"
+        - description: "Duplicate WebFormSheetID values exist in the source data (e.g., ID 45526082 appears twice). This may indicate a data quality issue or expected business behavior."
+          severity: "warn"
+          identified_date: "2024-03-19"
+          test: "unique_web_form_sheet_id"
+        - description: "Sheet records are referenced by 2,977 sheetfield records that don't exist in the sheet table. This may indicate deleted sheets or data synchronization issues."
+          severity: "warn"
+          identified_date: "2024-03-19"
+          test: "relationships_stg_opendental__sheetfield"
+      
+      business_rules:
+        - rule: "Sheet records are uniquely identified by sheet_id"
+          impact: "Ensures no duplicate sheets exist in the system"
+        - rule: "Sheet records are filtered from 2023-01-01 onwards"
+          impact: "Focuses on recent and recent data"
+        - rule: "WebFormSheetID should be unique for web forms (is_web_form = true)"
+          impact: "Identifies potential data quality issues with web form tracking"
+        - rule: "Sheet records should exist for all referenced sheetfield records"
+          impact: "Ensures data integrity between sheets and their fields"
+      
+      usage_notes: >
+        - Use this model for analyzing form usage patterns and document management
+        - Consider the is_deleted flag when analyzing active vs. historical records
+        - Web forms (is_web_form = true) may have different usage patterns than traditional forms
+        - Sheet type and layout information can be used to analyze form design patterns
+        - Note that some web form IDs may be duplicated in the source data - verify if this is expected behavior
+        - Be aware that some sheetfield records reference non-existent sheets - verify if these are deleted sheets
+    
+    columns:
+      # Primary Key
+      - name: sheet_id
+        description: "Primary key - unique identifier for each sheet record (maps to SheetNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Foreign Keys
+      - name: patient_id
+        description: "Foreign key to patient table - identifies the patient associated with this sheet"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: warn
+      
+      - name: sheet_def_id
+        description: "Foreign key to sheet definition table - identifies the template or definition used for this sheet"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              severity: warn
+      
+      - name: doc_id
+        description: "Foreign key to document table - identifies the associated document if this sheet is linked to a document"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__document')
+              field: document_id
+              severity: warn
+      
+      - name: clinic_id
+        description: "Foreign key to clinic table - identifies the clinic where this sheet was created"
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       severity: warn
+      
+      - name: web_form_sheet_id
+        description: "Identifier for web-based forms - used to track web form submissions. Note that some web form IDs may be duplicated in the source data (e.g., ID 45526082 appears twice)."
+        tests:
+          - unique:
+              where: "is_web_form = true"
+              severity: warn  # Changed to warn since we've documented this as a known issue
+      
+      # Sheet Properties
+      - name: sheet_type
+        description: "Type of sheet (e.g., form, document, report) - integer value indicating the sheet category"
+        tests:
+          - not_null
+      
+      - name: font_size
+        description: "Font size used in the sheet - real number value"
+        tests:
+          - not_null
+      
+      - name: font_name
+        description: "Name of the font used in the sheet - string value"
+      
+      - name: width
+        description: "Width of the sheet in pixels - integer value"
+        tests:
+          - not_null
+      
+      - name: height
+        description: "Height of the sheet in pixels - integer value"
+        tests:
+          - not_null
+      
+      # Boolean Flags
+      - name: is_landscape
+        description: "Indicates if sheet is in landscape orientation (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
+      - name: show_in_terminal
+        description: "Indicates if sheet should be shown in terminal (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
+      - name: is_web_form
+        description: "Indicates if sheet is a web form (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
+      - name: is_multi_page
+        description: "Indicates if sheet spans multiple pages (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
+      - name: is_deleted
+        description: "Indicates if sheet has been deleted (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
+      - name: has_mobile_layout
+        description: "Indicates if sheet has a mobile-specific layout (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+      
+      # Additional Fields
+      - name: internal_note
+        description: "Internal notes about the sheet - may contain administrative or technical information"
+      
+      - name: description
+        description: "Description of the sheet's purpose or content - provides context about the sheet's use"
+      
+      - name: revision_id
+        description: "Version/revision identifier for the sheet - tracks changes to the sheet over time"
+        tests:
+          - not_null
+      
+      # Date Fields
+      - name: sheet_datetime
+        description: "Timestamp when the sheet was created (maps to DateTimeSheet in OpenDental)"
+        tests:
+          - not_null
+      
+      - name: sheet_edited_datetime
+        description: "Timestamp when the sheet was last edited (maps to DateTSheetEdited in OpenDental)"
+        tests:
+          - not_null
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTimeSheet."
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTSheetEdited."
+        tests:
+          - not_null
+
+    # Updated Table relationships
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: patient_id
+          related_to: stg_opendental__patient.patient_id
+        - relationship: many_to_one
+          field: sheet_def_id
+          related_to: stg_opendental__definition.definition_id
+        - relationship: many_to_one
+          field: doc_id
+          related_to: stg_opendental__document.document_id

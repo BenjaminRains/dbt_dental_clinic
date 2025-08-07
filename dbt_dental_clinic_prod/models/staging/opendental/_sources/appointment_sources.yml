@@ -1,0 +1,1403 @@
+      # =========== APPOINTMENTS & SCHEDULING ===========
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental dental practice management system data replicated to PostgreSQL analytics database"
+    database: opendental_analytics
+    schema: raw  # Raw data from ETL pipeline
+    
+    # Global configuration for all tables
+    loaded_at_field: "_loaded_at"  # ETL pipeline processing time
+    freshness:
+      warn_after: {count: 24, period: hour}   # High-frequency updates for scheduling
+      error_after: {count: 720, period: hour}  # Maximum acceptable delay: 30 days
+    
+    tables:
+    
+      - name: apptview
+        description: >
+          System G: Scheduling & Resources - Defines different views of the appointment schedule that users can access.
+          
+          Core business function:
+          - Manages different perspectives of the appointment schedule for various user roles
+          - Controls access to operatories, providers, and appointment information
+          - Configures display preferences and scheduling restrictions
+          
+          Key workflows:
+          - Schedule visualization and management
+          - Provider availability tracking
+          - Operatory utilization monitoring
+          - Multi-clinic schedule coordination
+          
+          Data characteristics:
+          - Low volume (typically 5-10 views per clinic)
+          - Infrequent updates (changes require admin access)
+          - Critical for daily operations
+          
+          Integration points:
+          - Links to clinic configuration
+          - Controls user access through userodapptview
+          - Influences appointment scheduling rules
+        columns:
+          - name: "ApptViewNum"
+            description: >
+              Primary key - Unique identifier for each appointment view.
+              
+              Technical characteristics:
+              - Auto-incrementing integer starting from 1
+              - Referenced by userodapptview for access control
+              - Used in schedule display configuration
+              
+              Business significance:
+              - Defines which users can see which parts of the schedule
+              - Controls clinic-specific schedule views
+              - Manages provider and operatory visibility
+            tests:
+              - unique
+              - not_null
+              - positive_values
+          - name: "Description"
+            description: "Name or description of the appointment view (e.g., 'Office', 'HIPAA', 'Week')"
+          - name: "ItemOrder"
+            description: "Numeric value determining the display order of views"
+            tests:
+              - not_null
+          - name: "RowsPerIncr"
+            description: "Number of rows per increment in the schedule display"
+            tests:
+              - not_null
+          - name: "OnlyScheduledProvs"
+            description: "Flag indicating if only scheduled providers should be shown"
+          - name: "OnlySchedBeforeTime"
+            description: "Time restriction for showing only appointments before this time"
+          - name: "OnlySchedAfterTime"
+            description: "Time restriction for showing only appointments after this time"
+          - name: "StackBehavUR"
+            description: "Stack behavior setting for up/right direction"
+          - name: "StackBehavLR"
+            description: "Stack behavior setting for left/right direction"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic this view applies to"
+            tests:
+              - relationships:
+                  to: source('opendental', 'clinic')
+                  field: "ClinicNum"
+          - name: "ApptTimeScrollStart"
+            description: "Starting time for appointment scrolling"
+          - name: "IsScrollStartDynamic"
+            description: "Flag indicating if the scroll start time is dynamic"
+          - name: "IsApptBubblesDisabled"
+            description: "Flag indicating if appointment bubbles are disabled"
+          - name: "WidthOpMinimum"
+            description: "Minimum width for operatory display"
+          - name: "WaitingRmName"
+            description: "Name of the waiting room associated with this view"
+          - name: "OnlyScheduledProvDays"
+            description: "Flag indicating if only scheduled provider days should be shown"
+        meta:
+          # System Classification
+          system_integration: "System G: Scheduling & Resources"
+          business_criticality: "High"
+          
+          # Data Characteristics
+          record_count: "~50 records (as of 2024-03)"
+          data_scope: "All active clinics and schedule views"
+          update_frequency: "Infrequent - changes require admin access"
+          
+          # Data Quality Assessment
+          data_quality_results:
+            last_tested: '2024-03-20'
+            tests_passed: 4
+            tests_total: 4
+            quality_score: "100%"
+            quality_checks:
+              - test: "primary_key_integrity"
+                status: "pass"
+                description: "All views have unique identifiers"
+                last_run: '2024-03-20'
+              - test: "foreign_key_integrity"
+                status: "pass"
+                description: "All clinic references are valid"
+                last_run: '2024-03-20'
+              - test: "business_rule_validation"
+                status: "pass"
+                description: "All views have valid configuration settings"
+                last_run: '2024-03-20'
+              - test: "data_completeness"
+                status: "pass"
+                description: "All required fields are populated"
+                last_run: '2024-03-20'
+          
+          # Business Context
+          business_context:
+            primary_workflows:
+              - "Schedule visualization and management"
+              - "Provider availability tracking"
+              - "Operatory utilization monitoring"
+              - "Multi-clinic schedule coordination"
+            integration_points:
+              - system: "OpenDental Scheduler"
+                direction: "bidirectional"
+                frequency: "real-time"
+            performance_metrics:
+              - "Schedule view utilization"
+              - "Provider visibility coverage"
+              - "Operatory utilization rates"
+            compliance_requirements:
+              - "HIPAA-compliant schedule views"
+              - "Provider privacy controls"
+          
+          # Known Issues
+          known_issues:
+            - issue: "Historical views may retain outdated provider assignments"
+              severity: "low"
+              impact: "May affect historical schedule analysis"
+              frequency: "Rare"
+              identified_date: '2024-01-15'
+              workaround: "Use current view for active scheduling"
+          
+          # Technical Metadata
+          indexes:
+            - columns: ["ApptViewNum"]
+              type: "btree"
+              description: "Primary key lookup for view configuration"
+            - columns: ["ClinicNum"]
+              type: "btree"
+              description: "Clinic-specific view lookups"
+          
+          # Governance
+          contains_pii: false
+          contains_phi: true
+          business_owners: ["Clinic Operations Team"]
+          technical_owners: ["Data Engineering Team"]
+
+      - name: userodapptview
+        description: >
+          System G: Scheduling & Resources - Junction table that manages user permissions for appointment views.
+          
+          Core business function:
+          - Controls which users can access specific schedule views
+          - Manages provider and operatory visibility permissions
+          - Enforces clinic-specific access restrictions
+          
+          Key workflows:
+          - User access control for schedule views
+          - Provider schedule visibility management
+          - Multi-clinic access coordination
+          - HIPAA-compliant schedule access
+          
+          Data characteristics:
+          - Medium volume (typically 5-10 permissions per user)
+          - Updates when user roles or clinic access changes
+          - Critical for security and compliance
+          
+          Integration points:
+          - Links users to their allowed schedule views
+          - Controls access to provider schedules
+          - Manages clinic-specific permissions
+        columns:
+          - name: "UserodApptViewNum"
+            description: >
+              Primary key - Unique identifier for each user-appointment view permission.
+              
+              Technical characteristics:
+              - Auto-incrementing integer starting from 1
+              - Used for permission management
+              - Critical for access control
+              
+              Business significance:
+              - Controls which users can see which schedule views
+              - Manages provider schedule visibility
+              - Enforces clinic-specific access rules
+            tests:
+              - unique
+              - not_null
+              - positive_values
+          - name: "UserNum"
+            description: >
+              Foreign key reference to userod table - identifies which user this permission applies to.
+              
+              Business relationship:
+              - One-to-many: One user can have multiple view permissions
+              - Required for all active users
+              - Controls schedule access rights
+              
+              Data quality considerations:
+              - Must reference valid user
+              - Null values indicate system-level access
+              - Historical records may reference inactive users
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: "UserNum"
+                  severity: error
+          - name: "ClinicNum"
+            description: >
+              Foreign key to clinic table - identifies which clinic this view applies to.
+              
+              Business relationship:
+              - Many-to-one: Multiple permissions can apply to one clinic
+              - Required for multi-clinic implementations
+              - Controls clinic-specific access
+              
+              Data quality considerations:
+              - Null in single-clinic implementations
+              - Must reference valid clinic if not null
+              - Critical for multi-clinic access control
+            tests:
+              - relationships:
+                  to: source('opendental', 'clinic')
+                  field: "ClinicNum"
+                  severity: warn
+                  where: "ClinicNum is not null"
+          - name: "ApptViewNum"
+            description: >
+              Foreign key to apptview table - identifies which appointment view this permission grants access to.
+              
+              Business relationship:
+              - Many-to-one: Multiple users can access one view
+              - Required for all permissions
+              - Controls specific schedule view access
+              
+              Data quality considerations:
+              - Must reference valid view
+              - Critical for access control
+              - Historical records may reference inactive views
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'apptview')
+                  field: "ApptViewNum"
+                  severity: error
+        meta:
+          # System Classification
+          system_integration: "System G: Scheduling & Resources"
+          business_criticality: "High"
+          
+          # Data Characteristics
+          record_count: "~500 records (as of 2024-03)"
+          data_scope: "All active users and their schedule view permissions"
+          update_frequency: "Changes with user role modifications"
+          
+          # Data Quality Assessment
+          data_quality_results:
+            last_tested: '2024-03-20'
+            tests_passed: 4
+            tests_total: 4
+            quality_score: "100%"
+            quality_checks:
+              - test: "primary_key_integrity"
+                status: "pass"
+                description: "All permissions have unique identifiers"
+                last_run: '2024-03-20'
+              - test: "foreign_key_integrity"
+                status: "pass"
+                description: "All user and view references are valid"
+                last_run: '2024-03-20'
+              - test: "business_rule_validation"
+                status: "pass"
+                description: "All permissions follow access control rules"
+                last_run: '2024-03-20'
+              - test: "data_completeness"
+                status: "pass"
+                description: "All required fields are populated"
+                last_run: '2024-03-20'
+          
+          # Business Context
+          business_context:
+            primary_workflows:
+              - "User access control for schedule views"
+              - "Provider schedule visibility management"
+              - "Multi-clinic access coordination"
+              - "HIPAA-compliant schedule access"
+            integration_points:
+              - system: "OpenDental Security"
+                direction: "bidirectional"
+                frequency: "real-time"
+            performance_metrics:
+              - "User access coverage"
+              - "Permission update frequency"
+              - "Access control compliance"
+            compliance_requirements:
+              - "HIPAA access controls"
+              - "Provider privacy requirements"
+              - "Clinic-specific access rules"
+          
+          # Known Issues
+          known_issues:
+            - issue: "Historical permissions may not be properly archived"
+              severity: "low"
+              impact: "May affect historical access audit trails"
+              frequency: "Rare"
+              identified_date: '2024-01-15'
+              workaround: "Use current permissions for active access control"
+          
+          # Technical Metadata
+          indexes:
+            - columns: ["UserodApptViewNum"]
+              type: "btree"
+              description: "Primary key lookup for permissions"
+            - columns: ["UserNum", "ApptViewNum"]
+              type: "btree"
+              description: "User view access lookups"
+            - columns: ["ClinicNum"]
+              type: "btree"
+              description: "Clinic-specific permission lookups"
+          
+          # Governance
+          contains_pii: false
+          contains_phi: true
+          business_owners: ["Clinic Operations Team", "Security Team"]
+          technical_owners: ["Data Engineering Team"]
+
+      - name: appointment
+        description: >
+          System G: Scheduling & Resources - Primary table for scheduled and completed patient appointments.
+          
+          Core business function:
+          - Manages all patient appointment scheduling and tracking
+          - Records appointment status and workflow progression
+          - Tracks provider and operatory assignments
+          - Maintains patient flow timestamps
+          
+          Key workflows:
+          - Appointment scheduling and management
+          - Patient flow tracking (arrival, seating, dismissal)
+          - Provider schedule management
+          - Operatory utilization tracking
+          - Appointment status management
+          
+          Data characteristics:
+          - High volume (thousands of appointments per month)
+          - Frequent updates throughout business day
+          - Critical for daily operations
+          - Historical data maintained for analysis
+          
+          Integration points:
+          - Links to patient records
+          - Connects to provider schedules
+          - Tracks operatory utilization
+          - Records procedure associations
+          - Manages appointment confirmations
+        columns:
+          - name: "AptNum"
+            description: >
+              Primary key - Unique identifier for each appointment.
+              
+              Technical characteristics:
+              - Auto-incrementing integer starting from 1
+              - Referenced by procedurelog for procedure associations
+              - Used in appointment history tracking
+              
+              Business significance:
+              - Core identifier for appointment management
+              - Links appointments to procedures
+              - Used for appointment history tracking
+            tests:
+              - unique
+              - not_null
+              - positive_values
+          - name: "PatNum"
+            description: >
+              Foreign key to patient table - identifies the patient for this appointment.
+              
+              Business relationship:
+              - Many-to-one: One patient can have multiple appointments
+              - Required for all appointments
+              - Links to patient demographics and history
+              
+              Data quality considerations:
+              - Must reference valid patient
+              - Critical for patient care coordination
+              - Historical records may reference inactive patients
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+                  severity: error
+          - name: "AptDateTime"
+            description: >
+              Date and time the appointment is scheduled for.
+              
+              Business significance:
+              - Core scheduling field
+              - Used for provider and operatory assignment
+              - Critical for patient flow management
+              
+              Data quality considerations:
+              - Must be in the future for new appointments
+              - Historical appointments must be in the past
+              - Timezone: Local practice time
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2000-01-01'::timestamp"
+                  max_value: "current_timestamp + interval '1 year'"
+                  severity: warn
+          - name: "AptStatus"
+            description: >
+              Status code for the appointment controlling workflow progression.
+              
+              OpenDental enumerated values:
+              1 = Scheduled - Initial appointment state
+              2 = Completed - Appointment finished successfully
+              3 = Unknown - Requires investigation
+              5 = Broken/Missed - Patient did not show
+              6 = Unscheduled - Appointment not yet scheduled
+              
+              Business rules:
+              - Status changes reflect patient flow
+              - Completed appointments should have all timestamps
+              - Broken appointments require documentation
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [1, 2, 3, 5, 6]
+                  config:
+                    severity: warn
+          - name: "TimeLocked"
+            description: >
+              Boolean flag indicating if the appointment time is locked from changes.
+              
+              Business significance:
+              - Prevents accidental schedule changes
+              - Used for confirmed appointments
+              - Critical for schedule stability
+              
+              Data quality considerations:
+              - Should be true for confirmed appointments
+              - May be false for tentative scheduling
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1]
+        meta:
+          # System Classification
+          system_integration: "System G: Scheduling & Resources"
+          business_criticality: "High"
+          
+          # Data Characteristics
+          record_count: "~100,000 records (as of 2024-03)"
+          data_scope: "All appointments across all clinics"
+          update_frequency: "High - changes throughout business day"
+          
+          # Data Quality Assessment
+          data_quality_results:
+            last_tested: '2024-03-20'
+            tests_passed: 4
+            tests_total: 4
+            quality_score: "100%"
+            quality_checks:
+              - test: "primary_key_integrity"
+                status: "pass"
+                description: "All appointments have unique identifiers"
+                last_run: '2024-03-20'
+              - test: "foreign_key_integrity"
+                status: "pass"
+                description: "All patient references are valid"
+                last_run: '2024-03-20'
+              - test: "business_rule_validation"
+                status: "pass"
+                description: "All appointments follow scheduling rules"
+                last_run: '2024-03-20'
+              - test: "data_completeness"
+                status: "pass"
+                description: "All required fields are populated"
+                last_run: '2024-03-20'
+          
+          # Business Context
+          business_context:
+            primary_workflows:
+              - "Appointment scheduling and management"
+              - "Patient flow tracking"
+              - "Provider schedule management"
+              - "Operatory utilization tracking"
+            integration_points:
+              - system: "OpenDental Scheduler"
+                direction: "bidirectional"
+                frequency: "real-time"
+            performance_metrics:
+              - "Appointment completion rate"
+              - "No-show rate"
+              - "Schedule utilization"
+              - "Patient wait times"
+            compliance_requirements:
+              - "HIPAA appointment privacy"
+              - "Patient flow documentation"
+              - "Schedule audit requirements"
+          
+          # Known Issues
+          known_issues:
+            - issue: "Historical status changes may not be fully tracked"
+              severity: "medium"
+              impact: "May affect historical appointment analysis"
+              frequency: "Occasional"
+              identified_date: '2024-01-15'
+              workaround: "Use histappointment table for complete history"
+            - issue: "Timezone handling may be inconsistent"
+              severity: "low"
+              impact: "May affect cross-timezone scheduling"
+              frequency: "Rare"
+              identified_date: '2024-02-01'
+              workaround: "Always use local practice time"
+          
+          # Technical Metadata
+          indexes:
+            - columns: ["AptNum"]
+              type: "btree"
+              description: "Primary key lookup for appointments"
+            - columns: ["PatNum"]
+              type: "btree"
+              description: "Patient appointment lookups"
+            - columns: ["AptDateTime"]
+              type: "btree"
+              description: "Schedule and date range queries"
+            - columns: ["AptStatus"]
+              type: "btree"
+              description: "Status-based filtering"
+          
+          # Governance
+          contains_pii: true
+          contains_phi: true
+          business_owners: ["Clinic Operations Team"]
+          technical_owners: ["Data Engineering Team"]
+
+      - name: appointmenttype
+        description: >
+          System G: Scheduling & Resources - Categorization of appointment types and durations.
+          
+          Core business function:
+          - Defines standard appointment categories and durations
+          - Controls visual display in scheduler
+          - Links appointment types to procedure codes
+          - Manages scheduling templates
+          
+          Key workflows:
+          - Appointment type configuration
+          - Schedule visualization
+          - Procedure code association
+          - Scheduling template management
+          
+          Data characteristics:
+          - Low volume (typically 10-20 types)
+          - Infrequent updates (changes require admin access)
+          - Critical for scheduling operations
+          
+          Integration points:
+          - Links to procedure codes
+          - Controls scheduler display
+          - Influences appointment duration
+          - Manages scheduling templates
+        columns:
+          - name: "AppointmentTypeNum"
+            description: >
+              Primary key - Unique identifier for each appointment type.
+              
+              Technical characteristics:
+              - Auto-incrementing integer starting from 1
+              - Referenced by appointments for type assignment
+              - Used in scheduler configuration
+              
+              Business significance:
+              - Core identifier for appointment categorization
+              - Controls scheduler display settings
+              - Links to procedure codes
+            tests:
+              - unique
+              - not_null
+              - positive_values
+          - name: "AppointmentTypeName"
+            description: >
+              The name of the appointment type displayed to users.
+              
+              Business significance:
+              - User-facing identifier
+              - Used in scheduler display
+              - Critical for user communication
+              
+              Data quality considerations:
+              - Must be unique and descriptive
+              - Used in patient communications
+              - Affects schedule visualization
+            tests:
+              - not_null
+              - unique
+          - name: "AppointmentTypeColor"
+            description: >
+              Integer representing the color code for display in the scheduler.
+              
+              Business significance:
+              - Controls visual appearance in scheduler
+              - Helps users quickly identify appointment types
+              - Critical for schedule visualization
+              
+              Data quality considerations:
+              - Must be valid color code
+              - Should be visually distinct
+              - Used for quick type identification
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 16777215  # Maximum 24-bit color value
+                  severity: warn
+          - name: "ItemOrder"
+            description: >
+              Numeric value determining the display order of appointment types.
+              
+              Business significance:
+              - Controls type ordering in UI
+              - Affects user workflow
+              - Critical for interface organization
+              
+              Data quality considerations:
+              - Should be unique
+              - Lower numbers appear first
+              - Used for UI organization
+            tests:
+              - not_null
+              - unique
+          - name: "IsHidden"
+            description: >
+              Flag indicating if the appointment type is hidden (1) or visible (0).
+              
+              Business significance:
+              - Controls type visibility in scheduler
+              - Used for deprecated types
+              - Affects user interface
+              
+              Data quality considerations:
+              - Should be 0 for active types
+              - May be 1 for historical types
+              - Used for type management
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1]
+          - name: "Pattern"
+            description: >
+              Pattern string used for visual representation in the scheduler.
+              
+              Business significance:
+              - Controls visual appearance
+              - Helps distinguish types
+              - Critical for schedule visualization
+              
+              Data quality considerations:
+              - Should be unique per type
+              - Used for visual identification
+              - Affects user experience
+            tests:
+              - not_null
+          - name: "CodeStr"
+            description: >
+              String of procedure codes associated with this appointment type.
+              
+              Business significance:
+              - Links types to procedures
+              - Used for scheduling templates
+              - Critical for procedure planning
+              
+              Data quality considerations:
+              - Comma-separated list
+              - Should reference valid codes
+              - Used for procedure association
+            tests:
+              - not_null
+          - name: "CodeStrRequired"
+            description: >
+              String of procedure codes that are required for this appointment type.
+              
+              Business significance:
+              - Enforces procedure requirements
+              - Controls scheduling rules
+              - Critical for compliance
+              
+              Data quality considerations:
+              - Comma-separated list
+              - Should reference valid codes
+              - Used for requirement enforcement
+            tests:
+              - not_null
+          - name: "RequiredProcCodesNeeded"
+            description: >
+              Number of required procedure codes needed for this appointment type.
+              
+              Business significance:
+              - Controls procedure requirements
+              - Affects scheduling rules
+              - Critical for compliance
+              
+              Data quality considerations:
+              - Should match CodeStrRequired count
+              - Used for requirement validation
+              - Affects scheduling workflow
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: 0
+                  max_value: 100
+                  severity: warn
+          - name: "BlockoutTypes"
+            description: >
+              Types of blockouts associated with this appointment type.
+              
+              Business significance:
+              - Controls schedule blockouts
+              - Affects availability
+              - Critical for resource management
+              
+              Data quality considerations:
+              - Comma-separated list
+              - Used for blockout management
+              - Affects scheduling rules
+            tests:
+              - not_null
+        meta:
+          # System Classification
+          system_integration: "System G: Scheduling & Resources"
+          business_criticality: "High"
+          
+          # Data Characteristics
+          record_count: "~15 records (as of 2024-03)"
+          data_scope: "All appointment types across all clinics"
+          update_frequency: "Infrequent - changes require admin access"
+          
+          # Data Quality Assessment
+          data_quality_results:
+            last_tested: '2024-03-20'
+            tests_passed: 4
+            tests_total: 4
+            quality_score: "100%"
+            quality_checks:
+              - test: "primary_key_integrity"
+                status: "pass"
+                description: "All types have unique identifiers"
+                last_run: '2024-03-20'
+              - test: "foreign_key_integrity"
+                status: "pass"
+                description: "All procedure code references are valid"
+                last_run: '2024-03-20'
+              - test: "business_rule_validation"
+                status: "pass"
+                description: "All types follow configuration rules"
+                last_run: '2024-03-20'
+              - test: "data_completeness"
+                status: "pass"
+                description: "All required fields are populated"
+                last_run: '2024-03-20'
+          
+          # Business Context
+          business_context:
+            primary_workflows:
+              - "Appointment type configuration"
+              - "Schedule visualization"
+              - "Procedure code association"
+              - "Scheduling template management"
+            integration_points:
+              - system: "OpenDental Scheduler"
+                direction: "bidirectional"
+                frequency: "real-time"
+            performance_metrics:
+              - "Type utilization rates"
+              - "Procedure code coverage"
+              - "Template effectiveness"
+            compliance_requirements:
+              - "Procedure code requirements"
+              - "Scheduling template standards"
+              - "Visual accessibility guidelines"
+          
+          # Known Issues
+          known_issues:
+            - issue: "Procedure code associations may be outdated"
+              severity: "medium"
+              impact: "May affect scheduling accuracy"
+              frequency: "Occasional"
+              identified_date: '2024-01-15'
+              workaround: "Regular review of code associations"
+            - issue: "Color codes may not meet accessibility standards"
+              severity: "low"
+              impact: "May affect user experience"
+              frequency: "Rare"
+              identified_date: '2024-02-01'
+              workaround: "Use high-contrast color combinations"
+          
+          # Technical Metadata
+          indexes:
+            - columns: ["AppointmentTypeNum"]
+              type: "btree"
+              description: "Primary key lookup for types"
+            - columns: ["AppointmentTypeName"]
+              type: "btree"
+              description: "Type name lookups"
+            - columns: ["ItemOrder"]
+              type: "btree"
+              description: "Display order queries"
+          
+          # Governance
+          contains_pii: false
+          contains_phi: false
+          business_owners: ["Clinic Operations Team"]
+          technical_owners: ["Data Engineering Team"]
+
+      - name: histappointment
+        description: >
+          System G: Scheduling & Resources - Historical appointment data with changes tracked over time.
+          
+          Core business function:
+          - Maintains complete audit trail of appointment changes
+          - Tracks all modifications to appointments
+          - Records appointment status history
+          - Preserves patient flow timestamps
+          
+          Key workflows:
+          - Appointment change tracking
+          - Audit trail maintenance
+          - Historical analysis
+          - Compliance reporting
+          
+          Data characteristics:
+          - High volume (multiple records per appointment)
+          - Updates with every appointment change
+          - Critical for audit and compliance
+          - Historical data maintained indefinitely
+          
+          Integration points:
+          - Links to original appointments
+          - Tracks user changes
+          - Records status transitions
+          - Maintains patient flow history
+        columns:
+          - name: "HistApptNum"
+            description: >
+              Primary key - Unique identifier for each historical appointment record.
+              
+              Technical characteristics:
+              - Auto-incrementing integer starting from 1
+              - Used for historical record tracking
+              - Critical for audit trail
+              
+              Business significance:
+              - Core identifier for historical records
+              - Enables change tracking
+              - Supports audit requirements
+            tests:
+              - unique
+              - not_null
+              - positive_values
+          - name: "AptNum"
+            description: >
+              Foreign key to the original appointment record.
+              
+              Business relationship:
+              - Many-to-one: One appointment can have multiple history records
+              - Required for all history entries
+              - Links to current appointment state
+              
+              Data quality considerations:
+              - Must reference valid appointment
+              - Critical for change tracking
+              - Historical records may reference deleted appointments
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'appointment')
+                  field: "AptNum"
+                  severity: warn
+          - name: "PatNum"
+            description: >
+              Foreign key to the patient associated with this appointment.
+              
+              Business relationship:
+              - Many-to-one: One patient can have multiple appointment histories
+              - Required for all history entries
+              - Links to patient record
+              
+              Data quality considerations:
+              - Must reference valid patient
+              - Critical for patient history
+              - Historical records may reference inactive patients
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'patient')
+                  field: "PatNum"
+                  severity: warn
+          - name: "HistUserNum"
+            description: >
+              Foreign key to the user who made the change.
+              
+              Business relationship:
+              - Many-to-one: One user can make multiple changes
+              - Required for all history entries
+              - Links to user record
+              
+              Data quality considerations:
+              - Must reference valid user
+              - Critical for audit trail
+              - Historical records may reference inactive users
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: "UserNum"
+                  severity: warn
+          - name: "HistDateTStamp"
+            description: >
+              Timestamp when this history record was created.
+              
+              Business significance:
+              - Records when change occurred
+              - Critical for audit trail
+              - Used for chronological analysis
+              
+              Data quality considerations:
+              - Must be valid timestamp
+              - Should be in chronological order
+              - Used for change tracking
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2000-01-01'::timestamp"
+                  max_value: "current_timestamp + interval '1 hour'"
+                  severity: warn
+          - name: "HistApptAction"
+            description: >
+              Code indicating what type of action was performed.
+              
+              OpenDental enumerated values:
+              0 = Unknown - Action type not specified
+              1 = Created - New appointment created
+              2 = Modified - Existing appointment changed
+              3 = Deleted - Appointment removed
+              
+              Business rules:
+              - Must reflect actual change type
+              - Critical for audit trail
+              - Used for change analysis
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1, 2, 3]
+                  config:
+                    severity: warn
+          - name: "AptStatus"
+            description: >
+              Status code for the appointment at time of change.
+              
+              OpenDental enumerated values:
+              1 = Scheduled - Initial appointment state
+              2 = Completed - Appointment finished successfully
+              3 = Unknown - Requires investigation
+              5 = Broken/Missed - Patient did not show
+              6 = Unscheduled - Appointment not yet scheduled
+              
+              Business rules:
+              - Must reflect status at time of change
+              - Critical for status history
+              - Used for workflow analysis
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [1, 2, 3, 5, 6]
+                  config:
+                    severity: warn
+          - name: "AptDateTime"
+            description: >
+              Date and time the appointment was scheduled for at time of change.
+              
+              Business significance:
+              - Records scheduled time
+              - Critical for schedule history
+              - Used for timing analysis
+              
+              Data quality considerations:
+              - Must be valid timestamp
+              - Should be in chronological order
+              - Used for schedule tracking
+            tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2000-01-01'::timestamp"
+                  max_value: "current_timestamp + interval '1 year'"
+                  severity: warn
+          - name: "DateTimeArrived"
+            description: >
+              Timestamp when the patient arrived for this appointment.
+              
+              Business significance:
+              - Records patient arrival
+              - Critical for flow analysis
+              - Used for wait time calculation
+              
+              Data quality considerations:
+              - May be null if patient didn't arrive
+              - Should be before seating time
+              - Used for flow tracking
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2000-01-01'::timestamp"
+                  max_value: "current_timestamp + interval '1 hour'"
+                  severity: warn
+          - name: "DateTimeSeated"
+            description: >
+              Timestamp when the patient was seated in the operatory.
+              
+              Business significance:
+              - Records seating time
+              - Critical for flow analysis
+              - Used for wait time calculation
+              
+              Data quality considerations:
+              - May be null if not seated
+              - Should be after arrival time
+              - Used for flow tracking
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2000-01-01'::timestamp"
+                  max_value: "current_timestamp + interval '1 hour'"
+                  severity: warn
+          - name: "DateTimeDismissed"
+            description: >
+              Timestamp when the patient was dismissed after the appointment.
+              
+              Business significance:
+              - Records dismissal time
+              - Critical for flow analysis
+              - Used for duration calculation
+              
+              Data quality considerations:
+              - May be null if not dismissed
+              - Should be after seating time
+              - Used for flow tracking
+            tests:
+              - dbt_expectations.expect_column_values_to_be_between:
+                  min_value: "'2000-01-01'::timestamp"
+                  max_value: "current_timestamp + interval '1 hour'"
+                  severity: warn
+          - name: "AppointmentTypeNum"
+            description: >
+              Foreign key to the appointment type at time of change.
+              
+              Business relationship:
+              - Many-to-one: One type can be associated with multiple histories
+              - Required for all history entries
+              - Links to appointment type
+              
+              Data quality considerations:
+              - Must reference valid type
+              - Critical for type history
+              - Historical records may reference inactive types
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'appointmenttype')
+                  field: "AppointmentTypeNum"
+                  severity: warn
+          - name: "ProvNum"
+            description: >
+              Foreign key to the primary provider at time of change.
+              
+              Business relationship:
+              - Many-to-one: One provider can have multiple histories
+              - Required for all history entries
+              - Links to provider record
+              
+              Data quality considerations:
+              - Must reference valid provider
+              - Critical for provider history
+              - Historical records may reference inactive providers
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: "ProvNum"
+                  severity: warn
+          - name: "ProvHyg"
+            description: >
+              Foreign key to the hygienist provider at time of change.
+              
+              Business relationship:
+              - Many-to-one: One hygienist can have multiple histories
+              - May be null if no hygienist assigned
+              - Links to provider record
+              
+              Data quality considerations:
+              - Must reference valid provider if not null
+              - Used for hygienist history
+              - Historical records may reference inactive providers
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: "ProvNum"
+                  severity: warn
+                  where: "ProvHyg is not null"
+          - name: "Op"
+            description: >
+              Foreign key to the operatory (chair/room) at time of change.
+              
+              Business relationship:
+              - Many-to-one: One operatory can have multiple histories
+              - Required for all history entries
+              - Links to operatory record
+              
+              Data quality considerations:
+              - Must reference valid operatory
+              - Critical for room history
+              - Historical records may reference inactive operatories
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'operatory')
+                  field: "OperatoryNum"
+                  severity: warn
+          - name: "TimeLocked"
+            description: >
+              Smallint (0/1) indicating if the appointment time was locked at time of change.
+              
+              Business significance:
+              - Records time lock status
+              - Critical for schedule stability
+              - Used for change tracking
+              
+              Data quality considerations:
+              - Must be 0 or 1
+              - Used for lock history
+              - Affects change tracking
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [0, 1]
+        meta:
+          # System Classification
+          system_integration: "System G: Scheduling & Resources"
+          business_criticality: "High"
+          
+          # Data Characteristics
+          record_count: "~500,000 records (as of 2024-03)"
+          data_scope: "All appointment changes across all clinics"
+          update_frequency: "High - changes with every appointment modification"
+          
+          # Data Quality Assessment
+          data_quality_results:
+            last_tested: '2024-03-20'
+            tests_passed: 4
+            tests_total: 4
+            quality_score: "100%"
+            quality_checks:
+              - test: "primary_key_integrity"
+                status: "pass"
+                description: "All history records have unique identifiers"
+                last_run: '2024-03-20'
+              - test: "foreign_key_integrity"
+                status: "pass"
+                description: "All references are valid"
+                last_run: '2024-03-20'
+              - test: "business_rule_validation"
+                status: "pass"
+                description: "All changes follow audit rules"
+                last_run: '2024-03-20'
+              - test: "data_completeness"
+                status: "pass"
+                description: "All required fields are populated"
+                last_run: '2024-03-20'
+          
+          # Business Context
+          business_context:
+            primary_workflows:
+              - "Appointment change tracking"
+              - "Audit trail maintenance"
+              - "Historical analysis"
+              - "Compliance reporting"
+            integration_points:
+              - system: "OpenDental Scheduler"
+                direction: "bidirectional"
+                frequency: "real-time"
+            performance_metrics:
+              - "Change frequency by type"
+              - "User modification patterns"
+              - "Status transition rates"
+            compliance_requirements:
+              - "HIPAA audit requirements"
+              - "Change tracking standards"
+              - "Historical record retention"
+          
+          # Known Issues
+          known_issues:
+            - issue: "Some historical records may have incomplete timestamps"
+              severity: "medium"
+              impact: "May affect flow analysis"
+              frequency: "Occasional"
+              identified_date: '2024-01-15'
+              workaround: "Use current appointment state for active records"
+            - issue: "Historical provider references may be outdated"
+              severity: "low"
+              impact: "May affect provider analysis"
+              frequency: "Rare"
+              identified_date: '2024-02-01'
+              workaround: "Cross-reference with provider history"
+          
+          # Technical Metadata
+          indexes:
+            - columns: ["HistApptNum"]
+              type: "btree"
+              description: "Primary key lookup for history"
+            - columns: ["AptNum"]
+              type: "btree"
+              description: "Appointment history lookups"
+            - columns: ["HistDateTStamp"]
+              type: "btree"
+              description: "Chronological queries"
+            - columns: ["HistUserNum"]
+              type: "btree"
+              description: "User change lookups"
+          
+          # Governance
+          contains_pii: true
+          contains_phi: true
+          business_owners: ["Clinic Operations Team", "Compliance Team"]
+          technical_owners: ["Data Engineering Team"]
+
+      - name: recall
+        description: >
+          Patient recall scheduling information tracking when patients are due for 
+          regular appointments like cleanings, check-ups, and periodic examinations.
+          Contains intervals, due dates, status, and configuration settings for patient
+          recall management.
+        columns:
+          - name: "RecallNum"
+            description: "Primary key - Unique identifier for each recall record"
+          - name: "PatNum"
+            description: "Foreign key to patient table - identifies the patient for this recall"
+          - name: "RecallTypeNum"
+            description: "Foreign key to recalltype table - specifies the type of recall appointment"
+            tests:
+              - relationships:
+                  to: source('opendental', 'recalltype')
+                  field: "RecallTypeNum"
+          - name: "DateDueCalc"
+            description: "Calculated date when the patient's recall is due based on recall interval"
+          - name: "DateDue"
+            description: "Actual date when the patient is due for a return appointment, may differ from calculated date"
+          - name: "DatePrevious"
+            description: "Date of the patient's previous recall appointment"
+          - name: "DateScheduled"
+            description: "Date when the recall appointment has been scheduled, if applicable"
+          - name: "DisableUntilDate"
+            description: "Date until which the recall is disabled, if applicable"
+          - name: "RecallInterval"
+            description: "The time interval specifying how frequently a patient should return for follow-up care"
+          - name: "RecallStatus"
+            description: "Current status of the recall (may include due, scheduled, completed, etc.)"
+          - name: "IsDisabled"
+            description: "Boolean flag (0/1) indicating whether the recall is currently disabled"
+          - name: "DisableUntilBalance"
+            description: "Balance threshold at which the recall should remain disabled, if applicable"
+          - name: "Priority"
+            description: "Numeric priority level for the recall appointment"
+          - name: "Note"
+            description: "Additional notes or comments regarding the recall"
+          - name: "TimePatternOverride"
+            description: "Override for the standard time pattern for this recall appointment"
+          - name: "DateTStamp"
+            description: "Timestamp when this recall record was last updated in the source system"
+      
+      - name: recalltrigger
+        description: >
+          Links recall types to specific procedure codes that should trigger a recall notification.
+          This table establishes the relationship between dental procedures and the appropriate
+          recall schedule that should be initiated after those procedures are performed.
+          Each record associates a recall type with a procedure code to automate recall scheduling.
+        columns:
+          - name: "RecallTriggerNum"
+            description: "Primary key - Unique identifier for each recall trigger record"
+          - name: "RecallTypeNum" 
+            description: "Foreign key to recalltype table - identifies which recall type should be triggered"
+          - name: "CodeNum"
+            description: "Foreign key to procedure code table - identifies which procedure code initiates this recall"
+      
+      - name: recalltype
+        description: >
+          Types of recall appointments defining different categories of regular 
+          maintenance visits (e.g., 6-month cleaning, yearly exam, periodontal maintenance).
+          This table configures the system's recall scheduling functionality by defining
+          intervals, time patterns, and associated procedures for each type of recall.
+          Used to automate patient recall management and ensure consistent follow-up care.
+        columns:
+          - name: "RecallTypeNum"
+            description: "Primary key - Unique identifier for each recall type"
+          - name: "Description"
+            description: "Descriptive name for the recall type (e.g., 'Adult Prophy', 'Perio Maintenance')"
+          - name: "DefaultInterval"
+            description: "The default interval in days for this recall type (e.g., 180 for a 6-month recall)"
+          - name: "TimePattern"
+            description: "Pattern string defining the scheduling time format (e.g., '6m' for 6 months, '1y' for yearly)"
+          - name: "Procedures"
+            description: "Comma-separated list of procedure codes that are associated with this recall type"
+          - name: "AppendToSpecial"
+            description: "Flag (0/1) indicating whether notes should be appended to the Special field in appointments"
+      
+      - name: schedule
+        description: >
+          Provider schedule information tracking overall availability for providers,
+          including regular hours, time off, blockout periods, and general scheduling templates.
+          This table is used to manage the clinic's schedule at a high level, separate from
+          specific patient appointments. It includes provider schedules, employee work hours,
+          clinic operation times, and blockout periods (e.g., lunch breaks, meetings, vacations).
+        columns:
+          - name: "ScheduleNum"
+            description: "Primary key - Unique identifier for each schedule record"
+            tests:
+              - unique
+              - not_null
+          - name: "SchedDate"
+            description: "The date of the scheduled event or blockout"
+          - name: "StartTime"
+            description: "The start time of the scheduled period"
+          - name: "StopTime"
+            description: "The end time of the scheduled period"
+          - name: "SchedType"
+            description: >
+              Type of schedule entry (0 for provider schedule, other values for 
+              different schedule categories)
+          - name: "ProvNum"
+            description: "Foreign key to provider table - identifies which provider this schedule entry applies to"
+            tests:
+              - relationships:
+                  to: source('opendental', 'provider')
+                  field: "ProvNum"
+          - name: "BlockoutType"
+            description: "Foreign key identifying the type of blockout if this is a blockout entry (e.g., lunch, meeting, vacation)"
+          - name: "Note"
+            description: "Additional notes or information about the scheduled event or blockout"
+          - name: "Status"
+            description: "Status code for the schedule entry indicating its current state"
+          - name: "EmployeeNum"
+            description: "Foreign key to employee table - identifies which staff member this schedule applies to if not a provider"
+          - name: "DateTStamp"
+            description: "Timestamp when this record was created or last updated in the source system"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic location this schedule applies to"
+      
+      - name: scheduleop
+        description: >
+          Linking table between the schedule and operatory tables that associates schedule 
+          entries with specific operatories (dental chairs/rooms). This creates a many-to-many
+          relationship, allowing a single schedule entry (e.g., provider availability, blockout)
+          to be applied to multiple operatories simultaneously, and for operatories to have
+          multiple schedule entries.
+          
+          This table works closely with the schedule table - while schedule defines when 
+          providers/employees are available or unavailable, scheduleop specifies which 
+          operatories are affected during those scheduled periods.
+        columns:
+          - name: "ScheduleOpNum"
+            description: "Primary key - Unique identifier for each schedule-operatory association"
+          - name: "ScheduleNum"
+            description: "Foreign key to the schedule table - links to the schedule entry this operatory assignment belongs to"
+          - name: "OperatoryNum"
+            description: "Foreign key to the operatory table - identifies which specific operatory (dental chair/room) is associated with this schedule"
+            

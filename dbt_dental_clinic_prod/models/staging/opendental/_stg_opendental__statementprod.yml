@@ -1,0 +1,142 @@
+version: 2
+
+models:
+  - name: stg_opendental__statementprod
+    description: >
+      Staging model for OpenDental statement product records. Contains line items and products associated with patient statements.
+      
+      Business Context:
+      - Links products, documents, and adjustments to statements
+      - Supports various product types (procedures, payments, adjustments)
+      - Used for detailed statement line item tracking
+      - Helps reconcile statement totals with individual items
+      
+      Data Scope:
+      - Records from 2023-01-01 onwards
+      - Only includes products from valid statements
+      - Captures all product types associated with statements
+      
+      Key Relationships:
+      - Links to statements through statement_id
+      - May reference documents through doc_id
+      - May reference late charge adjustments through late_charge_adj_id
+      - Uses statement timestamps for metadata tracking
+      
+      Important Business Rules:
+      - Products must be associated with valid statements
+      - Statement dates must be after 2000-01-01
+      - Metadata timestamps are inherited from parent statement
+      - Each product must have a valid product type
+
+    meta:
+      record_count: "Approximately 50,000 records (as of 2024)"
+      data_scope: "Statement products from 2023-01-01 onwards"
+      
+      known_issues:
+        - description: "Metadata timestamps are inherited from parent statement rather than product creation time"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          impact: "May not accurately reflect when products were added to statements"
+          test: "metadata_timestamp_inheritance"
+      
+      business_rules:
+        - rule: "Products must be associated with valid statements"
+          impact: "Ensures data integrity and traceability"
+        - rule: "Statement dates must be after 2000-01-01"
+          impact: "Prevents historical data issues"
+        - rule: "Each product must have a valid product type"
+          impact: "Ensures proper categorization and reporting"
+      
+      usage_notes: >
+        - Use statement_id to join with statement table for full context
+        - Check prod_type to understand the nature of each line item
+        - Be aware that metadata timestamps reflect statement creation, not product addition
+        - Consider doc_id and late_charge_adj_id for additional context when available
+
+    columns:
+      # Primary Key
+      - name: statement_prod_id
+        description: "Primary key - unique identifier for each statement product record (maps to StatementProdNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Foreign Keys
+      - name: statement_id
+        description: "Foreign key to statement table - identifies the parent statement"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__statement')
+              field: statement_id
+
+      - name: doc_id
+        description: "Foreign key to document table - links to associated document if exists"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__document')
+              field: document_id
+              severity: warn
+
+      - name: late_charge_adj_id
+        description: "Foreign key to late charge adjustment table - links to associated adjustment if exists"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__adjustment')
+              field: adjustment_id
+              severity: warn
+
+      # Additional Fields
+      - name: fkey
+        description: "Foreign key reference - depends on the product type (e.g., procedure_id, payment_id)"
+
+      - name: prod_type
+        description: "Type of product included in the statement - determines the nature of the line item"
+        tests:
+          - not_null
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Inherited from parent statement's DateTStamp."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Inherited from parent statement's DateTStamp."
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "exists (select 1 from {{ ref('stg_opendental__statement') }} s where s.statement_id = stg_opendental__statementprod.statement_id and s.date_sent >= '2023-01-01'::date)"
+          name: "statement_date_range_check"
+          config:
+            severity: warn
+            description: "Ensures all statement products are from statements sent in 2023 or later"
+
+      - dbt_utils.expression_is_true:
+          expression: "exists (select 1 from {{ ref('stg_opendental__statement') }} s where s.statement_id = stg_opendental__statementprod.statement_id and s.date_sent > '2000-01-01'::date)"
+          name: "statement_date_validity_check"
+          config:
+            severity: warn
+            description: "Ensures all statement products are from statements with valid dates"
+
+    meta:
+      relationships:
+        - relationship: many_to_one
+          field: statement_id
+          related_to: stg_opendental__statement.statement_id
+        - relationship: many_to_one
+          field: doc_id
+          related_to: stg_opendental__document.document_id
+          severity: warn
+        - relationship: many_to_one
+          field: late_charge_adj_id
+          related_to: stg_opendental__adjustment.adjustment_id
+          severity: warn

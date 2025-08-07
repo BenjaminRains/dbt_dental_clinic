@@ -1,0 +1,159 @@
+version: 2
+
+models:
+  - name: stg_opendental__refattach
+    description: >
+      Staging model for referral attachments. 
+      
+      This table contains information about referrals linked to patients, procedures, and providers in OpenDental. It is used to track the lifecycle and context of patient referrals, including their association with procedures, providers, and referral types. The model supports clinical and operational reporting on referral activity, transitions of care, and provider engagement.
+    
+    meta:
+      record_count: [ADD APPROXIMATE COUNT]
+      data_scope: "2023-01-01 to present (see SQL filter on RefDate)"
+      known_issues:
+        - description: "497 orphaned referral attachments found (referral_id not present in referral table). Most are single occurrences per patient, likely historical or deleted referrals."
+          severity: "warn"
+          identified_date: "2024-03-19"
+          test: "relationships_referral_id"
+        - description: "~994 records have provider_id references that don't exist in provider table. Common for historical/external/legacy data."
+          severity: "warn"
+          identified_date: "[ADD DATE]"
+          test: "relationships_provider_id"
+      business_rules:
+        - rule: "procedure_id may be 0 or NULL for referrals not linked to a specific procedure (typically referral_type = 1)"
+          impact: "Not all referrals are associated with a procedure; analysts should filter as needed."
+        - rule: "provider_id may reference non-existent providers for historical/external referrals."
+          impact: "Expected for legacy data; not an error."
+      usage_notes: >
+        - Not all referral attachments are linked to procedures or providers; see business rules and known issues.
+        - Analysts should use referral_type and referral_to_status to filter for specific referral workflows.
+        - Data is filtered to records with RefDate >= 2023-01-01.
+
+    config:
+      materialized: incremental
+      unique_key: ref_attach_id
+      schema: staging
+
+    columns:
+      - name: ref_attach_id
+        description: "Primary key of the referral attachment (maps to RefAttachNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      - name: referral_id
+        description: "Foreign key to referral table (maps to ReferralNum). Links to the originating referral record."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__referral')
+              field: referral_id
+              severity: warn
+              config:
+                description: >
+                  497 orphaned referral attachments found. Most are single occurrences per patient, suggesting these might be historical or deleted referrals.
+
+      - name: patient_id
+        description: "Foreign key to the patient table (maps to PatNum). Identifies the patient associated with the referral attachment."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+
+      - name: procedure_id
+        description: >
+          Foreign key to the procedurelog table (maps to ProcNum). Can be:
+          - 0 for referrals not associated with specific procedures (typically referral_type = 1)
+          - NULL if no procedure is linked
+          - A valid procedure_id reference
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              where: "procedure_id != 0"
+              severity: warn
+              config:
+                description: >
+                  Some referral attachments have procedure_id = 0, indicating they are not linked to specific procedures. This is expected behavior for certain referral types.
+
+      - name: provider_id
+        description: >
+          Foreign key to the provider table (maps to ProvNum). Links referral attachments to providers. May reference non-existent providers for historical/external/legacy data.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              config:
+                description: >
+                  This test warns when provider_id references providers that don't exist in the provider table. This is expected for historical data and external provider referrals. The warning helps track data quality without failing the build.
+
+      - name: item_order
+        description: "Order of the referral attachment item (maps to ItemOrder in OpenDental), defaults to 0."
+        tests: []
+
+      - name: referral_date
+        description: "Date when the referral was made (maps to RefDate in OpenDental, cleaned to date)."
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "DATE '2000-01-01'"
+              max_value: "DATE '2100-01-01'"
+
+      - name: referral_type
+        description: >
+          Type of referral (maps to RefType in OpenDental). Possible values:
+          0 = From another provider
+          1 = To another provider
+          2 = Within practice
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2]
+
+      - name: referral_to_status
+        description: >
+          Status of the referral (maps to RefToStatus in OpenDental). Possible values:
+          0 = None
+          1 = Referred
+          2 = Scheduled
+          3 = Completed
+          4 = Inactive
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4]
+
+      - name: note
+        description: "Additional notes about the referral attachment (maps to Note in OpenDental)."
+        tests: []
+
+      - name: is_transition_of_care
+        description: "Flag indicating if this is a transition of care referral (maps to IsTransitionOfCare in OpenDental, 0=No, 1=Yes converted to boolean)."
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+      - name: procedure_completion_date
+        description: "Date when the associated procedure was completed (maps to DateProcComplete in OpenDental, cleaned to date)."
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "DATE '2000-01-01'"
+              max_value: "DATE '2100-01-01'"
+
+      - name: _loaded_at
+        description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)."
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when this record was created in the source system (maps to DateTStamp in OpenDental)."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when this record was last updated in the source system (maps to DateTStamp in OpenDental)."
+        tests:
+          - not_null

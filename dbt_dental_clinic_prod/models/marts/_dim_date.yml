@@ -1,0 +1,272 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: >
+      Date dimension table providing comprehensive time intelligence and calendar attributes.
+      This model serves as the foundation for all time-based analysis in the dental practice,
+      supporting both operational and financial reporting needs.
+
+      ## Business Context
+      The date dimension is a critical component of our dimensional model, enabling:
+      - Time-based analysis across all business processes
+      - Fiscal period alignment for financial reporting
+      - Business day calculations for operational metrics
+      - Holiday-adjusted performance analysis
+      - Rolling period comparisons
+
+      ## Technical Specifications
+      - Grain: One row per calendar day
+      - Date Range: 2020-01-01 through 2030-12-31
+      - Refresh: Daily (static data, no incremental processing needed)
+      - Dependencies: None (self-contained date generation)
+
+      ## Business Logic
+      ### Calendar Attributes
+      - Standard calendar year, quarter, month, and day attributes
+      - Day of week (0-6, where 0 is Sunday, 6 is Saturday)
+      - Month and day names for reporting
+
+      ### Fiscal Periods
+      - Fiscal year starts in October (Q1: Oct-Dec)
+      - Fiscal quarters aligned with business planning cycles
+      - Fiscal year calculation: Current year + 1 if month >= 10
+
+      ### Business Days
+      - Weekdays (Monday-Friday) excluding holidays
+      - Sequential business day numbering within each month
+      - Holiday calendar includes major US federal holidays
+      - Business day flags for operational metrics
+
+      ### Time Intelligence
+      - Rolling 12-month window for trend analysis
+      - Prior year period comparison support
+      - Holiday-adjusted performance indicators
+      - Weekend vs. weekday differentiation
+
+      ## Usage Guidelines
+      ### Common Time Periods
+      - Current Month: WHERE is_rolling_12_months = true
+      - Prior Year: WHERE is_same_period_prior_year = true
+      - Business Days: WHERE is_business_day = true
+      - Fiscal Periods: GROUP BY fiscal_year, fiscal_quarter
+
+      ### Performance Considerations
+      - Pre-calculated flags minimize runtime calculations
+      - Indexed on date_id for optimal join performance
+      - Static nature allows for materialized views
+
+      ### Common Joins
+      - Fact tables: ON fact.date_id = dim_date.date_id
+      - Appointment tables: ON apt.appointment_date = dim_date.date_day
+      - Financial tables: ON fin.transaction_date = dim_date.date_day
+
+    columns:
+      - name: date_id
+        description: >
+          Primary key for the date dimension, in YYYY-MM-DD format.
+          Used as the standard join key for all fact tables and time-based analysis.
+        tests:
+          - unique
+          - not_null
+
+      - name: date_day
+        description: >
+          The actual date value, in YYYY-MM-DD format.
+          Used for direct date comparisons and date arithmetic operations.
+        tests:
+          - not_null
+
+      - name: year
+        description: >
+          Calendar year (e.g., 2024).
+          Used for year-over-year analysis and annual reporting.
+        tests:
+          - not_null
+
+      - name: month
+        description: >
+          Calendar month number (1-12).
+          Used for monthly analysis and seasonal patterns.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+      - name: day
+        description: >
+          Day of month (1-31).
+          Used for daily analysis and month-to-date calculations.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+
+      - name: day_of_week
+        description: >
+          Day of week (0-6, where 0 is Sunday, 6 is Saturday).
+          Used for weekly patterns and weekend vs. weekday analysis.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5, 6]
+
+      - name: month_name
+        description: >
+          Full month name (e.g., 'January', 'February').
+          Used for reporting and visualization labels.
+        tests:
+          - not_null
+
+      - name: day_name
+        description: >
+          Full day name (e.g., 'Monday', 'Tuesday').
+          Used for reporting and visualization labels.
+        tests:
+          - not_null
+
+      - name: quarter
+        description: >
+          Calendar quarter (1-4).
+          Used for quarterly analysis and reporting.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+
+      - name: is_weekend
+        description: >
+          Boolean flag indicating if the date falls on a weekend (Saturday or Sunday).
+          Used to filter out weekend days from operational metrics.
+        tests:
+          - not_null
+
+      - name: is_weekday
+        description: >
+          Boolean flag indicating if the date falls on a weekday (Monday through Friday).
+          Used to focus analysis on business operations.
+        tests:
+          - not_null
+
+      - name: is_holiday
+        description: >
+          Boolean flag indicating if the date is a recognized US holiday.
+          Used to adjust operational metrics for holiday closures.
+        tests:
+          - not_null
+
+      - name: is_business_day
+        description: >
+          Boolean flag indicating if the date is a business day (weekday and not a holiday).
+          Primary filter for operational metrics and business day calculations.
+        tests:
+          - not_null
+
+      - name: business_day_of_month
+        description: >
+          Sequential number of business days within the month (null for non-business days).
+          Used for month-to-date calculations and business day averages.
+        tests:
+          - not_null:
+              where: "is_business_day = true"
+
+      - name: fiscal_year
+        description: >
+          Fiscal year (October through September).
+          Used for financial reporting and budget comparisons.
+        tests:
+          - not_null
+
+      - name: fiscal_quarter
+        description: >
+          Fiscal quarter (1-4, where Q1 is Oct-Dec).
+          Used for financial reporting and quarterly analysis.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+
+      - name: is_rolling_12_months
+        description: >
+          Boolean flag indicating if the date falls within the last 12 months from current date.
+          Used for rolling year analysis and trend calculations.
+        tests:
+          - not_null
+
+      - name: is_same_period_prior_year
+        description: >
+          Boolean flag indicating if the date falls within the same period last year (12-24 months ago).
+          Used for year-over-year comparisons and growth analysis.
+        tests:
+          - not_null
+
+      - name: is_holiday_adjusted
+        description: >
+          Boolean flag indicating if the date is either a holiday or weekend.
+          Used for holiday-adjusted performance metrics and comparisons.
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - date_id
+            - date_day
+            - year
+            - month
+            - day
+
+    meta:
+      owner: "Data Team"
+      contains_pii: false
+      contains_phi: false
+      refresh_frequency: "Daily"
+      business_owner: "Finance Team"
+      technical_owner: "Data Engineering Team"
+      usage_notes: >
+        This dimension table is used for all time-based analysis and reporting.
+        
+        ## Key Use Cases
+        - Financial reporting and analysis
+          * Monthly financial statements
+          * Quarterly performance reviews
+          * Annual budget comparisons
+          * Fiscal year reporting
+        
+        - Operational metrics and KPIs
+          * Daily production tracking
+          * Business day averages
+          * Holiday-adjusted performance
+          * Rolling period analysis
+        
+        - Patient appointment scheduling
+          * Business day availability
+          * Holiday calendar integration
+          * Weekend vs. weekday patterns
+          * Seasonal scheduling trends
+        
+        - Provider productivity analysis
+          * Business day productivity
+          * Holiday-adjusted metrics
+          * Rolling period comparisons
+          * Year-over-year growth
+        
+        - Revenue cycle management
+          * Daily collection tracking
+          * Business day collections
+          * Holiday-adjusted metrics
+          * Fiscal period reporting
+        
+        ## Common Analysis Patterns
+        - Month-to-date calculations
+        - Year-over-year comparisons
+        - Rolling 12-month trends
+        - Business day averages
+        - Holiday-adjusted metrics
+        - Fiscal period analysis
+        
+        ## Performance Optimization
+        - Use date_id for joins to fact tables
+        - Leverage pre-calculated flags for filtering
+        - Utilize business day calculations for operational metrics
+        - Apply holiday adjustments for accurate comparisons 

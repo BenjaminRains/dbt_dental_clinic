@@ -1,0 +1,323 @@
+version: 2
+
+models:
+  - name: int_communication_metrics
+    description: >
+      Comprehensive communication metrics model that aggregates and analyzes patient
+      communication patterns and effectiveness. This model serves as the analytical foundation
+      for evaluating communication strategies, staff performance, and patient engagement metrics.
+
+      Grain: One row per unique combination of date, user, communication type, direction, and category.
+      Each record represents aggregated metrics for a specific communication segment, enabling
+      multi-dimensional analysis of communication effectiveness across different parameters.
+
+      Key features:
+      - Aggregates communication volumes by type, direction, and category
+      - Tracks success and failure rates across different communication channels
+      - Measures response rates for outbound communications
+      - Calculates conversion rates for communications leading to appointments
+      - Monitors average call durations for phone communications (mode 2 only)
+      - Enables time-based trend analysis of communication patterns
+      - Provides user/staff level performance metrics
+      - Supports communication effectiveness reporting
+      - Tracks distribution of communications across modes (email, phone, mail, text)
+      - Monitors program-specific communications (system default, legacy system)
+      - Provides diagnostic metrics for data quality monitoring
+
+      Data Sources:
+      - int_patient_communications_base: Primary source for all communication events
+      - stg_opendental__appointment: Used for linking communications to appointment outcomes
+      - stg_opendental__userod: Used for user information and attribution
+      - stg_opendental__commlog: Raw communication data for additional context
+
+      Business rules:
+      - Success determined by communication outcome (confirmed/completed = success)
+      - Failed communications include those with no_answer or cancelled outcomes
+      - Response rate calculated only for outbound communications
+      - Conversion rate measures communications that resulted in scheduled appointments
+      - Duration metrics only applicable to phone communications (mode 2)
+      - Duration calculations exclude future scheduled communications
+      - Duration calculations require valid end times (not default '0001-01-01')
+      - Metrics calculated daily with user-level granularity where applicable
+      - Success rates normalized as percentages of total communications
+      - All volume metrics must be non-negative integers
+      - Rate metrics normalized to values between 0 and 1
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: ref('int_communication_metrics')
+
+      # Volume metrics validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            total_count >= 0 AND
+            successful_count >= 0 AND
+            failed_count >= 0 AND
+            total_count = successful_count + failed_count
+          config:
+            severity: error
+            description: >
+              Communication counts must be non-negative and the sum of successful and failed counts
+              must equal the total count.
+
+      # Rate metrics validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (response_rate IS NULL OR (response_rate >= 0 AND response_rate <= 1)) AND
+            (conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1))
+          config:
+            severity: error
+            description: >
+              Rate metrics must be between 0 and 1, representing percentages as decimals.
+
+      # Direction-specific metrics
+      - dbt_utils.expression_is_true:
+          expression: >
+            (communication_direction = 'outbound' AND response_rate IS NOT NULL) OR
+            (communication_direction = 'inbound' AND response_rate IS NULL)
+          config:
+            severity: warn
+            description: >
+              Response rate should only be calculated for outbound communications.
+
+      # Duration validation for calls
+      - dbt_utils.expression_is_true:
+          expression: >
+            (communication_type = 2 AND average_duration IS NOT NULL) OR
+            (communication_type != 2 AND average_duration IS NULL)
+          config:
+            severity: warn
+            description: >
+              Duration metrics should only be populated for phone call communications.
+
+    columns:
+      - name: metric_id
+        description: Unique identifier for the metrics record
+        tests:
+          - unique
+          - not_null
+      - name: date
+        description: Date of the metrics
+        tests:
+          - not_null
+      - name: user_id
+        description: >
+          ID of the user (for user-level metrics). Note: user_id = 0 represents
+          system-generated communications which don't have corresponding user records.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              where: "user_id != 0"  # Exclude system communications
+              severity: warn
+      - name: communication_type
+        description: >
+          Type of communication in the system. Main types:
+          - 0: Legacy system communications (mode 5) - General automated communications
+          - 224: Primary appointment notification system (mode 1,4) - Appointment-related communications
+          - 228: Secondary automated communication system (mode 4) - General patient communications
+          - 603: Tertiary communication system (mode 5) - Clinical communications
+          - 226: Billing and financial communications
+          - 225: Insurance and claims communications
+          - 571: Insurance narratives and documentation
+          - 432: Medical clearances and prescriptions
+          - 509/510: Surgical procedures and clearances
+          - 614/615: Referrals and specialist communications
+          - 636: Treatment plans and financial arrangements
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
+      - name: communication_direction
+        description: >
+          Direction of communication. Possible values:
+          - inbound: Communication from patient to practice
+          - outbound: Communication from practice to patient
+          - system: Automated system message
+          - unknown: Direction cannot be determined
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['inbound', 'outbound', 'system', 'unknown']
+      - name: communication_category
+        description: Category of communication (appointment, billing, clinical, etc.)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+              severity: warn
+      - name: total_count
+        description: Total number of communications
+        tests:
+          - not_null
+      - name: successful_count
+        description: Number of successful communications
+        tests:
+          - not_null
+      - name: failed_count
+        description: Number of failed communications
+        tests:
+          - not_null
+      - name: average_duration
+        description: >
+          Average duration of communications in minutes. Only calculated for:
+          - Phone calls (communication_mode = 2)
+          - Non-future communications
+          - Communications with valid end times (not default '0001-01-01')
+          - Communications where end time is after start time
+        tests:
+          - not_null:
+              where: "communication_type = 2"
+      - name: response_rate
+        description: Rate of response for outbound communications
+        tests:
+          - not_null:
+              where: "communication_direction = 'outbound'"
+      - name: conversion_rate
+        description: Conversion rate (e.g., appointments scheduled from calls)
+        tests:
+          - not_null:
+              where: "communication_category = 'appointment'"
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model
+        tests:
+          - not_null
+      - name: min_start_time
+        description: Earliest communication start time in the period
+        tests:
+          - not_null
+      - name: max_start_time
+        description: Latest communication start time in the period
+        tests:
+          - not_null
+      - name: min_end_time
+        description: Earliest valid communication end time in the period
+        tests:
+          - not_null:
+              where: "records_with_end_time > 0"
+      - name: max_end_time
+        description: Latest valid communication end time in the period
+        tests:
+          - not_null:
+              where: "records_with_end_time > 0"
+      - name: records_with_end_time
+        description: Count of records with valid end times (not default '0001-01-01')
+        tests:
+          - not_null
+      - name: valid_durations
+        description: Count of records with valid duration calculations
+        tests:
+          - not_null
+      - name: future_dates_count
+        description: Count of communications scheduled in the future
+        tests:
+          - not_null
+      - name: earliest_future_date
+        description: Earliest future scheduled communication date
+        tests:
+          - not_null:
+              where: "future_dates_count > 0"
+      - name: latest_future_date
+        description: Latest future scheduled communication date
+        tests:
+          - not_null:
+              where: "future_dates_count > 0"
+      - name: email_count
+        description: Count of email communications (mode 1)
+        tests:
+          - not_null
+      - name: phone_count
+        description: Count of phone call communications (mode 2)
+        tests:
+          - not_null
+      - name: mail_count
+        description: Count of mail communications (mode 3)
+        tests:
+          - not_null
+      - name: text_count
+        description: Count of text message communications (mode 5)
+        tests:
+          - not_null
+      - name: system_default_count
+        description: Count of communications from system default program (program_id = 0)
+        tests:
+          - not_null
+      - name: legacy_system_count
+        description: Count of communications from legacy system (program_id = 95)
+        tests:
+          - not_null
+
+    meta:
+      business_owners: ["dental_communications_team", "practice_management"]
+      technical_owners: ["data_engineering_team", "analytics_team"]
+      refresh_frequency: "daily"
+      contains_pii: false
+      primary_use_cases:
+        - "Staff performance evaluation for communication activities"
+        - "Communication channel effectiveness analysis"
+        - "Trend analysis of patient engagement metrics"
+        - "Conversion rate optimization for appointment scheduling"
+        - "Response rate monitoring for outbound campaigns"
+        - "Data quality monitoring for communication timestamps"
+        - "Distribution analysis of communication channels"
+        - "Program-specific communication tracking"
+      data_quality_requirements:
+        - "All volume counts must be non-negative integers"
+        - "Total count must equal sum of successful and failed counts"
+        - "Rate metrics must be normalized between 0 and 1"
+        - "Duration metrics only applicable to phone communications"
+        - "Response rates only meaningful for outbound communications"
+        - "All metrics must be segmented by relevant dimensions (type, direction, category)"
+        - "Daily aggregation must include all communications for the day"
+        - "User attribution must be accurate for staff performance metrics"
+        - "Future scheduled communications must be tracked separately"
+        - "Invalid end times must be excluded from duration calculations"
+        - "Communication mode distribution must be tracked"
+        - "Program-specific communications must be monitored"
+
+    tests:
+      # Validates that successful_count is non-negative and doesn't exceed total_count
+      - dbt_utils.expression_is_true:
+          name: successful_count_validation
+          expression: "successful_count >= 0 AND successful_count <= total_count"
+          config:
+            severity: error
+
+      # Validates that failed_count is non-negative and doesn't exceed total_count
+      - dbt_utils.expression_is_true:
+          name: failed_count_validation
+          expression: "failed_count >= 0 AND failed_count <= total_count"
+          config:
+            severity: error
+
+      # Validates that average_duration is non-negative when present
+      - dbt_utils.expression_is_true:
+          name: average_duration_validation
+          expression: "average_duration IS NULL OR average_duration >= 0"
+          config:
+            severity: warn
+
+      # Validates that response_rate is between 0 and 1 when present
+      - dbt_utils.expression_is_true:
+          name: response_rate_validation
+          expression: "response_rate IS NULL OR (response_rate >= 0 AND response_rate <= 1)"
+          config:
+            severity: error
+
+      # Validates that conversion_rate is between 0 and 1 when present
+      - dbt_utils.expression_is_true:
+          name: conversion_rate_validation
+          expression: "conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1)"
+          config:
+            severity: error
+
+      # Validates that date is not in the future
+      - dbt_utils.expression_is_true:
+          name: date_validation
+          expression: "date <= current_date"
+          config:
+            severity: error

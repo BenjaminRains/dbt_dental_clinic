@@ -1,0 +1,124 @@
+version: 2
+
+models:
+  - name: stg_opendental__zipcode
+    description: >
+      Staging model for zipcode data in OpenDental. Contains postal code information
+      including city and state mappings, with a flag for frequently used zipcodes.
+      
+      This model standardizes and cleans zipcode data from OpenDental, ensuring:
+      - All zipcodes are exactly 5 digits (padded with leading zeros if needed)
+      - States are standardized to 2 uppercase letters
+      - City names are cleaned and standardized
+      - Frequent zipcodes are flagged for quick reference
+      
+      The model serves as a reference table for address validation and standardization
+      across the dental practice management system.
+    
+    meta:
+      record_count: "Approximately 43,000 records (standard US zipcode coverage)"
+      data_scope: "Complete US zipcode database with frequent usage tracking"
+      
+      known_issues:
+        - description: "Some historical records may have non-standard state abbreviations"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          test: "state_length_valid"
+      
+      business_rules:
+        - rule: "All zipcodes must be exactly 5 digits"
+          impact: "Ensures consistent address validation and postal service compatibility"
+        - rule: "States must be exactly 2 uppercase letters"
+          impact: "Maintains standardization for address validation and reporting"
+        - rule: "Frequent zipcodes are tracked for quick selection"
+          impact: "Improves user experience in address entry forms"
+      
+      usage_notes: >
+        - Use this model for address validation and standardization
+        - The is_frequent flag can be used to optimize address entry forms
+        - All zipcodes are cleaned and standardized regardless of source format
+        - This is a reference table that should be joined to other models for address data
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "LENGTH(zipcode) = 5"
+          name: zipcode_length_valid
+          config:
+            description: "Zipcode must be exactly 5 digits"
+      
+      - dbt_utils.expression_is_true:
+          expression: "LENGTH(state) = 2"
+          name: state_length_valid
+          config:
+            description: "State must be exactly 2 letters"
+    
+    columns:
+      # Primary Key
+      - name: zipcode_id
+        description: >
+          Primary key - unique identifier for each zipcode record.
+          Maps to ZipCodeNum in OpenDental source table.
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Business Columns
+      - name: zipcode
+        description: >
+          The 5-digit postal code, standardized to exactly 5 digits with leading zeros
+          if needed. Maps to ZipCodeDigits in OpenDental source table.
+          
+          Transformation rules:
+          - Extracts first 5 digits from source ZipCodeDigits
+          - Pads with leading zeros if needed
+          - Handles various source formats (5-digit, 9-digit, hyphenated)
+        tests:
+          - not_null
+
+      - name: city
+        description: >
+          The city name associated with this zipcode, cleaned and standardized.
+          Maps to City in OpenDental source table.
+        tests:
+          - not_null
+
+      - name: state
+        description: >
+          The two-letter state code associated with this zipcode, converted to uppercase
+          and stripped of any non-letter characters. Maps to State in OpenDental source table.
+          
+          Note: Source data already contains valid 2-letter state codes, but we standardize
+          to ensure consistency (uppercase, no special characters).
+        tests:
+          - not_null
+
+      - name: is_frequent
+        description: >
+          Flag indicating if this zipcode is frequently used in the system.
+          Maps to IsFrequent in OpenDental source table (0=No, 1=Yes converted to boolean).
+        tests:
+          - not_null
+          - boolean_values
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: >
+          Timestamp when the data was loaded into our data warehouse by the ETL pipeline.
+          Generated using current_timestamp.
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: >
+          Timestamp when the zipcode was created in the source system (OpenDental).
+          This will be NULL as the source system does not track creation timestamps.
+          The _loaded_at column should be used to track when records were added to our warehouse.
+        tests: []  # No tests since this will always be NULL
+
+      - name: _updated_at
+        description: >
+          Timestamp when the zipcode was last updated in the source system (OpenDental).
+          This will be NULL as the source system does not track update timestamps.
+          The _loaded_at column should be used to track when records were added to our warehouse.
+        tests: []  # No tests since this will always be NULL

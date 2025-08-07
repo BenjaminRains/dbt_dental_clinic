@@ -1,0 +1,120 @@
+version: 2
+
+models:
+  - name: stg_opendental__definition
+    description: >
+      Staging model for OpenDental definitions table. Contains system configuration definitions 
+      that define categories, display options, colors, and other configurable elements used 
+      throughout the OpenDental system.
+      
+      This table stores various types of system definitions including appointment confirmation types,
+      adjustment types, diagnosis codes, treatment plan priorities, payment types, and other
+      categorized configuration items. Each definition belongs to a category and can have 
+      associated display properties like colors and ordering.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~500-1000 records typically"
+      data_scope: "All active and historical system definitions"
+      
+      known_issues:
+        - description: "Some legacy definitions may have empty or unclear item_name values"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          test: "test_definition_name_not_empty"
+        - description: "Approximately 12 records have null category_id values, likely legacy or system-level definitions"
+          severity: "warn"
+          identified_date: "2024-01-01"
+        - description: "Category groupings may not always align with current business processes"
+          severity: "warn"
+          identified_date: "2024-01-01"
+      
+      business_rules:
+        - rule: "Definitions within the same category should be ordered by item_order for display purposes"
+          impact: "Affects UI display order in OpenDental application"
+        - rule: "Hidden definitions (is_hidden=1) are not visible in user interfaces but remain in system for historical data integrity"
+          impact: "Critical for understanding why certain options may not appear in dropdowns"
+      
+      usage_notes: >
+        This table is essential for understanding system configuration and should be joined
+        with other tables that reference definition categories. Pay attention to the category_id
+        field to understand what type of definition each record represents. Hidden definitions
+        may still be referenced by historical records, so filtering should be done carefully
+        based on analysis needs.
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - definition_id
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100
+          max_value: 10000
+      - dbt_utils.expression_is_true:
+          expression: "item_order is null or item_order >= 0"
+      - dbt_utils.expression_is_true:
+          expression: "category_id is null or category_id >= 0"
+      - dbt_utils.expression_is_true:
+          expression: "is_hidden in (true, false)"
+
+    columns:
+      - name: definition_id
+        description: >
+          Primary key of the definition table - unique identifier for each system definition 
+          (maps to DefNum in OpenDental). Used throughout the system to reference specific 
+          configuration items and maintain referential integrity.
+        tests:
+          - unique
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 1"
+
+      - name: category_id
+        description: >
+          Category identifier that groups related definitions together. Different categories
+          represent different types of system configurations (e.g., appointment types,
+          adjustment categories, payment types). Critical for understanding the business
+          context of each definition. May be null for legacy or system-level definitions.
+
+      - name: item_order
+        description: >
+          Ordering sequence for items within the same category. Used to control the display
+          order of options in dropdowns and lists within the OpenDental application.
+          Lower numbers appear first in the interface.
+
+      - name: item_name
+        description: >
+          Name or identifier of the definition item as displayed to users in the OpenDental
+          interface. This is the human-readable label that appears in dropdowns, reports,
+          and other UI elements.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_not_be_null:
+              row_condition: "trim(item_name) != ''"
+
+      - name: item_value
+        description: >
+          Additional value or setting associated with the definition item. May contain
+          configuration details, codes, or other metadata specific to the definition type.
+          Can be null for definitions that only require a name/display value.
+
+      - name: item_color
+        description: >
+          Color value associated with the definition item for display purposes in the
+          OpenDental interface. Typically stored as a color code or system color reference.
+          Used for visual categorization and improved user experience.
+
+      - name: is_hidden
+        description: >
+          Flag indicating if the definition item is hidden from user view in the OpenDental
+          interface (0=visible, 1=hidden converted to boolean). Hidden items are retained
+          for historical data integrity but not shown in current dropdowns or selection lists.
+        tests:
+          - not_null
+
+      - name: _loaded_at
+        description: >
+          Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+          (using current_timestamp). Used for data lineage tracking and identifying when
+          data was last refreshed.
+        tests:
+          - not_null

@@ -1,0 +1,218 @@
+version: 2
+
+models:
+  - name: stg_opendental__rxpat
+    description: >
+      Staging model for prescription records from OpenDental. Contains information about prescriptions written for patients.
+      
+      This model includes:
+      - Prescription details including drug name, dosage, and instructions
+      - Patient and provider relationships
+      - Pharmacy information
+      - Electronic prescription (eRx) details
+      - Prescription status and tracking
+    
+    meta:
+      record_count: "Varies by clinic"
+      data_scope: "All prescriptions across all clinics"
+      
+      known_issues:
+        - description: "Some historical records may have null provider_id values"
+          severity: "warn"
+          identified_date: "2024-01-01"
+          test: "provider_id_not_null"
+        - description: "DaysOfSupply field is not actively used - all values are 0.0"
+          severity: "warn"
+          identified_date: "2024-01-01"
+        - description: "Refills field contains data quality issues: one record has value '999' and one record has empty string. These are excluded from the accepted_values test."
+          severity: "warn"
+          identified_date: "2024-03-14"
+          impact: "Data quality"
+          affected_records: 2
+        - description: "Clinic relationship test currently disabled. Future implementation will use stg_opendental__clinic model once data is available."
+          severity: "info"
+          identified_date: "2024-03-14"
+      
+      business_rules:
+        - rule: "Prescriptions must be associated with a patient"
+          impact: "Critical for patient care tracking and reporting"
+        - rule: "Controlled substances must have is_controlled flag set"
+          impact: "Required for regulatory compliance"
+        - rule: "Refills should be between 0 and 9"
+          impact: "Ensures valid prescription refill counts"
+      
+      usage_notes: >
+        - Use rx_date for temporal analysis
+        - Check send_status for prescription transmission status
+        - is_controlled flag is critical for controlled substance reporting
+        - erx_guid is required for electronic prescriptions
+        - DaysOfSupply field is not currently used in the system
+        - Refills field contains data quality issues (999 and empty string values)
+        - Clinic relationship test is currently disabled; will be implemented when staging model is available
+    
+    tests:
+      - unique:
+          column_name: rx_id
+      - test_date_after:
+          column_name: rx_date
+          compare_column: "1990-01-01"
+          allow_null: false
+      - dbt_utils.expression_is_true:
+          expression: "coalesce(days_of_supply, 0.0) = 0.0"
+          severity: warn
+    
+    columns:
+      # Primary Key
+      - name: rx_id
+        description: "Primary key - unique identifier for each prescription (maps to RxNum in OpenDental)"
+        tests:
+          - not_null
+          - positive_values
+
+      # Foreign Keys
+      - name: patient_id
+        description: "Foreign key to patient table - identifies the patient who received the prescription"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+      
+      - name: provider_id
+        description: "Foreign key to provider who prescribed the medication"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+      
+      - name: pharmacy_id
+        description: "Foreign key to pharmacy where prescription was sent"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__pharmacy')
+              field: pharmacy_id
+              severity: warn
+      
+      - name: procedure_id
+        description: "Foreign key to related dental procedure (if applicable)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              severity: warn
+      
+      - name: clinic_id
+        description: "Foreign key to clinic where prescription was written"
+        # Relationship test disabled until staging model is available
+        # tests:
+        #   # Current implementation using source table directly
+        #   - relationships:
+        #       to: source('opendental', 'clinic')
+        #       field: "ClinicNum"
+        #       severity: warn
+        #   # Future implementation using staging model
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       severity: warn
+      
+      - name: user_id
+        description: "Foreign key to user who created/modified the prescription record"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__user')
+              field: user_id
+              severity: warn
+
+      # Dates
+      - name: rx_date
+        description: "Date when prescription was written (maps to RxDate in OpenDental)"
+        tests:
+          - not_null
+
+      # Prescription Details
+      - name: drug_name
+        description: "Name of the prescribed medication (maps to Drug in OpenDental)"
+        tests:
+          - not_null
+
+      - name: sig
+        description: "Prescription instructions/signatura (maps to Sig in OpenDental)"
+
+      - name: dispense_instructions
+        description: "Instructions for dispensing the medication (maps to Disp in OpenDental)"
+
+      - name: refills
+        description: "Number of authorized refills (maps to Refills in OpenDental). Expected values are 0-9."
+        tests:
+          - accepted_values:
+              values: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '']
+              severity: warn
+
+      - name: notes
+        description: "Additional notes about the prescription (maps to Notes in OpenDental)"
+
+      - name: is_controlled
+        description: "Boolean flag indicating if medication is a controlled substance (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: send_status
+        description: "Status of prescription transmission (maps to SendStatus in OpenDental)"
+        tests:
+          - not_null
+
+      - name: rx_cui
+        description: "RxNorm Concept Unique Identifier for the medication (maps to RxCui in OpenDental)"
+
+      - name: dosage_code
+        description: "Code indicating medication dosage (maps to DosageCode in OpenDental)"
+
+      - name: days_of_supply
+        description: "Number of days the prescription should last (maps to DaysOfSupply in OpenDental). Currently not used in the system - all values are 0.0."
+
+      - name: patient_instruction
+        description: "Detailed instructions for the patient (maps to PatientInstruction in OpenDental)"
+
+      # E-Prescription Related
+      - name: erx_guid
+        description: "Globally unique identifier for electronic prescriptions (maps to ErxGuid in OpenDental)"
+
+      - name: is_erx_old
+        description: "Boolean flag indicating if this is an old electronic prescription (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: erx_pharmacy_info
+        description: "Additional pharmacy information for electronic prescriptions (maps to ErxPharmacyInfo in OpenDental)"
+
+      - name: is_proc_required
+        description: "Boolean flag indicating if a procedure is required (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: rx_type
+        description: "Type of prescription (maps to RxType in OpenDental)"
+        tests:
+          - not_null
+
+      # Metadata
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTStamp."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp."
+        tests:
+          - not_null

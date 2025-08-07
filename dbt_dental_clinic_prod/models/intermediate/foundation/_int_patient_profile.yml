@@ -1,0 +1,430 @@
+version: 2
+
+models:
+  - name: int_patient_profile
+    description: >
+      Foundation model that combines core patient information from staging models to create comprehensive patient profiles.
+      
+      This model serves as the primary source for patient profile information in downstream analytics and financial processing.
+      Part of System Foundation: Core Patient Data workflow.
+      
+      Key Features:
+      - Basic demographics and contact information: Core patient identification and communication
+      - Family relationships and emergency contacts: Patient safety and financial responsibility
+      - Medical notes and treatment information: Clinical care coordination
+      - Patient preferences (pronouns, consent): Patient experience and compliance
+      - Insurance status and financial information: Payment processing and coverage management
+      
+      Data Sources:
+      - stg_opendental__patient: Core patient information and demographics
+      - stg_opendental__patientlink: Family relationships and financial responsibility
+      - stg_opendental__patientnote: Additional patient information and preferences
+      
+      Business Logic Features:
+      - Patient status determination: Active/Inactive/Deceased/Archived categorization
+      - Family relationship mapping: Bidirectional relationship tracking
+      - Emergency contact management: Required for active patients
+      - Medical and treatment note consolidation: Clinical information aggregation
+      - Insurance status tracking: Coverage and financial responsibility
+      
+      Financial Calculations:
+      - Insurance coverage determination: Active coverage status
+      - Financial responsibility mapping: Guarantor relationships
+      - Payment eligibility: Based on patient status and insurance
+      
+      Data Quality Notes:
+      - Geographic data (city, state, zipcode) pending investigation
+      - Consider checking for additional patient address/location tables
+      - Family relationships may be incomplete for historical data
+      - Insurance status requires regular validation
+      - Emergency contact information needs periodic verification
+      
+      Business Rules:
+      - Each patient must have a unique patient_id
+      - Patient status must be valid (Active/Inactive/Deceased/Archived)
+      - Family relationships must be bidirectional
+      - Emergency contacts must have valid phone numbers
+      - Active patients must have complete demographic information
+      - Insurance status must be current and accurate
+    
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: patient_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['patient_id']
+          unique: true
+        - columns: ['guarantor_id']
+        - columns: ['primary_provider_id']
+        - columns: ['_updated_at']
+      tags: ['foundation', 'weekly']
+    
+    columns:
+      - name: patient_id
+        description: >
+          Primary key - Unique identifier for the patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase)
+          - Transformed to: patient_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all patients
+          - Used as foreign key in multiple downstream models
+          - Critical for patient identification and record linking
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              config:
+                severity: error
+                description: "Patient ID must exist in source system"
+
+      - name: guarantor_id
+        description: >
+          Foreign key to the patient's guarantor (maps from "GuarantorNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "GuarantorNum" (CamelCase)
+          - Transformed to: guarantor_id (snake_case)
+          
+          Business Relationship:
+          - Links to the patient responsible for payment
+          - May be self-referential (patient is their own guarantor)
+          - Critical for financial responsibility tracking
+          
+          Data Quality Considerations:
+          - Must exist in patient profile
+          - Self-referential cases must be validated
+        tests:
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+                description: "Guarantor must exist in patient profile"
+
+      - name: primary_provider_id
+        description: >
+          Foreign key to the patient's primary provider (maps from "PriProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PriProvNum" (CamelCase)
+          - Transformed to: primary_provider_id (snake_case)
+          
+          Business Relationship:
+          - Main provider responsible for patient care
+          - Used for provider assignment and scheduling
+          - Critical for clinical workflow
+        tests:
+          - relationships:
+              to: ref('int_provider_profile')
+              field: provider_id
+              config:
+                severity: error
+                description: "Primary provider must exist in provider profile"
+
+      - name: patient_status
+        description: >
+          Current status of the patient
+          
+          Valid Values:
+          - 0: Patient (active) - Currently receiving care
+          - 1: NonPatient - Potential patient, not yet treated
+          - 2: Inactive - Former patient, not currently active
+          - 3: Archived - Historical record, typically not accessed
+          - 4: Deceased - Patient has passed away
+          - 5: Deleted - Soft delete, record maintained for audit
+          
+          Business Rules:
+          - Must be one of the valid statuses
+          - Status changes must be tracked
+          - Affects financial processing and clinical care
+          
+          Operational Impact:
+          - Determines eligibility for services
+          - Affects billing and insurance processing
+          - Influences communication preferences
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5]
+              config:
+                severity: error
+                description: "Patient status must be valid"
+
+      - name: patient_status_description
+        description: >
+          Human-readable description of patient status derived from numeric codes
+          
+          Calculation Logic:
+          - Input: patient_status (numeric code from OpenDental)
+          - Method: CASE statement mapping numeric values to descriptive strings
+          - Output: Standardized status description for reporting and UI
+          
+          Business Rules:
+          - 0: 'Active' - Currently receiving care, eligible for services
+          - 1: 'Archived' - Former patient, not currently active
+          - 2: 'Deceased' - Patient has passed away, no further services
+          - 3: 'Prospective' - Potential patient, not yet treated
+          - else: 'Unknown' - Invalid or unexpected status requiring investigation
+          
+          Business Impact:
+          - Used for patient filtering in clinical workflows
+          - Drives billing and insurance processing decisions
+          - Supports patient communication and scheduling logic
+          
+          Data Quality Notes:
+          - All patients should have valid status descriptions
+          - 'Unknown' status indicates data quality issues requiring attention
+          - Status changes should be tracked for audit compliance
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Archived', 'Deceased', 'Prospective', 'Unknown']
+              config:
+                severity: error
+                description: >
+                  Patient status description validation for business logic integrity
+                  
+                  Business Rule: All patients must have valid status descriptions
+                  Impact: Invalid descriptions break clinical and financial workflows
+                  Enforcement: Ensures proper patient categorization and processing
+
+      - name: patient_category
+        description: >
+          Human-readable description of patient position code
+          
+          Business Logic:
+          - 0: 'Regular Patient' - Standard patient category
+          - 1: 'House Account' - Internal or special account
+          - 2: 'Staff Member' - Employee or staff
+          - 3: 'VIP Patient' - High-priority patient
+          - 4: 'Other' - Special category
+          - else: 'Unknown' - Invalid or unexpected code
+          
+          Usage:
+          - Used for patient classification
+          - Affects billing and service delivery
+          - Derived from position_code field
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Regular Patient', 'House Account', 'Staff Member', 'VIP Patient', 'Other', 'Unknown']
+              config:
+                severity: error
+                description: "Patient category must be valid"
+
+      - name: has_insurance_flag
+        description: >
+          Flag indicating if patient has active insurance (converted from OpenDental 0/1 integer)
+          
+          Source Transformation:
+          - OpenDental source: "HasIns" (0/1 integer)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false)
+          
+          Business Logic:
+          - true when: Patient has active insurance coverage
+          - false when: Patient has no insurance or inactive coverage
+          
+          Operational Usage:
+          - Used for insurance verification
+          - Affects payment processing
+          - Influences financial responsibility
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                severity: error
+                description: "Insurance flag must be boolean"
+
+      - name: emergency_contact_name
+        description: >
+          Name of the patient's emergency contact
+          
+          Business Rules:
+          - Recommended for active patients (status = 0)
+          - Used for emergency situations
+          - Must be a valid name (not empty or just spaces)
+          
+          Data Quality:
+          - Currently only ~16.5% of active patients have emergency contact info
+          - When present, should be properly formatted
+          - May be null for non-active patients
+          
+          Known Data Gap:
+          - Emergency contact information is not consistently collected
+          - Consider implementing a data quality improvement initiative
+        tests:
+          - not_null:
+              where: "patient_status = 0"
+              config:
+                severity: warn
+                description: "Active patients should have emergency contact name for safety"
+
+      - name: emergency_contact_phone
+        description: >
+          Phone number of the patient's emergency contact
+          
+          Business Rules:
+          - Recommended for active patients (status = 0)
+          - Used for emergency situations
+          - Must be a valid phone number format
+          
+          Data Quality:
+          - Currently only ~16.5% of active patients have emergency contact info
+          - When present, should be properly formatted
+          - May be null for non-active patients
+          
+          Known Data Gap:
+          - Emergency contact information is not consistently collected
+          - Consider implementing a data quality improvement initiative
+        tests:
+          - not_null:
+              where: "patient_status = 0"
+              config:
+                severity: warn
+                description: "Active patients should have emergency contact phone for safety"
+
+      - name: _loaded_at
+        description: >
+          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          
+          Source: ETL pipeline metadata (added during extraction process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+              config:
+                severity: error
+                description: "ETL extraction timestamp must be within valid range"
+
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 100000
+          config:
+            severity: error
+            description: >
+              Data Volume: Expected patient count range for dental practice operations
+              
+              Baseline: Dental practices typically have 1,000-50,000 patients
+              Alert Threshold: Investigate if outside expected range
+              Action Required: Verify data pipeline if count anomalies detected
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when patient_status not in (0,1,2,3,4,5) then 1 end) = 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Patient Status Validation
+              
+              Requirement: All patients must have valid status codes
+              Impact: Invalid statuses break clinical and financial workflows
+              Enforcement: Ensures proper patient categorization and processing
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when guarantor_id is null then 1 end) = 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Financial Responsibility Assignment
+              
+              Requirement: All patients must have a guarantor assigned
+              Impact: Required for billing and financial processing
+              Enforcement: Ensures proper financial responsibility tracking
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when patient_status = 0 and primary_provider_id is null then 1 end) = 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Active Patient Provider Assignment
+              
+              Requirement: All active patients must have primary provider assigned
+              Impact: Required for clinical care coordination and scheduling
+              Enforcement: Ensures proper clinical workflow and provider assignment
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when patient_status = 0 and (emergency_contact_name is null or emergency_contact_phone is null) then 1 end) / count(case when patient_status = 0 then 1 end) < 0.5"
+          config:
+            severity: warn
+            description: >
+              Data Quality Monitor: Emergency Contact Completeness
+              
+              Expectation: At least 50% of active patients should have emergency contact information
+              Tolerance: Current rate is ~16.5%, target is 50%+ for patient safety
+              Action Required: Implement data collection improvement initiative
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when patient_status = 0 and has_insurance_flag = false then 1 end) / count(case when patient_status = 0 then 1 end) < 0.3"
+          config:
+            severity: warn
+            description: >
+              Business Rule: Insurance Coverage Monitoring
+              
+              Requirement: Most active patients should have insurance coverage
+              Impact: High uninsured rate affects financial performance
+              Enforcement: Monitor insurance coverage rates for business intelligence
+
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      business_process: "Patient Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System Foundation: Core Patient Data"
+      data_quality_requirements:
+        - "All active patients must have complete demographic information"
+        - "Emergency contact information must be valid and current"
+        - "Family relationships must be properly mapped"
+        - "Patient status must accurately reflect current state"
+        - "Insurance status must be current and accurate"
+        - "Financial responsibility must be properly assigned"
+        - "Provider assignments must be valid and current"
+      performance_requirements:
+        - "Daily refresh for patient status and demographic updates"
+        - "Sub-second query response for patient lookups"
+        - "Efficient indexing on patient_id, guarantor_id, and primary_provider_id"
+        - "Optimized for high-frequency patient profile queries"

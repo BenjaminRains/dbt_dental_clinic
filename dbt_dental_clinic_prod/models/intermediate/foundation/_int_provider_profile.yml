@@ -1,0 +1,359 @@
+version: 2
+
+models:
+  - name: int_provider_profile
+    description: >
+      Foundation intermediate model for provider profile and business logic.
+      Part of System Foundation: Provider Profile Management.
+      
+      This model transforms provider data into business-friendly attributes and status flags
+      that determine what each provider can do in the system. It serves as the foundation
+      for all provider-related downstream models across all business systems.
+      
+      Key Features:
+      - Provider Status Classification: Distinguishes active, hidden, terminated, and system providers
+      - Capability Flags: Determines treatment, prescribing, and billing capabilities
+      - Professional Validation: Validates DEA numbers, state licenses, and professional IDs
+      - Business Rule Implementation: Applies complex logic for provider capabilities
+      
+      Data Sources:
+      - stg_opendental__provider: Primary provider data with professional identifiers and metadata
+      
+      Business Logic Features:
+      - System Provider Handling: Special treatment for system provider (ID=0)
+      - Non-Person Provider Classification: Identifies labs, facilities, and institutional providers
+      - Capability Derivation: Combines multiple flags to determine treatment and billing capabilities
+      - Professional Credential Validation: Checks for required licenses and certifications
+      
+      Data Quality Notes:
+      - System provider (ID=0) handled as special case with appropriate flags
+      - Non-person providers (labs, facilities) properly classified and excluded from patient care
+      - Terminated providers identified by termination_date presence
+      - Empty/null professional identifiers handled gracefully with appropriate defaults
+      - Billing override logic prevents duplicate billing when providers have billing delegates
+      
+      Performance Notes:
+      - Incremental materialization with _updated_at filtering for efficient processing
+      - Indexed on provider_id (unique), is_active_provider, and _updated_at for query optimization
+      - Efficient boolean flag calculations using CASE statements with early termination logic
+    
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: provider_id
+    
+    meta:
+      owner: "Clinical Operations"
+      contains_pii: true
+      business_process: "Provider Management"
+      refresh_frequency: "Real-time incremental"
+      business_impact: "High"
+      system_integration: "Foundation - Provider Profile Management"
+      data_quality_requirements:
+        - "All active providers must have valid professional identifiers"
+        - "System provider (ID=0) must be properly classified"
+        - "Capability flags must be logically consistent"
+      performance_requirements:
+        - "Incremental processing for real-time updates"
+        - "Sub-second query response for provider lookups"
+    
+    columns:
+      - name: provider_id
+        description: >
+          Primary key - Unique identifier for the provider (maps from "ProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProvNum" (CamelCase)
+          - Transformed to: provider_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all providers
+          - ID=0 is reserved for system provider
+          - Used as foreign key in all provider-related tables
+          - Foundation for all provider capability and access control logic
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                severity: error
+                description: "Provider ID must exist in staging table for data integrity"
+      
+      - name: provider_abbreviation
+        description: "Short abbreviation used to identify the provider"
+      
+      - name: display_order
+        description: "Order in which provider appears in lists"
+      
+      - name: last_name
+        description: "Provider's last name"
+      
+      - name: first_name
+        description: "Provider's first name"
+      
+      - name: preferred_name
+        description: "Name the provider prefers to be called"
+      
+      - name: provider_status
+        description: "Numeric status code from OpenDental (0=Active, 1=Hidden, etc.)"
+      
+      - name: specialty_id
+        description: >
+          Foreign key to provider specialty (maps from "SpecialtyNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "SpecialtyNum" (CamelCase as stored)
+          - Transformed to: specialty_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links provider to their professional specialty classification
+          - Used for provider filtering and capability determination
+          - Impacts fee schedules and procedure authorization
+          
+          Data Quality Considerations:
+          - May be null for non-clinical providers
+          - Historical data may have inconsistent specialty assignments
+        tests:
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+              where: "specialty_id is not null"
+              config:
+                severity: warn
+                description: "Specialty ID should reference valid specialty definition when present"
+      
+      - name: is_system_provider
+        description: >
+          Flag indicating if this is the system provider (converted from provider_id = 0 check)
+          
+          Source Transformation:
+          - OpenDental source: Calculated from "ProvNum" = 0
+          - Transformation: CASE statement converting numeric comparison to boolean
+          - Result: PostgreSQL boolean (true/false)
+          
+          Business Logic:
+          - true when: provider_id = 0 (reserved system provider)
+          - false when: provider_id > 0 (actual provider)
+          
+          Operational Usage:
+          - System provider used for automated processes
+          - Excluded from provider selection lists
+          - Special handling in billing and scheduling logic
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "System provider flag must be boolean for business logic integrity"
+      
+      - name: is_active_provider
+        description: >
+          Flag indicating whether provider is active and available for clinical operations
+          
+          Logic:
+          - true when: is_hidden = false AND provider_status = 0
+          - false when: provider is hidden OR has non-active status
+          
+          Business Impact:
+          - Determines provider availability for scheduling
+          - Controls visibility in provider selection lists
+          - Foundation for other capability flags
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_non_person_provider
+        description: >
+          Flag indicating if this represents a facility or non-person entity (converted from OpenDental boolean)
+          
+          Source Transformation:
+          - OpenDental source: "IsNotPerson" (0/1 integer as stored)
+          - Transformation: Uses convert_opendental_boolean() macro
+          - Result: PostgreSQL boolean (true/false/null)
+          
+          Business Logic:
+          - true when: Provider represents a lab, facility, or institutional entity
+          - false when: Provider is an individual person
+          - Also true when: last_name is null or empty (additional business rule)
+          
+          Operational Usage:
+          - Non-person providers cannot treat patients
+          - Used for billing entity classification
+          - Affects scheduling and procedure assignment logic
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Non-person provider flag validation for clinical workflow integrity"
+      
+      - name: is_terminated_provider
+        description: "True if provider has a termination date"
+        tests:
+          - not_null
+      
+      - name: can_prescribe_controlled_substances
+        description: "True if provider has a DEA number"
+        tests:
+          - not_null
+      
+      - name: has_state_license
+        description: "True if provider has a state license number"
+        tests:
+          - not_null
+      
+      - name: can_treat_patients
+        description: >
+          Flag indicating whether provider can treat patients
+          
+          Calculation Logic:
+          - Combines is_active_provider = true
+          - AND is_non_person_provider = false
+          - AND is_terminated_provider = false
+          
+          Business Rules:
+          - Only person providers can treat patients
+          - Must be active and not terminated
+          - Used for scheduling and procedure assignment validation
+          
+          Business Impact:
+          - Controls patient scheduling eligibility
+          - Validates procedure assignments
+          - Foundation for clinical workflow rules
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: can_bill_procedures
+        description: >
+          Flag indicating whether provider can bill procedures directly
+          
+          Calculation Logic:
+          - Combines billing_override_provider_id is null (no billing delegate)
+          - AND is_active_provider = true (provider is active)
+          
+          Business Rules:
+          - Providers with billing overrides cannot bill directly
+          - Only active providers can bill procedures
+          - Used for procedure billing validation and revenue attribution
+          
+          Business Impact:
+          - Controls billing workflow and revenue tracking
+          - Validates procedure assignments for billing
+          - Foundation for financial reporting and provider productivity
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Billing capability flag validation for financial workflow integrity"
+      
+      - name: _extracted_at
+        description: >
+          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          
+          Source: ETL pipeline metadata (added during extraction process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+
+      - name: _created_at  
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null:
+              where: "provider_id > 0"
+              config:
+                description: "All real providers should have creation timestamps"
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000
+          config:
+            severity: error
+            description: >
+              Data Volume: Expected provider count range for business operations
+              
+              Baseline: Dental clinics typically have 1-50 providers
+              Alert Threshold: Investigate if outside expected range
+              Action Required: Verify data pipeline if count anomalies detected
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when provider_id = 0 then 1 end) = 1"
+          config:
+            severity: error
+            description: >
+              Business Rule: System Provider Existence
+              
+              Requirement: Exactly one system provider (ID=0) must exist
+              Impact: System provider required for automated processes
+              Enforcement: Ensures system integrity and process functionality
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when is_active_provider = true and can_treat_patients = false then 1 end) = 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Active Provider Capability Consistency
+              
+              Requirement: All active providers must be capable of treating patients
+              Impact: Ensures scheduling and clinical workflow integrity
+              Enforcement: Prevents active providers from being excluded from patient care
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when can_treat_patients = true and is_non_person_provider = true then 1 end) = 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Person Provider Treatment Capability
+              
+              Requirement: Only person providers can treat patients
+              Impact: Ensures clinical safety and proper provider classification
+              Enforcement: Prevents non-person entities from being assigned to patient care
+      
+      - dbt_expectations.expression_is_true:
+          expression: "count(case when can_bill_procedures = true and is_active_provider = false then 1 end) = 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Billing Capability Consistency
+              
+              Requirement: Only active providers can bill procedures
+              Impact: Ensures financial workflow integrity and revenue tracking
+              Enforcement: Prevents inactive providers from billing

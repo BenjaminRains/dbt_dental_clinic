@@ -1,0 +1,400 @@
+version: 2
+
+models:
+  - name: stg_opendental__clinic
+    description: >
+      Standardized staging model for clinic/location information from OpenDental.
+      This model provides location and operational details for dental clinic facilities,
+      including addresses, contact information, billing settings, and operational preferences.
+      
+      **IMPORTANT**: This model is currently a shell/placeholder and is NOT in active use
+      by the MDC clinic. The source OpenDental data is not being extracted or loaded,
+      and the ETL pipeline has not been configured for this table. This model exists
+      as a template for potential future implementation if MDC clinic expands to
+      multiple locations or begins using the clinic functionality in OpenDental.
+    
+    meta:
+      # Data quality and business context
+      record_count: "0 records (not currently in use)"
+      data_scope: "Shell model - no active data extraction"
+      
+      known_issues:
+        - description: "Model is not currently built or tested - ETL pipeline not configured for clinic data"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "Source data not being extracted from OpenDental clinic table"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "Tests reference source tables instead of staging models due to inactive status"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Each clinic represents a physical location where dental services are provided"
+          impact: "Critical for multi-location practices to track location-specific operations"
+        - rule: "Default provider settings affect how procedures and billing are handled at each location"
+          impact: "Impacts provider assignment and billing workflows"
+        - rule: "Billing and pay-to addresses can differ from physical clinic location"
+          impact: "Important for accurate financial processing and vendor payments"
+      
+      usage_notes: >
+        **SHELL MODEL NOTICE**: This model is not currently active and contains no data.
+        It serves as a template for future implementation if MDC clinic expands to
+        multiple locations. The model structure follows OpenDental's clinic table
+        schema and includes all necessary fields for location management, billing
+        configuration, and operational settings. If activated, this model would
+        support multi-location reporting, provider assignment, and location-specific
+        billing configurations. All tests are currently configured but not running
+        due to the absence of source data extraction.
+    
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: source('opendental', 'clinic')
+          config:
+            severity: warn
+            enabled: false  # Disabled until ETL pipeline includes clinic data
+    
+    columns:
+      - name: clinic_id
+        description: >
+          Primary key for clinic records (maps to ClinicNum in OpenDental).
+          Unique identifier for each physical clinic location within the dental practice.
+        tests:
+          - unique:
+              config:
+                enabled: false
+          - not_null:
+              config:
+                enabled: false
+          - positive_values:
+              config:
+                enabled: false
+
+      - name: clinic_name
+        description: >
+          Name or description of the clinic location (maps to Description in OpenDental).
+          Human-readable name used to identify the clinic in reports and user interfaces.
+
+      - name: clinic_abbreviation
+        description: >
+          Abbreviation used for the clinic in reports and displays (maps to Abbr in OpenDental).
+          Short code for space-constrained displays and report formatting.
+
+      - name: display_order
+        description: >
+          Display order for the clinic in lists and dropdowns (maps to ItemOrder in OpenDental).
+          Controls the sequence in which clinics appear in user interface elements.
+        tests:
+          - positive_values:
+              config:
+                enabled: false
+                where: "display_order is not null"
+
+      - name: address_line_1
+        description: >
+          Primary address line of the clinic (maps to Address in OpenDental).
+          Street address where the clinic is physically located.
+
+      - name: address_line_2
+        description: >
+          Secondary address line of the clinic (maps to Address2 in OpenDental).
+          Additional address information such as suite numbers or building details.
+
+      - name: city
+        description: >
+          City where the clinic is located (maps to City in OpenDental).
+          Municipality or city name for the clinic's physical address.
+
+      - name: state
+        description: >
+          State where the clinic is located (maps to State in OpenDental).
+          State or province code for the clinic's physical address.
+
+      - name: zip_code
+        description: >
+          ZIP/Postal code of the clinic (maps to Zip in OpenDental).
+          Postal code for the clinic's physical address.
+
+      - name: phone_number
+        description: >
+          Contact phone number for the clinic (maps to Phone in OpenDental).
+          Primary phone number for patient contact and business communications.
+
+      - name: fax_number
+        description: >
+          Fax number for the clinic (maps to Fax in OpenDental).
+          Fax number used for document transmission and insurance communications.
+
+      - name: email_address_id
+        description: >
+          Foreign key to email address record (maps to EmailAddressNum in OpenDental).
+          Links to the primary email address configuration for the clinic.
+        tests:
+          - positive_values:
+              config:
+                enabled: false
+                where: "email_address_id is not null"
+
+      - name: email_alias
+        description: >
+          Custom email alias for the clinic (maps to FName in OpenDental).
+          Display name or alias used when sending emails from the clinic.
+
+      - name: bank_number
+        description: >
+          Bank account number for the clinic (maps to BankNumber in OpenDental).
+          Financial account information for clinic-specific transactions.
+
+      - name: billing_address_line_1
+        description: >
+          Primary billing address line (maps to BillingAddress in OpenDental).
+          Street address used for billing and financial correspondence.
+
+      - name: billing_address_line_2
+        description: >
+          Secondary billing address line (maps to BillingAddress2 in OpenDental).
+          Additional billing address information.
+
+      - name: billing_city
+        description: >
+          City for billing address (maps to BillingCity in OpenDental).
+          Municipality for billing correspondence.
+
+      - name: billing_state
+        description: >
+          State for billing address (maps to BillingState in OpenDental).
+          State or province for billing correspondence.
+
+      - name: billing_zip
+        description: >
+          ZIP/Postal code for billing address (maps to BillingZip in OpenDental).
+          Postal code for billing correspondence.
+
+      - name: pay_to_address_line_1
+        description: >
+          Primary pay-to address line (maps to PayToAddress in OpenDental).
+          Street address where payments should be sent to the clinic.
+
+      - name: pay_to_address_line_2
+        description: >
+          Secondary pay-to address line (maps to PayToAddress2 in OpenDental).
+          Additional pay-to address information.
+
+      - name: pay_to_city
+        description: >
+          City for pay-to address (maps to PayToCity in OpenDental).
+          Municipality for payment processing.
+
+      - name: pay_to_state
+        description: >
+          State for pay-to address (maps to PayToState in OpenDental).
+          State or province for payment processing.
+
+      - name: pay_to_zip
+        description: >
+          ZIP/Postal code for pay-to address (maps to PayToZip in OpenDental).
+          Postal code for payment processing.
+
+      - name: default_provider_id
+        description: >
+          Foreign key to default provider for the clinic (maps to DefaultProv in OpenDental).
+          Specifies which provider is automatically assigned to procedures and appointments
+          at this clinic location when no specific provider is selected.
+        tests:
+          - positive_values:
+              config:
+                enabled: false
+                where: "default_provider_id is not null"
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                enabled: false
+                severity: warn
+              where: "default_provider_id is not null"
+
+      - name: insurance_billing_provider_id
+        description: >
+          Foreign key to insurance billing provider (maps to InsBillingProv in OpenDental).
+          Specifies which provider's information is used for insurance billing and claims
+          processing for procedures performed at this clinic location.
+        tests:
+          - positive_values:
+              config:
+                enabled: false
+                where: "insurance_billing_provider_id is not null"
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                enabled: false
+                severity: warn
+              where: "insurance_billing_provider_id is not null"
+
+      - name: default_place_of_service
+        description: >
+          Default place of service code for the clinic (maps to DefaultPlaceService in OpenDental).
+          Standard healthcare place of service code used for insurance billing and reporting.
+          Common values: 11 = Office, 22 = Outpatient Hospital, 23 = Emergency Room.
+
+      - name: is_medical_only
+        description: >
+          Flag indicating if clinic is medical-only (maps to IsMedicalOnly in OpenDental).
+          0 = Dental services provided, 1 = Medical services only.
+          Used to distinguish between dental and medical service locations.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: use_billing_address_on_claims
+        description: >
+          Flag to use billing address on insurance claims (maps to UseBillAddrOnClaims in OpenDental).
+          0 = Use clinic address, 1 = Use billing address on insurance claims.
+          Controls which address appears on submitted insurance claims.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: is_insurance_verification_excluded
+        description: >
+          Flag to exclude from insurance verification (maps to IsInsVerifyExcluded in OpenDental).
+          0 = Include in verification, 1 = Exclude from automatic insurance verification processes.
+          Used to control automated insurance eligibility checking workflows.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: is_confirmation_enabled
+        description: >
+          Flag for appointment confirmation feature (maps to IsConfirmEnabled in OpenDental).
+          0 = Confirmation disabled, 1 = Appointment confirmation enabled for this clinic.
+          Controls whether automated appointment confirmations are sent to patients.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: is_confirmation_default
+        description: >
+          Flag for default confirmation setting (maps to IsConfirmDefault in OpenDental).
+          0 = Not default, 1 = Default confirmation setting for new appointments.
+          Determines the initial confirmation status for new appointments at this clinic.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: is_new_patient_appointment_excluded
+        description: >
+          Flag to exclude from new patient appointments (maps to IsNewPatApptExcluded in OpenDental).
+          0 = Allow new patients, 1 = Exclude from new patient appointment scheduling.
+          Used to control which clinics can accept new patient appointments.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: is_hidden
+        description: >
+          Flag to hide clinic from normal view (maps to IsHidden in OpenDental).
+          0 = Visible, 1 = Hidden from standard clinic lists and selection interfaces.
+          Used to temporarily remove clinics from active use without deletion.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: has_procedure_on_prescription
+        description: >
+          Flag for procedure on prescription feature (maps to HasProcOnRx in OpenDental).
+          0 = Feature disabled, 1 = Procedures can be added to prescriptions at this clinic.
+          Controls integration between procedure coding and prescription workflows.
+        tests:
+          - accepted_values:
+              values: [0, 1]
+              config:
+                enabled: false
+
+      - name: region_id
+        description: >
+          Foreign key to region table (maps to RegionNum in OpenDental).
+          Links clinic to a regional grouping for reporting and administrative purposes.
+          May be null if regional organization is not used.
+        tests:
+          - positive_values:
+              config:
+                enabled: false
+                where: "region_id is not null"
+
+      - name: timezone
+        description: >
+          Timezone setting for the clinic (maps to TimeZone in OpenDental).
+          Standard timezone identifier used for appointment scheduling and time-based operations.
+          Format typically follows IANA timezone database (e.g., 'America/New_York').
+
+      - name: scheduling_note
+        description: >
+          Scheduling notes for the clinic (maps to SchedNote in OpenDental).
+          Free-text notes displayed during appointment scheduling to provide
+          location-specific guidance or restrictions.
+
+      - name: medical_lab_account_number
+        description: >
+          Medical lab account number (maps to MedLabAccountNum in OpenDental).
+          Account identifier for laboratory services associated with this clinic location.
+
+      - name: external_id
+        description: >
+          External system identifier (maps to ExternalID in OpenDental).
+          Identifier used for integration with third-party systems or legacy databases.
+
+      - name: sms_contract_date
+        description: >
+          Date of SMS contract (maps to SmsContractDate in OpenDental).
+          Contract effective date for SMS messaging services at this clinic location.
+
+      - name: sms_monthly_limit
+        description: >
+          Monthly SMS message limit (maps to SmsMonthlyLimit in OpenDental).
+          Maximum number of SMS messages allowed per month for this clinic location.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                enabled: false
+                where: "sms_monthly_limit is not null"
+
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null:
+              config:
+                enabled: false
+
+      - name: _created_at
+        description: >
+          Timestamp when the clinic record was created in OpenDental (maps to DateTStamp).
+          Represents when this clinic location was originally set up in the system.
+        tests:
+          - not_null:
+              config:
+                enabled: false
+
+      - name: _updated_at
+        description: >
+          Timestamp when the clinic record was last updated in OpenDental (maps to DateTStamp).
+          For clinic records, this typically tracks configuration changes to clinic settings.
+        tests:
+          - not_null:
+              config:
+                enabled: false 

@@ -1,0 +1,127 @@
+version: 2
+
+models:
+  - name: int_user_preferences
+    description: >
+      Comprehensive user preferences model that manages user-specific settings and appointment
+      view configurations. This model serves as the foundation for personalized scheduling
+      experiences, view customization, and user preference persistence in the dental clinic.
+      
+      Key features:
+      - Manages user-specific preferences and settings
+      - Tracks appointment view configurations
+      - Supports clinic-specific view settings
+      - Maintains preference history and changes
+      - Enables view customization
+      - Supports multi-clinic configurations
+      - Tracks preference timestamps
+      - Integrates with scheduling system
+      - Manages view type associations
+      - Provides preference audit trail
+      
+      Data Sources:
+      - stg_opendental__userodpref: Base user preferences
+      - stg_opendental__userodapptview: Appointment view settings
+      - stg_opendental__userod: User information
+      - stg_opendental__clinic: Clinic information
+      - stg_opendental__apptview: Appointment view definitions
+      
+      Business rules:
+      - One record per user preference
+      - User must exist in the system
+      - Clinic must exist in the system
+      - View clinic ID must match user's clinic ID
+      - Update timestamps must be after creation timestamps
+      - Foreign key references must be valid
+      - Preference values must be properly formatted
+      - View configurations must be valid
+      - Required fields must not be null
+      - Timestamps must be in chronological order
+      - Model updates must maintain data integrity
+      
+      Grain:
+      - One record per user preference (user_od_pref_id)
+      - One record per appointment view (userod_appt_view_id)
+      - User-level preference settings
+      - Clinic-level view configurations
+      - Incremental updates based on updated_at
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: ['user_od_pref_id']
+
+    columns:
+      - name: user_od_pref_id
+        description: Unique identifier for the user preference record
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: ID of the user
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+      - name: fkey
+        description: Foreign key reference
+      - name: fkey_type
+        description: Type of the foreign key reference
+      - name: value_string
+        description: Preference value stored as string
+      - name: clinic_id
+        description: ID of the clinic
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+      - name: created_at
+        description: When the preference was created
+        tests:
+          - not_null
+      - name: updated_at
+        description: When the preference was last updated
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= created_at"
+              column_name: updated_at
+              name: updated_at_after_created
+      
+      # Appointment View Information
+      - name: userod_appt_view_id
+        description: ID of the appointment view record
+      - name: appt_view_id
+        description: ID of the appointment view type
+      - name: appt_view_clinic_id
+        description: ID of the clinic for this view
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "IS NULL OR appt_view_clinic_id = clinic_id"
+              column_name: appt_view_clinic_id
+              name: appt_view_clinic_id_matches_clinic_id
+      - name: view_created_at
+        description: When the view was created
+      - name: view_updated_at
+        description: When the view was last updated
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "IS NULL OR view_updated_at >= view_created_at"
+              column_name: view_updated_at
+              name: view_updated_at_after_created
+      
+      # Metadata
+      - name: model_created_at
+        description: Timestamp when this record was created in the dbt model
+        tests:
+          - not_null
+      - name: model_updated_at
+        description: Timestamp when this record was last updated in the dbt model
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= model_created_at"
+              column_name: model_updated_at
+              name: model_updated_at_after_created 

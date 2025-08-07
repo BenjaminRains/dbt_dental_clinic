@@ -1,0 +1,108 @@
+version: 2
+
+models:
+  - name: int_claim_tracking
+    description: >
+      Complete tracking history for insurance claims, preserving all status updates and notes.
+      Each record represents a tracking entry for a claim, showing its progression through the insurance process.
+      
+      Key features:
+      - Tracks all status changes and updates for insurance claims
+      - Preserves detailed tracking notes and timestamps
+      - Links to int_claim_details for validation
+      - Maintains chronological history of claim progression
+      
+      Data Sources:
+      - stg_opendental__claimtracking: Base tracking information
+      - int_claim_details: Validation against claim details
+    
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: [claim_id, claim_tracking_id, tracking_type, entry_timestamp]
+    
+    columns:
+      - name: claim_id
+        description: Foreign key to the claim
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_claim_details')
+              field: claim_id
+
+      - name: claim_tracking_id
+        description: Primary key for the tracking record
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__claimtracking')
+              field: claim_tracking_id
+
+      - name: tracking_type
+        description: Type of tracking entry (e.g., sent, received, paid)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ClaimProcReceived', 'StatusHistory', 'ClaimUser']
+
+      - name: entry_timestamp
+        description: Timestamp when the tracking entry was created
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'2026-12-31'"
+
+      - name: tracking_note
+        description: Additional notes or comments about the tracking entry
+        tests:
+          - dbt_expectations.expect_column_values_to_not_be_null:
+              where: "tracking_type in ('denied', 'pending')"
+              severity: warn
+
+      - name: created_at
+        description: Timestamp when the tracking entry was created
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'2026-12-31'"
+
+      - name: updated_at
+        description: Timestamp when the tracking entry was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'2026-12-31'"
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 100000
+
+      - dbt_utils.expression_is_true:
+          expression: "entry_timestamp <= current_timestamp"
+          severity: warn
+          name: warn_future_tracking_entries
+
+      - dbt_utils.expression_is_true:
+          expression: "created_at <= updated_at"
+          severity: warn
+          name: warn_invalid_timestamp_order
+
+      - dbt_utils.expression_is_true:
+          expression: "not (tracking_type = 'denied' and tracking_note is null)"
+          severity: warn
+          name: warn_missing_denial_note
+
+      - dbt_utils.expression_is_true:
+          expression: "not (tracking_type = 'pending' and tracking_note is null)"
+          severity: warn
+          name: warn_missing_pending_note
+
+      - dbt_expectations.expect_compound_columns_to_be_unique:
+          column_list: [claim_id, claim_tracking_id, tracking_type, entry_timestamp]
+          quote_columns: true
+          ignore_row_if: "any_value_is_missing"
+          severity: warn 

@@ -1,0 +1,110 @@
+version: 2
+
+models:
+  - name: stg_opendental__toothinitial
+    description: >
+      Staging model for tooth initial data from OpenDental. Tracks initial conditions and
+      movements of teeth, including their type, movement patterns, and visual representations.
+      This model supports orthodontic treatment planning and progress tracking.
+    
+    meta:
+      record_count: "Varies based on patient orthodontic records"
+      data_scope: "All tooth initial records from OpenDental system"
+      
+      known_issues:
+        - description: "271 records have empty string values for tooth_num, which is a data quality issue as every tooth initial record should have a valid tooth number"
+          severity: "error"
+          identified_date: "2024-03-20"
+          test: "tooth_num_not_empty"
+        - description: "Multiple tooth numbering systems are in use (standard 1-32, letters A-T, and some non-standard numbers)"
+          severity: "warn"
+          identified_date: "2024-03-20"
+      
+      business_rules:
+        - rule: "Each tooth initial record must be associated with a valid patient"
+          impact: "Ensures data integrity for orthodontic treatment tracking"
+        - rule: "Every tooth initial record must have a valid tooth number (no empty strings allowed)"
+          impact: "Critical for accurate tooth tracking and visualization"
+        - rule: "Tooth numbers must be in one of the accepted formats (standard 1-32, letters A-T, or specific non-standard numbers)"
+          impact: "Ensures consistent tooth identification across the system"
+      
+      usage_notes: >
+        This model is used for tracking initial tooth positions and movements in orthodontic cases.
+        Key considerations:
+        - Tooth numbers may be in different formats:
+          * Standard dental notation (1-32)
+          * Letter notation (A-T)
+          * Some non-standard numbers (51, 57, 58, 66, 67, 70, 71, 77, 78, 79)
+        - Movement patterns are used for treatment planning
+        - Drawing information supports visual representation in dental software
+        - Color codes and segments are used for treatment visualization
+
+    columns:
+      # Primary Key
+      - name: tooth_initial_id
+        description: "Primary key - unique identifier for each tooth initial record (maps to ToothInitialNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Foreign Keys
+      - name: patient_id
+        description: "Foreign key to the patient who the tooth initial applies to (maps to PatNum in OpenDental)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+
+      # Business Attributes
+      - name: tooth_num
+        description: >
+          The specific tooth number being tracked. Must be in one of the following formats:
+          - Standard dental notation (1-32)
+          - Letter notation (A-T)
+          - Non-standard numbers (51, 57, 58, 66, 67, 70, 71, 77, 78, 79)
+          Empty strings are not allowed and indicate a data quality issue.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", 
+                "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32",
+                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+                "51", "57", "58", "66", "67", "70", "71", "77", "78", "79"
+              ]
+          - dbt_utils.not_empty_string:
+              column_name: tooth_num
+
+      - name: initial_type
+        description: "Type of initial condition or movement recorded for the tooth (e.g., rotation, tipping, intrusion)"
+
+      - name: movement
+        description: "Description of the tooth movement pattern or required movement"
+
+      - name: drawing_segment
+        description: "Segment information used for drawing the tooth initial in dental software"
+
+      - name: color_draw
+        description: "Color code used for drawing the tooth initial in dental software"
+
+      - name: draw_text
+        description: "Additional text or notes for the tooth initial drawing"
+
+      # Metadata
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the tooth initial was created in the source system (OpenDental). Maps to SecDateTEntry."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the tooth initial was last updated in the source system (OpenDental). Maps to SecDateTEdit."
+        tests:
+          - not_null

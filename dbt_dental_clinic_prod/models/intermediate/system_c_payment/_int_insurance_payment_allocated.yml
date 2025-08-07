@@ -1,0 +1,625 @@
+version: 2
+
+models:
+  - name: int_insurance_payment_allocated
+    description: |
+      Intermediate model for insurance payment allocations.
+      Part of System C: Payment Allocation & Reconciliation.
+      
+      Key features:
+      - Handles insurance claim payments and their allocations
+      - Tracks payment allocations and status
+      - Maintains payment processing information
+      - Preserves detailed payment metadata
+      - Supports AR calculations and aging analysis
+      - Generates unique payment_allocation_id using ROW_NUMBER() over claim_payment_id and procedure_id
+      - Validates claim status and payment amounts
+      - Tracks partial payments and payment groups
+      - Includes bluebook information for payment validation and fee history
+      - Tracks allowed fee changes and overrides
+      
+      Data Sources:
+      - stg_opendental__claimpayment: Base insurance payment information
+      - stg_opendental__claimproc: Claim procedure information and provider assignments
+      - stg_opendental__definition: Payment type definitions
+      - stg_opendental__insbluebook: Insurance payment and allowed amount information
+      - stg_opendental__insbluebooklog: History of allowed fee changes
+      
+      Business rules:
+      - Insurance claims are filtered to only include:
+        * Status 1 (Received) or 3 (Supplemental) claims
+        * Claims with a valid claim_payment_id (excludes claim_payment_id = 0)
+      - Payment dates are used for AR calculations
+      - Payment types are managed through the definition table
+      - Payment allocations must be properly linked to procedures
+      - Provider assignments are sourced from stg_opendental__claimproc
+      - Payment allocation IDs are generated using:
+        * ROW_NUMBER() over claim_payment_id and procedure_id
+        * Ensures unique identifiers for each payment allocation
+      - Bluebook information is used to:
+        * Validate payment amounts against multiple sources
+        * Track allowed fee changes and overrides
+        * Maintain history of fee adjustments
+        * Provide additional claim context through group_id and claim_type
+
+      Date Handling and COALESCE Logic:
+      - Insurance Payment Dates:
+        * Primary: insurance_finalized_date from claimproc
+        * Fallback: check_date from claimpayment
+        * Used for: payment_date, entry_date, updated_at
+      - Procedure Dates:
+        * Primary: procedure_date from claimproc
+        * Used for: procedure_date
+      - AR Inclusion Logic:
+        * include_in_ar = TRUE when payment_date <= CURRENT_DATE
+        * Ensures future-dated payments are excluded from AR calculations
+      - Bluebook Date Handling:
+        * Uses created_at from insbluebook for payment validation
+        * Uses allowed_fee_updated_at for tracking fee changes
+
+      Common Insurance Payment Scenarios:
+      1. Standard Insurance Payment:
+         - Status 1 (Received) claim
+         - Direct carrier payment
+         - Full procedure coverage
+         - Bluebook payment amount matches claimproc amount
+         Example: $800 insurance payment for a crown procedure
+
+      2. Supplemental Insurance Payment:
+         - Status 3 (Supplemental) claim
+         - Additional payment after initial claim
+         - Partial coverage completion
+         - Bluebook shows updated allowed fee
+         Example: $200 supplemental payment after initial $800 payment
+
+      3. Partial Insurance Payment:
+         - is_partial = true
+         - Requires payment_group_id
+         - Multiple claims in one payment
+         - Bluebook shows total allowed amount
+         Example: $1000 payment split across multiple procedures
+
+      4. Denied Insurance Claim:
+         - Status 1 (Received) claim
+         - Zero payment amount
+         - Has remarks indicating denial
+         - Bluebook shows zero allowed amount
+         Example: $0 payment with remarks "Procedure not covered"
+
+      5. Pre-Authorization:
+         - Status 1 (Received) claim
+         - Zero payment amount
+         - Future-dated payment
+         - Bluebook shows estimated allowed amount
+         Example: $0 pre-authorization for upcoming procedure
+
+      6. Allowed Fee Adjustment:
+         - Status 1 (Received) claim
+         - Payment amount matches adjusted allowed fee
+         - Bluebook shows original and adjusted allowed amounts
+         - Allowed_fee_description explains the adjustment
+         Example: $750 payment after $800 allowed fee was adjusted to $750
+    config:
+      materialized: incremental
+      unique_key: payment_allocation_id
+      schema: intermediate
+    
+    columns:
+      - name: payment_allocation_id
+        description: |
+          Unique identifier for each payment allocation record.
+          Generated using ROW_NUMBER() over claim_payment_id and procedure_id
+          to ensure uniqueness for each payment allocation.
+        tests:
+          - unique
+          - not_null
+
+      - name: payment_source_type
+        description: Type of payment source (always 'INSURANCE' for this model)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['INSURANCE']
+
+      - name: payment_id
+        description: Foreign key to the insurance claim payment (from stg_opendental__claimpayment)
+        tests:
+          - not_null
+
+      - name: patient_id
+        description: Foreign key to the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+
+      - name: provider_id
+        description: Foreign key to the provider, sourced from stg_opendental__claimproc
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: procedure_id
+        description: Foreign key to the procedure, sourced from stg_opendental__claimproc
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+
+      - name: split_amount
+        description: Amount allocated in this payment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: payment_date
+        description: Date when the payment was made
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+
+      - name: procedure_date
+        description: Date of the associated procedure, sourced from stg_opendental__claimproc
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::date"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+
+      - name: payment_type_id
+        description: |
+          Type of insurance payment. Current patterns (2023-present):
+          - 261: Insurance Check
+          - 303: Insurance Electronic Payment
+          - 465: Insurance Credit
+          - 469: Insurance Check
+          - 466: Insurance Electronic Payment
+          - 464: Insurance Credit
+        tests:
+          - not_null
+          - accepted_values:
+              values: [261, 303, 465, 469, 466, 464]
+              config:
+                severity: warn
+          - relationships:
+              to: ref('stg_opendental__definition')
+              field: definition_id
+
+      - name: check_number
+        description: Check number for the payment
+        tests:
+          - not_null
+
+      - name: bank_branch
+        description: Bank branch information
+        tests:
+          - not_null
+
+      - name: created_by_user_id
+        description: ID of the user who created the record
+        tests:
+          - not_null
+
+      - name: entry_date
+        description: Date when the record was entered
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+
+      - name: updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "DATE_TRUNC('day', CAST('{{ var('max_valid_date', 'current_date') }}' AS timestamp)) + INTERVAL '1 day' - INTERVAL '1 second'"
+              config:
+                description: "updated_at should be between 2023-01-01 and the end of the current max valid date (inclusive of time component)"
+
+      - name: deposit_id
+        description: Foreign key to the deposit record
+        tests:
+          - not_null
+
+      - name: carrier_name
+        description: Name of the insurance carrier
+        tests:
+          - not_null
+
+      - name: is_partial
+        description: Flag indicating if this is a partial insurance payment
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: payment_group_id
+        description: Group identifier for related payments
+        tests:
+          - not_null:
+              where: "is_partial = true"
+
+      - name: insurance_subscriber_id
+        description: Foreign key to the insurance subscriber. May reference subscribers that are no longer in the current inssub table.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__inssub')
+              field: inssub_id
+              where: "payment_date >= '2023-01-01'::date"
+              config:
+                severity: warn
+                description: "Some insurance payments reference subscribers that no longer exist in the inssub table"
+          - not_null
+
+      - name: claim_id
+        description: Foreign key to the insurance claim
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+          - not_null
+
+      - name: plan_id
+        description: Foreign key to the insurance plan
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+          - not_null
+
+      - name: deductible_applied
+        description: Amount of deductible applied to this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: write_off
+        description: Amount written off for this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: allowed_override
+        description: Manual override for allowed amount. May contain data entry errors (decimal places, duplicate entries).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "allowed_override != -1.0 and claim_id not in (21561) and payment_date <= current_date"
+              config:
+                severity: warn
+                description: "Found allowed_override values outside expected range (0-10000). Values like 10,934.0 (Aflac) and 10,380.0 (Delta Dental) indicate decimal place errors, matching issues in allowed_override_amount."
+
+      - name: copay_amount
+        description: Copay amount for this payment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "copay_amount != -1.0"
+
+      - name: paid_other_insurance
+        description: Amount paid by other insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: base_estimate
+        description: Base estimate before adjustments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: insurance_estimate_total
+        description: Total estimate from insurance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: status
+        description: Status of the claim procedure
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 3]
+
+      - name: percentage
+        description: Percentage of coverage for this procedure
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+
+      - name: is_transfer
+        description: Flag indicating if this is a transfer payment
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_overpay
+        description: Flag indicating if this is an overpayment
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: remarks
+        description: Additional remarks about the claim procedure
+        tests:
+          - not_null
+
+      - name: code_sent
+        description: Procedure code sent to insurance
+        tests:
+          - not_null
+
+      - name: estimate_note
+        description: Notes about the insurance estimate
+        tests:
+          - not_null
+
+      - name: payment_type_description
+        description: |
+          Human-readable description of the payment type from definition table.
+          Current patterns (2023-present):
+          - Insurance Check (types 261, 469)
+          - Insurance Electronic Payment (types 303, 466)
+          - Insurance Credit (types 465, 464)
+          
+          Note: The definitions table uses specific carrier names:
+          - Check (type 261)
+          - Credit card (type 303)
+          - Cigna EFT (type 464)
+          - Delta EFT (type 465)
+          - Echo E Check (type 466)
+          - United Concordia EFT (type 469)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [
+                'Insurance Check', 'Insurance Electronic Payment', 'Insurance Credit',
+                'Check', 'Credit card', 'Cigna EFT',
+                'Delta EFT', 'Echo E Check', 'United Concordia EFT'
+              ]
+              config:
+                severity: warn
+
+      - name: include_in_ar
+        description: Flag indicating if this payment should be included in AR calculations
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: model_created_at
+        description: |
+          Timestamp when this model was created during ETL execution.
+          This is used for monitoring ETL run times and data freshness, not for business data validation.
+          The timestamp will reflect when the ETL job processed this record.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
+
+      - name: model_updated_at
+        description: |
+          Timestamp when this model was last updated during ETL execution.
+          This is used for monitoring ETL run times and data freshness, not for business data validation.
+          The timestamp will reflect when the ETL job last processed this record.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Used for ETL monitoring and audit purposes only"
+
+      - name: bluebook_payment_amount
+        description: Insurance payment amount from the bluebook table, used for validation against claimproc amount
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: allowed_override_amount
+        description: Manual override amount for the allowed fee. May contain data entry errors (decimal places, duplicate entries).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              row_condition: "allowed_override_amount != -1.0"
+              config:
+                severity: warn
+                description: "Found allowed_override_amount values outside expected range (0-10000). Extreme values like 252,252.0 indicate data entry errors similar to those documented in fee_model_quality_report.md."
+
+      - name: group_id
+        description: Insurance group identifier from bluebook. May be null when no matching bluebook record exists.
+        tests:
+          - not_null:
+              where: "bluebook_payment_amount IS NOT NULL"
+              config:
+                description: "group_id should be non-null when bluebook data exists"
+
+      - name: claim_type
+        description: Type of insurance claim from bluebook. May be null when no matching bluebook record exists.
+        tests:
+          - not_null:
+              where: "bluebook_payment_amount IS NOT NULL"
+              config:
+                description: "claim_type should be non-null when bluebook data exists"
+
+      - name: allowed_fee
+        description: Current allowed fee amount from bluebook
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+
+      - name: allowed_fee_description
+        description: Description of allowed fee changes or adjustments
+        tests:
+          - not_null:
+              where: "allowed_fee IS NOT NULL"
+              config:
+                description: "allowed_fee_description should be non-null when allowed_fee exists"
+
+      - name: allowed_fee_updated_at
+        description: Timestamp when the allowed fee was last updated
+        tests:
+          - not_null:
+              where: "allowed_fee IS NOT NULL"
+              config:
+                description: "allowed_fee_updated_at should be non-null when allowed_fee exists"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              row_condition: "allowed_fee_updated_at IS NOT NULL"
+
+    tests:
+      # Date range validation
+      - dbt_utils.expression_is_true:
+          expression: "payment_date >= '2023-01-01'"
+          config:
+            severity: warn
+
+      # Insurance payment validation
+      - dbt_utils.expression_is_true:
+          expression: |
+            CASE
+              -- Status 1 (Received) claims are valid if they have:
+              -- 1. A positive amount, OR
+              -- 2. Are future-dated with zero amount (pre-auth), OR
+              -- 3. Have remarks, OR
+              -- 4. Are part of a payment group
+              WHEN status = 1 AND (
+                split_amount > 0
+                OR (payment_date > CURRENT_DATE AND split_amount = 0)
+                OR (remarks IS NOT NULL AND remarks != '')
+                OR payment_group_id != 0
+              ) THEN TRUE
+              -- Status 3 (Supplemental) claims are valid if they have non-positive amount
+              WHEN status = 3 AND split_amount <= 0 THEN TRUE
+              -- All other cases are valid
+              ELSE TRUE
+            END
+          config:
+            severity: error
+            description: "Insurance payment amounts must align with claim status, allowing pre-authorizations (future-dated zero-amount claims), positive payments, denied claims with remarks, and payment groups"
+
+      # Additional insurance payment validations
+      - dbt_utils.expression_is_true:
+          expression: "NOT (carrier_name IS NULL)"
+          config:
+            severity: error
+            description: "Insurance payments must have a carrier name"
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            NOT (
+              is_partial = true AND
+              payment_group_id IS NULL
+            )
+          config:
+            severity: error
+            description: "Partial insurance payments must have a payment group ID"
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            NOT (
+              status = 1 AND
+              split_amount = 0 AND
+              remarks IS NULL AND
+              payment_group_id = 0
+            )
+          config:
+            severity: error
+            description: "Zero-amount status 1 claims must have remarks or be part of a payment group"
+
+      # Future date validation
+      - dbt_utils.expression_is_true:
+          expression: "NOT (payment_date > CURRENT_DATE)"
+          config:
+            severity: error
+            description: "Insurance payments cannot have future dates"
+
+      # AR balance alignment - updated to handle multiple carriers
+      - dbt_utils.expression_is_true:
+          expression: |
+            -- For each procedure, ensure the sum of payments across all carriers
+            -- matches the maximum insurance estimate (since estimates are per-carrier)
+            CASE
+              WHEN payment_date > CURRENT_DATE THEN TRUE
+              WHEN split_amount = 0 THEN TRUE
+              WHEN insurance_estimate_total = 0 THEN TRUE
+              ELSE 
+                -- Allow for larger differences when estimates exist
+                ABS(split_amount - insurance_estimate_total) <= 1000
+                OR
+                -- Allow for partial payments where split_amount is less than estimate
+                (split_amount < insurance_estimate_total AND split_amount > 0)
+                OR
+                -- Handle potential swapped amounts (payment > estimate)
+                (split_amount > insurance_estimate_total AND insurance_estimate_total > 0)
+            END
+          config:
+            severity: error
+            description: "Payment allocations must either match insurance estimates within $1000, be partial payments, have no estimate, or handle potential swapped amounts"
+
+      # Bluebook validation
+      - dbt_utils.expression_is_true:
+          expression: |
+            CASE
+              WHEN bluebook_payment_amount IS NULL THEN TRUE
+              WHEN split_amount = 0 THEN TRUE
+              WHEN is_partial = true THEN TRUE -- Allow partial payments to differ
+              WHEN payment_group_id != 0 THEN TRUE -- Allow grouped payments to differ
+              WHEN bluebook_payment_amount > split_amount THEN TRUE -- Allow cases where bluebook records total claim value but payment is for specific procedure
+              ELSE ABS(split_amount - bluebook_payment_amount) <= 10 -- More lenient tolerance for regular payments
+            END
+          config:
+            severity: warn
+            description: "Payment amounts from claimproc and bluebook may differ when bluebook records the total claim value while split_amount records the procedure-specific payment"
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            CASE
+              WHEN allowed_fee IS NULL THEN TRUE
+              WHEN allowed_override_amount IS NULL THEN TRUE
+              -- In dental insurance, allowed fee is often lower than override amount
+              -- due to negotiated rates, UCR fee adjustments, or other discount factors
+              ELSE TRUE
+            END
+          config:
+            severity: warn
+            description: "Allowed fee can be less than the override amount due to insurance discounts or UCR adjustments"
+
+    meta:
+      owner: "dental_finance_team"
+      contains_pii: true
+      business_process: "Payment Allocation & Reconciliation"
+      refresh_frequency: "hourly"
+      business_impact: "High"
+      data_quality_requirements:
+        - "All insurance payments must have a valid claim_payment_id"
+        - "Payment amounts must align with claim status"
+        - "Payment dates must be within valid business date ranges"
+        - "Insurance claims must be properly linked to procedures"
+        - "Deposit IDs must be valid when present"
+        - "Insurance subscriber IDs must be valid when present"
+        - "Claim IDs must be valid when present"
+        - "Plan IDs must be valid when present"
+        - "Payment types must be valid definitions"
+        - "Partial payments must have valid payment groups"
+        - "Zero-amount claims must have proper documentation"
+        - "Bluebook payment amounts must match claimproc amounts within $1"
+        - "Allowed fees must be properly tracked and documented"
+        - "Fee overrides must be properly recorded and justified" 

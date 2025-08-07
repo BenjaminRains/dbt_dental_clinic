@@ -1,0 +1,334 @@
+version: 2
+
+models:
+  - name: int_ar_shared_calculations
+    description: >
+      Central calculation hub for AR analysis that provides common calculations
+      used across the AR analysis system. This model standardizes aging buckets,
+      payment processing, and adjustment calculations to ensure consistency
+      across all AR-related models.
+      
+      Key features:
+      - Standardizes aging bucket calculations (0-30, 31-60, 61-90, 90+ days)
+      - Provides base payment calculations for both insurance and patient payments
+      - Handles adjustment calculations and categorization
+      - Creates a unified transaction history
+      - Serves as a reference for other AR models
+      - Includes procedure_id = 0 records which represent financial transactions
+        rather than actual procedures
+      
+      Data Sources:
+      - int_patient_payment_allocated: Patient payment details
+      - int_insurance_payment_allocated: Insurance payment details
+      - int_adjustments: Adjustment details
+      - int_procedure_complete: Procedure information
+      
+      Business rules:
+      - Only includes payments and adjustments marked for AR inclusion
+      - Calculates aging based on transaction date
+      - Standardizes aging buckets across all models
+      - Combines all transaction types (procedures, payments, adjustments)
+      - Maintains consistent payment and adjustment categorization
+      - procedure_id = 0 records are treated as general account adjustments
+        - These records have no procedure-related information
+        - They represent financial transactions and account adjustments
+        - They are included in aging calculations and AR analysis
+      - Patient balances older than 18 months are considered unenforceable and should be written off
+      - Insurance balances are pursued regardless of age
+      - Historical data beyond 18 months is retained for analysis but marked as warnings for patient balances
+      
+    config:
+      materialized: table
+      schema: intermediate
+    
+    columns:
+      - name: patient_id
+        description: Unique identifier for the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+
+      - name: procedure_id
+        description: >
+          Foreign key to procedure. Note: procedure_id = 0 represents financial
+          transactions rather than actual procedures.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              config:
+                severity: error
+                description: "procedure_id must be non-negative"
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+              where: "procedure_id > 0"
+              config:
+                severity: warn
+
+      - name: transaction_date
+        description: >
+          Date of the transaction (procedure, payment, or adjustment).
+          Note: For patient balances, transactions older than 18 months are considered
+          unenforceable and should be written off. Insurance balances are pursued
+          regardless of age.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: transaction_date
+              where: "is_patient_payment = true OR (is_insurance_payment = false AND is_patient_payment = false AND procedure_id > 0)"
+              config:
+                severity: warn
+                description: >
+                  Transaction date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
+
+      - name: amount
+        description: Transaction amount (positive for procedures, negative for payments)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+
+      - name: aging_bucket
+        description: Aging category (0-30, 31-60, 61-90, 90+ days)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0-30', '31-60', '61-90', '90+']
+
+      - name: days_outstanding
+        description: Number of days the transaction has been outstanding
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: payment_date
+        description: >
+          Date of payment (if applicable). Note: For patient payments, dates older than 18 months
+          are considered historical and should be reviewed for potential write-offs.
+          Insurance payments are pursued regardless of age.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: payment_date
+              where: "is_patient_payment = true"
+              config:
+                severity: warn
+                description: >
+                  Payment date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
+
+      - name: payment_amount
+        description: Amount of payment (if applicable)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -60000
+              max_value: 60000
+              config:
+                severity: error
+                description: "Payment amount must be between -60,000 and 60,000"
+
+      - name: payment_type
+        description: >
+          Type of payment:
+          - CHECK: Check payments (including insurance checks)
+          - CREDIT_CARD: Credit card payments (including insurance credit)
+          - ELECTRONIC: Electronic payments (including insurance electronic)
+          - CASH: Cash payments
+          - STANDARD: Standard/regular payments
+          - ADMINISTRATIVE: Administrative payments
+          - REFUND: Refund payments
+          - OTHER: Any other payment types
+        tests:
+          - accepted_values:
+              values: ['CHECK', 'CREDIT_CARD', 'ELECTRONIC', 'CASH', 'STANDARD', 'ADMINISTRATIVE', 'REFUND', 'OTHER']
+
+      - name: payment_source
+        description: >
+          Source of payment. Note: This field is currently not being used in the source system
+          (always 0). Test is monitoring for any future changes where this field might be used.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "::smallint = 0"
+              config:
+                severity: warn
+                description: > 
+                  Payment source should be 0. If this test fails, 
+                  it indicates the field is now being used in the source system.
+
+      - name: payment_status
+        description: Status of the payment
+        tests:
+          - accepted_values:
+              values: ['COMPLETED', 'PENDING']
+
+      - name: is_insurance_payment
+        description: Flag indicating if payment is from insurance
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_patient_payment
+        description: Flag indicating if payment is from patient
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: adjustment_date
+        description: >
+          Date of adjustment (if applicable). Note: For patient-related adjustments,
+          dates older than 18 months are considered historical and should be reviewed
+          for potential write-offs. Insurance adjustments are pursued regardless of age.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: adjustment_date
+              where: "adjustment_type IN ('DISCOUNT', 'CREDIT', 'ADMIN_CORRECTION', 'ADMIN_ADJUSTMENT', 'REALLOCATION', 'OTHER')"
+              config:
+                severity: warn
+                description: >
+                  Adjustment date is older than 18 months for patient-related adjustments.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
+
+      - name: adjustment_amount
+        description: Amount of adjustment (if applicable)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -50000
+              max_value: 50000
+              config:
+                severity: error
+                description: "Adjustment amount must be between -50,000 and 50,000"
+
+      - name: adjustment_type
+        description: >
+          High-level categorization of adjustments for AR analysis.
+          This is a simplified view used specifically for AR reporting:
+          - WRITEOFF: Insurance or provider write-offs
+          - DISCOUNT: Any type of discount (provider, senior, employee, etc.)
+          - CREDIT: Credits applied to the account
+          - ADMIN_CORRECTION: Administrative corrections
+          - ADMIN_ADJUSTMENT: Administrative adjustments
+          - REALLOCATION: Reallocation adjustments
+          - UNEARNED_INCOME: Unearned income adjustments
+          - OTHER: All other adjustment types
+        tests:
+          - accepted_values:
+              values: ['WRITEOFF', 'DISCOUNT', 'CREDIT', 'ADMIN_CORRECTION', 'ADMIN_ADJUSTMENT',
+               'REALLOCATION', 'UNEARNED_INCOME', 'OTHER']
+
+      - name: adjustment_category
+        description: >
+          Detailed categorization of adjustments from the source system.
+          This preserves the original categorization from OpenDental with our standardized values:
+          - insurance_writeoff: Insurance-related write-offs
+          - provider_discount: Discounts authorized by providers
+          - senior_discount: Senior citizen discounts
+          - employee_discount: Employee-specific discounts
+          - cash_discount: Discounts for cash payments
+          - patient_refund: Refunds to patients
+          - referral_credit: Credits for referrals
+          - new_patient_discount: Discounts for new patients
+          - admin_correction: Administrative corrections
+          - admin_adjustment: Administrative adjustments
+          - unearned_income: Income not yet earned
+          - other: All other adjustment types
+        tests:
+          - accepted_values:
+              values: ['insurance_writeoff', 'provider_discount', 'senior_discount', 'reallocation',
+               'employee_discount', 'cash_discount', 'patient_refund', 'referral_credit', 
+               'new_patient_discount', 'admin_correction', 'admin_adjustment', 
+               'unearned_income', 'other']
+
+      - name: is_procedure_adjustment
+        description: >
+          Flag indicating if the adjustment is tied to a specific procedure.
+          True when the adjustment is procedure-specific, false for general account adjustments.
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_retroactive_adjustment
+        description: >
+          Flag indicating if the adjustment was applied after the original procedure date.
+          True when adjustment_date > procedure_date, false otherwise.
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+    tests:
+      # Transaction validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (payment_date IS NOT NULL AND adjustment_date IS NULL) OR
+            (payment_date IS NULL AND adjustment_date IS NOT NULL) OR
+            (payment_date IS NULL AND adjustment_date IS NULL)
+          config:
+            severity: error
+            description: "Transaction must be either a payment or an adjustment, not both"
+
+      # Payment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (payment_date IS NOT NULL AND payment_amount IS NOT NULL) OR
+            (payment_date IS NULL AND payment_amount IS NULL)
+          config:
+            severity: error
+            description: "Payment date and amount must both be present or both be null"
+
+      # Adjustment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (adjustment_date IS NOT NULL AND adjustment_amount IS NOT NULL) OR
+            (adjustment_date IS NULL AND adjustment_amount IS NULL)
+          config:
+            severity: error
+            description: "Adjustment date and amount must both be present or both be null"
+
+      # Aging validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (aging_bucket = '0-30' AND days_outstanding <= 30) OR
+            (aging_bucket = '31-60' AND days_outstanding > 30 AND days_outstanding <= 60) OR
+            (aging_bucket = '61-90' AND days_outstanding > 60 AND days_outstanding <= 90) OR
+            (aging_bucket = '90+' AND days_outstanding > 90)
+          config:
+            severity: error
+            description: "Aging bucket must match days outstanding"
+
+      # Payment source validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (is_insurance_payment = true AND is_patient_payment = false) OR
+            (is_insurance_payment = false AND is_patient_payment = true) OR
+            (is_insurance_payment = false AND is_patient_payment = false)
+          config:
+            severity: error
+            description: "Payment must be either from insurance or patient, not both"
+
+    meta:
+      business_owners: ["dental_finance_team", "insurance_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "Transactions must be properly categorized as payments or adjustments"
+        - "Payment amounts must be positive when payment date exists"
+        - "Adjustment amounts must be positive when adjustment date exists"
+        - "Aging buckets must correctly reflect days outstanding"
+        - "Payment source must be clearly identified (insurance or patient)"
+        - "All calculations must be consistent across AR models"
+        - "Transaction dates must be in chronological order"
+        - "Amounts must be properly signed (positive for procedures, negative for payments)"
+        - "Patient balances older than 18 months must be flagged for review"

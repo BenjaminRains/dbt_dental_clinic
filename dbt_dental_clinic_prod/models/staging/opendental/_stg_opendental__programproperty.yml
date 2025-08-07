@@ -1,0 +1,126 @@
+version: 2
+
+models:
+  - name: stg_opendental__programproperty
+    description: >
+      Staging model for program properties from OpenDental. Contains configuration and property settings 
+      for various programs (third-party integrations, features, modules) with associated clinic and 
+      security information.
+      
+      This table stores key-value pairs that configure how different programs and features behave within 
+      OpenDental. Each property can be clinic-specific or global, and may have security restrictions. 
+      Common use cases include API credentials, feature toggles, integration settings, and system 
+      configuration parameters.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~500-1000 properties"
+      data_scope: "All program configuration properties across all clinics"
+      
+      known_issues:
+        - description: "Property values may contain sensitive information (credentials, API keys) that should be handled with care in analytics"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "none - business awareness item"
+        - description: "All current properties are global (clinic_id is NULL for all 344 records), no clinic-specific configurations exist"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "none - expected behavior"
+        - description: "Source table doesn't track creation/update timestamps, so _created_at and _updated_at are NULL"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "none - source limitation"
+        - description: "17 records have empty property_desc (Program ID 137 - Practice by Numbers app paths), property_value is self-descriptive"
+          severity: "warn"
+          identified_date: "2025-01-01"
+          test: "none - valid business pattern"
+      
+      business_rules:
+        - rule: "Properties marked as high security should only be accessed by authorized personnel"
+          impact: "Security compliance and data protection"
+        - rule: "Masked properties have their values hidden in the OpenDental interface for security"
+          impact: "Sensitive data protection in user interfaces"
+        - rule: "Clinic-specific properties override global properties for that clinic"
+          impact: "Configuration hierarchy affects system behavior"
+      
+      usage_notes: >
+        This model is primarily used for understanding system configuration and feature enablement 
+        across clinics. When analyzing program configurations, consider that properties may be 
+        clinic-specific or global. Use caution when handling property values as they may contain 
+        sensitive information like API credentials or security settings.
+    
+        # Note: Model-level tests removed as row count validation is better handled 
+        # at the source level or through business logic tests
+    
+    columns:
+      - name: program_property_id
+        description: "Primary key - Unique identifier for each program property configuration record (maps to ProgramPropertyNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      - name: program_id
+        description: "Foreign key to the program record - Links this property to its parent program/feature (maps to ProgramNum in OpenDental)"
+        tests:
+          - not_null
+          - positive_values
+          - relationships:
+              to: ref('stg_opendental__program')
+              field: program_id
+              severity: error
+
+      - name: clinic_id
+        description: "Foreign key to the clinic record - Specifies which clinic this property applies to. NULL indicates global properties that apply to all clinics"
+        # Note: All current records have NULL clinic_id (global properties)
+        # Relationship test would be conditional if clinic-specific properties exist
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       severity: warn
+        #       where: "clinic_id IS NOT NULL"
+
+      - name: property_desc
+        description: >
+          Description/name of the program property - Human-readable identifier for the configuration setting 
+          (e.g., 'API_URL', 'EnableFeatureX', 'Timeout_Seconds'). May be empty for some computer-specific 
+          configurations where the property_value is self-descriptive (like file paths).
+        tests:
+          - not_null
+          # Note: Some valid records have empty property_desc (e.g., computer-specific app paths)
+          # so not_empty_string test is not appropriate for this column
+
+      - name: property_value
+        description: >
+          Value associated with the program property - The actual configuration value which may be:
+          URLs, API keys, boolean flags (0/1), numeric values, file paths, or other configuration data.
+          May be null when using system defaults.
+
+      - name: computer_name
+        description: >
+          Name of the computer where the property is set - Identifies the specific workstation or server 
+          where this property configuration applies. May be null for global/system-wide properties.
+
+      - name: is_masked
+        description: "Boolean flag indicating if the property value is masked for security purposes in the OpenDental interface (0=Not Masked, 1=Masked converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: is_high_security
+        description: "Boolean flag indicating if the property requires high security access permissions to view or modify (0=Normal Security, 1=High Security converted to boolean)"
+        tests:
+          - not_null
+          - boolean_values
+
+      - name: _loaded_at
+        description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). NULL for this table as the source programproperty table doesn't track creation timestamps."
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). NULL for this table as the source programproperty table doesn't track update timestamps."

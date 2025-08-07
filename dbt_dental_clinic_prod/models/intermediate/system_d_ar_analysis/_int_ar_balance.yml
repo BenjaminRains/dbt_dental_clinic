@@ -1,0 +1,480 @@
+version: 2
+
+models:
+  - name: int_ar_balance
+    description: >
+      Procedure-level Accounts Receivable balance model that tracks detailed financial
+      information for each dental procedure. This model serves as the foundation for
+      AR analysis, providing granular visibility into procedure balances, insurance
+      claims, and patient responsibility.
+      
+      Key features:
+      - Tracks procedure-level AR balances
+      - Uses shared calculations for aging and payments
+      - Monitors insurance vs patient responsibility
+      - Supports detailed AR reporting and analysis
+      - Maintains procedure-level aging information
+      - Includes insurance carrier information
+      
+      Data Sources:
+      - int_procedure_complete: Base procedure information
+      - stg_opendental__claimproc: Insurance claim procedure details
+      - stg_opendental__claim: Insurance claim information
+      - stg_opendental__carrier: Insurance carrier details
+      - int_ar_shared_calculations: Common payment and adjustment calculations
+      
+      Business rules:
+      - Only includes procedures with positive balances or include_in_ar = TRUE
+      - Calculates aging based on procedure date
+      - Determines responsible party (insurance vs patient)
+      - Tracks insurance estimates and pending amounts
+      - Maintains detailed payment and adjustment history
+      - Links insurance claims to their respective carriers
+      - Patient balances older than 18 months are considered unenforceable and should be written off
+      - Insurance balances are pursued regardless of age
+      - Historical data beyond 18 months is retained for analysis but marked as warnings for patient balances
+      
+    config:
+      materialized: incremental
+      unique_key: ar_balance_id
+      schema: intermediate
+    
+    columns:
+      - name: ar_balance_id
+        description: >
+          Primary key - Unique identifier for the AR balance record. This is a
+          surrogate key generated using ROW_NUMBER().
+        tests:
+          - unique
+          - not_null
+
+      - name: procedure_id
+        description: Unique identifier for the dental procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+              config:
+                severity: error
+
+      - name: patient_id
+        description: Unique identifier for the patient
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+
+      - name: provider_id
+        description: Unique identifier for the provider who performed the procedure
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                severity: error
+
+      - name: procedure_date
+        description: >
+          Date when the procedure was performed.
+          Note: For patient balances, procedures older than 18 months are considered
+          unenforceable and should be written off. Insurance balances are pursued
+          regardless of age.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: procedure_date
+              where: "responsible_party = 'PATIENT'"
+              config:
+                severity: warn
+                description: >
+                  Procedure date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
+
+      - name: procedure_code
+        description: Code identifying the type of procedure performed
+        tests:
+          - not_null
+
+      - name: procedure_description
+        description: Human-readable description of the procedure
+        tests:
+          - not_null
+
+      - name: procedure_fee
+        description: Original fee for the procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: insurance_payment_amount
+        description: Total amount paid by insurance for this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: patient_payment_amount
+        description: Total amount paid by patient for this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: total_payment_amount
+        description: Total amount paid for this procedure (insurance + patient)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: total_adjustment_amount
+        description: >
+          Total amount of adjustments applied to this procedure.
+          Note: Negative values are valid and expected due to:
+          - Major insurance write-offs
+          - Special patient discounts
+          - Multiple procedure packages
+          - Insurance overpayments
+          - Special pricing arrangements
+          
+          Business Rules:
+          - Negative values are valid and expected
+          - Values typically range from -$15,000 to $100,000
+          - Most negative values represent legitimate business adjustments
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -15000
+              max_value: 100000
+              config:
+                severity: error
+                description: >
+                  Total adjustment amount must be between -$15,000 and $100,000.
+                  Negative values are valid and represent legitimate business adjustments
+                  such as insurance write-offs, discounts, and special pricing arrangements.
+
+      - name: current_balance
+        description: >
+          Current outstanding balance for this procedure.
+          Note: Negative values are valid and expected due to standard copay adjustments,
+          insurance write-offs, and patient discounts in the dental practice management system.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -2000
+              max_value: 100000
+              config:
+                severity: error
+                description: >
+                  Current balance must be between -$2,000 and $100,000.
+                  Negative values are valid and represent standard adjustments,
+                  copays, and write-offs in the dental practice management system.
+
+      - name: insurance_estimate
+        description: Original insurance estimate for this procedure
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: insurance_pending_amount
+        description: Amount still pending from insurance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+
+      - name: patient_responsibility
+        description: >
+          Amount owed by patient. This value can be negative due to:
+          - Insurance overpayments
+          - Special patient discounts
+          - Write-offs
+          - Multiple procedure adjustments
+          - Standard copay adjustments
+          
+          Business Rules:
+          - Negative values are valid and expected
+          - Values typically range from -$5,000 to $100,000
+          - Most negative values represent legitimate business adjustments
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -5000
+              max_value: 100000
+              config:
+                severity: error
+                description: >
+                  Patient responsibility must be between -$5,000 and $100,000.
+                  Negative values are valid and represent legitimate business adjustments
+                  such as insurance overpayments, discounts, and write-offs.
+
+      - name: days_outstanding
+        description: Number of days the balance has been outstanding
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+
+      - name: aging_bucket
+        description: Aging category (0-30, 31-60, 61-90, 90+ days)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['0-30', '31-60', '61-90', '90+']
+
+      - name: claim_id
+        description: Unique identifier for the insurance claim
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              config:
+                severity: error
+
+      - name: claim_status
+        description: Current status of the insurance claim
+        tests:
+          - accepted_values:
+              values: ['P', 'R', 'D', 'S', 'C', 'H', 'W']
+              config:
+                severity: error
+                description: >
+                  Claim status must be one of:
+                  - P (Pending)
+                  - R (Received)
+                  - D (Denied)
+                  - S (Sent - Verified)
+                  - C (Closed)
+                  - H (Hold until Pri received)
+                  - W (Waiting to Send)
+
+      - name: claim_status_description
+        description: Human-readable description of the claim's status
+        tests:
+          - not_null
+
+      - name: claim_date
+        description: >
+          Date when the claim was submitted. Insurance claims are pursued regardless of age.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: received_date
+        description: >
+          Date when the claim was received by insurance. Insurance claims are pursued regardless of age.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: carrier_name
+        description: Name of the insurance carrier associated with the claim
+        tests:
+          - relationships:
+              to: ref('stg_opendental__carrier')
+              field: carrier_name
+              config:
+                severity: error
+
+      - name: last_insurance_payment_date
+        description: >
+          Date of most recent insurance payment. Insurance claims are pursued regardless of age.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+
+      - name: last_patient_payment_date
+        description: >
+          Date of most recent patient payment. Note: Patient payments older than 18 months
+          are considered historical and should be reviewed for potential write-offs.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: last_patient_payment_date
+              config:
+                severity: warn
+                description: >
+                  Last patient payment date is older than 18 months. These balances are considered
+                  unenforceable and should be written off. Please review these accounts
+                  for potential write-off actions.
+
+      - name: last_payment_date
+        description: >
+          Date of most recent payment from any source. NULL indicates no payments exist.
+          For procedures with no payments, aging is calculated from the procedure date.
+          Note: For patient responsibility, payments older than 18 months are considered
+          historical and should be reviewed for potential write-offs. Insurance claims
+          are pursued regardless of age.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= CURRENT_DATE - INTERVAL '18 months'"
+              column_name: last_payment_date
+              where: "responsible_party = 'PATIENT'"
+              config:
+                severity: warn
+                description: >
+                  Last payment date is older than 18 months for patient responsibility.
+                  These balances are considered unenforceable and should be written off.
+                  Please review these accounts for potential write-off actions.
+
+      - name: responsible_party
+        description: Party responsible for the balance (INSURANCE or PATIENT)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['INSURANCE', 'PATIENT']
+
+      - name: include_in_ar
+        description: Flag indicating whether to include this procedure in AR calculations
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: model_created_at
+        description: Timestamp when the record was created in this model
+        tests:
+          - not_null
+
+      - name: model_updated_at
+        description: Timestamp when the record was last updated in this model
+        tests:
+          - not_null
+
+    tests:
+      # Balance validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            current_balance = procedure_fee - insurance_payment_amount - 
+            patient_payment_amount - total_adjustment_amount
+          config:
+            severity: error
+            description: "Current balance must equal procedure fee minus payments and adjustments"
+
+      # Insurance validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            insurance_pending_amount >= 0 AND insurance_estimate >= 0
+          config:
+            severity: error
+            description: "Insurance amounts must be non-negative"
+
+      # Payment validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            insurance_payment_amount >= 0 AND patient_payment_amount >= 0 AND
+            total_payment_amount = insurance_payment_amount + patient_payment_amount
+          config:
+            severity: error
+            description: "Payment amounts must be non-negative and sum correctly"
+
+      # Adjustment validation
+      - dbt_utils.expression_is_true:
+          expression: "total_adjustment_amount >= -15000"
+          config:
+            severity: error
+            description: >
+              Adjustment amount must be greater than or equal to -$15,000.
+              Negative values are valid and represent legitimate business adjustments
+              such as insurance write-offs, discounts, and special pricing arrangements.
+
+      # Date validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (
+              -- Skip validation if no payment exists
+              last_payment_date IS NULL OR
+              -- Special handling for pre-authorization claims
+              (claim_status = 'S' AND claim_id IS NOT NULL) OR
+              -- Allow payments up to 6 months before procedure for non-pre-auth claims
+              (procedure_date IS NOT NULL AND last_payment_date >= procedure_date - INTERVAL '6 months')
+            ) AND (
+              -- Skip validation if either claim date is NULL
+              claim_date IS NULL OR received_date IS NULL OR
+              -- Skip validation for pre-authorization claims
+              (claim_status = 'S' AND claim_id IS NOT NULL) OR
+              -- Allow same-day claims and received dates
+              (claim_date IS NOT NULL AND received_date IS NOT NULL AND claim_date <= received_date)
+            )
+          config:
+            severity: error
+            description: >
+              Dates must follow business rules:
+              - For pre-authorization claims (status S):
+                * Future procedure dates are allowed
+                * Payments before procedure date are allowed
+                * Claim/received dates may be NULL
+              - For regular claims:
+                * Payment date must be within 6 months before procedure date
+                * Claim date must be on or before received date
+              Note: NULL dates are excluded from validation where appropriate
+
+      # Responsible party validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (responsible_party = 'INSURANCE' AND claim_id IS NOT NULL AND claim_status IN ('P', 'R', 'S')) OR
+            (responsible_party = 'PATIENT' AND (claim_id IS NULL OR claim_status NOT IN ('P', 'R', 'S')))
+          config:
+            severity: error
+            description: "Responsible party must match claim presence and status"
+
+      # Aging validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (aging_bucket = '0-30' AND days_outstanding <= 30) OR
+            (aging_bucket = '31-60' AND days_outstanding > 30 AND days_outstanding <= 60) OR
+            (aging_bucket = '61-90' AND days_outstanding > 60 AND days_outstanding <= 90) OR
+            (aging_bucket = '90+' AND days_outstanding > 90)
+          config:
+            severity: error
+            description: "Aging bucket must match days outstanding"
+
+      # Carrier validation
+      - dbt_utils.expression_is_true:
+          expression: >
+            (claim_id IS NOT NULL AND carrier_name IS NOT NULL) OR
+            (claim_id IS NULL AND carrier_name IS NULL)
+          config:
+            severity: warn
+            description: >
+              Carrier name must be present when claim exists.
+              Note: This is a known data quality issue where some valid claims
+              have plan numbers that don't map to carrier records in the system.
+              See stakeholders/insurance_carrier_mapping_issue.md for details.
+
+    meta:
+      business_owners: ["dental_finance_team", "insurance_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "Current balance must equal procedure fee minus payments and adjustments"
+        - "Insurance amounts must be non-negative"
+        - "Payment amounts must be non-negative and sum correctly"
+        - "Adjustment amount must be non-negative"
+        - "Dates must be in chronological order"
+        - "Responsible party must match claim presence and status"
+        - "Aging buckets must be correctly calculated based on procedure date"
+        - "Include in AR flag must be set correctly based on business rules"
+        - "All financial metrics must be properly calculated at the procedure level"
+        - "Insurance carrier information must be correctly linked to claims"
+        - "Patient balances older than 18 months must be flagged for review" 

@@ -1,0 +1,148 @@
+version: 2
+
+models:
+  - name: stg_opendental__userodapptview
+    description: >
+      Staging model for user appointment view preferences in OpenDental. Contains information about
+      how users prefer to view their appointment schedules, including view type and clinic assignments.
+      
+      This model serves as a junction table that maps users to their preferred appointment view settings
+      for different clinics. It enables personalized scheduling interfaces while maintaining system-wide
+      consistency in appointment management.
+    
+    meta:
+      record_count: "Varies based on number of users and their view preferences"
+      data_scope: "All active and historical user appointment view preferences"
+      
+      known_issues:
+        - description: "Source system lacks creation and update timestamps, resulting in NULL _created_at and _updated_at values"
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "Unable to track when view preferences were created or modified"
+        - description: >
+            Some records have invalid user_id references. Common reasons:
+            - Historical users that have been deleted
+            - System users with special view assignments
+            - Users created before view tracking was properly implemented
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect historical analysis of user preferences"
+        # - description: >
+        #     Some records have invalid clinic_id references. Common reasons:
+        #     - Historical clinics that have been closed
+        #     - System-wide view preferences (clinic_id = 0)
+        #     - Clinics created before view tracking was properly implemented
+        #   severity: "warn"
+        #   identified_date: "2024-03-20"
+        #   business_impact: "May affect historical analysis of clinic-specific preferences"
+        - description: >
+            Some records have invalid appt_view_id references. Common reasons:
+            - Historical view types that have been deprecated
+            - System default views (appt_view_id = 0)
+            - Views created before tracking was properly implemented
+          severity: "warn"
+          identified_date: "2024-03-20"
+          business_impact: "May affect historical analysis of view type preferences"
+      
+      business_rules:
+        - rule: "Each user can have multiple view preferences (one per clinic-view combination)"
+          impact: "Enables personalized scheduling interfaces while maintaining system consistency"
+        - rule: "View preferences must be unique per user-clinic-view combination"
+          impact: "Prevents conflicting view settings for the same user in the same context"
+        - rule: "System users (user_id = 0) are exempt from certain relationship validations"
+          impact: "Maintains system functionality while allowing historical data analysis"
+      
+      usage_notes: >
+        - Use this model to understand user scheduling interface preferences
+        - Join with stg_opendental__userod for user details
+        - Join with stg_opendental__clinic for clinic information
+        - Join with stg_opendental__apptview for view type details
+        - Note that creation and update timestamps are not available in source
+        - All timestamps are in UTC
+        - Contains no PII or sensitive information
+    
+    columns:
+      # Primary Key
+      - name: userod_appt_view_id
+        description: "Primary key - Unique identifier for each user appointment view preference (maps to UserodApptViewNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Foreign Keys
+      - name: user_id
+        description: "Foreign key to stg_opendental__userod - Represents the user whose view preference this is (maps to UserNum in OpenDental, NULL if 0)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              severity: warn
+              where: "user_id is not null"
+              name: fk_userodapptview_user_valid
+              config:
+                description: >
+                  This test warns when user_id references users that don't exist
+                  in the userod table. This is expected for historical data and system
+                  users. The warning helps track data quality without failing the build.
+
+      # - name: clinic_id
+      #   description: "Foreign key to stg_opendental__clinic - Represents the clinic this view preference applies to (maps to ClinicNum in OpenDental, NULL if 0)"
+      #   tests:
+      #     - relationships:
+      #         to: ref('stg_opendental__clinic')
+      #         field: clinic_id
+      #         severity: warn
+      #         where: "clinic_id is not null"
+      #         name: fk_userodapptview_clinic_valid
+      #         config:
+      #           description: >
+      #             This test warns when clinic_id references clinics that don't exist
+      #             in the clinic table. This is expected for historical data and system
+      #             users. The warning helps track data quality without failing the build.
+
+      - name: appt_view_id
+        description: "Foreign key to stg_opendental__apptview - Represents the type of appointment view preferred (maps to ApptViewNum in OpenDental, NULL if 0)"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__apptview')
+              field: appt_view_id
+              severity: warn
+              where: "appt_view_id is not null"
+              name: fk_userodapptview_apptview_valid
+              config:
+                description: >
+                  This test warns when appt_view_id references appointment views that don't exist
+                  in the apptview table. This is expected for historical data and system
+                  users. The warning helps track data quality without failing the build.
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the view preference was created in the source system (OpenDental). Since no creation timestamp exists in the source, this uses current_timestamp to track when the record was loaded into our warehouse."
+        tests:
+          - not_null:
+              where: "_created_at is not null"
+              severity: warn
+
+      - name: _updated_at
+        description: "Timestamp when the view preference was last updated in the source system (OpenDental). Since no update timestamp exists in the source, this uses current_timestamp to track when the record was loaded into our warehouse."
+        tests:
+          - not_null:
+              where: "_updated_at is not null"
+              severity: warn
+
+    # Model-level tests
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - user_id
+            - clinic_id
+            - appt_view_id
+          config:
+            severity: error
+            description: "Each user can only have one view preference per clinic and view type"

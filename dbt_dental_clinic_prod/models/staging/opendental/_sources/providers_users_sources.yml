@@ -1,0 +1,604 @@
+version: 2
+
+sources:
+  - name: opendental
+    description: "OpenDental data in PostgreSQL"
+    database: opendental_analytics
+    schema: raw  # Raw data from ETL pipeline
+    
+    # Global settings for all tables
+    loaded_at_field: "_loaded_at"
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 720, period: hour}
+    
+    tables:
+      - name: provider
+        description: "Dental provider information including doctors, hygienists, and other clinical staff"
+        columns:
+          - name: "ProvNum"
+            description: "Primary key for provider records"
+            tests:
+              - unique
+              - not_null
+          - name: "Abbr"
+            description: "Provider abbreviation used in schedules and reports"
+          - name: "ItemOrder"
+            description: "Display order for the provider in lists"
+          - name: "LName"
+            description: "Provider's last name"
+          - name: "FName"
+            description: "Provider's first name"
+          - name: "MI" 
+            description: "Provider's middle initial"
+          - name: "Suffix"
+            description: "Provider's name suffix (e.g., DDS, MD)"
+          - name: "PreferredName"
+            description: "Provider's preferred name to display"
+          - name: "FeeSched"
+            description: "Fee schedule ID assigned to this provider"
+          - name: "Specialty"
+            description: "Specialty ID for the provider's main practice area"
+          - name: "SSN"
+            description: "Provider's Social Security Number"
+          - name: "StateLicense"
+            description: "State license number"
+          - name: "DEANum"
+            description: "Drug Enforcement Administration number"
+          - name: "IsSecondary"
+            description: "Flag indicating if provider is considered secondary (0=no, 1=yes)"
+          - name: "ProvColor"
+            description: "Color code for provider in the schedule"
+          - name: "IsHidden"
+            description: "Flag indicating if provider is hidden in the UI (0=no, 1=yes)"
+          - name: "UsingTIN"
+            description: "Flag indicating if provider is using a Tax ID Number (0=no, 1=yes)"
+          - name: "BlueCrossID"
+            description: "Blue Cross Blue Shield provider identifier"
+          - name: "SigOnFile"
+            description: "Flag indicating if signature is on file (0=no, 1=yes)"
+          - name: "MedicaidID"
+            description: "Medicaid provider identifier"
+          - name: "OutlineColor"
+            description: "Color code for provider outline in the schedule"
+          - name: "NationalProvID"
+            description: "National Provider Identifier (NPI)"
+          - name: "DateTStamp"
+            description: "Last update timestamp for the provider record"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "ProvStatus"
+            description: "Provider status code (active, inactive, etc.)"
+          - name: "DateTerm"
+            description: "Date when the provider was terminated, if applicable"
+          - name: "HourlyProdGoalAmt"
+            description: "Hourly production goal amount for the provider"
+
+      - name: userod
+        description: "User information for OpenDental"
+        columns:
+          - name: user_id
+            description: "Primary key for users"
+            tests:
+              - unique
+              - not_null
+          - name: user_group_id
+            description: "Foreign key to user group table"
+          - name: employee_id
+            description: "Foreign key to employee table"
+          - name: clinic_id
+            description: "Foreign key to clinic table"
+          - name: provider_id
+            description: "Foreign key to provider table"
+          - name: cemt_user_id
+            description: "Foreign key to another user record (CEMT user reference)"
+          - name: username
+            description: "User's login username"
+          - name: password_hash
+            description: "Hashed password value"
+          - name: domain_username
+            description: "Domain username for network authentication"
+          - name: badge_id
+            description: "User's badge identifier"
+          - name: is_hidden
+            description: "Flag indicating if the user account is hidden"
+          - name: has_strong_password
+            description: "Flag indicating if the password meets strong password requirements"
+          - name: is_clinic_restricted
+            description: "Flag indicating if the user is restricted to specific clinics"
+          - name: is_password_reset_required
+            description: "Flag indicating if the user needs to reset their password"
+          - name: task_list_inbox
+            description: "User's task list inbox configuration"
+          - name: anesthesia_provider_type
+            description: "Type of anesthesia provider if applicable"
+          - name: is_default_hide_popups
+            description: "Flag for default popup visibility settings"
+          - name: is_inbox_hide_popups
+            description: "Flag for inbox popup visibility settings"
+          - name: mobile_web_pin
+            description: "PIN for mobile web access"
+          - name: mobile_web_pin_failed_attempts
+            description: "Count of failed mobile web PIN attempts"
+          - name: eclipboard_clinical_pin
+            description: "PIN for eClipboard clinical access"
+          - name: last_failed_login_at
+            description: "Timestamp of last failed login attempt"
+          - name: failed_login_attempts
+            description: "Count of failed login attempts"
+          - name: last_login_at
+            description: "Timestamp of last successful login"
+
+      - name: usergroup
+        description: "User security groups"
+        columns:
+          - name: user_group_id
+            description: "Primary key for user groups"
+            tests:
+              - unique
+              - not_null
+          - name: description
+            description: "Description or name of the user group"
+          - name: usergroup_num_cemt
+            description: "Reference to CEMT user group number"
+          - name: _airbyte_ab_id
+            description: "Unique identifier created by Airbyte for each record"
+          - name: _airbyte_emitted_at
+            description: "Timestamp when the record was emitted by Airbyte"
+          - name: _airbyte_normalized_at
+            description: "Timestamp when the record was normalized"
+
+      - name: usergroupattach
+        description: "User-group assignments"
+        columns:
+          - name: user_group_attach_id
+            description: "Primary key for user group assignments"
+            tests:
+              - unique
+              - not_null
+          - name: user_num
+            description: "Foreign key to the user table"
+          - name: user_group_num
+            description: "Foreign key to the user group table"
+          - name: _loaded_at
+            description: "Timestamp when this record was loaded into the staging model"
+
+      - name: employee
+        description: "Employee information for dental practice staff"
+        columns:
+          - name: "EmployeeNum"
+            description: "Primary key - Unique identifier for each employee"
+            tests:
+              - unique
+              - not_null
+          - name: "LName"
+            description: "Employee's last name"
+          - name: "FName"
+            description: "Employee's first name"
+          - name: "MiddleI"
+            description: "Employee's middle initial"
+          - name: "IsHidden"
+            description: "Flag indicating if the employee record is hidden from view (0=no, 1=yes)"
+          - name: "ClockStatus"
+            description: "Current clock status of the employee (e.g., 'in', 'out', etc.)"
+          - name: "PhoneExt"
+            description: "Employee's office phone extension"
+          - name: "PayrollID"
+            description: "Employee's payroll identifier"
+          - name: "WirelessPhone"
+            description: "Employee's mobile/wireless phone number"
+          - name: "EmailWork"
+            description: "Employee's work email address"
+          - name: "EmailPersonal"
+            description: "Employee's personal email address"
+          - name: "IsFurloughed"
+            description: "Flag indicating if the employee is currently furloughed (0=no, 1=yes)"
+          - name: "IsWorkingHome"
+            description: "Flag indicating if the employee is working from home (0=no, 1=yes)"
+          - name: "ReportsTo"
+            description: "Foreign key reference to the employee's manager/supervisor"
+            tests:
+              - relationships:
+                  to: source('opendental', 'employee')
+                  field: "EmployeeNum"
+                  severity: warn
+
+      - name: entrylog
+        description: >
+          System audit log tracking user actions and system events. Contains a record 
+          of who performed what action and when, with references to the affected records.
+        columns:
+          - name: EntryLogNum
+            description: "Primary key - Unique identifier for each log entry"
+            tests:
+              - unique
+              - not_null
+          - name: UserNum
+            description: "Foreign key to the user who performed the action"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: FKeyType
+            description: >
+              Type identifier for the foreign key reference. Indicates what type of 
+              record the FKey points to.
+            tests:
+              - not_null
+          - name: FKey
+            description: >
+              Foreign key reference to the related record. The actual table referenced 
+              depends on the FKeyType value.
+            tests:
+              - not_null
+          - name: LogSource
+            description: >
+              Source of the log entry. Indicates which system component or module 
+              generated the log entry.
+            tests:
+              - not_null
+          - name: EntryDateTime
+            description: "Timestamp when the log entry was created"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+
+      - name: task
+        description: >
+          Tasks and to-do items for staff related to patients, appointments, 
+          or administrative work. This table maintains the practice's task management system,
+          tracking assignments, due dates, priorities, and completion status. Tasks can be
+          associated with various object types (patients, appointments, etc.) and organized
+          into task lists. The system supports reminders, recurring tasks, and triage categories
+          for workflow prioritization. Only tasks created on or after January 1, 2023 are
+          included in the analytics models.
+        columns:
+          - name: "TaskNum"
+            description: "Primary key - Unique identifier for each task"
+          - name: "TaskListNum"
+            description: "Foreign key to the task list this task belongs to"
+          - name: "DateTask"
+            description: "The date associated with the task"
+          - name: "KeyNum" 
+            description: "Reference key to associated entity depending on the ObjectType"
+          - name: "Descript"
+            description: "Main description text of the task"
+          - name: "TaskStatus"
+            description: "Status code of the task (pending, completed, etc.)"
+          - name: "IsRepeating"
+            description: "Flag indicating if this is a recurring/repeating task"
+          - name: "DateType"
+            description: "Type code indicating how dates are used for this task"
+          - name: "FromNum"
+            description: "Foreign key to the entity that created or assigned the task"
+          - name: "ObjectType"
+            description: "Code indicating what type of object this task is associated with"
+          - name: "DateTimeEntry"
+            description: "Timestamp when the task was entered into the system"
+          - name: "UserNum"
+            description: "Foreign key to the user assigned to complete this task"
+          - name: "DateTimeFinished"
+            description: "Timestamp when the task was marked as finished/completed"
+          - name: "PriorityDefNum"
+            description: "Foreign key to the priority definition for this task"
+          - name: "ReminderGroupId"
+            description: "Identifier for grouping related reminders"
+          - name: "ReminderType"
+            description: "Type code for the reminder associated with this task"
+          - name: "ReminderFrequency"
+            description: "How frequently reminders should be sent for this task"
+          - name: "DateTimeOriginal"
+            description: "Timestamp when the task was originally created"
+          - name: "SecDateTEdit"
+            description: "Timestamp of the last edit to this task record"
+          - name: "DescriptOverride"
+            description: "Optional override text for the description"
+          - name: "IsReadOnly"
+            description: "Flag indicating if the task is read-only and cannot be modified"
+          - name: "TriageCategory"
+            description: "Foreign key to triage category for task prioritization in workflows"
+
+      - name: taskhist
+        description: "Historical tracking of task changes and status updates"
+        freshness:
+          warn_after: {count: 24, period: day}
+          error_after: {count: 48, period: day}
+        columns:
+          - name: "TaskHistNum"
+            description: "Primary key for task history records"
+            tests:
+              - unique
+              - not_null
+          - name: "UserNumHist"
+            description: "Foreign key to the user who made the historical change"
+            tests:
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "DateTStamp"
+            description: "Timestamp when the history record was created"
+            tests:
+              - not_null
+          - name: "IsNoteChange"
+            description: "Flag indicating if this history record represents a note change"
+            tests:
+              - not_null
+          - name: "TaskNum"
+            description: "Foreign key to the task record"
+            tests:
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: task_id
+          - name: "TaskListNum"
+            description: "Foreign key to the task list this task belongs to"
+            tests:
+              - relationships:
+                  to: source('opendental', 'tasklist')
+                  field: task_list_id
+          - name: "DateTask"
+            description: "Date when the task is scheduled for"
+            tests:
+              - not_null
+          - name: "KeyNum"
+            description: "Foreign key to the related entity (varies by object type)"
+          - name: "Descript"
+            description: "Main description of the task"
+            tests:
+              - not_null
+          - name: "TaskStatus"
+            description: "Current status of the task"
+            tests:
+              - not_null
+          - name: "IsRepeating"
+            description: "Flag indicating if this is a repeating task"
+            tests:
+              - not_null
+          - name: "DateType"
+            description: "Type of date associated with the task"
+            tests:
+              - not_null
+          - name: "FromNum"
+            description: "Foreign key to the source entity"
+          - name: "ObjectType"
+            description: "Type of object this task is associated with"
+            tests:
+              - not_null
+          - name: "DateTimeEntry"
+            description: "Timestamp when the task was entered"
+            tests:
+              - not_null
+          - name: "UserNum"
+            description: "Foreign key to the user who created the task"
+            tests:
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "DateTimeFinished"
+            description: "Timestamp when the task was completed"
+          - name: "PriorityDefNum"
+            description: "Foreign key to the priority definition"
+            tests:
+              - relationships:
+                  to: source('opendental', 'prioritydef')
+                  field: priority_def_id
+          - name: "ReminderGroupId"
+            description: "Identifier for the reminder group"
+          - name: "ReminderType"
+            description: "Type of reminder associated with the task"
+          - name: "ReminderFrequency"
+            description: "Frequency of reminders for this task"
+          - name: "DateTimeOriginal"
+            description: "Original timestamp of the task"
+          - name: "DescriptOverride"
+            description: "Overriding description for the task"
+          - name: "IsReadOnly"
+            description: "Flag indicating if the task is read-only"
+            tests:
+              - not_null
+          - name: "TriageCategory"
+            description: "Foreign key to the triage category"
+            tests:
+              - relationships:
+                  to: source('opendental', 'triagedef')
+                  field: triage_def_id
+
+      - name: timeadjust
+        description: >
+          Time clock adjustments for provider and staff time tracking, including 
+          modifications to recorded hours and attendance records. Contains details about
+          employee time entries with regular, overtime, and PTO hour adjustments. 
+          This table is used for payroll processing, attendance tracking, and labor 
+          management. It includes clinic associations and notes about why adjustments 
+          were made. Supports both manual and automatic adjustments to time records.
+        columns:
+          - name: "TimeAdjustNum"
+            description: "Primary key - Unique identifier for each time adjustment record"
+          - name: "EmployeeNum"
+            description: "Foreign key to employee table - identifies which staff member this time adjustment applies to"
+          - name: "TimeEntry"
+            description: "Timestamp when the adjusted time entry was recorded"
+          - name: "RegHours"
+            description: "Regular (non-overtime) hours being adjusted"
+          - name: "OTimeHours"
+            description: "Overtime hours being adjusted"
+          - name: "Note"
+            description: "Additional notes or explanation for why the time adjustment was made"
+          - name: "IsAuto"
+            description: "Flag indicating if this adjustment was created automatically by the system (1) or manually entered (0)"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic location this time adjustment applies to"
+          - name: "PtoDefNum"
+            description: "Foreign key to the PTO definition table - indicates which type of paid time off is being used if applicable"
+          - name: "PtoHours"
+            description: "Paid time off hours being adjusted"
+          - name: "IsUnpaidProtectedLeave"
+            description: "Flag indicating if this adjustment represents unpaid protected leave (1) or standard paid time (0)"
+          - name: "SecuUserNumEntry"
+            description: "Foreign key to security user table - identifies which user entered or approved this time adjustment"
+
+      - name: tasklist
+        description: >
+          Task lists and categories for organizing tasks in the practice. Contains information
+          about task groupings, their descriptions, and hierarchical relationships. Task lists
+          can be used to organize tasks by department, priority, or workflow stage.
+        columns:
+          - name: "TaskListNum"
+            description: "Primary key - Unique identifier for each task list"
+            tests:
+              - unique
+              - not_null
+          - name: "Descript"
+            description: "Description or name of the task list"
+          - name: "Parent"
+            description: "Foreign key to parent task list if this is a sub-list"
+          - name: "DateTL"
+            description: "Date associated with the task list"
+          - name: "IsRepeating"
+            description: "Flag indicating if this is a repeating task list (0=no, 1=yes)"
+          - name: "DateType"
+            description: "Type of date associated with the task list"
+          - name: "FromNum"
+            description: "Reference to the source entity that created this task list"
+          - name: "ObjectType"
+            description: "Type of object this task list is associated with"
+          - name: "DateTimeEntry"
+            description: "Timestamp when the task list was created"
+          - name: "GlobalTaskFilterType"
+            description: "Type of global task filter applied to this list"
+          - name: "TaskListStatus"
+            description: "Current status of the task list"
+
+      - name: tasknote
+        description: >
+          Notes and comments associated with tasks in the system. Contains detailed information
+          about task updates, progress, and communications between staff members. Each note is
+          linked to a specific task and includes the user who created it and when it was added.
+        columns:
+          - name: "TaskNoteNum"
+            description: "Primary key - Unique identifier for each task note"
+            tests:
+              - unique
+              - not_null
+          - name: "TaskNum"
+            description: "Foreign key to the task this note is associated with"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: "TaskNum"
+          - name: "UserNum"
+            description: "Foreign key to the user who created the note"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "DateTimeNote"
+            description: "Timestamp when the note was created"
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "<= current_timestamp"
+          - name: "Note"
+            description: "The content of the task note"
+            tests:
+              - not_null
+
+      - name: tasksubscription
+        description: >
+          Task subscription records that track which users are subscribed to specific tasks
+          or task lists. This table manages user notifications and task assignments by
+          maintaining the relationships between users and their subscribed tasks.
+        columns:
+          - name: "TaskSubscriptionNum"
+            description: "Primary key - Unique identifier for each task subscription record"
+            tests:
+              - unique
+              - not_null
+          - name: "UserNum"
+            description: "Foreign key to the user who is subscribed to the task"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+          - name: "TaskListNum"
+            description: "Foreign key to the task list that contains the task"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'tasklist')
+                  field: "TaskListNum"
+          - name: "TaskNum"
+            description: "Foreign key to the specific task being subscribed to"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: "TaskNum"
+
+      - name: taskunread
+        description: >
+          Tracks which tasks are marked as unread by which users. This table maintains
+          the read/unread status of tasks for each user, enabling task notification
+          and tracking functionality in the system.
+        columns:
+          - name: "TaskUnreadNum"
+            description: "Primary key - Unique identifier for each task unread record"
+            tests:
+              - unique
+              - not_null
+          - name: "TaskNum"
+            description: "Foreign key to the task that is marked as unread"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'task')
+                  field: "TaskNum"
+          - name: "UserNum"
+            description: "Foreign key to the user who has the task marked as unread"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('opendental', 'userod')
+                  field: user_id
+
+      - name: userodpref
+        description: "User-specific preferences and settings for OpenDental users"
+        columns:
+          - name: "UserOdPrefNum"
+            description: "Primary key for user preference records"
+            tests:
+              - unique
+              - not_null
+          - name: "UserNum"
+            description: "Foreign key to the user this preference belongs to"
+            tests:
+              - not_null
+          - name: "Fkey"
+            description: "Foreign key value associated with the preference (varies by FkeyType)"
+            tests:
+              - not_null
+          - name: "FkeyType"
+            description: "Type identifier for the foreign key (defines what Fkey refers to)"
+            tests:
+              - not_null
+          - name: "ValueString"
+            description: "The actual preference value stored as a string"
+          - name: "ClinicNum"
+            description: "Foreign key to the clinic this preference is associated with"
+            tests:
+              - not_null
+
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 15
+            tests_total: 15
+          contains_pii: true
+          business_owners: ["dental_operations_team"]
+          technical_owners: ["data_engineering_team"]

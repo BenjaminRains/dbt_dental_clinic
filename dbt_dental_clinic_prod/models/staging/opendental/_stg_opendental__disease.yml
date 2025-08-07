@@ -1,0 +1,171 @@
+version: 2
+
+models:
+  - name: stg_opendental__disease
+    description: >
+      Staging model for OpenDental disease records containing patient disease history and health conditions.
+      
+      This model captures disease/condition records from the OpenDental practice management system, including 
+      diagnosis dates, resolution dates, clinical status, and associated notes. Each record represents a 
+      disease or health condition diagnosed for a specific patient, with SNOMED CT classification support
+      for standardized medical coding. The model includes both active and resolved conditions, making it
+      essential for comprehensive patient health history analysis and care continuity tracking.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~150,000 disease records"
+      data_scope: "All patient disease/condition records from OpenDental system inception to current"
+      
+      known_issues:
+        - description: "Some historical records may have missing or invalid date_start values due to data migration"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "test_valid_date_start"
+        - description: "SNOMED problem type codes may be incomplete for older records entered before SNOMED implementation"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "Problem status and function status use numeric codes that may not be consistently applied across providers"
+          severity: "warn"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Disease records with date_stop are considered resolved/inactive conditions"
+          impact: "Critical for determining active vs historical health conditions in patient care"
+        - rule: "Records without date_stop are considered ongoing/active conditions"
+          impact: "Used for current patient health status and care planning"
+        - rule: "SNOMED problem type provides standardized medical coding for reporting and analysis"
+          impact: "Enables clinical reporting compliance and data standardization"
+      
+      usage_notes: >
+        This model is essential for clinical analysis, patient health history tracking, and care continuity.
+        When analyzing active conditions, filter for records where date_stop IS NULL. For historical 
+        analysis, include all records regardless of date_stop status. The model supports both clinical
+        workflows and administrative reporting. SNOMED codes enable integration with external medical
+        systems and regulatory reporting requirements.
+    
+    tests:
+      # Model-level validation tests  
+      - dbt_utils.expression_is_true:
+          expression: "date_start <= COALESCE(date_stop, CURRENT_DATE)"
+          config:
+            severity: error
+            where: "date_start IS NOT NULL"
+    
+    columns:
+      # Primary Key
+      - name: disease_id
+        description: >
+          Primary key - Unique identifier for each disease/condition record in the OpenDental system
+          (maps to DiseaseNum in OpenDental). This ID is used to track individual disease records
+          and link to related clinical documentation and treatment plans.
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Foreign Keys
+      - name: patient_id
+        description: >
+          Foreign key to the patient table - Links the disease record to the specific patient
+          (maps to PatNum in OpenDental). Essential for patient health history aggregation
+          and clinical care coordination.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+
+      - name: disease_def_id
+        description: >
+          Foreign key to the disease definition table - References the standardized disease/condition
+          definition (maps to DiseaseDefNum in OpenDental). Links to disease catalogs and medical
+          coding systems for consistent diagnosis classification.
+        tests:
+          - not_null
+          - positive_values
+
+      # Clinical Content Fields
+      - name: patient_note
+        description: >
+          Free-text clinical notes specific to this patient's disease/condition instance.
+          Contains provider observations, patient symptoms, treatment responses, and other
+          clinical documentation relevant to this specific disease occurrence.
+        tests:
+          - not_null:
+              where: "patient_note IS NOT NULL"
+              config:
+                severity: warn
+
+      - name: snomed_problem_type
+        description: >
+          SNOMED CT classification code for the type of medical problem or disease category.
+          Provides standardized medical terminology for regulatory reporting, clinical decision
+          support, and interoperability with external healthcare systems. May be null for
+          records entered before SNOMED implementation.
+
+      # Date/Time Fields
+      - name: date_timestamp
+        description: >
+          Timestamp when the disease record was created or last modified in OpenDental
+          (maps to DateTStamp). Used for audit trails and determining the most recent
+          updates to patient health records.
+        tests:
+          - not_null
+
+      - name: date_start
+        description: >
+          Date when the disease/condition was first diagnosed, identified, or became relevant
+          for the patient (maps to DateStart). Critical for establishing disease timeline
+          and duration of conditions. May be null for some historical migration records.
+
+      - name: date_stop
+        description: >
+          Date when the disease/condition was resolved, cured, or no longer relevant for
+          patient care (maps to DateStop). Null values indicate ongoing/active conditions.
+          Used to distinguish between current and historical health issues.
+
+      # Status Fields (converted to boolean)
+      - name: problem_status
+        description: >
+          Clinical status indicator for the disease/condition converted to boolean format
+          (maps to ProbStatus in OpenDental, 0=Inactive, 1=Active converted to boolean).
+          Indicates whether the condition is currently active in the patient's clinical profile.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: function_status
+        description: >
+          Functional status indicator related to the patient's functional capacity with this condition
+          converted to boolean format (maps to FunctionStatus in OpenDental, 0=Normal, 1=Impaired 
+          converted to boolean). Used for disability assessments and functional outcome tracking.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: >
+          Timestamp when the disease record was created in the source system (OpenDental).
+          Maps to DateStart as the creation timestamp. May be null for historical records
+          where the original creation date was not preserved during data migration.
+        tests:
+          - not_null:
+              where: "_created_at IS NOT NULL"
+              config:
+                severity: warn
+
+      - name: _updated_at
+        description: >
+          Timestamp when the disease record was last updated in the source system (OpenDental).
+          Maps to DateTStamp field. Used for incremental data processing and audit tracking.
+        tests:
+          - not_null

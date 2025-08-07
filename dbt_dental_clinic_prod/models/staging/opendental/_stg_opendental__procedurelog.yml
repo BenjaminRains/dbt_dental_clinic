@@ -1,0 +1,582 @@
+version: 2
+
+models:
+  - name: stg_opendental__procedurelog
+    description: >
+      Staging model for OpenDental procedure log data. Contains detailed information 
+      about dental procedures performed on patients, serving as a core clinical and 
+      financial tracking table. This model captures all procedures from 2023-01-01 
+      onwards, plus historical procedures referenced by recent insurance records, 
+      procedure groups, and procedure notes.
+      
+      Key business functions:
+      - Clinical procedure tracking and documentation
+      - Financial billing and insurance claim processing  
+      - Treatment planning and completion tracking
+      - Provider productivity and procedure analysis
+      - Integration with appointments, claims, and payment workflows
+      
+      Data includes both completed procedures and treatment plans across all statuses,
+      with comprehensive fee, diagnosis, and clinical detail information.
+    
+    config:
+      materialized: incremental
+      unique_key: procedure_id
+    
+    meta:
+      # Data quality and business context
+      record_count: "~101,142 procedures for 4,518 unique patients (avg 22.4 procedures per patient)"
+      data_scope: >
+        This model is incremental and includes:
+        - All procedures dated 2023-01-01 or later
+        - Historical procedures (pre-2023) that are referenced by recent insurance bluebook entries
+        - Historical procedures (pre-2023) that are referenced by procedure groups  
+        - Historical procedures (pre-2023) that are referenced by recent procedure notes
+        
+        Core table that links with procedurecode, adjustment, appointment, patient, statement and other tables.
+      
+      key_statistics:
+        - metric: "Fee comparison with standard fees"
+          value: "~29% exact matches, ~37% higher, ~34% lower than standard"
+        - metric: "Fee difference distribution"
+          value: "Median difference: $0, Average difference: -$39.20"
+        - metric: "Patient distribution"
+          value: "4,518 unique patients across 101,142 procedures"
+      
+      known_issues:
+        - description: "Future-dated procedures are valid and represent planned treatments that haven't occurred yet (treatment planning workflow)"
+          severity: "info"
+          identified_date: "2024-01-15"
+          impact: "Normal business process - no action required. Procedures with future dates indicate planned treatments."
+        
+        - description: "Procedure records with procedure_id = 0 are valid financial transactions/adjustments rather than actual procedures"
+          severity: "info"  
+          identified_date: "2024-01-15"
+          impact: >
+            These records are used for account adjustments, payment transactions, and financial corrections.
+            Key characteristics:
+            - Have no procedure-related information (no procedure_code, description, etc.)
+            - Have varying amounts, both positive and negative
+            - Have transaction dates but no procedure dates
+            - Valid business records, not data quality issues
+        
+        - description: "21 procedures have completion dates that precede their procedure dates"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "date_complete_valid"
+          impact: "May indicate backdated entries, data correction scenarios, or end-of-day processing differences. Clinical review recommended for significant variances."
+        
+        - description: "17 procedures have fees above $15,000 (upper limit threshold)"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "procedure_fee_reasonable_upper_limit"
+          impact: "High-value procedures that should be reviewed for accuracy. May represent complex procedures, laboratory work, or data entry errors."
+        
+        - description: "31 procedures have fees outside the typical $0-$10,000 range"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "procedure_fees_reasonable_range"
+          impact: "Procedures with atypical fee amounts. May indicate custom pricing, insurance adjustments, complex treatments, or data entry errors."
+        
+        - description: "44 procedures reference planned appointments that don't exist in our appointment data window"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "planned_appointment_id relationship test"
+          impact: "Expected for procedures referencing historical planned appointments (pre-2023) or cancelled/rescheduled appointments. Normal business scenario."
+        
+        - description: "External models reference procedures outside our data scope: 72 adjustments, 3,002 claimprocs, 7,327 paysplits"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "external relationship tests"
+          impact: >
+            Other staging models reference procedures that fall outside our 2023+ scope or are treatment planned procedures. 
+            This is expected due to our incremental loading strategy which includes historical procedures only when 
+            referenced by recent records. These warnings indicate cross-model data dependencies are working as designed.
+      
+      business_rules:
+        - rule: "Procedure status 1 (Treatment Planned) procedures may have future dates and null completion dates"
+          impact: "These represent planned treatments and should not be counted as completed procedures in financial reports"
+        
+        - rule: "Procedure status 2 (Completed) procedures should have completion dates on or after procedure dates"
+          impact: "Critical for accurate treatment completion tracking and billing workflows"
+        
+        - rule: "Appointment_id = 0 indicates no appointment needed/scheduled yet (common for planned procedures)"
+          impact: "Zero values are valid business logic, not missing data. NULL indicates field not applicable."
+        
+        - rule: "Surface codes use different validation rules for odontoplasty procedures (procedure_code_id 523, 1440)"
+          impact: "Standard surface codes (B,D,F,I,L,M,O,U,R,V) vs numeric region codes (1,2,5,6) for specialized procedures"
+      
+      usage_notes: >
+        CRITICAL: This model includes both completed procedures AND treatment plans. Filter by procedure_status 
+        for specific analysis:
+        - Status 2 = Completed procedures (for financial and clinical analysis)
+        - Status 1 = Treatment planned (for pipeline analysis) 
+        - Status 6 = Ordered/Planned (for workflow management)
+        
+        Fee analysis should consider that ~29% match standard fees exactly, with ~37% higher and ~34% lower 
+        than standard fees. This variance is often intentional (insurance adjustments, payment plans, etc.).
+        
+        Use with caution for date-based analysis as model includes historical procedures referenced by 
+        recent records, which may skew time-series analysis if not properly filtered.
+
+    tests:
+      - compare_source_staging_rowcount:
+          source_relation: source('opendental', 'procedurelog')
+          source_column: '"ProcDate"'
+          staged_column: 'procedure_date'
+          date_value: '2023-01-01'
+          config:
+            severity: warn
+      
+      # Validate status distribution matches expectations
+      - dbt_utils.expression_is_true:
+          name: procedure_status_distribution_reasonable
+          expression: >
+            (select count(*) from {{ ref('stg_opendental__procedurelog') }} where procedure_status = 2) > 
+            (select count(*) from {{ ref('stg_opendental__procedurelog') }} where procedure_status = 1) * 0.5
+          config:
+            severity: warn
+            description: "Completed procedures should represent significant portion of total procedures"
+      
+      # Validate fee amounts are within reasonable ranges
+      - dbt_utils.expression_is_true:
+          name: procedure_fees_reasonable_range
+          expression: "procedure_fee between 0 and 10000 or procedure_fee is null"
+          config:
+            severity: warn
+            error_if: ">= 10"
+            description: "Procedure fees should generally be between $0-$10,000 for typical dental procedures"
+      
+      # Validate metadata timestamp relationships
+      - dbt_utils.expression_is_true:
+          name: updated_at_after_created_at
+          expression: "_updated_at >= _created_at or _created_at is null"
+          config:
+            severity: warn
+            description: "Update timestamp should be after creation timestamp when both are present"
+      
+      # Validate individual procedure fee upper limits
+      - dbt_utils.expression_is_true:
+          name: procedure_fee_reasonable_upper_limit
+          expression: "procedure_fee <= 15000 or procedure_fee is null"
+          config:
+            severity: warn
+            description: "Procedure fees above $15,000 should be reviewed for accuracy"
+
+    columns:
+      # Primary Key
+      - name: procedure_id
+        description: "Primary key - Unique identifier for each procedure record (maps to ProcNum in OpenDental). Core identifier linking procedures across all clinical and financial workflows."
+        tests:
+          - unique
+          - not_null
+      
+      # Foreign Key Relationships
+      - name: patient_id
+        description: "Foreign key to patient - Identifies which patient received the procedure. Dataset contains ~4,518 unique patients with average of 22.4 procedures per patient."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      
+      - name: provider_id
+        description: "Foreign key to provider - Identifies the dental provider who performed or is assigned to perform the procedure. Distribution shows ~16 unique providers across all procedures."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                severity: warn
+                where: "provider_id is not null"
+      
+      - name: appointment_id
+        description: >
+          Foreign key to appointment - Links procedure to the appointment where it was performed.
+          Business rules:
+          - 0 = No appointment needed/scheduled yet (common for planned procedures)
+          - NULL = Field not applicable
+          - Valid ID = References actual appointment
+          
+          Note: Historical procedures may reference appointments outside our date window (pre-2023).
+          Completed procedures may retain original appointment_id even if appointment was rescheduled.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              config:
+                severity: warn
+                where: "appointment_id is not null and appointment_id != 0 and procedure_date >= '2023-01-01'"
+      
+      - name: clinic_id
+        description: "Foreign key to clinic - Identifies the clinic location where the procedure was performed or is planned to be performed."
+        # TODO: Enable when stg_opendental__clinic model is available
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__clinic')
+        #       field: clinic_id
+        #       config:
+        #         severity: warn
+        #         where: "clinic_id is not null and clinic_id != 0"
+      
+      - name: procedure_code_id
+        description: "Foreign key to procedure code - Links to standardized dental procedure codes (CDT codes). 346 unique procedure codes are used across all procedures. ~17.6% lack standard fee information in fee schedules."
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: procedure_code_id
+              config:
+                severity: warn
+                where: "procedure_code_id is not null and procedure_code_id != 0"
+      
+      - name: site_id
+        description: "Foreign key to site - Identifies the treatment site for the procedure (may reference tooth location or treatment area)."
+        # TODO: Enable when stg_opendental__site model is available
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__site')
+        #       field: site_id
+        #       config:
+        #         severity: warn
+        #         where: "site_id is not null and site_id != 0"
+      
+      - name: planned_appointment_id
+        description: >
+          Foreign key to planned future appointment - References a planned appointment for the procedure.
+          Business rules:
+          - 0 = No planned appointment
+          - NULL = No future appointment needed
+          - Valid ID = References future or existing appointment
+          
+          Note: Completed procedures may retain original planned_appointment_id even after completion.
+          Field may reference appointments that were cancelled or rescheduled.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              config:
+                severity: warn
+                where: "planned_appointment_id is not null and planned_appointment_id != 0 and procedure_status = 1"
+      
+      - name: procedure_lab_id
+        description: "Foreign key to laboratory procedure - Links to associated lab work for prosthetic or specialized procedures."
+      
+      - name: billing_type_one_id
+        description: "Foreign key to primary billing type - Categorizes procedure for billing and reporting purposes."
+      
+      - name: billing_type_two_id
+        description: "Foreign key to secondary billing type - Additional billing categorization for complex procedures."
+      
+      - name: statement_id
+        description: >
+          Foreign key to patient statement - Links procedure to billing statement.
+          Business rules:
+          - 0 = No statement needed/created
+          - NULL = No statement required
+          - Valid ID = References actual statement
+          
+          Note: Future-dated procedures, same-day treatments, and $0 fee procedures may not have statements.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__statement')
+              field: statement_id
+              config:
+                severity: warn
+                where: "statement_id is not null and statement_id != 0 and procedure_date <= current_date"
+      
+      - name: repeat_charge_id
+        description: "Foreign key to repeat charge - Links to recurring billing setup for procedures that repeat regularly."
+      
+      - name: provider_order_override_id
+        description: "Foreign key to provider override - References provider who can override standard procedure ordering rules."
+      
+      - name: sec_user_entry_id
+        description: "Foreign key to security user - Identifies the user who entered the procedure into the system."
+      
+      - name: ordering_referral_id
+        description: "Foreign key to referring provider - Links to the provider who referred the patient for this procedure."
+      
+      # Date and Time Fields
+      - name: procedure_date
+        description: >
+          Date when the procedure was performed or is planned to be performed.
+          Business rules:
+          - Future dates are valid for treatment planned procedures (status 1)
+          - NULL allowed only for status 4 (Existing Prior) and status 6 (Ordered/Planned)
+          - Historical procedures included if referenced by recent insurance/group/note records
+          
+          Data range: 2023-01-01 to 2026-03-04 (future dates represent planned treatments).
+        tests:
+          - not_null:
+              config:
+                where: "procedure_status not in (4, 6)"
+                severity: error
+      
+      - name: date_original_prosthesis
+        description: "Date of the original prosthesis for replacement or repair procedures. Used in insurance claim processing for prosthetic replacement rules."
+      
+      - name: date_entry
+        description: "Date when the procedure was entered into the OpenDental system. Used for audit tracking and workflow analysis."
+      
+      - name: date_treatment_plan
+        description: "Date when the procedure was added to the treatment plan. May differ from procedure_date for procedures planned in advance."
+      
+      - name: sec_date_entry
+        description: "Security timestamp when the procedure was entered by the security user. Used for audit trail and user activity tracking."
+      
+      - name: date_complete
+        description: >
+          Date when the procedure was marked as completed in the system.
+          Business validation:
+          - Should typically be on or after procedure_date
+          - Some variance expected for backdated entries or corrections
+          - Required for status 2 (Completed) procedures
+          - May be slightly before procedure_date due to end-of-day processing
+        tests:
+          - date_complete_valid:
+              config:
+                severity: warn
+                description: "Validates completion dates are not significantly before procedure dates"
+      
+      - name: procedure_time
+        description: "Start time for the procedure (time portion only). Used for scheduling and duration analysis."
+      
+      - name: procedure_time_end
+        description: "End time for the procedure (time portion only). Used with procedure_time to calculate procedure duration."
+      
+      - name: start_time
+        description: "Start time as integer representation. Alternative time tracking format used in some workflows."
+      
+      - name: stop_time
+        description: "Stop time as integer representation. Alternative time tracking format used in some workflows."
+      
+      # Financial Fields
+      - name: procedure_fee
+        description: >
+          Fee amount charged for the procedure in USD.
+          Statistical distribution:
+          - Median: $75.00, Average: $201.80
+          - ~29% match standard fees exactly
+          - ~37% exceed standard fees, ~34% below standard fees
+          - Range typically $0-$10,000 for standard dental procedures
+          
+          Variance from standard fees is often intentional due to insurance adjustments, 
+          payment plans, or practice-specific pricing strategies.
+        tests:
+          - non_negative_or_null
+      
+      - name: discount
+        description: "Discount amount applied to the procedure fee. Analysis reveals systematic discounting patterns for certain procedure types."
+        tests:
+          - non_negative_or_null
+      
+      - name: tax_amount
+        description: "Tax amount charged on the procedure fee. Used in jurisdictions where dental services are taxable."
+        tests:
+          - non_negative_or_null
+      
+      - name: discount_plan_amount
+        description: "Discount amount applied through patient's discount plan membership. Separate from standard procedure discounts."
+        tests:
+          - non_negative_or_null
+      
+      # Clinical Details
+      - name: old_code
+        description: "Legacy procedure code from previous coding systems. Maintained for historical reference and system migrations."
+      
+      - name: surface
+        description: >
+          Tooth surface(s) involved in the procedure. Uses two different coding systems:
+          
+          Standard Surface Codes (most procedures):
+          - B = Buccal (cheek side)
+          - D = Distal (back/away from center)
+          - F = Facial (face side)
+          - I = Incisal (biting edge)
+          - L = Lingual (tongue side)
+          - M = Mesial (front/toward center)
+          - O = Occlusal (chewing surface)
+          - U = Universal (all surfaces)
+          - R = Root
+          - V = Vestibular (lip side)
+          
+          Special Numeric Codes (odontoplasty procedures - codes 523, 1440 only):
+          - 1 = Treatment region 1
+          - 2 = Treatment region 2
+          - 5 = Treatment region 5 (multiple teeth)
+          - 6 = Treatment region 6
+        tests:
+          - valid_tooth_surface:
+              config:
+                severity: warn
+                description: "Validates surface codes follow standard dental notation or numeric codes for odontoplasty"
+      
+      - name: tooth_number
+        description: "Tooth number using standard dental numbering (1-32 for permanent teeth, A-T for primary teeth). May be null for procedures not specific to individual teeth."
+        tests:
+          - valid_tooth_number:
+              config:
+                severity: warn
+      
+      - name: tooth_range
+        description: "Range of teeth involved in the procedure (e.g., '1-3' for multiple adjacent teeth). Used for procedures affecting multiple teeth."
+      
+      - name: priority
+        description: "Priority level assigned to the procedure for treatment sequencing. Higher numbers typically indicate higher priority."
+      
+      - name: procedure_status
+        description: >
+          Current status of the procedure. Distribution across all procedures:
+          1 = Treatment Planned (19.5%) - Planned but not yet performed
+          2 = Completed (55.6%) - Procedure has been performed  
+          3 = Administrative/Documentation (4.6%) - Documentation or admin entry
+          4 = Existing Prior (0.6%) - Pre-existing condition from before records
+          5 = Referred (1.4%) - Referred to specialist
+          6 = Ordered/Planned (14.4%) - Ordered but not yet scheduled
+          7 = Condition (3.9%) - Documented condition
+          8 = In Progress (0.1%) - Currently being performed
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8]
+              config:
+                severity: error
+      
+      - name: diagnosis
+        description: "Primary diagnosis code associated with the procedure. Links to standard dental diagnosis coding systems."
+      
+      - name: place_service
+        description: "Place of service code indicating where the procedure was performed (office, hospital, etc.). Used for insurance billing requirements."
+      
+      - name: prosthesis
+        description: "Prosthesis indicator for insurance billing. Specifies if procedure involves prosthetic appliances requiring special insurance handling."
+      
+      - name: claim_note
+        description: "Clinical note attached to insurance claims for this procedure. Provides additional context for claim processing."
+      
+      - name: medical_code
+        description: "Medical procedure code when dental procedure has medical billing implications. Used for dual billing scenarios."
+      
+      - name: diagnostic_code
+        description: "Primary diagnostic code for the condition being treated. May differ from procedure code (treatment vs diagnosis)."
+      
+      - name: diagnostic_code_2
+        description: "Secondary diagnostic code for complex cases requiring multiple diagnoses."
+      
+      - name: diagnostic_code_3
+        description: "Tertiary diagnostic code for complex cases requiring multiple diagnoses."
+      
+      - name: diagnostic_code_4
+        description: "Quaternary diagnostic code for complex cases requiring multiple diagnoses."
+      
+      # Boolean Flags
+      - name: is_principal_diagnosis
+        description: "Boolean flag indicating if this procedure addresses the principal diagnosis for the patient visit (0=No, 1=Yes converted to boolean)."
+        tests:
+          - boolean_values
+      
+      - name: hide_graphics
+        description: "Boolean flag indicating if graphics should be hidden for this procedure in clinical charts (0=No, 1=Yes converted to boolean)."
+        tests:
+          - boolean_values
+      
+      - name: is_locked
+        description: "Boolean flag indicating if the procedure record is locked from further editing (0=No, 1=Yes converted to boolean). Used to prevent accidental changes to completed procedures."
+        tests:
+          - boolean_values
+      
+      - name: is_date_prosthesis_estimated
+        description: "Boolean flag indicating if the prosthesis date is estimated rather than exact (0=No, 1=Yes converted to boolean). Used in insurance prosthetic replacement calculations."
+        tests:
+          - boolean_values
+      
+      - name: is_cpoe
+        description: "Boolean flag indicating if this is a Computerized Physician Order Entry (0=No, 1=Yes converted to boolean). Used for medical integration workflows."
+        tests:
+          - boolean_values
+      
+      # Code Modifiers and Additional Fields
+      - name: code_modifier_1
+        description: "First modifier code for the procedure. Used to specify variations or additional details about how the procedure was performed."
+      
+      - name: code_modifier_2
+        description: "Second modifier code for procedures requiring multiple modifiers."
+      
+      - name: code_modifier_3
+        description: "Third modifier code for complex procedures requiring multiple modifiers."
+      
+      - name: code_modifier_4
+        description: "Fourth modifier code for complex procedures requiring multiple modifiers."
+      
+      - name: revenue_code
+        description: "Revenue code for hospital billing integration. Used when procedures are performed in hospital settings."
+      
+      - name: unit_quantity
+        description: "Quantity of units for the procedure. Used for procedures that can be performed in multiple units (e.g., radiographs)."
+      
+      - name: base_units
+        description: "Base units for anesthesia or time-based billing calculations."
+      
+      - name: canadian_type_codes
+        description: "Canadian-specific procedure type codes for practices operating under Canadian dental billing systems."
+      
+      - name: prognosis
+        description: "Prognosis identifier indicating expected treatment outcome. Used for treatment planning and patient communication."
+      
+      - name: drug_unit
+        description: "Unit type for drug administration procedures (mg, ml, etc.). Used for procedures involving medication administration."
+      
+      - name: drug_quantity
+        description: "Quantity of drug administered during the procedure. Used with drug_unit for precise medication tracking."
+      
+      - name: unit_quantity_type
+        description: "Type classification for unit quantity field. Provides context for interpreting unit_quantity values."
+      
+      - name: billing_note
+        description: "Internal billing note for the procedure. Used for billing department communication and claim processing guidance."
+      
+      - name: snomed_body_site
+        description: "SNOMED CT body site code for precise anatomical location specification. Used for medical integration and standardized reporting."
+      
+      - name: icd_version
+        description: "Version of ICD codes used for diagnosis coding. Tracks which ICD version (9, 10, etc.) applies to diagnostic codes."
+      
+      - name: urgency
+        description: "Urgency level assigned to the procedure. Used for scheduling prioritization and emergency case identification."
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)."
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: >
+          Timestamp when the record was created in the source system (OpenDental). 
+          Maps to DateEntryC column with fallback to DateTStamp for invalid dates.
+          
+          Business rule: May be null for system-generated records or records created 
+          before timestamp tracking was implemented.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                where: "procedure_status = 2"
+                description: "Completed procedures should have valid creation timestamps for audit purposes"
+      
+      - name: _updated_at
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental). 
+          Maps to DateTStamp column with fallback to DateEntryC if DateTStamp is null.
+          
+          Used for incremental loading and change detection.
+        tests:
+          - not_null
+      
+      - name: _created_by_user_id
+        description: >
+          User who created the record in the source system (OpenDental). 
+          Maps to SecUserNumEntry column with zero values converted to null.
+          
+          May be null for system-generated records, bulk imports, or historical 
+          records created before user tracking was implemented.

@@ -1,0 +1,223 @@
+version: 2
+
+models:
+  - name: stg_opendental__claimpayment
+    description: >
+      Standardized staging model for insurance claim payments from OpenDental. 
+      This model represents payments received from insurance companies for submitted claims,
+      including check details, payment amounts, carrier information, and processing metadata.
+      
+      Records are filtered to include only payments from January 1, 2023 forward to focus on
+      current operational data. Each payment represents a single check or electronic payment
+      from an insurance carrier that may be distributed across multiple claims through the
+      claim procedures (claimproc) relationship.
+    
+    meta:
+      record_count: "~47,000 payments (2023-present)"
+      data_scope: "Insurance claim payments from January 1, 2023 forward"
+      
+      known_issues:
+        - description: "Empty check numbers are used as valid values (2,425 records) and some carriers reuse check numbers on the same day"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "unique check_number test configured with warning severity"
+        
+        - description: "Date issued field is sparsely populated - only certain carriers (primarily Delta Dental) provide this information"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "date_issued not_null test configured with warning severity"
+        
+        - description: "Refund payment types (72, 645, 646, 647) sometimes have positive amounts (257 records) - indicates data entry inconsistencies"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "refund_amounts_validation test configured with warning severity"
+        
+        - description: "Payment group ID is null for approximately 7,494 records (16% of payments) - payments may not always be assigned to groups"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "payment_group_id not_null test removed"
+      
+      business_rules:
+        - rule: "Payment type 0 must always have $0.00 amount (administrative entries)"
+          impact: "Non-zero amounts for type 0 indicate data entry errors"
+        
+        - rule: "Refund payment types (72, 645, 646, 647) must have negative amounts"
+          impact: "Positive amounts for refund types indicate processing errors"
+        
+        - rule: "Claim payments are distributed to individual procedures through claimproc table"
+          impact: "Payment allocation analysis requires joining with claimproc records"
+      
+      usage_notes: >
+        This model should be used for insurance payment analysis and reconciliation.
+        Key considerations:
+        - Use check_date as primary date field; date_issued is optional and carrier-specific
+        - Check numbers may not be unique across all carriers or time periods
+        - Payment distribution to specific claims/procedures requires joining with stg_opendental__claimproc
+        - Payment types indicate different processing workflows and should be considered in analysis
+        - Negative amounts indicate refunds or adjustments
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "case when payment_type_id = 0 then check_amount = 0 else true end"
+          config:
+            severity: error
+      
+      - dbt_utils.expression_is_true:
+          expression: "case when payment_type_id in (72, 645, 646, 647) then check_amount < 0 else true end"
+          config:
+            severity: warn
+    
+    columns:
+      - name: claim_payment_id
+        description: "Primary key for the claim payment record (maps to ClaimPaymentNum in OpenDental). Unique identifier for each insurance payment received."
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      - name: check_date
+        description: "Date the insurance check was issued or received. Primary date field used for payment processing and reporting."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2023-01-01'"
+      
+      - name: date_issued
+        description: >
+          Date the payment was issued by the insurance carrier. This is an optional field
+          that is only populated by certain carriers when they provide this information.
+          
+          Population patterns by payment type:
+          - Payment type 261: Rarely populated (0-0.57% of records)
+          - Payment type 303: Occasionally populated (0-7.44% of records)  
+          - Payment type 465: Sometimes populated (25.93% of records)
+          
+          Primary carriers providing this data: Delta Dental plans.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      
+      - name: check_amount
+        description: "Total amount of the insurance check in USD. Positive values for payments, negative values for refunds."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "!= 0 or payment_type_id = 0"
+              config:
+                severity: warn
+      
+      - name: check_number
+        description: >
+          Check number or payment reference from the insurance carrier. May be empty
+          for electronic payments or certain carrier types (2,425 records with empty values).
+          
+          Note: Some carriers (Aetna, United Healthcare, Cigna) may reuse the same check 
+          number for multiple payments on the same day, particularly with payment type 261.
+        tests:
+          - unique:
+              config:
+                severity: warn
+                where: "check_number is not null and check_number != ''"
+      
+      - name: bank_branch
+        description: "Bank branch information for the payment. Used for deposit processing and reconciliation."
+        tests:
+          - not_null
+      
+      - name: note
+        description: "Additional notes related to the payment processing, carrier communications, or special handling instructions."
+      
+      - name: clinic_id
+        description: "Foreign key to clinic where the payment was processed. Links to clinic-specific deposit and accounting procedures."
+      
+      - name: deposit_id
+        description: "Foreign key to the deposit record if this payment was included in a bank deposit. Null for payments not yet deposited."
+      
+      - name: carrier_name
+        description: "Name of the insurance carrier that issued the payment. Used for carrier-specific analysis and reconciliation."
+        tests:
+          - not_null
+      
+      - name: is_partial
+        description: "Boolean flag indicating if this is a partial payment (0=No, 1=Yes converted to boolean). Partial payments typically require follow-up processing."
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: payment_type_id
+        description: >
+          Type of payment indicating processing workflow and carrier patterns. Key patterns (2023-present):
+          
+          Regular Payments:
+          - 0: Administrative entries (must be $0.00)
+          - 69: High value payments (avg $1,036)
+          - 70: Regular payments (avg $348)
+          - 71: Most common type (avg $293)
+          - 261: High volume type (avg $341) - Major carriers: Cigna, Aetna, MetLife, United Healthcare
+          - 303: Regular payments (avg $278) - Major carriers: MetLife, Guardian, Ameritas, Anthem
+          - 391: High value (avg $922) - No current records
+          - 412: Newer payment type (avg $199) - No current records
+          - 464: Rare type (avg $184) - Single record from Delta Dental of California
+          - 465: Delta Dental payments (avg $359) - Used exclusively by Delta Dental plans
+          - 466: Rare type (avg $200) - Only United Concordia, used briefly in early 2023
+          - 469: United Concordia payments (avg $482) - Used exclusively by United Concordia
+          - 574: Very high value (avg $26,071) - No current records
+          - 634: New type since Sept 2024 (avg $6,009) - No current records
+          
+          Refund Types (negative amounts):
+          - 72: Standard refunds (always negative)
+          - 645: Large refunds (avg -$268)
+          - 646: Small refunds (avg -$1)
+          - 647: Medium refunds (avg -$88)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 69, 70, 71, 72, 261, 303, 391, 412, 417, 464, 465, 466, 469, 574, 634, 645, 646, 647]
+              config:
+                severity: warn
+      
+      - name: payment_group_id
+        description: "Foreign key to payment group for batch processing and reporting organization. May be null for payments not assigned to a group."
+      
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column."
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column."
+        tests:
+          - not_null
+      
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
+        tests:
+          - not_null
+
+    meta:
+      relationships:
+        - related_model: stg_opendental__claim
+          description: >
+            While there is no direct foreign key from claim payments to claims in the database schema,
+            claim payments are logically connected to claims through the claim procedures (claimproc) table.
+            A single claim payment can be distributed across multiple claims.
+        
+        - related_model: stg_opendental__claimproc
+          field: claim_payment_id
+          description: >
+            Claim procedures reference claim payments through the claim_payment_id field.
+            Each claim payment can be associated with multiple claim procedures, showing how
+            the payment was allocated across different procedures within a claim.
+        
+        - related_model: stg_opendental__claimtracking
+          description: >
+            Claim tracking entries may reference payment events for a claim, though there is
+            no direct foreign key relationship. The tracking records provide status updates
+            on claims which may include payment information.

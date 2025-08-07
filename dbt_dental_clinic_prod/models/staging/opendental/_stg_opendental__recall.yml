@@ -1,0 +1,216 @@
+version: 2
+
+models:
+  - name: stg_opendental__recall
+    description: >
+      Staging model for dental practice recall appointments and follow-up schedules
+      from the OpenDental system. Contains information about when patients are due
+      for their next appointment, recall status, and related configuration.
+      
+      This model tracks patient recall schedules which are critical for maintaining
+      regular patient care and practice revenue. Recalls are automatically generated
+      based on procedure types and intervals, but can be manually overridden.
+      The model filters to recalls due from 2023-01-01 through current date.
+    
+    meta:
+      # Data quality and business context
+      record_count: "~6,900 active recalls"
+      data_scope: "Active recalls from 2023-01-01 to current date"
+      
+      known_issues:
+        - description: "Some historical recalls have null DateDue values which are filtered out"
+          severity: "warn"
+          identified_date: "2023-12-01"
+          test: "not_null_date_due"
+        - description: "RecallInterval values frequently exceed expected 0-60 month range, indicating custom practice configurations"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "expect_column_values_to_be_between_recall_interval"
+        - description: "Small number of recall_status values (8 records) fall outside expected 0-10 range, indicating additional status codes"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "expect_column_values_to_be_between_recall_status"
+        - description: "Priority values range inconsistently across different practice configurations"
+          severity: "warn"
+          identified_date: "2023-12-01"
+      
+      business_rules:
+        - rule: "Recalls are automatically disabled when patient balance exceeds disable_until_balance threshold"
+          impact: "Affects revenue tracking and patient communication workflows"
+        - rule: "DateDueCalc is system-calculated based on intervals, DateDue can be manually overridden"
+          impact: "Critical for understanding scheduling flexibility and business logic"
+        - rule: "RecallStatus determines workflow state and communication triggers"
+          impact: "Affects patient outreach and scheduling automation"
+      
+      usage_notes: >
+        Use this model for recall tracking, patient communication scheduling, and practice
+        productivity analysis. Join with stg_opendental__patient for patient demographics
+        and stg_opendental__recalltype for recall type definitions. Be aware that
+        is_disabled recalls should be excluded from active scheduling workflows.
+        The recall_interval is typically in months (3, 6, 12) but can be customized.
+    
+    config:
+      materialized: incremental
+      unique_key: recall_id
+      schema: staging
+    
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 5000
+          max_value: 15000
+    
+    columns:
+      - name: recall_id
+        description: >
+          Primary key for the recall record. Maps to RecallNum in OpenDental.
+          Unique identifier for each recall appointment schedule entry.
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      - name: patient_id
+        description: >
+          Foreign key to the patient record. Links recall to specific patient
+          for scheduling and communication purposes.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+      
+      - name: recall_type_id
+        description: >
+          Foreign key to the recall type record. Defines the type of recall
+          appointment (e.g., routine cleaning, periodontal maintenance).
+          May be null for custom or legacy recall configurations.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__recalltype')
+              field: recall_type_id
+              severity: warn
+              where: "recall_type_id is not null"
+      
+      - name: date_due_calc
+        description: >
+          System-calculated date when the patient's recall is due based on
+          previous appointment date and recall interval. This is the automated
+          calculation before any manual overrides.
+      
+      - name: date_due
+        description: >
+          Actual date when the patient is due for a return appointment.
+          This may be manually overridden from date_due_calc for business reasons.
+          Critical for scheduling and patient communication workflows.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+      
+      - name: date_previous
+        description: >
+          Date of the patient's previous recall appointment that this recall
+          is based on. Used for calculating intervals and tracking compliance.
+      
+      - name: date_scheduled
+        description: >
+          Date when the recall appointment has been scheduled, if applicable.
+          Null indicates the recall is due but not yet scheduled.
+      
+      - name: disable_until_date
+        description: >
+          Date until which the recall is disabled, if applicable. Used for
+          temporary suspension of recall communications or scheduling.
+      
+      - name: recall_interval
+        description: >
+          The time interval specifying how frequently a patient should return for follow-up care,
+          typically measured in months (e.g., 3, 6, or 12 months). A value of 0 indicates
+          a custom interval that requires manual interpretation.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 60
+              severity: warn
+      
+      - name: recall_status
+        description: >
+          Current status of the recall appointment workflow:
+          0 = Due (ready for scheduling)
+          1 = Scheduled (appointment booked)
+          2 = Completed (appointment finished)
+          3 = Cancelled (recall cancelled)
+          Additional statuses may exist based on practice configuration.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: is_disabled
+        description: >
+          Boolean flag indicating whether the recall is currently disabled.
+          Disabled recalls are excluded from scheduling and communication workflows.
+          Converted from OpenDental IsDisabled field (0=No, 1=Yes converted to boolean).
+        tests:
+          - not_null
+          - boolean_values
+      
+      - name: disable_until_balance
+        description: >
+          Balance threshold at which the recall should remain disabled, if applicable.
+          When patient balance exceeds this amount, recall is automatically disabled
+          until balance is reduced. Used for practice financial policies.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+              where: "disable_until_balance is not null"
+      
+      - name: priority
+        description: >
+          Numeric priority level for the recall appointment, with lower numbers
+          indicating higher priority. Used for scheduling prioritization and
+          communication sequencing. Defaults to 0 if not specified.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: note
+        description: >
+          Additional notes or comments regarding the recall appointment.
+          Free-text field for special instructions, patient preferences,
+          or clinical notes. Null/empty values are converted to null.
+      
+      - name: time_pattern_override
+        description: >
+          Override for the standard time pattern for this recall appointment.
+          Allows customization of appointment duration or scheduling constraints
+          for specific patients or recall types. Null indicates standard timing.
+      
+      - name: _loaded_at
+        description: >
+          Timestamp when this record was loaded into the data warehouse by the ETL pipeline
+          (using current_timestamp). Used for data lineage and debugging purposes.
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: >
+          Timestamp when this record was created in the source system (OpenDental).
+          Maps to DateTStamp in OpenDental. Used for tracking record creation timing.
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: >
+          Timestamp when this record was last updated in the source system (OpenDental).
+          Maps to DateTStamp in OpenDental. Used for incremental loading and change tracking.
+        tests:
+          - not_null

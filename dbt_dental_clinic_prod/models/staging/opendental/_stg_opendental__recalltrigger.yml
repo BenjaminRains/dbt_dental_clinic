@@ -1,0 +1,109 @@
+version: 2
+
+models:
+  - name: stg_opendental__recalltrigger
+    description: >
+      Staging model for dental recall triggers that define the relationship between recall types 
+      and procedure codes. Recall triggers specify which procedure codes should automatically 
+      initiate a specific type of recall (such as hygiene cleanings or periodic exams).
+      
+      This model is essential for automated recall scheduling systems, helping dental practices 
+      maintain patient care continuity by ensuring appropriate follow-up appointments are 
+      scheduled based on completed procedures. Each trigger links a specific procedure code 
+      to a recall type, creating the business rules for when recalls should be generated.
+    
+    meta:
+      record_count: "~500-1000 active triggers"
+      data_scope: "All recall trigger configurations, primarily active recall types"
+      
+      known_issues:
+        - description: "Some legacy recall triggers may reference inactive procedure codes"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "relationships_test_for_code_id"
+        - description: "Recall triggers without associated recall types indicate data integrity issues"
+          severity: "error"
+          identified_date: "2024-01-15"
+          test: "relationships_test_for_recall_type_id"
+      
+      business_rules:
+        - rule: "Each recall trigger must be associated with exactly one recall type and one procedure code"
+          impact: "Ensures automated recall scheduling works correctly"
+        - rule: "Multiple procedure codes can trigger the same recall type"
+          impact: "Allows flexibility in recall scheduling business logic"
+      
+      usage_notes: >
+        This model is primarily used for configuring automated recall systems and should be 
+        joined with procedure codes and recall types for comprehensive recall rule analysis.
+        When analyzing recall triggers, consider that inactive or discontinued procedure codes 
+        may still have associated triggers that need cleanup.
+    
+    config:
+      tags: ['staging', 'opendental', 'daily']
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "recall_type_id is not null and code_id is not null"
+          config:
+            severity: error
+    
+    columns:
+      - name: recall_trigger_id
+        description: >
+          Primary key - Unique identifier for each recall trigger record. Maps to RecallTriggerNum 
+          in OpenDental. This ID links procedure completion events to specific recall type generation 
+          rules in the automated recall scheduling system.
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      - name: recall_type_id
+        description: >
+          Foreign key to the recall type table (stg_opendental__recalltype). Identifies which 
+          type of recall (hygiene cleaning, periodic exam, etc.) should be triggered when the 
+          associated procedure code is completed. Maps to RecallTypeNum in OpenDental.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__recalltype')
+              field: recall_type_id
+              severity: error
+      
+      - name: code_id
+        description: >
+          Foreign key to the procedure codes table (stg_opendental__procedurecode). Identifies 
+          which specific procedure code, when completed, should trigger the creation of the 
+          associated recall type. Maps to CodeNum in OpenDental. May reference inactive 
+          procedure codes in legacy configurations.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: procedure_code_id
+              severity: warn
+              where: "code_id is not null"
+      
+      - name: _loaded_at
+        description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: >
+          Timestamp when this record was created in the source system (OpenDental). 
+          Note: OpenDental recall trigger table does not have a native created timestamp, 
+          so this is populated with the ETL load timestamp for new records. May be null 
+          for records where the source timestamp is not available.
+        tests:
+          - not_null:
+              where: "_created_at is not null"
+      
+      - name: _updated_at
+        description: >
+          Timestamp when this record was last updated in the source system (OpenDental). 
+          Note: OpenDental recall trigger table does not have a native updated timestamp, 
+          so this is populated with the ETL load timestamp. May be null for records 
+          where the source timestamp is not available.
+        tests:
+          - not_null:
+              where: "_updated_at is not null"

@@ -1,0 +1,536 @@
+version: 2
+
+models:
+  - name: stg_opendental__claim
+    description: >
+      Standardized view of dental insurance claims from the OpenDental system.
+      Contains information about claim status, payments, providers, and related details for tracking
+      dental service billing and insurance reimbursement processes.
+      
+      This model processes claims from 2023-01-01 onwards and includes comprehensive business rules
+      for claim status validation, payment tracking, and orthodontic treatment monitoring.
+      Claims represent submitted billing requests to insurance companies for dental services performed.
+    
+    meta:
+      record_count: "~25,000 active claims"
+      data_scope: "All dental claims from January 1, 2023 onwards with incremental updates"
+      
+      known_issues:
+        - description: "Some claims show received dates before their sent dates due to data entry timing or system updates"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "received_date_after_sent_date"
+        - description: "Rare cases where total payments (deductible + insurance + write-off) exceed claim fee"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "total_payments_not_greater_than_claim_fee"
+        - description: "Employment-related flag only uses value 2 (No) across all claims"
+          severity: "info"
+          identified_date: "2024-01-15"
+        - description: "Place of service consistently shows 0 as all services performed at single clinic location"
+          severity: "info"
+          identified_date: "2024-01-15"
+      
+      business_rules:
+        - rule: "Claims must have service dates and valid claim statuses (R/S/H/W)"
+          impact: "Core business logic for claim processing workflow"
+        - rule: "Sent claims (S) must have sent dates; Received claims (R) must have received dates"
+          impact: "Ensures proper claim lifecycle tracking"
+        - rule: "Hold claims (H) and Waiting claims (W) must have both primary and secondary plan IDs"
+          impact: "Critical for coordination of benefits processing"
+        - rule: "Insurance payments cannot exceed claim fees"
+          impact: "Prevents overpayment scenarios"
+        - rule: "Orthodontic claims (is_ortho=1) should have total months specified"
+          impact: "Required for ortho benefit tracking and payment scheduling"
+      
+      usage_notes: >
+        Key considerations for analysts:
+        
+        - **Claim Status Workflow**: R (Received/Processed) → S (Sent/Tracking) → H (Hold/Secondary) → W (Waiting/Transition)
+        - **Payment Analysis**: Use claim_fee as baseline; insurance_payment_amount for actual reimbursement
+        - **Orthodontic Claims**: Filter using is_ortho=1; track progress with ortho_remaining_months/ortho_total_months
+        - **Multi-Insurance**: Hold (H) and Waiting (W) claims involve coordination between primary/secondary insurance
+        - **Date Logic**: original_sent_date tracks first submission; sent_date tracks most recent submission
+        - **Data Quality**: Some historical timing discrepancies exist but don't impact financial accuracy
+        
+        This model serves as the foundation for claims reporting, revenue cycle analysis, and insurance reconciliation.
+
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "insurance_payment_amount is null or claim_fee is null or insurance_payment_amount <= claim_fee"
+          name: insurance_payment_not_greater_than_claim_fee
+      - dbt_utils.expression_is_true:
+          expression: "deductible_applied is null or insurance_payment_amount is null or write_off is null or claim_fee is null or deductible_applied + insurance_payment_amount + write_off <= claim_fee"
+          name: total_payments_not_greater_than_claim_fee
+          config:
+            severity: warn
+            description: >
+              Warning: Some claims show total payments exceeding claim fee.
+              This can occur in rare cases when both deductible and insurance payment are applied to the same claim.
+              While valid, these cases should be reviewed to ensure they are intentional.
+      - dbt_utils.expression_is_true:
+          expression: "ortho_remaining_months is null or ortho_total_months is null or ortho_remaining_months <= ortho_total_months"
+          name: ortho_remaining_not_greater_than_total
+      - dbt_utils.expression_is_true:
+          expression: "case when is_ortho = true then ortho_total_months > 0 else true end"
+          name: ortho_claims_have_total_months
+          config:
+            severity: warn
+            description: >
+              Note: Currently no orthodontic claims in dataset (all is_ortho = false).
+              This test will be meaningful when ortho claims are present and validates
+              that ortho claims have a positive total months value.
+      - dbt_utils.expression_is_true:
+          expression: "sent_date is null or sent_date >= service_date"
+          name: sent_date_after_service_date
+      - dbt_utils.expression_is_true:
+          expression: >
+            received_date is null 
+            or sent_date is null 
+            or original_sent_date is null 
+            or (
+              -- Check if received_date is after the original send date
+              received_date >= original_sent_date
+              -- OR if it's a resent claim, check against the most recent sent date
+              or (resent_date is not null and received_date >= sent_date)
+              -- OR if it's a single-send claim, check against the sent date
+              or (resent_date is null and received_date >= sent_date)
+            )
+          name: received_date_after_sent_date
+          config:
+            severity: warn
+            description: >
+              Warning: Some claims show received dates before their sent dates.
+              This test accounts for:
+              1. Original claims (received_date >= sent_date)
+              2. Resent claims (received_date >= most recent sent_date)
+              3. Claims with multiple send dates (received_date >= original_sent_date)
+              While some cases may be valid due to data entry timing or system updates,
+              these should be reviewed to ensure they are intentional.
+
+    columns:
+      # Primary key
+      - name: claim_id
+        description: "Primary key - Unique identifier for the dental insurance claim (maps to ClaimNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+
+      # Foreign keys - Patient and Insurance
+      - name: patient_id
+        description: "Foreign key to the patient who received the dental services for this claim"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              severity: error
+      
+      - name: plan_id
+        description: "Foreign key to the primary insurance plan for this claim - required for all active claims"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+              severity: error
+              where: "plan_id is not null and plan_id != 0"
+      
+      - name: secondary_plan_id
+        description: "Foreign key to the secondary insurance plan - used for coordination of benefits when patient has multiple insurance coverage"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+              severity: error
+              where: "secondary_plan_id is not null and secondary_plan_id != 0"
+
+      # Foreign keys - Providers
+      - name: treating_provider_id
+        description: "Foreign key to the dentist or hygienist who performed the treatment"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: error
+              where: "treating_provider_id is not null and treating_provider_id != 0"
+      
+      - name: billing_provider_id
+        description: "Foreign key to the provider responsible for billing and claim submission"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "billing_provider_id is not null and billing_provider_id != 0"
+      
+      - name: referring_provider_id
+        description: "Foreign key to the provider who referred the patient for treatment"
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "referring_provider_id is not null and referring_provider_id != 0"
+
+      # Foreign keys - Administrative
+      - name: clinic_id
+        description: "Foreign key to the clinic location where services were provided. Note: MDC operates from a single location with clinic_id = 0, so relationship test is disabled until clinic model is properly implemented."
+      
+      - name: claim_form_id
+        description: "Foreign key to the type of claim form used for submission (ADA form type)"
+      
+      - name: insurance_subscriber_id
+        description: "Foreign key to the primary insurance subscriber (patient or family member)"
+      
+      - name: secondary_insurance_subscriber_id
+        description: "Foreign key to the secondary insurance subscriber for coordination of benefits"
+      
+      - name: ordering_referral_id
+        description: "Foreign key to the provider who ordered or referred the specific treatment"
+      
+      - name: provider_order_override_id
+        description: "Foreign key to the provider who overrode original treatment orders"
+      
+      - name: custom_tracking_id
+        description: "Foreign key to custom tracking information for specialized claim monitoring"
+
+      # Date fields - Core dates
+      - name: service_date
+        description: "Date when the dental service was performed - core business date for all claims"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2000-01-01'"
+              column_name: service_date
+          - dbt_utils.expression_is_true:
+              expression: "<= current_date + interval '1 year'"
+              column_name: service_date
+      
+      - name: sent_date
+        description: "Date when the claim was most recently sent to the insurance company - required for Sent status claims"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= service_date"
+              where: "sent_date is not null and service_date is not null"
+      
+      - name: received_date
+        description: "Date when the claim was received and processed by the insurance company - required for Received status claims"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= service_date"
+              where: "received_date is not null and service_date is not null"
+      
+      - name: original_sent_date
+        description: "Date when the claim was first sent to insurance - tracks initial submission for resent claims"
+
+      # Date fields - Specialized
+      - name: resent_date
+        description: "Date when the claim was resent to the insurance company after initial submission"
+      
+      - name: prior_date
+        description: "Date of prior prosthesis placement - required for prosthetic replacement claims"
+      
+      - name: accident_date
+        description: "Date of accident if claim is accident-related - required when accident_related flag is set"
+      
+      - name: ortho_date
+        description: "Date orthodontic treatment began - required for orthodontic claims (is_ortho=1)"
+      
+      - name: illness_injury_pregnancy_date
+        description: "Date of illness, injury, or pregnancy for medical necessity claims"
+      
+      - name: other_date
+        description: "Miscellaneous date field used for various specialized claim purposes"
+
+      # Financial fields - Core amounts
+      - name: claim_fee
+        description: "Total fee amount submitted for this claim - represents the practice's standard charge for services"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_utils.expression_is_true:
+              expression: "<= 50000"
+              config:
+                severity: warn
+      
+      - name: insurance_payment_estimate
+        description: "Estimated payment amount from insurance based on benefits verification - used for treatment planning"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "is null or insurance_payment_estimate >= 0"
+      
+      - name: insurance_payment_amount
+        description: "Actual payment amount received from insurance company - null until claim is processed"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "is null or insurance_payment_amount >= 0"
+      
+      - name: deductible_applied
+        description: "Amount of patient deductible applied to this claim - reduces insurance payment"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "is null or deductible_applied >= 0"
+      
+      - name: write_off
+        description: "Amount written off by the provider - typically contractual adjustments per insurance agreements"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      
+      - name: share_of_cost
+        description: "Patient's share of cost for the claim - amount patient is responsible for paying"
+
+      # Status and classification fields
+      - name: claim_status
+        description: >
+          Single character status code indicating current claim processing stage:
+          
+          - R: Received - Claim has been fully processed by insurance with payment or denial.
+            All received claims have sent dates, received dates, and plan IDs.
+            Average payment is $233.02 on average claim fee of $572.79.
+          - S: Sent - Claim has been sent to insurance and is being tracked for response.
+            All sent claims have sent dates and plan IDs.
+            Some may have partial payments (avg $5.03) on higher value claims (avg $792.92).
+          - H: Hold - Secondary claim waiting for primary insurance processing completion.
+            All hold claims have both primary and secondary plan IDs.
+            No sent or received dates as they wait for primary insurance.
+            Average claim fee is $537.67.
+          - W: Waiting - Special status for high-value claims ($1,117.17 avg) in transition.
+            Most have sent dates and all have both primary and secondary plan IDs.
+            No received dates as they are still being processed.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['R', 'S', 'H', 'W']
+              config:
+                severity: error
+          - dbt_utils.expression_is_true:
+              expression: "!= 'S' or sent_date is not null"
+              column_name: claim_status
+              name: sent_claims_missing_sent_date
+              config:
+                severity: error
+                description: "Sent claims must have a sent date as they have been transmitted to insurance"
+          - dbt_utils.expression_is_true:
+              expression: "!= 'R' or received_date is not null"
+              column_name: claim_status
+              name: received_claims_missing_received_date
+              config:
+                severity: error
+                description: "Received claims must have a received date as they have been processed by insurance"
+          - dbt_utils.expression_is_true:
+              expression: "!= 'H' or (plan_id is not null and secondary_plan_id is not null)"
+              column_name: claim_status
+              name: hold_claims_missing_plan_ids
+              config:
+                severity: error
+                description: "Hold claims must have both primary and secondary plan IDs as they are waiting for primary insurance processing"
+          - dbt_utils.expression_is_true:
+              expression: "!= 'W' or (plan_id is not null and secondary_plan_id is not null)"
+              column_name: claim_status
+              name: waiting_claims_missing_plan_ids
+              config:
+                severity: error
+                description: "Waiting claims must have both primary and secondary plan IDs as they are high-value claims in transition"
+      
+      - name: claim_type
+        description: >
+          Type of claim indicating insurance processing priority:
+          
+          - P: Primary insurance claim (91.69% of claims)
+            Standard claims submitted to a patient's primary insurance company.
+          - S: Secondary insurance claim (8.12% of claims)
+            Claims submitted to a patient's secondary insurance after primary insurance processing.
+          - Other: Special case claims (0.19% of claims)
+            Claims that follow primary insurance patterns but were marked as "Other".
+            These claims have primary plan IDs, no secondary insurance, follow standard processing,
+            have typical insurance payment patterns (50-60% of claim fee), and range from $88 to $1,632 in value.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['P', 'S', 'Other']
+              config:
+                severity: error
+
+      # Boolean fields
+      - name: is_employment_related
+        description: "Flag indicating if claim is related to employment injury (0=Yes, 1=No converted to boolean). Currently all claims show No (false) as MDC primarily handles general dentistry."
+        tests:
+          - not_null
+          - accepted_values:
+              values: [false]
+              config:
+                severity: error
+      
+      - name: is_ortho
+        description: "Flag indicating if claim is for orthodontic treatment (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_outside_lab
+        description: "Flag indicating if outside laboratory services were used (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_prosthesis
+        description: "Flag indicating if claim involves prosthetic replacement (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      # Integer/Numeric fields
+      - name: place_of_service
+        description: >
+          Code indicating location where services were performed:
+          0 = Office/Clinic (default for MDC as all services performed at single location)
+          
+          Note: Other standard values (11=Office, 21=Inpatient Hospital, 22=Outpatient Hospital)
+          are not currently used by MDC clinic.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0]
+              config:
+                severity: error
+      
+      - name: patient_relation
+        description: >
+          Code for patient's relationship to primary insurance subscriber:
+          0 = Self (patient is the subscriber)
+          1 = Spouse 
+          2 = Child
+          4 = Other dependent
+          8 = Unknown relationship
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 4, 8]
+              config:
+                severity: warn
+      
+      - name: secondary_patient_relation
+        description: "Code for patient's relationship to secondary insurance subscriber (uses same codes as patient_relation)"
+      
+      - name: ortho_remaining_months
+        description: "Number of months remaining in orthodontic treatment plan - used for benefit tracking and payment scheduling"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "is null or (ortho_remaining_months >= 0 and ortho_remaining_months <= 60)"
+      
+      - name: ortho_total_months
+        description: "Total number of months planned for orthodontic treatment - required for ortho claims (is_ortho=1)"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "is null or (ortho_total_months >= 0 and ortho_total_months <= 60)"
+      
+      - name: radiographs
+        description: "Number of radiographic images attached to claim for insurance review"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "is null or (radiographs >= 0 and radiographs <= 50)"
+      
+      - name: attached_images
+        description: "Number of clinical photographs attached to claim for insurance review"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "is null or (attached_images >= 0 and attached_images <= 50)"
+      
+      - name: attached_models
+        description: "Number of dental models/impressions attached to claim"
+      
+      - name: special_program_code
+        description: "Code indicating special insurance program status (Medicare, Medicaid, etc.)"
+      
+      - name: med_type
+        description: "Medical claim type code for medical necessity dental procedures"
+      
+      - name: correction_type
+        description: "Code indicating type of correction made to original claim submission"
+      
+      - name: illness_injury_pregnancy_date_qualifier
+        description: "Qualifier code for the illness/injury/pregnancy date field"
+      
+      - name: other_date_qualifier
+        description: "Qualifier code for the other_date field indicating its purpose"
+
+      # Text/String fields
+      - name: pre_auth_string
+        description: "Pre-authorization number or string provided by insurance company for prior approved treatments"
+      
+      - name: reason_under_paid
+        description: "Insurance company's explanation for why claim was paid less than expected amount"
+      
+      - name: claim_note
+        description: "Internal notes related to the claim processing, billing, or special circumstances"
+      
+      - name: reference_number_string
+        description: "Insurance company's reference number assigned to the claim for tracking"
+      
+      - name: accident_related
+        description: "Flag or description indicating if claim is related to an accident"
+      
+      - name: accident_state
+        description: "Two-letter state code where accident occurred (required if accident_related is set)"
+      
+      - name: attached_flags
+        description: "Flags indicating types of attachments included with claim submission"
+      
+      - name: attachment_id
+        description: "Unique identifier for digital attachments submitted with claim"
+      
+      - name: prior_authorization_number
+        description: "Prior authorization number required for certain high-cost or specialized procedures"
+      
+      - name: uniform_bill_type
+        description: "Type of uniform billing form used for institutional claims"
+      
+      - name: admission_type_code
+        description: "Code indicating type of admission for institutional/hospital claims"
+      
+      - name: admission_source_code
+        description: "Code indicating source of admission for institutional claims"
+      
+      - name: patient_status_code
+        description: "Code indicating patient's status at time of discharge from institutional care"
+      
+      - name: claim_identifier
+        description: "Unique identifier assigned to claim by insurance company upon receipt"
+      
+      - name: original_reference_number
+        description: "Original reference number for claims that have been corrected or resubmitted"
+      
+      - name: security_hash
+        description: "Hash value for electronic claim security verification"
+      
+      - name: narrative
+        description: "Detailed narrative text explaining medical necessity or special circumstances for claim"
+
+      # Required metadata columns (standardized across all staging models)
+      - name: _loaded_at
+        description: "Timestamp when the record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column. Uses SecDateTEdit as fallback for invalid dates."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2000-01-01'"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column with fallback to SecDateEntry."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= _created_at"
+      
+      - name: _created_by_user_id
+        description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column. May be null for system-generated claims or historical records."

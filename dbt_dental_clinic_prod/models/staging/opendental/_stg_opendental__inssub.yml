@@ -1,0 +1,298 @@
+version: 2
+
+models:
+  - name: stg_opendental__inssub
+    description: >
+      Staging model for insurance subscribers. This table contains information about insurance subscribers 
+      and their relationship to insurance plans, tracking benefit assignments, release authorizations, 
+      and subscription periods.
+      
+      This model represents the relationship between patients (subscribers) and their insurance plans, 
+      including benefit assignments, authorization flags, and subscription validity periods. Records are 
+      filtered to include only active or recently modified subscriptions to optimize performance while 
+      maintaining data currency.
+    
+    meta:
+      record_count: "~85,000"
+      data_scope: "Insurance subscriptions from 2023+ or historical active/future-terminated records"
+      
+      known_issues:
+        - description: "Historical records (pre-2020) may have _created_by_user_id = null due to system changes"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "test_created_by_user_conditional"
+        - description: "Some legacy records have invalid termination dates in the past that don't align with current status"
+          severity: "warn" 
+          identified_date: "2024-01-15"
+          test: "test_status_with_date"
+        - description: "External subscriber IDs may contain duplicates across different insurance plans"
+          severity: "warn"
+          identified_date: "2024-01-15"
+        - description: "20 records (~0.15%) have birth dates incorrectly entered as effective_date (1949-1999 range) - reduced to 6 after 1980 filter"
+          severity: "warn"
+          identified_date: "2025-01-03"
+          test: "effective_date_validation"
+        - description: "1 record has termination_date before effective_date (inssub_id: 12590, effective: 2023-08-01, terminated: 2023-06-30)"
+          severity: "warn"
+          identified_date: "2025-01-03"
+          test: "date_sequence_validation"
+        - description: "1 record has empty subscriber_external_id string (violates length > 0 validation)"
+          severity: "warn"
+          identified_date: "2025-01-03"
+          test: "subscriber_external_id_validation"
+        - description: "Performance filtering excludes old terminated subscriptions, causing referential integrity warnings in downstream models"
+          severity: "warn"
+          identified_date: "2025-01-03"
+          impact: "insverify (283), payment_allocated (200), insverifyhist (983), claimproc (290) records reference filtered subscribers"
+      
+      business_rules:
+        - rule: "Subscriber status is derived from termination_date vs current_date"
+          impact: "Critical for determining coverage eligibility and claim processing"
+        - rule: "Benefit assignment and information release flags control claim processing workflow"
+          impact: "Affects automated vs manual claim submission processes"
+        - rule: "Effective dates can be NULL for newly created subscriptions pending setup"
+          impact: "~7% of ACTIVE subscriptions have NULL effective_date during initial setup workflow"
+        - rule: "When populated, effective dates must be <= current_date, termination dates can be future"
+          impact: "Supports both current and scheduled future terminations"
+      
+      usage_notes: >
+        Key considerations for analysts:
+        - Use subscriber_status field rather than calculating from termination_date directly
+        - Historical records are included only if still active to optimize performance
+        - External subscriber IDs are not unique across plans but are unique within a plan
+        - Always join with insurance_plan_id when analyzing coverage details
+        - Consider both effective_date and termination_date when determining coverage periods
+        
+        Data quality considerations:
+        - 6 records have invalid effective_date values (birth dates) - filter with WHERE effective_date >= '1980-01-01' for date range analysis
+        - 1 record (inssub_id: 12590) has illogical date sequence - exclude for date range validations if needed
+        - 1 record has empty subscriber_external_id - handle nulls appropriately in joins
+        
+        Downstream impact:
+        - Our performance filtering creates referential integrity gaps in downstream models
+        - Expect relationship warnings in insverify, payment allocation, verification history, and claim processing models
+        - This is expected behavior to optimize query performance by excluding old terminated subscriptions
+    
+    tests:
+      # Business rule validations (model-level)
+      - dbt_utils.expression_is_true:
+          expression: "(effective_date IS NULL OR effective_date <= COALESCE(termination_date, current_date))"
+          config:
+            severity: warn
+      
+      # Data quality validations (model-level)
+      - dbt_utils.expression_is_true:
+          expression: "inssub_id > 0"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "insurance_plan_id > 0"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "subscriber_id > 0"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(effective_date IS NULL OR effective_date >= '1980-01-01')"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "(effective_date IS NULL OR effective_date <= current_date)"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(termination_date IS NULL OR effective_date IS NULL OR termination_date >= effective_date)"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "(termination_date IS NULL OR termination_date <= current_date + interval '5 years')"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "(date_created IS NULL OR date_created >= '2000-01-01')"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(date_created IS NULL OR date_created <= current_date)"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "date_updated >= COALESCE(date_created, '2000-01-01')"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "date_updated <= current_date"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "_loaded_at <= current_timestamp"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(_created_at IS NULL OR _created_at >= '2000-01-01')"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(_created_at IS NULL OR _created_at <= current_timestamp)"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "_updated_at >= COALESCE(_created_at, '2000-01-01')"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "_updated_at <= current_timestamp"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(_created_by_user_id IS NULL OR _created_by_user_id > 0)"
+          config:
+            severity: error
+      
+      # String length validations (model-level)
+      - dbt_utils.expression_is_true:
+          expression: "(subscriber_external_id IS NULL OR length(subscriber_external_id) > 0)"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "(benefit_notes IS NULL OR length(benefit_notes) <= 1000)"
+          config:
+            severity: warn
+      - dbt_utils.expression_is_true:
+          expression: "(subscriber_notes IS NULL OR length(subscriber_notes) <= 1000)"
+          config:
+            severity: warn
+      
+      # Status logic validations (model-level)
+      - dbt_utils.expression_is_true:
+          expression: "(subscriber_status = 'ACTIVE' AND (termination_date IS NULL OR termination_date > current_date)) OR subscriber_status != 'ACTIVE'"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(subscriber_status = 'TERMINATED' AND termination_date < current_date) OR subscriber_status != 'TERMINATED'"
+          config:
+            severity: error
+      - dbt_utils.expression_is_true:
+          expression: "(subscriber_status = 'FUTURE_TERMINATED' AND termination_date >= current_date) OR subscriber_status != 'FUTURE_TERMINATED'"
+          config:
+            severity: error
+    
+    columns:
+      - name: inssub_id
+        description: "Primary key - Unique identifier for the insurance subscriber record (maps to InsSubNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+
+      - name: insurance_plan_id
+        description: "Foreign key to stg_opendental__insplan - Links to the insurance plan details and coverage specifications"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__insplan')
+              field: insurance_plan_id
+              config:
+                severity: error
+
+      - name: subscriber_id
+        description: "Foreign key to stg_opendental__patient - The patient who is the primary subscriber for this insurance plan"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+              config:
+                severity: error
+
+      - name: subscriber_external_id
+        description: >
+          External identifier for the subscriber used by the insurance company. This ID is provided by the insurance 
+          carrier and used for claim processing and member verification. May be null for self-pay or unverified plans.
+
+      - name: benefit_notes
+        description: >
+          Free-text notes regarding the insurance benefits, coverage details, limitations, or special instructions. 
+          Used by staff for reference during treatment planning and claim processing.
+
+      - name: subscriber_notes
+        description: >
+          Notes about the subscriber relationship, payment history, or special circumstances. 
+          Used for internal tracking and communication among staff.
+
+      - name: is_release_info
+        description: "Flag indicating if the patient has authorized release of information to the insurance company (converted from 0/1 to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: is_assign_benefits
+        description: "Flag indicating if the patient has authorized assignment of benefits to the provider (converted from 0/1 to boolean)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: effective_date
+        description: "Date when the insurance subscription becomes effective and coverage begins. May be NULL for newly created subscriptions pending setup or verification."
+
+      - name: termination_date
+        description: >
+          Date when the insurance subscription terminates and coverage ends. 
+          NULL indicates no planned termination (active indefinitely).
+
+      - name: date_created
+        description: "Date when the insurance subscription record was originally created in OpenDental (maps to SecDateEntry, date portion only)"
+        tests:
+          - not_null:
+              where: "_created_by_user_id is not null"
+
+      - name: date_updated
+        description: "Date when the insurance subscription record was last modified in OpenDental (maps to SecDateTEdit, date portion only)"
+        tests:
+          - not_null
+
+      - name: subscriber_status
+        description: >
+          Current status of the subscriber derived from termination_date:
+          - ACTIVE: No termination date or termination date is in the future
+          - TERMINATED: Termination date is in the past
+          - FUTURE_TERMINATED: Termination date is today or in the future (scheduled termination)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ACTIVE', 'TERMINATED', 'FUTURE_TERMINATED']
+
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: >
+          Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry 
+          with fallback to SecDateTEdit. May be null for historical records (pre-2020) that lack creation timestamps.
+        tests:
+          - not_null:
+              where: "_created_by_user_id is not null"
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit with fallback logic."
+        tests:
+          - not_null
+
+      - name: _created_by_user_id
+        description: >
+          User who created the record in the source system (OpenDental). Maps to SecUserNumEntry. 
+          May be null for historical records (pre-2020) or system-generated records.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              where: "_created_by_user_id is not null"
+              config:
+                severity: warn
+
+    config:
+      tags: ['staging', 'insurance', 'daily']
