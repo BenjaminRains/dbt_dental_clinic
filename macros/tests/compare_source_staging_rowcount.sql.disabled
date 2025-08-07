@@ -1,7 +1,7 @@
 {% test compare_source_staging_rowcount(model, source_relation, source_column, staged_column, date_value) %}
 
 {# Set up the failure calculation for the test #}
-{{ config(fail_calc = 'sum(coalesce(diff_count, 0))') }}
+{# {{ config(fail_calc = 'sum(coalesce(diff_count, 0))') }} #}
 
 with source_counts as (
     select count(*) as source_count

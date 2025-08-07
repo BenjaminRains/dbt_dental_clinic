@@ -1,7 +1,7 @@
-{{ config(
+{# {{ config(
     severity='warn',
     tags=['data_quality', 'staging']
-) }}
+) }} #}
 
 -- Test to verify that significant appointment status changes have corresponding history records
 -- Returns appointments that should have history records but are missing appropriate coverage

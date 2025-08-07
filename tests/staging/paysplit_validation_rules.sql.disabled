@@ -1,4 +1,4 @@
-{{ config(severity = 'warn') }}
+{# {{ config(severity = 'warn') }} #}
 
 {% if execute and model.name != 'stg_opendental__paysplit' %}
     -- Skip this test for any model that isn't stg_opendental__paysplit
