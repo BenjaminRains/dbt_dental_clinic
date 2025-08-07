@@ -402,12 +402,12 @@ models:
       - dbt_utils.expression_is_true:
           expression: "not (procedure_status = 2 and procedure_fee = 0)"
           severity: warn
-          name: warn_completed_procedure_zero_fee
+          name: warn_procedure_complete_zero_fee
 
       - dbt_utils.expression_is_true:
           expression: "not (has_standard_fee = false and procedure_status = 2)"
           severity: warn
-          name: warn_completed_procedure_no_standard_fee
+          name: warn_procedure_complete_no_standard_fee
 
       - dbt_utils.expression_is_true:
           expression: >
@@ -453,7 +453,7 @@ models:
       - dbt_utils.expression_is_true:
           expression: "not (is_hygiene_flag = 1 and procedure_fee > 500)"
           severity: warn
-          name: warn_high_hygiene_procedure_fees
+          name: warn_procedure_complete_high_hygiene_fees
 
       - dbt_utils.expression_is_true:
           expression: >

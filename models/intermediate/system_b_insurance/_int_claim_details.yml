@@ -419,16 +419,7 @@ models:
               Tolerance: May have exceptions for specific clinical situations
               Action Required: Review procedures flagged as radiology but marked as non-billable
 
-      - unique:
-          column_name: claim_detail_id
-          config:
-            severity: error
-            description: >
-              Data Integrity: Each claim detail record must have unique identifier
-              
-              Business Requirement: Prevents duplicate processing of claim procedures
-              System Impact: Essential for accurate financial tracking and reporting
-              Enforcement: Ensures one record per claim-procedure combination
+      # Removed duplicate unique test for claim_detail_id (already defined in column definition)
     
     meta:
       owner: "insurance_team"

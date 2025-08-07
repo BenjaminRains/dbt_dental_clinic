@@ -257,11 +257,7 @@ models:
               max_value: 10000
               severity: warn
 
-      - name: adjustment_impact
-        description: Classification of adjustment impact based on percentage of procedure fee
-        tests:
-          - accepted_values:
-              values: ['major', 'moderate', 'minor']
+      # Removed duplicate adjustment_impact definition
 
       - name: is_procedure_adjustment
         description: Flag indicating if adjustment is tied to a specific procedure
