@@ -7,7 +7,7 @@ with source_data as (
     select * 
     from {{ source('opendental', 'adjustment') }}
     where {{ clean_opendental_date('"AdjDate"') }} >= '2023-01-01'::date
-        and {{ clean_opendental_date('"AdjDate"') }} <= '{{ var("max_valid_date") }}'::date
+        and {{ clean_opendental_date('"AdjDate"') }} <= {{ var("max_valid_date") }}::date
     {% if is_incremental() %}
         and {{ clean_opendental_date('"AdjDate"') }} > (select max(adjustment_date) from {{ this }})
     {% endif %}
