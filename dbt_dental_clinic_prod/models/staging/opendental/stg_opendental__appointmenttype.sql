@@ -35,23 +35,3 @@ renamed_columns as (
 )
 
 select * from renamed_columns
-
-union all
-
-select
-    0 as appointment_type_id,
-    'None' as appointment_type_name,
-    null as appointment_type_color,
-    null as item_order,
-    null as pattern,
-    null as code_str,
-    null as code_str_required,
-    null as required_proc_codes_needed,
-    null as blockout_types,
-    null as is_hidden,
-    
-    -- Metadata columns for default record
-    current_timestamp as _loaded_at,
-    null as _created_at,
-    null as _updated_at,
-    null as _created_by_user_id
