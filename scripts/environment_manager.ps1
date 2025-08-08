@@ -27,15 +27,21 @@ function Initialize-DBTEnvironment {
     $projectName = Split-Path -Leaf $ProjectPath
     Write-Host "`n🏗️  Initializing dbt environment: $projectName" -ForegroundColor Cyan
 
-    # Verify dbt project
-    if (-not (Test-Path "$ProjectPath\dbt_project.yml")) {
-        Write-Host "❌ No dbt_project.yml found" -ForegroundColor Red
+    # Verify dbt project - check both current directory and dbt_dental_clinic_prod subdirectory
+    $dbtProjectPath = $ProjectPath
+    if (Test-Path "$ProjectPath\dbt_dental_clinic_prod\dbt_project.yml") {
+        $dbtProjectPath = "$ProjectPath\dbt_dental_clinic_prod"
+        Write-Host "📁 Found dbt project in: dbt_dental_clinic_prod/" -ForegroundColor Green
+    } elseif (Test-Path "$ProjectPath\dbt_project.yml") {
+        Write-Host "📁 Found dbt project in: current directory" -ForegroundColor Green
+    } else {
+        Write-Host "❌ No dbt_project.yml found in current directory or dbt_dental_clinic_prod/" -ForegroundColor Red
         return
     }
 
-    # Set up dbt pipenv environment (always from project root)
-    if (Test-Path "$ProjectPath\Pipfile") {
-        Push-Location $ProjectPath
+    # Set up dbt pipenv environment (use the dbt project directory)
+    if (Test-Path "$dbtProjectPath\Pipfile") {
+        Push-Location $dbtProjectPath
         try {
             Write-Host "📦 Installing dbt dependencies..." -ForegroundColor Yellow
             
@@ -86,9 +92,13 @@ function Initialize-DBTEnvironment {
         return
     }
 
-    # Load environment variables
+    # Load environment variables from both project root and dbt project directory
     @(".env_production", ".dbt-env") | ForEach-Object {
-        $envFile = "$ProjectPath\$_"
+        # Try dbt project directory first, then project root
+        $envFile = "$dbtProjectPath\$_"
+        if (-not (Test-Path $envFile)) {
+            $envFile = "$ProjectPath\$_"
+        }
         if (Test-Path $envFile) {
             Get-Content $envFile | ForEach-Object {
                 if ($_ -match '^([^#][^=]+)=(.*)$') {
@@ -311,7 +321,18 @@ function Invoke-DBT {
     }
     Write-Host "🚀 dbt $($args -join ' ')" -ForegroundColor Cyan
     # FIXED: Use pipenv run to avoid infinite recursion with dbt alias
-    pipenv run dbt $args
+    # Also change to dbt project directory before running commands
+    $currentLocation = Get-Location
+    if (Test-Path "dbt_dental_clinic_prod") {
+        Push-Location "dbt_dental_clinic_prod"
+        try {
+            pipenv run dbt $args
+        } finally {
+            Pop-Location
+        }
+    } else {
+        pipenv run dbt $args
+    }
 }
 
 function Start-Notebook {
@@ -550,8 +571,8 @@ Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
 # Auto-detect project type
 $cwd = Get-Location
-if (Test-Path "$cwd\dbt_project.yml") {
-    Write-Host "`n🏗️  dbt project detected (Pipfile in root). Run 'dbt-init' to start." -ForegroundColor Green
+if ((Test-Path "$cwd\dbt_project.yml") -or (Test-Path "$cwd\dbt_dental_clinic_prod\dbt_project.yml")) {
+    Write-Host "`n🏗️  dbt project detected. Run 'dbt-init' to start." -ForegroundColor Green
 }
 if (Test-Path "$cwd\etl_pipeline\Pipfile") {
     Write-Host "🔄 ETL pipeline detected (Pipfile in etl_pipeline/). Run 'etl-init' to start." -ForegroundColor Magenta
