@@ -62,13 +62,13 @@ renamed_columns as (
         -- Boolean Fields
         {{ convert_opendental_boolean('"IsTransfer"') }} as is_transfer,
         {{ convert_opendental_boolean('"IsOverpay"') }} as is_overpay,
+        {{ convert_opendental_boolean('"NoBillIns"') }} as no_bill_insurance,
         
-        -- Integer/Status Fields
-        "Status" as status,
-        "Percentage" as percentage,
-        "PercentOverride" as percentage_override,
-        "NoBillIns" as no_bill_insurance,
-        "LineNumber" as line_number,
+        -- Integer/Status Fields (cast to smallint to match DDL)
+        "Status"::smallint as status,
+        "Percentage"::smallint as percentage,
+        "PercentOverride"::smallint as percentage_override,
+        "LineNumber"::smallint as line_number,
         "PaymentRow" as payment_row,
         
         -- Character Fields
