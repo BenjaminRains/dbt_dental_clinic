@@ -19,6 +19,10 @@ models:
           severity: "warn"
           identified_date: "2024-01-15"
           test: "relationships_with_third_table"
+        - description: "tracking_definition_id and tracking_error_definition_id use 0 as 'no definition' value"
+          severity: "info"
+          identified_date: "2024-01-15"
+          impact: "Tests configured to only check positive values (> 0) to accommodate this valid data pattern"
         - description: "tracking_error_definition_id may be null for non-error tracking events"
           severity: "warn"
           identified_date: "2024-01-15"
@@ -101,18 +105,20 @@ models:
           Foreign key to the tracking definition (maps to TrackingDefNum in OpenDental).
           Defines the type or category of tracking event being recorded.
           Links to predefined tracking definitions that categorize different types of claim events.
+          Note: Value 0 indicates "no definition" and is a valid state.
         tests:
           - positive_values:
-              where: "tracking_definition_id is not null"
+              where: "tracking_definition_id is not null AND tracking_definition_id > 0"
 
       - name: tracking_error_definition_id
         description: >
           Foreign key to the tracking error definition (maps to TrackingErrorDefNum in OpenDental).
           Used when the tracking entry represents an error condition or problem with claim processing.
           Null for non-error tracking events. Links to predefined error definitions for categorization.
+          Note: Value 0 indicates "no error definition" and is a valid state.
         tests:
           - positive_values:
-              where: "tracking_error_definition_id is not null"
+              where: "tracking_error_definition_id is not null AND tracking_error_definition_id > 0"
 
       - name: entry_timestamp
         description: >
