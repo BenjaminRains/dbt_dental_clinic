@@ -4,10 +4,13 @@
     
     Source columns are INTEGER type but may contain invalid data like "N"
     so we need to cast to text first before pattern matching
+    
+    Updated to preserve 0 values which are meaningful in OpenDental
+    (e.g., coverage_category_id = 0 means "no specific category/general benefit")
 -#}
     {%- for transformation in transformations -%}
         CASE 
-            WHEN {{ transformation.source }}::text ~ '^[1-9][0-9]*$' THEN {{ transformation.source }}::text::integer
+            WHEN {{ transformation.source }}::text ~ '^[0-9]+$' THEN {{ transformation.source }}::text::integer
             ELSE NULL
         END as {{ transformation.target }}
         {%- if not loop.last -%},{%- endif -%}
