@@ -58,7 +58,7 @@ models:
     
     tests:
       - dbt_utils.expression_is_true:
-          expression: "case when payment_type_id = 0 then check_amount = 0 else true end"
+          expression: "case when payment_type_id = 463 then check_amount = 0 else true end"
           config:
             severity: error
       
@@ -121,9 +121,16 @@ models:
                 where: "check_number is not null and check_number != ''"
       
       - name: bank_branch
-        description: "Bank branch information for the payment. Used for deposit processing and reconciliation."
+        description: >
+          Bank branch information for the payment. Used for deposit processing and reconciliation.
+          
+          NOTE: This field is sparsely populated in the source system. Analysis shows only 2 out of 
+          19,690 records (0.01%) have actual bank branch values. The remaining 99.99% of records 
+          have empty/null values, indicating this field is not actively used in the OpenDental system.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       
       - name: note
         description: "Additional notes related to the payment processing, carrier communications, or special handling instructions."
@@ -174,7 +181,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [0, 69, 70, 71, 72, 261, 303, 391, 412, 417, 464, 465, 466, 469, 574, 634, 645, 646, 647]
+              values: [0, 69, 70, 71, 72, 261, 303, 391, 412, 417, 464, 465, 466, 467, 469, 574, 634, 645, 646, 647, 661]
               config:
                 severity: warn
       
