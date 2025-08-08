@@ -30,6 +30,14 @@ models:
         - description: "Place of service consistently shows 0 as all services performed at single clinic location"
           severity: "info"
           identified_date: "2024-01-15"
+        - description: "2 claims (claim_id: 26910, 26911) have place_of_service = 3 instead of expected 0. These are recent claims (2025-03-24) for patient 32041 and likely represent data entry errors."
+          severity: "warn"
+          identified_date: "2025-01-15"
+          test: "accepted_values_stg_opendental__claim_place_of_service__0"
+        - description: "2 claims have patient_relation = 7 instead of expected values [0,1,2,4,8]. This represents 0.02% of records and likely indicates data entry errors for rare relationship types."
+          severity: "warn"
+          identified_date: "2025-01-15"
+          test: "accepted_values_stg_opendental__claim_patient_relation__0__1__2__4__8"
       
       business_rules:
         - rule: "Claims must have service dates and valid claim statuses (R/S/H/W)"
@@ -301,10 +309,12 @@ models:
           - W: Waiting - Special status for high-value claims ($1,117.17 avg) in transition.
             Most have sent dates and all have both primary and secondary plan IDs.
             No received dates as they are still being processed.
+          - U: Unknown/Unspecified - Rare status (0.02% of claims) for claims with unclear processing state.
+            These claims may require manual review or represent edge cases in the claim workflow.
         tests:
           - not_null
           - accepted_values:
-              values: ['R', 'S', 'H', 'W']
+              values: ['R', 'S', 'H', 'W', 'U']
               config:
                 severity: error
           - dbt_utils.expression_is_true:
