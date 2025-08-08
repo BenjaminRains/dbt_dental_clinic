@@ -2,7 +2,7 @@
     Note: This staging model is prepared for when data becomes available.
     Current Status (2024-03-14):
     - Database: opendental_analytics
-    - Schema: public
+    - Schema: raw
     - Table: clinic
     - Status: No data available in local development environment
     - Expected Columns: See DDL in analysis/clinic/clinic_pg_ddl.sql
@@ -11,6 +11,50 @@
     1. Standard column naming and transformations
     2. Metadata fields (_loaded_at, _created_at, _updated_at)
     3. All columns from the source DDL
+    
+    Column Mapping Verification (DDL -> Staging):
+    - "ClinicNum" (int8) -> clinic_id (via transform_id_columns)
+    - "Description" (varchar) -> clinic_name
+    - "Address" (varchar) -> address_line_1
+    - "Address2" (varchar) -> address_line_2
+    - "City" (varchar) -> city
+    - "State" (varchar) -> state
+    - "Zip" (varchar) -> zip_code
+    - "Phone" (varchar) -> phone_number
+    - "BankNumber" (varchar) -> bank_number
+    - "DefaultPlaceService" (bool) -> default_place_of_service
+    - "InsBillingProv" (int8) -> insurance_billing_provider_id (via transform_id_columns)
+    - "Fax" (varchar) -> fax_number
+    - "EmailAddressNum" (int8) -> email_address_id (via transform_id_columns)
+    - "DefaultProv" (int8) -> default_provider_id (via transform_id_columns)
+    - "SmsContractDate" (timestamp) -> sms_contract_date (via clean_opendental_date)
+    - "SmsMonthlyLimit" (float8) -> sms_monthly_limit
+    - "IsMedicalOnly" (bool) -> is_medical_only (via convert_opendental_boolean)
+    - "BillingAddress" (varchar) -> billing_address_line_1
+    - "BillingAddress2" (varchar) -> billing_address_line_2
+    - "BillingCity" (varchar) -> billing_city
+    - "BillingState" (varchar) -> billing_state
+    - "BillingZip" (varchar) -> billing_zip
+    - "PayToAddress" (varchar) -> pay_to_address_line_1
+    - "PayToAddress2" (varchar) -> pay_to_address_line_2
+    - "PayToCity" (varchar) -> pay_to_city
+    - "PayToState" (varchar) -> pay_to_state
+    - "PayToZip" (varchar) -> pay_to_zip
+    - "UseBillAddrOnClaims" (bool) -> use_billing_address_on_claims (via convert_opendental_boolean)
+    - "Region" (int8) -> region_id (via transform_id_columns)
+    - "ItemOrder" (int4) -> display_order
+    - "IsInsVerifyExcluded" (bool) -> is_insurance_verification_excluded (via convert_opendental_boolean)
+    - "Abbr" (varchar) -> clinic_abbreviation
+    - "MedLabAccountNum" (varchar) -> medical_lab_account_number
+    - "IsConfirmEnabled" (bool) -> is_confirmation_enabled (via convert_opendental_boolean)
+    - "IsConfirmDefault" (bool) -> is_confirmation_default (via convert_opendental_boolean)
+    - "IsNewPatApptExcluded" (bool) -> is_new_patient_appointment_excluded (via convert_opendental_boolean)
+    - "IsHidden" (bool) -> is_hidden (via convert_opendental_boolean)
+    - "ExternalID" (int8) -> external_id (via transform_id_columns)
+    - "SchedNote" (varchar) -> scheduling_note
+    - "HasProcOnRx" (bool) -> has_procedure_on_prescription (via convert_opendental_boolean)
+    - "TimeZone" (varchar) -> timezone
+    - "EmailAliasOverride" (varchar) -> email_alias
     
     TODO: Once data is available:
     1. Verify all columns exist as expected
@@ -34,7 +78,8 @@ renamed_columns as (
             {'source': '"EmailAddressNum"', 'target': 'email_address_id'},
             {'source': '"DefaultProv"', 'target': 'default_provider_id'},
             {'source': '"InsBillingProv"', 'target': 'insurance_billing_provider_id'},
-            {'source': '"Region"', 'target': 'region_id'}
+            {'source': '"Region"', 'target': 'region_id'},
+            {'source': '"ExternalID"', 'target': 'external_id'}
         ]) }},
         
         -- Basic Information
@@ -80,7 +125,6 @@ renamed_columns as (
         "TimeZone" as timezone,
         "SchedNote" as scheduling_note,
         "MedLabAccountNum" as medical_lab_account_number,
-        "ExternalID" as external_id,
         
         -- Date Fields
         {{ clean_opendental_date('"SmsContractDate"') }} as sms_contract_date,
@@ -88,10 +132,10 @@ renamed_columns as (
         -- SMS Settings
         "SmsMonthlyLimit" as sms_monthly_limit,
         
-        -- Metadata columns
+        -- Metadata columns (clinic table doesn't have DateEntry/DateTStamp columns)
         {{ standardize_metadata_columns(
-            created_at_column='"DateEntry"',
-            updated_at_column='"DateTStamp"',
+            created_at_column=none,
+            updated_at_column=none,
             created_by_column=none
         ) }}
 
