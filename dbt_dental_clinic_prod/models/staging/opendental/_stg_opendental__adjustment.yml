@@ -185,26 +185,14 @@ models:
 
       # Required metadata columns (using standardize_metadata_columns macro)
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
         tests:
           - not_null
       
-      - name: _created_at
-        description: "Timestamp when the record was created in OpenDental (maps to DateEntry). May be null for legacy records."
-        tests:
-          - not_null:
-              where: "adjustment_date >= '2023-01-01'"
-      
-      - name: _updated_at
-        description: "Timestamp when the record was last updated in OpenDental (maps to SecDateTEdit)."
+      - name: _transformed_at
+        description: "Timestamp when this dbt model was last built/transformed"
         tests:
           - not_null
-
-      - name: _created_by_user_id
-        description: "User who created the record in OpenDental (maps to SecUserNumEntry). May be null for system-generated adjustments."
-        tests:
-          - not_null:
-              where: "_created_at >= '2023-01-01' AND adjustment_note IS NOT NULL"
 
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:

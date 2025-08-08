@@ -117,15 +117,3 @@ models:
           data refresh and is used for tracking data freshness and debugging ETL issues.
         tests:
           - not_null
-
-      - name: _created_at
-        description: >
-          Timestamp when the employer record was created in the source system (OpenDental).
-          This field is set to NULL in the current implementation as the source system
-          does not track creation timestamps for employer records.
-
-      - name: _updated_at
-        description: >
-          Timestamp when the employer record was last updated in the source system (OpenDental).
-          This field is set to NULL in the current implementation as the source system
-          does not track update timestamps for employer records. 

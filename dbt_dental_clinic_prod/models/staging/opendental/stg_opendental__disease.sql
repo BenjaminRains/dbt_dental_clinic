@@ -29,11 +29,7 @@ renamed_columns as (
         {{ convert_opendental_boolean('"FunctionStatus"') }} as function_status,
 
         -- Standardized metadata columns (using improved macro)
-        {{ standardize_metadata_columns(
-            created_at_column='"DateStart"',
-            updated_at_column='"DateTStamp"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

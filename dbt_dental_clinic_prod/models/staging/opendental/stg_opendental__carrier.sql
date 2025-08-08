@@ -49,11 +49,12 @@ renamed_columns as (
         {{ convert_opendental_boolean('"OrthoInsPayConsolidate"') }} as ortho_insurance_payment_consolidate,
         
         -- Metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"SecDateEntry"') }} as sec_date_entry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
+        "SecUserNumEntry" as sec_user_num_entry,
+        
+        {{ standardize_metadata_columns() }}
         
     from source_data
 )

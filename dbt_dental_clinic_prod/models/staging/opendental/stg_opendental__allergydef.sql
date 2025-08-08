@@ -22,12 +22,11 @@ renamed_columns as (
         -- Boolean fields using macro
         {{ convert_opendental_boolean('"IsHidden"') }} as is_hidden,
         
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"DateTStamp"') }} as date_t_stamp,
+        
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTStamp"',
-            updated_at_column='"DateTStamp"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

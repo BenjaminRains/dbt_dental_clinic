@@ -54,12 +54,10 @@ renamed_columns as (
         end as is_retroactive_adjustment,
         
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"DateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
-
+        {{ standardize_metadata_columns() }},
+        {{ clean_opendental_date('"DateEntry"') }} as date_entry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
+        "SecUserNumEntry" as sec_user_num_entry
     from source_data
 )
 

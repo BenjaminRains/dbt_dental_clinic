@@ -35,12 +35,13 @@ renamed_columns as (
         "CoverageLevel" as coverage_level,
         "TreatArea" as treatment_area,
         
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"SecDateTEntry"') }} as sec_date_t_entry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
+        -- Note: SecUserNumEntry column does not exist in the benefit table
+        
         -- Metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateTEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

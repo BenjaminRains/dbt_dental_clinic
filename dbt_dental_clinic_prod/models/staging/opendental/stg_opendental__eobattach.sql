@@ -6,7 +6,7 @@
 with source_data as (
     select * from {{ source('opendental', 'eobattach') }}
     {% if is_incremental() %}
-        where "DateTCreated" > (select max(_created_at) from {{ this }})
+        where {{ clean_opendental_date('"DateTCreated"') }} > (select max(_created_at) from {{ this }})
     {% endif %}
 ),
 
@@ -22,15 +22,12 @@ renamed_columns as (
         "FileName" as file_name,
         "RawBase64" as raw_base64,
         
-        -- Date fields
-        {{ clean_opendental_date('"DateTCreated"') }} as date_created,
+        -- Source system timestamp columns (when available)
+        {{ clean_opendental_date('"DateTCreated"') }} as _created_at,
+        {{ clean_opendental_date('"DateTCreated"') }} as _updated_at,
         
-        -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTCreated"',
-            updated_at_column='"DateTCreated"',
-            created_by_column=none
-        ) }}
+        -- Standardized metadata columns (ETL and dbt tracking)
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

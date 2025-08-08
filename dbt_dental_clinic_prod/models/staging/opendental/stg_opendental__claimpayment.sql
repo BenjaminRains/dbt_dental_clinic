@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'claimpayment') }}
     where {{ clean_opendental_date('"CheckDate"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -42,12 +42,13 @@ renamed_columns as (
         "Note" as note,
         "CarrierName" as carrier_name,
         
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"SecDateEntry"') }} as sec_date_entry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
+        "SecUserNumEntry" as sec_user_num_entry,
+        
         -- Metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }}
     
     from source_data
 )

@@ -124,16 +124,11 @@ models:
           'Claim Sent', 'Payment Received', 'Status Changed', etc.
 
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (from tracking table or current_timestamp fallback)"
         tests:
           - not_null
 
-      - name: _created_at
-        description: "Timestamp when the snapshot was created in OpenDental (maps to DateTEntry). Represents when this specific snapshot record was first entered into the source system."
+      - name: _transformed_at
+        description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
         tests:
           - not_null
-
-      - name: _updated_at
-        description: "Timestamp when the snapshot was last updated in OpenDental (maps to DateTEntry). For snapshots, this typically matches _created_at since snapshots are usually immutable records."
-        tests:
-          - not_null 

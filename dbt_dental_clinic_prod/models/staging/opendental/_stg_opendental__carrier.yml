@@ -239,23 +239,26 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
+      - name: _transformed_at
         description: >
-          Timestamp when the record was created in the source system (OpenDental).
-          Maps to SecDateEntry in the carrier table. For legacy records where SecDateEntry 
-          is NULL, this defaults to SecDateTEdit (last update timestamp).
+          Timestamp when this dbt model was last built/transformed
         tests:
           - not_null
 
-      - name: _updated_at
+      # Raw metadata columns from source
+      - name: sec_date_entry
         description: >
-          Timestamp when the record was last updated in the source system (OpenDental).
-          Maps to SecDateTEdit in the carrier table. Tracks the most recent modification
-          to any field in the carrier record.
+          Date when the record was created in the source system (OpenDental).
+          Maps to SecDateEntry in the carrier table.
         tests:
           - not_null
 
-      - name: _created_by_user_id
+      - name: sec_date_t_edit
+        description: >
+          Date when the record was last edited in the source system (OpenDental).
+          Maps to SecDateTEdit in the carrier table.
+
+      - name: sec_user_num_entry
         description: >
           ID of the user who created the record in the source system (OpenDental).
           Maps to SecUserNumEntry in the carrier table. May be null for legacy records
@@ -266,4 +269,4 @@ models:
               field: user_id
               config:
                 severity: warn
-                where: "_created_by_user_id is not null"
+                where: "sec_user_num_entry is not null"

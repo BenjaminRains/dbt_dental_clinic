@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'appointment') }}
     where "AptDateTime" >= '2023-01-01'::timestamp  -- Only include appointments from 2023 onwards
     {% if is_incremental() %}
-        AND "DateTStamp" > (SELECT max(_updated_at) FROM {{ this }})
+        AND {{ clean_opendental_date('"DateTStamp"') }} > (SELECT max(_loaded_at) FROM {{ this }})
     {% endif %}
 ),
 
@@ -60,12 +60,13 @@ renamed_columns as (
         "ItemOrderPlanned"::integer as item_order_planned,
         "SecurityHash"::varchar as security_hash,
         
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"SecDateTEntry"') }} as sec_date_t_entry,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_t_stamp,
+        "SecUserNumEntry" as sec_user_num_entry,
+        
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateTEntry"',
-            updated_at_column='"DateTStamp"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

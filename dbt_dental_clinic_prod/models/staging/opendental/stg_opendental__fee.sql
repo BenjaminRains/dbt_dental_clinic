@@ -37,12 +37,11 @@ renamed_columns as (
         {{ clean_opendental_date('"SecDateEntry"') }} as date_created,
         {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
         
+        -- User tracking column
+        "SecUserNumEntry" as sec_user_num_entry,
+        
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

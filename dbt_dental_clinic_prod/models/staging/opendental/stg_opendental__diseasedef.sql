@@ -21,11 +21,7 @@ renamed_columns as (
         "Icd10Code" as icd10_code,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTStamp"',
-            updated_at_column='"DateTStamp"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

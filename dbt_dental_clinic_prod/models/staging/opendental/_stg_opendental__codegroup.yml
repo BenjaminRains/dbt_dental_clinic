@@ -107,3 +107,8 @@ models:
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
+
+      - name: _transformed_at
+        description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
+        tests:
+          - not_null

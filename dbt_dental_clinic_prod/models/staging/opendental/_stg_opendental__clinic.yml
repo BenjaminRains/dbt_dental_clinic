@@ -375,26 +375,13 @@ models:
                 where: "sms_monthly_limit is not null"
 
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (from tracking table or current_timestamp fallback)"
         tests:
           - not_null:
               config:
                 enabled: false
 
-      - name: _created_at
-        description: >
-          Timestamp when the clinic record was created in OpenDental (maps to DateTStamp).
-          Represents when this clinic location was originally set up in the system.
+      - name: _transformed_at
+        description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
         tests:
-          - not_null:
-              config:
-                enabled: false
-
-      - name: _updated_at
-        description: >
-          Timestamp when the clinic record was last updated in OpenDental (maps to DateTStamp).
-          For clinic records, this typically tracks configuration changes to clinic settings.
-        tests:
-          - not_null:
-              config:
-                enabled: false 
+          - not_null

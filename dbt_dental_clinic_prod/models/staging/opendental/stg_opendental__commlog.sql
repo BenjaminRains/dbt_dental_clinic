@@ -41,11 +41,7 @@ renamed_columns as (
         {{ convert_opendental_boolean('"SigIsTopaz"') }} as is_topaz_signature,
         
         -- Metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTEntry"',
-            updated_at_column='"DateTStamp"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

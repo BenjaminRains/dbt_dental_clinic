@@ -25,12 +25,11 @@ renamed_columns as (
         -- Date fields using macro
         {{ clean_opendental_date('"DateAdverseReaction"') }} as adverse_reaction_date,
         
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"DateTStamp"') }} as date_t_stamp,
+        
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTStamp"',
-            updated_at_column='"DateTStamp"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

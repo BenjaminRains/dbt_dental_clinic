@@ -8,7 +8,7 @@ with source_data as (
     select * from {{ source('opendental', 'claimproc') }}
     where {{ clean_opendental_date('"ProcDate"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -78,12 +78,14 @@ renamed_columns as (
         "ClaimAdjReasonCodes" as claim_adjustment_reason_codes,
         "SecurityHash" as security_hash,
         
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"SecDateEntry"') }} as sec_date_entry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
+        {{ clean_opendental_date('"DateEntry"') }} as date_entry,
+        "SecUserNumEntry" as sec_user_num_entry,
+        
         -- Metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"DateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }}
         
     from source_data
 )

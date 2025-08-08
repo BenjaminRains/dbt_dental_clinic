@@ -134,35 +134,11 @@ models:
 
       # Required Metadata Columns
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (from tracking table or current_timestamp fallback)"
         tests:
           - not_null
 
-      - name: _created_at
-        description: >
-          Timestamp when the log entry was created in the source system (OpenDental).
-          Maps to EntryDateTime since logs are created when they are written.
-          For entry logs, this is always the same as entry_datetime since logs are 
-          immutable and created at the time of the event.
+      - name: _transformed_at
+        description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
         tests:
           - not_null
-
-      - name: _updated_at
-        description: >
-          Timestamp when the log entry was last updated in the source system (OpenDental).
-          Maps to EntryDateTime since logs are immutable and don't get updated after creation.
-          For entry logs, this is always the same as entry_datetime and _created_at.
-        tests:
-          - not_null
-
-      - name: _created_by_user_id
-        description: >
-          User who created the log entry in the source system (OpenDental).
-          Maps to UserNum, same as user_id since the user performing the action
-          is the one who generates the log entry. May be NULL for system-generated 
-          entries where no specific user is associated with the action (approximately 1.83% of records).
-        tests:
-          - not_null:
-              where: "user_id IS NOT NULL"
-              config:
-                description: "Should not be null when user_id is present; allows nulls for system entries"

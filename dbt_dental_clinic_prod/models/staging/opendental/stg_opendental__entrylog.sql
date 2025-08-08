@@ -22,11 +22,7 @@ renamed_columns as (
         {{ clean_opendental_date('"EntryDateTime"') }} as entry_datetime,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"EntryDateTime"',
-            updated_at_column='"EntryDateTime"',
-            created_by_column='"UserNum"'
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

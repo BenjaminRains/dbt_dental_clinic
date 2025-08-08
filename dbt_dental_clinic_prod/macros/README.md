@@ -49,7 +49,11 @@ from source_table
 ) }}
 ```
 
-**Output:** Adds four columns: `_loaded_at`, `_created_at`, `_updated_at`, `_created_by_user_id`
+**Output:** Adds two columns: `_loaded_at`, '_transformed_at'
+
+---
+
+
 
 ---
 

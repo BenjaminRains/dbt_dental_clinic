@@ -145,21 +145,12 @@ models:
           May include error messages, status descriptions, or other relevant information.
 
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (from tracking table or current_timestamp fallback)"
         tests:
           - not_null
 
-      - name: _created_at
-        description: >
-          Timestamp when the tracking entry was created in OpenDental (maps to DateTimeEntry).
-          Represents when this specific tracking event was originally recorded in the source system.
-        tests:
-          - not_null
-
-      - name: _updated_at
-        description: >
-          Timestamp when the tracking entry was last updated in OpenDental (maps to DateTimeEntry).
-          For tracking entries, this typically matches _created_at since tracking events are usually immutable once created.
+      - name: _transformed_at
+        description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
         tests:
           - not_null
 
