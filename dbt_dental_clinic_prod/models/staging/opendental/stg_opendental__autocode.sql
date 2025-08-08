@@ -19,11 +19,7 @@ renamed_columns as (
         {{ convert_opendental_boolean('"LessIntrusive"') }} as is_less_intrusive,
         
         -- Metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column=none,
-            updated_at_column=none,
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
     
     from source_data
 )

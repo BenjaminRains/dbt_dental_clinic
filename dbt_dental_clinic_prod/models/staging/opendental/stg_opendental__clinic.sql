@@ -133,11 +133,7 @@ renamed_columns as (
         "SmsMonthlyLimit" as sms_monthly_limit,
         
         -- Metadata columns (clinic table doesn't have DateEntry/DateTStamp columns)
-        {{ standardize_metadata_columns(
-            created_at_column=none,
-            updated_at_column=none,
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )
