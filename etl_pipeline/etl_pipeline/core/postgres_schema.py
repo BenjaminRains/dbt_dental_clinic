@@ -214,6 +214,17 @@ class PostgresSchema:
             str: Best PostgreSQL type for this column
         """
         try:
+            # Special handling for known columns that should always be smallint
+            # These columns are known to support values beyond 0/1 in business logic
+            known_smallint_columns = {
+                'apptview': ['StackBehavUR', 'StackBehavLR']
+            }
+            
+            if (table_name.lower() in known_smallint_columns and 
+                column_name in known_smallint_columns[table_name.lower()]):
+                logger.info(f"Column {table_name}.{column_name} forced to smallint (known business logic)")
+                return 'smallint'
+            
             # For TINYINT columns, check if they're actually boolean (only 0/1 values)
             if mysql_type.lower().startswith('tinyint'):
                 with self.mysql_engine.connect() as conn:
@@ -225,7 +236,6 @@ class PostgresSchema:
                         FROM {safe_table_name} 
                         WHERE {column_name} IS NOT NULL 
                         AND {column_name} NOT IN (0, 1)
-                        LIMIT 1
                     """)
                     result = conn.execute(query)
                     scalar_result = result.scalar()
@@ -328,8 +338,18 @@ class PostgresSchema:
             return self._type_analysis_cache[cache_key]
         
         try:
+            # Special handling for known columns that should always be smallint
+            # These columns are known to support values beyond 0/1 in business logic
+            known_smallint_columns = {
+                'apptview': ['StackBehavUR', 'StackBehavLR']
+            }
+            
+            if (table_name.lower() in known_smallint_columns and 
+                column_name in known_smallint_columns[table_name.lower()]):
+                logger.info(f"Column {table_name}.{column_name} forced to smallint (known business logic)")
+                pg_type = 'smallint'
             # For TINYINT columns, check if they're actually boolean (only 0/1 values)
-            if mysql_type.lower().startswith('tinyint'):
+            elif mysql_type.lower().startswith('tinyint'):
                 with self.mysql_engine.connect() as conn:
                     # Use a more efficient query that checks for non-0/1 values
                     # Handle reserved words by backticking table name
@@ -339,7 +359,6 @@ class PostgresSchema:
                         FROM {safe_table_name} 
                         WHERE {column_name} IS NOT NULL 
                         AND {column_name} NOT IN (0, 1)
-                        LIMIT 1
                     """)
                     result = conn.execute(query)
                     scalar_result = result.scalar()
@@ -547,9 +566,9 @@ class PostgresSchema:
                     # If schema creation fails, assume it already exists
                     logger.debug(f"Schema creation failed (likely already exists): {str(e)}")
                 
-                # Drop existing table if it exists
+                # Drop existing table if it exists (with CASCADE to handle dependent objects)
                 conn.execute(text(f"""
-                    DROP TABLE IF EXISTS {self.postgres_schema}.{table_name}
+                    DROP TABLE IF EXISTS {self.postgres_schema}.{table_name} CASCADE
                 """))
                 
                 # Create table
