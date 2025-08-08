@@ -61,20 +61,22 @@ renamed_columns as (
         {{ convert_opendental_boolean('"IsOutsideLab"') }} as is_outside_lab,
         {{ convert_opendental_boolean('"IsProsthesis"') }} as is_prosthesis,
         
-        -- Integer/Status Fields
-        "PlaceService" as place_of_service,
-        "OrthoRemainM" as ortho_remaining_months,
-        "PatRelat" as patient_relation,
-        "PatRelat2" as secondary_patient_relation,
-        "Radiographs" as radiographs,
-        "AttachedImages" as attached_images,
-        "AttachedModels" as attached_models,
-        "SpecialProgramCode" as special_program_code,
-        "MedType" as med_type,
-        "CorrectionType" as correction_type,
-        "OrthoTotalM" as ortho_total_months,
-        "DateIllnessInjuryPregQualifier" as illness_injury_pregnancy_date_qualifier,
-        "DateOtherQualifier" as other_date_qualifier,
+        -- Integer/Status Fields (using transform_id_columns for proper type conversion)
+        {{ transform_id_columns([
+            {'source': '"PlaceService"', 'target': 'place_of_service'},
+            {'source': '"OrthoRemainM"', 'target': 'ortho_remaining_months'},
+            {'source': '"PatRelat"', 'target': 'patient_relation'},
+            {'source': '"PatRelat2"', 'target': 'secondary_patient_relation'},
+            {'source': '"Radiographs"', 'target': 'radiographs'},
+            {'source': '"AttachedImages"', 'target': 'attached_images'},
+            {'source': '"AttachedModels"', 'target': 'attached_models'},
+            {'source': '"SpecialProgramCode"', 'target': 'special_program_code'},
+            {'source': '"MedType"', 'target': 'med_type'},
+            {'source': '"CorrectionType"', 'target': 'correction_type'},
+            {'source': '"OrthoTotalM"', 'target': 'ortho_total_months'},
+            {'source': '"DateIllnessInjuryPregQualifier"', 'target': 'illness_injury_pregnancy_date_qualifier'},
+            {'source': '"DateOtherQualifier"', 'target': 'other_date_qualifier'}
+        ]) }},
         
         -- Character Fields
         "ClaimStatus" as claim_status,
