@@ -16,8 +16,8 @@ renamed_columns as (
         
         -- Attributes
         "ItemOrder" as item_order,
-        "ItemName" as item_name,
-        "ItemValue" as item_value,
+        {{ clean_opendental_string('"ItemName"') }} as item_name,
+        {{ clean_opendental_string('"ItemValue"') }} as item_value,
         "ItemColor" as item_color,
         
         -- Boolean Fields
