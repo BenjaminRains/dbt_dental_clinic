@@ -7,7 +7,7 @@ WITH appointment_with_metrics AS (
         a.appointment_id,
         a.appointment_status,
         a.appointment_datetime,
-        a._updated_at AS last_modified,
+        a._loaded_at AS last_modified,
         
         -- Calculate expected minimum history records based on status
         CASE
