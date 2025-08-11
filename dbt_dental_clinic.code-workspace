@@ -13,14 +13,14 @@
         "python.linting.flake8Enabled": true,
         "sqlfluff.lint.run": "onSave",
         "[sql]": {
-            "editor.defaultFormatter": "henriblancke.vscode-dbt-formatter"
+            "editor.defaultFormatter": "dbtLabsInc.dbt"
         },
         "files.associations": {
             "*.sql": "sql"
         },
         "[jinja-sql]": {
             "editor.formatOnSave": true,
-            "editor.defaultFormatter": "henriblancke.vscode-dbt-formatter"
+            "editor.defaultFormatter": "dbtLabsInc.dbt"
         },
         // DBT Power User specific settings can be added here as well
         "dbt.enableModelHover": true,
