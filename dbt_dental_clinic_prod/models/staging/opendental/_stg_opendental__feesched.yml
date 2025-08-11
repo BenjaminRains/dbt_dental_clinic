@@ -162,30 +162,17 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
-        description: >
-          Timestamp when the fee schedule was created in the source system (OpenDental).
-          Maps to SecDateEntry with fallback to SecDateTEdit. Handles OpenDental's invalid default dates.
-          May be null for records with corrupted timestamps.
+      - name: _transformed_at
+        description: "Timestamp when this dbt model was last built/transformed"
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
-      - name: _updated_at
-        description: >
-          Timestamp when the fee schedule was last updated in the source system (OpenDental).
-          Maps to SecDateTEdit with fallback to SecDateEntry. Handles OpenDental's invalid default dates.
+      - name: sec_user_num_entry
+        description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         tests:
-          - not_null:
-              config:
-                severity: warn
-
-      - name: _created_by_user_id
-        description: >
-          ID of the OpenDental user who created the fee schedule record (maps to SecUserNumEntry in OpenDental).
-          May be null for system-generated records or records created before user tracking was implemented.
-          References the userod table for user details.
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
