@@ -674,6 +674,15 @@ class TableProcessor:
                 needs_updating, replication_primary, analytics_primary, force_full_load_recommended = loader._check_analytics_needs_updating(table_name)
                 if not needs_updating:
                     logger.info(f"Analytics database is up to date for {table_name}, skipping load phase")
+                    # IMPORTANT: Update load status even when skipping load to reflect that table was processed
+                    tracking_metadata = {
+                        'rows_processed': 0,
+                        'last_primary_value': None,
+                        'primary_column': None,
+                        'duration': 0.0,
+                        'strategy_used': 'skipped_no_new_data'
+                    }
+                    self._update_pipeline_status(table_name, 'load', 'success', tracking_metadata)
                     return True
                 elif force_full_load_recommended:
                     logger.info(f"Analytics table {table_name} is empty but has load timestamp, forcing full load")
