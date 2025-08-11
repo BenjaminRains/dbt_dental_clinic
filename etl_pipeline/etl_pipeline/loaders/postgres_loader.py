@@ -799,19 +799,28 @@ class PostgresLoader:
                     if incremental_columns:
                         last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                     
-                    # Get the last primary key value from the loaded data
+                    # Get the last datetime value from the incremental column
                     if rows_loaded > 0:
-                        # Query the analytics database to get the max primary key value
+                        # Query the analytics database to get the max datetime value from the primary incremental column
                         try:
                             with self.analytics_engine.connect() as conn:
-                                result = conn.execute(text(f"""
-                                    SELECT MAX("{primary_key}") 
-                                    FROM {self.analytics_schema}.{table_name}
-                                """)).scalar()
-                                if result:
-                                    last_primary_value = str(result)
+                                # Get the primary incremental column from table config
+                                primary_incremental_column = table_config.get('primary_incremental_column')
+                                if primary_incremental_column and primary_incremental_column != 'none':
+                                    result = conn.execute(text(f"""
+                                        SELECT MAX("{primary_incremental_column}") 
+                                        FROM {self.analytics_schema}.{table_name}
+                                        WHERE "{primary_incremental_column}" IS NOT NULL
+                                    """)).scalar()
+                                    if result:
+                                        last_primary_value = str(result)
+                                        logger.info(f"Got max datetime value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
+                                    else:
+                                        logger.warning(f"No datetime values found in {primary_incremental_column} for {table_name}")
+                                else:
+                                    logger.warning(f"No primary incremental column configured for {table_name}")
                         except Exception as e:
-                            logger.warning(f"Could not get last primary key value for {table_name}: {str(e)}")
+                            logger.warning(f"Could not get last datetime value for {table_name}: {str(e)}")
                     
                     self._update_load_status_hybrid(
                         table_name, rows_loaded, 'success', 
@@ -1585,19 +1594,27 @@ class PostgresLoader:
                 if incremental_columns:
                     last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                 
-                # Get the last primary key value from the loaded data
-                if rows_loaded > 0:
-                    # Query the analytics database to get the max primary key value
-                    try:
-                        with self.analytics_engine.connect() as conn:
+                # Get the last datetime value from the incremental column
+                # Query the analytics database to get the max datetime value from the primary incremental column
+                try:
+                    with self.analytics_engine.connect() as conn:
+                        # Get the primary incremental column from table config
+                        primary_incremental_column = table_config.get('primary_incremental_column')
+                        if primary_incremental_column and primary_incremental_column != 'none':
                             result = conn.execute(text(f"""
-                                SELECT MAX("{primary_key}") 
+                                SELECT MAX("{primary_incremental_column}") 
                                 FROM {self.analytics_schema}.{table_name}
+                                WHERE "{primary_incremental_column}" IS NOT NULL
                             """)).scalar()
                             if result:
                                 last_primary_value = str(result)
-                    except Exception as e:
-                        logger.warning(f"Could not get last primary key value for {table_name}: {str(e)}")
+                                logger.info(f"Got max datetime value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
+                            else:
+                                logger.warning(f"No datetime values found in {primary_incremental_column} for {table_name}")
+                        else:
+                            logger.warning(f"No primary incremental column configured for {table_name}")
+                except Exception as e:
+                    logger.warning(f"Could not get last datetime value for {table_name}: {str(e)}")
                 
                 self._update_load_status_hybrid(
                     table_name, rows_loaded, 'success', 
@@ -1911,19 +1928,28 @@ class PostgresLoader:
                     if incremental_columns:
                         last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                     
-                    # Get the last primary key value from the loaded data
+                    # Get the last datetime value from the incremental column
                     if rows_loaded > 0:
-                        # Query the analytics database to get the max primary key value
+                        # Query the analytics database to get the max datetime value from the primary incremental column
                         try:
                             with self.analytics_engine.connect() as conn:
-                                result = conn.execute(text(f"""
-                                    SELECT MAX("{primary_key}") 
-                                    FROM {self.analytics_schema}.{table_name}
-                                """)).scalar()
-                                if result:
-                                    last_primary_value = str(result)
+                                # Get the primary incremental column from table config
+                                primary_incremental_column = table_config.get('primary_incremental_column')
+                                if primary_incremental_column and primary_incremental_column != 'none':
+                                    result = conn.execute(text(f"""
+                                        SELECT MAX("{primary_incremental_column}") 
+                                        FROM {self.analytics_schema}.{table_name}
+                                        WHERE "{primary_incremental_column}" IS NOT NULL
+                                    """)).scalar()
+                                    if result:
+                                        last_primary_value = str(result)
+                                        logger.info(f"Got max datetime value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
+                                    else:
+                                        logger.warning(f"No datetime values found in {primary_incremental_column} for {table_name}")
+                                else:
+                                    logger.warning(f"No primary incremental column configured for {table_name}")
                         except Exception as e:
-                            logger.warning(f"Could not get last primary key value for {table_name}: {str(e)}")
+                            logger.warning(f"Could not get last datetime value for {table_name}: {str(e)}")
                     
                     self._update_load_status_hybrid(
                         table_name, rows_loaded, 'success', 
