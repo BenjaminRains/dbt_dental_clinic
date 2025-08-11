@@ -459,10 +459,10 @@ class PostgresLoader:
                     # Note: Only using columns that actually exist in the table schema
                     conn.execute(text(f"""
                         INSERT INTO {self.analytics_schema}.etl_load_status (
-                            table_name, last_loaded, last_primary_value, primary_column_name,
+                            table_name, last_primary_value, primary_column_name,
                             rows_loaded, load_status, _loaded_at
                         ) VALUES (
-                            :table_name, '2024-01-01 00:00:00', NULL, NULL,
+                            :table_name, NULL, NULL,
                             0, 'pending', CURRENT_TIMESTAMP
                         )
                     """), {"table_name": table_name})
@@ -491,18 +491,18 @@ class PostgresLoader:
                     # Only update timestamp when rows are actually loaded
                     conn.execute(text(f"""
                         INSERT INTO {self.analytics_schema}.etl_load_status (
-                            table_name, last_loaded, last_primary_value, primary_column_name,
-                            rows_loaded, load_status
+                            table_name, last_primary_value, primary_column_name,
+                            rows_loaded, load_status, _loaded_at
                         ) VALUES (
-                            :table_name, CURRENT_TIMESTAMP, :last_primary_value, :primary_column_name,
-                            :rows_loaded, :load_status
+                            :table_name, :last_primary_value, :primary_column_name,
+                            :rows_loaded, :load_status, CURRENT_TIMESTAMP
                         )
                         ON CONFLICT (table_name) DO UPDATE SET
-                            last_loaded = CURRENT_TIMESTAMP,
                             last_primary_value = :last_primary_value,
                             primary_column_name = :primary_column_name,
                             rows_loaded = :rows_loaded,
-                            load_status = :load_status
+                            load_status = :load_status,
+                            _loaded_at = CURRENT_TIMESTAMP
                     """), {
                         "table_name": table_name,
                         "last_primary_value": last_primary_value,
@@ -514,18 +514,18 @@ class PostgresLoader:
                     # When no rows are loaded, only update the status but keep the existing timestamp
                     conn.execute(text(f"""
                         INSERT INTO {self.analytics_schema}.etl_load_status (
-                            table_name, last_loaded, last_primary_value, primary_column_name,
-                            rows_loaded, load_status
+                            table_name, last_primary_value, primary_column_name,
+                            rows_loaded, load_status, _loaded_at
                         ) VALUES (
-                            :table_name, CURRENT_TIMESTAMP, :last_primary_value, :primary_column_name,
-                            :rows_loaded, :load_status
+                            :table_name, :last_primary_value, :primary_column_name,
+                            :rows_loaded, :load_status, CURRENT_TIMESTAMP
                         )
                         ON CONFLICT (table_name) DO UPDATE SET
                             last_primary_value = :last_primary_value,
                             primary_column_name = :primary_column_name,
                             rows_loaded = :rows_loaded,
-                            load_status = :load_status
-                            -- Note: last_loaded is NOT updated when rows_loaded = 0
+                            load_status = :load_status,
+                            _loaded_at = CURRENT_TIMESTAMP
                     """), {
                         "table_name": table_name,
                         "last_primary_value": last_primary_value,
@@ -797,7 +797,7 @@ class PostgresLoader:
                     # Get the last timestamp from incremental columns
                     incremental_columns = table_config.get('incremental_columns', [])
                     if incremental_columns:
-                        last_timestamp = self._get_last_load_time_max(table_name, incremental_columns)
+                        last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                     
                     # Get the last primary key value from the loaded data
                     if rows_loaded > 0:
@@ -942,7 +942,7 @@ class PostgresLoader:
                 logger.error(f"Fallback row conversion also failed: {str(e2)}")
                 return {}
 
-    def _get_last_load_time_max(self, table_name: str, incremental_columns: List[str]) -> Optional[datetime]:
+    def _get_loaded_at_time_max(self, table_name: str, incremental_columns: List[str]) -> Optional[datetime]:
         """Get the maximum last load time across all incremental columns."""
         try:
             # Get the last primary value from the tracking table
@@ -953,7 +953,7 @@ class PostgresLoader:
                     WHERE table_name = :table_name
                     AND load_status = 'success'
                     AND last_primary_value IS NOT NULL
-                    ORDER BY last_loaded DESC
+                    ORDER BY _loaded_at DESC
                     LIMIT 1
                 """), {"table_name": table_name}).fetchone()
                 
@@ -1011,7 +1011,7 @@ class PostgresLoader:
                     WHERE table_name = :table_name
                     AND load_status = 'success'
                     AND last_primary_value IS NOT NULL
-                    ORDER BY last_loaded DESC
+                    ORDER BY _loaded_at DESC
                     LIMIT 1
                 """), {"table_name": table_name}).fetchone()
                 
@@ -1221,22 +1221,19 @@ class PostgresLoader:
         
         return valid_columns
     
-    def _get_last_load_time(self, table_name: str) -> Optional[datetime]:
+    def _get_loaded_at_time(self, table_name: str) -> Optional[datetime]:
         """Get last load time from analytics database's etl_load_status table."""
         try:
             with self.analytics_engine.connect() as conn:
                 result = conn.execute(text(f"""
-                    SELECT last_loaded
+                    SELECT _loaded_at
                     FROM {self.analytics_schema}.etl_load_status
                     WHERE table_name = :table_name
                     AND load_status = 'success'
-                    ORDER BY last_loaded DESC
+                    ORDER BY _loaded_at DESC
                     LIMIT 1
                 """), {"table_name": table_name}).scalar()
                 
-                # Return None if the value is the initial timestamp (1970-01-01 00:00:01)
-                if result and result.year == 1970:
-                    return None
                 return result
         except Exception as e:
             logger.error(f"Error getting last load time for {table_name}: {str(e)}")
@@ -1260,12 +1257,12 @@ class PostgresLoader:
         This ensures analytics loads all data that was copied to replication since the last analytics load.
         """
         try:
-            # Get last_loaded from analytics DB (this is the correct cutoff for incremental loads)
-            last_loaded = self._get_last_load_time(table_name)
+            # Get _loaded_at from analytics DB (this is the correct cutoff for incremental loads)
+            _loaded_at = self._get_loaded_at_time(table_name)
             
-            if last_loaded:
-                logger.info(f"Using analytics load time as cutoff for {table_name}: {last_loaded}")
-                return last_loaded
+            if _loaded_at:
+                logger.info(f"Using analytics load time as cutoff for {table_name}: {_loaded_at}")
+                return _loaded_at
             else:
                 logger.info(f"No previous load found for {table_name}, performing full load")
                 return None
@@ -1586,7 +1583,7 @@ class PostgresLoader:
                 # Get the last timestamp from incremental columns
                 incremental_columns = table_config.get('incremental_columns', [])
                 if incremental_columns:
-                    last_timestamp = self._get_last_load_time_max(table_name, incremental_columns)
+                    last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                 
                 # Get the last primary key value from the loaded data
                 if rows_loaded > 0:
@@ -1912,7 +1909,7 @@ class PostgresLoader:
                     # Get the last timestamp from incremental columns
                     incremental_columns = table_config.get('incremental_columns', [])
                     if incremental_columns:
-                        last_timestamp = self._get_last_load_time_max(table_name, incremental_columns)
+                        last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                     
                     # Get the last primary key value from the loaded data
                     if rows_loaded > 0:
@@ -2057,7 +2054,7 @@ class PostgresLoader:
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
 
         # Get last analytics load time to determine what's new
-        last_analytics_load = self._get_last_load_time(table_name)
+        last_analytics_load = self._get_loaded_at_time(table_name)
         
         if not last_analytics_load:
             # No previous analytics load found, perform full load
@@ -2129,7 +2126,7 @@ class PostgresLoader:
             return query
         
         # Get last load time from analytics (correct cutoff for incremental loads)
-        last_load = self._get_last_load_time(table_name)
+        last_load = self._get_loaded_at_time(table_name)
         
         logger.info(f"DEBUG: Last load time for {table_name}: {last_load}")
         
@@ -2181,7 +2178,7 @@ class PostgresLoader:
         try:
             with self.analytics_engine.connect() as conn:
                 result = conn.execute(text(f"""
-                    SELECT MAX(last_loaded)
+                    SELECT MAX(_loaded_at)
                     FROM {self.analytics_schema}.etl_load_status
                     WHERE table_name = :table_name
                     AND load_status = 'success'
@@ -2778,7 +2775,7 @@ class PostgresLoader:
                     FROM {self.analytics_schema}.etl_load_status
                     WHERE table_name = :table_name
                     AND load_status = 'success'
-                    ORDER BY last_loaded DESC
+                    ORDER BY _loaded_at DESC
                     LIMIT 1
                 """), {"table_name": table_name}).fetchone()
                 
@@ -3124,7 +3121,7 @@ class PostgresLoader:
             replication_copy_time = self._get_last_copy_time_from_replication(table_name)
             
             # Get last load time from analytics database
-            analytics_load_time = self._get_last_load_time(table_name)
+            analytics_load_time = self._get_loaded_at_time(table_name)
             
             # Get current row count in analytics table
             analytics_row_count = self._get_analytics_row_count(table_name)
@@ -3276,14 +3273,14 @@ class PostgresLoader:
             with self.analytics_engine.connect() as conn:
                 conn.execute(text(f"""
                     INSERT INTO {self.analytics_schema}.etl_load_status 
-                    (table_name, rows_loaded, load_status, last_loaded, last_primary_value, primary_column_name)
-                    VALUES (:table_name, :rows_loaded, :load_status, NOW(), :last_primary_value, :primary_column_name)
+                    (table_name, rows_loaded, load_status, last_primary_value, primary_column_name, _loaded_at)
+                    VALUES (:table_name, :rows_loaded, :load_status, :last_primary_value, :primary_column_name, NOW())
                     ON CONFLICT (table_name) DO UPDATE SET
-                        last_loaded = NOW(),
                         last_primary_value = :last_primary_value,
                         primary_column_name = :primary_column_name,
                         rows_loaded = :rows_loaded,
-                        load_status = :load_status
+                        load_status = :load_status,
+                        _loaded_at = NOW()
                 """), {
                     "table_name": table_name,
                     "rows_loaded": rows_loaded,
@@ -3330,7 +3327,7 @@ class PostgresLoader:
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
         
         # Get maximum last load time across all columns
-        last_load = self._get_last_load_time_max(table_name, valid_columns)
+        last_load = self._get_loaded_at_time_max(table_name, valid_columns)
         if not last_load:
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
         
