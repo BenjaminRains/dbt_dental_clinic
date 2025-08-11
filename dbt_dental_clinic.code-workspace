@@ -16,7 +16,7 @@
             "editor.defaultFormatter": "henriblancke.vscode-dbt-formatter"
         },
         "files.associations": {
-            "*.sql": "jinja-sql"
+            "*.sql": "sql"
         },
         "[jinja-sql]": {
             "editor.formatOnSave": true,
