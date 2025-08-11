@@ -280,11 +280,11 @@ class PipelineDataValidator:
                 timestamps = []
                 for column in incremental_columns:
                     result = conn.execute(text(f"""
-                        SELECT last_loaded
+                        SELECT _loaded_at
                         FROM raw.etl_load_status
                         WHERE table_name = :table_name
                         AND load_status = 'success'
-                        ORDER BY last_loaded DESC
+                        ORDER BY _loaded_at DESC
                         LIMIT 1
                     """), {"table_name": table_name}).scalar()
                     
@@ -425,7 +425,7 @@ class PipelineDataValidator:
                 try:
                     with self.analytics_engine.connect() as analytics_conn:
                         result = analytics_conn.execute(text(f"""
-                            SELECT MAX(last_loaded)
+                            SELECT MAX(_loaded_at)
                             FROM raw.etl_load_status
                             WHERE table_name = :table_name
                             AND load_status = 'success'
@@ -493,7 +493,7 @@ class PipelineDataValidator:
         Validate PostgresLoader incremental methods specifically.
         
         Tests:
-        - _get_last_load_time_max method
+        - _get_loaded_at_time_max method
         - _build_improved_load_query_max method
         - _filter_valid_incremental_columns method
         - _validate_incremental_integrity method
@@ -504,16 +504,16 @@ class PipelineDataValidator:
         validation_results = {}
         
         try:
-            # Test _get_last_load_time_max method
+            # Test _get_loaded_at_time_max method
             with self.analytics_engine.connect() as conn:
                 timestamps = []
                 for column in incremental_columns:
                     result = conn.execute(text(f"""
-                        SELECT last_loaded
+                        SELECT _loaded_at
                         FROM raw.etl_load_status
                         WHERE table_name = :table_name
                         AND load_status = 'success'
-                        ORDER BY last_loaded DESC
+                        ORDER BY _loaded_at DESC
                         LIMIT 1
                     """), {"table_name": table_name}).scalar()
                     
@@ -521,7 +521,7 @@ class PipelineDataValidator:
                         timestamps.append(result)
                 
                 max_timestamp = max(timestamps) if timestamps else None
-                validation_results['get_last_load_time_max'] = {
+                validation_results['get_loaded_at_time_max'] = {
                     'max_timestamp': max_timestamp,
                     'total_timestamps': len(timestamps),
                     'method_working': True
@@ -563,8 +563,8 @@ class PipelineDataValidator:
                 }
             
             # Test _build_improved_load_query_max method
-            if validation_results['get_last_load_time_max']['max_timestamp'] and validation_results['filter_valid_incremental_columns']['valid_columns'] > 0:
-                last_load = validation_results['get_last_load_time_max']['max_timestamp']
+            if validation_results['get_loaded_at_time_max']['max_timestamp'] and validation_results['filter_valid_incremental_columns']['valid_columns'] > 0:
+                last_load = validation_results['get_loaded_at_time_max']['max_timestamp']
                 valid_columns = validation_results['filter_valid_incremental_columns']['valid_columns_list']
                 
                 # Test OR logic query
@@ -1681,9 +1681,9 @@ class TestTestDataPipelineE2E:
             # Assert: Verify PostgresLoader incremental methods functionality
             assert validation_results['postgres_loader_incremental_methods_valid'], f"PostgresLoader incremental methods validation failed for {table_name}: {validation_results}"
             
-            # Verify _get_last_load_time_max method
-            get_last_load_time = validation_results.get('get_last_load_time_max', {})
-            assert get_last_load_time.get('method_working', False), f"_get_last_load_time_max method failed for {table_name}"
+            # Verify _get_loaded_at_time_max method
+            get_last_load_time = validation_results.get('get_loaded_at_time_max', {})
+            assert get_last_load_time.get('method_working', False), f"_get_loaded_at_time_max method failed for {table_name}"
             
             # Verify _filter_valid_incremental_columns method
             filter_columns = validation_results.get('filter_valid_incremental_columns', {})

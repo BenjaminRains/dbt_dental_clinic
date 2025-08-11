@@ -712,7 +712,7 @@ class TestPostgresLoaderIntegration:
             Assert: Verify incremental logic works correctly
             
         Validates:
-            - _get_last_load_time_max() with multiple incremental columns
+            - _get_loaded_at_time_max() with multiple incremental columns
             - _build_improved_load_query_max() with OR logic
             - _filter_valid_incremental_columns() data quality validation
             - _validate_incremental_integrity() validation logic
@@ -727,11 +727,11 @@ class TestPostgresLoaderIntegration:
         result = postgres_loader.load_table('patient')
         assert result is True, "Initial load should succeed"
         
-        # Act & Assert: Test _get_last_load_time_max with multiple columns
+        # Act & Assert: Test _get_loaded_at_time_max with multiple columns
         # Get the actual incremental columns from the table configuration
         patient_config = postgres_loader.get_table_config('patient')
         incremental_columns = patient_config.get('incremental_columns', ['DateTStamp', 'DateTimeDeceased'])
-        last_load_time = postgres_loader._get_last_load_time_max('patient', incremental_columns)
+        last_load_time = postgres_loader._get_loaded_at_time_max('patient', incremental_columns)
         
         # Should return a datetime or None (depending on whether tracking records exist)
         assert last_load_time is None or isinstance(last_load_time, datetime), \
@@ -898,7 +898,7 @@ class TestPostgresLoaderIntegration:
         # Get the actual incremental columns from the table configuration
         patient_config = postgres_loader.get_table_config('patient')
         incremental_columns = patient_config.get('incremental_columns', ['DateTStamp', 'DateTimeDeceased'])
-        last_load_time = postgres_loader._get_last_load_time_max('patient', incremental_columns)
+        last_load_time = postgres_loader._get_loaded_at_time_max('patient', incremental_columns)
         
         if last_load_time:
             integrity_result = postgres_loader._validate_incremental_integrity(

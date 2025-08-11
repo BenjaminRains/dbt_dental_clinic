@@ -90,7 +90,7 @@ def mock_postgres_loader_instance():
     mock_loader.get_table_config = MagicMock(side_effect=get_table_config_side_effect)
     mock_loader._build_load_query = MagicMock(return_value="SELECT * FROM test_table")
     mock_loader._update_load_status = MagicMock(return_value=True)
-    mock_loader._get_last_load_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
+    mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
     mock_loader.stream_mysql_data = MagicMock(return_value=[[{'id': 1, 'data': 'test'}]])
     mock_loader.load_table_copy_csv = MagicMock(return_value=True)
@@ -113,7 +113,7 @@ class TestPostgresLoaderQueryLogic:
         - No real database connections, full mocking
     """
     
-    def test_get_last_load_time_max_success(self, mock_postgres_loader_instance):
+    def test_get_loaded_at_time_max_success(self, mock_postgres_loader_instance):
         """
         Test getting maximum last load time across multiple incremental columns.
         """
@@ -131,12 +131,12 @@ class TestPostgresLoaderQueryLogic:
         loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
         
         # Act
-        result = loader._get_last_load_time_max('patient', ['DateModified', 'DateCreated'])
+        result = loader._get_loaded_at_time_max('patient', ['DateModified', 'DateCreated'])
         
         # Assert
         assert result == datetime(2024, 1, 1, 10, 0, 0)  # Should return the max
     
-    def test_get_last_load_time_max_no_records(self, mock_postgres_loader_instance):
+    def test_get_loaded_at_time_max_no_records(self, mock_postgres_loader_instance):
         """
         Test getting last load time when no records exist.
         """
@@ -151,8 +151,8 @@ class TestPostgresLoaderQueryLogic:
         loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
         
         # Act - need to patch the method itself since it's already mocked in fixture
-        with patch.object(loader, '_get_last_load_time_max', return_value=None):
-            result = loader._get_last_load_time_max('patient', ['DateModified'])
+        with patch.object(loader, '_get_loaded_at_time_max', return_value=None):
+            result = loader._get_loaded_at_time_max('patient', ['DateModified'])
             
             # Assert
             assert result is None
@@ -166,8 +166,8 @@ class TestPostgresLoaderQueryLogic:
         
         loader = mock_postgres_loader_instance
         
-        # Mock _get_last_load_time_max to return a timestamp
-        with patch.object(loader, '_get_last_load_time_max', return_value=datetime(2024, 1, 1, 10, 0, 0)):
+        # Mock _get_loaded_at_time_max to return a timestamp
+        with patch.object(loader, '_get_loaded_at_time_max', return_value=datetime(2024, 1, 1, 10, 0, 0)):
             # Mock _build_improved_load_query_max to return expected SQL
             expected_sql = "SELECT * FROM patient WHERE (DateModified > '2024-01-01 10:00:00' OR DateCreated > '2024-01-01 10:00:00')"
             with patch.object(loader, '_build_improved_load_query_max', return_value=expected_sql):
@@ -208,10 +208,10 @@ class TestPostgresLoaderQueryLogic:
         loader = mock_postgres_loader_instance
         incremental_columns = ['DateCreated', 'DateModified', 'DateTstamp']
         
-        # Mock _get_last_load_time_max to return a timestamp
-        with patch.object(loader, '_get_last_load_time_max', return_value=datetime(2024, 1, 1, 10, 0, 0)):
+        # Mock _get_loaded_at_time_max to return a timestamp
+        with patch.object(loader, '_get_loaded_at_time_max', return_value=datetime(2024, 1, 1, 10, 0, 0)):
             # Act
-            last_load = loader._get_last_load_time_max('appointment', incremental_columns)
+            last_load = loader._get_loaded_at_time_max('appointment', incremental_columns)
             
             # Assert
             assert last_load == datetime(2024, 1, 1, 10, 0, 0) 
