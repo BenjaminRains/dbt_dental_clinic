@@ -354,16 +354,16 @@ models:
               severity: error
       
       - name: appointment_source
-        description: "Source of the appointment (maps to ApptSource in OpenDental): 0=Phone, 1=Online, 2=Walk-in, etc."
+        description: "Source of the appointment (maps to ApptSource in OpenDental): 0=Phone/Manual, 1=Online"
         tests:
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+              values: [0, 1]
       
       - name: priority
-        description: "Priority level of the appointment (maps to Priority in OpenDental): 0=Normal, 1=High, etc."
+        description: "Priority level of the appointment (maps to Priority in OpenDental): 0=Normal, 1=High"
         tests:
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5]
+              values: [0, 1]
       
       # Boolean fields
       - name: is_time_locked
@@ -414,17 +414,9 @@ models:
       - name: _loaded_at
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
-          - not_null
-      
-      - name: _created_at
-        description: "Timestamp when the historical appointment record was created in the source system (derived from HistDateTStamp in OpenDental)"
-        tests:
-          - not_null
-      
-      - name: _updated_at
-        description: "Timestamp when the historical appointment record was last updated in the source system (derived from DateTStamp in OpenDental with fallback to HistDateTStamp)"
-        tests:
-          - not_null
-      
-      - name: _created_by_user_id
+          - not_null   
+
+      - name: sec_user_num_entry
         description: "User who entered the record in the source system (maps to SecUserNumEntry in OpenDental). NULL if 0 (system-generated)."
+        tests:
+          - not_null
