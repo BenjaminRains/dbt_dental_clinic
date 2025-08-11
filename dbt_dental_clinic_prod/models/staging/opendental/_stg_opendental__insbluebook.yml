@@ -163,15 +163,7 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column."
+      - name: _transformed_at
+        description: "Timestamp when the dbt model was built/transformed (using current_timestamp)"
         tests:
           - not_null
-
-      - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTEntry column."
-        tests:
-          - not_null
-
-      - name: _created_by_user_id
-        description: "User who created the record in the source system (OpenDental). Not available in source data, set to null."
