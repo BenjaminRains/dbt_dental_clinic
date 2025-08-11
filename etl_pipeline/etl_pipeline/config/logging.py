@@ -360,8 +360,15 @@ DEFAULT_LOG_CONFIG = {
 def init_default_logger():
     """Initialize default logger configuration."""
     try:
+        # Detect test environment and set appropriate log directory
+        etl_environment = os.getenv("ETL_ENVIRONMENT", "production")
+        if etl_environment == "test":
+            default_log_dir = "logs/tests"
+        else:
+            default_log_dir = "logs/etl_pipeline"
+        
         # Try to get log directory from environment or use default
-        log_dir = os.getenv("ETL_LOG_PATH", "logs/etl_pipeline")
+        log_dir = os.getenv("ETL_LOG_PATH", default_log_dir)
         log_level = os.getenv("ETL_LOG_LEVEL", "INFO")
         
         # Create organized log directory structure
