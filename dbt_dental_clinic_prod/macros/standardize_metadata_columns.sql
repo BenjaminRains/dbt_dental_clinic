@@ -1,4 +1,4 @@
-{% macro standardize_metadata_columns(
+l{% macro standardize_metadata_columns(
     created_at_column=null, 
     updated_at_column=null, 
     created_by_column=null,
@@ -30,7 +30,12 @@
 -#}
         -- ETL and dbt tracking columns
         COALESCE(
-            (SELECT MAX(_loaded_at) FROM {{ source('opendental', 'etl_load_status') }} WHERE table_name = '{{ this.name }}'),
+            (SELECT _loaded_at 
+             FROM {{ source('opendental', 'etl_load_status') }} 
+             WHERE table_name = '{{ this.name }}'
+             AND load_status = 'success'
+             ORDER BY _loaded_at DESC 
+             LIMIT 1),
             current_timestamp
         ) as _loaded_at,                    -- ETL pipeline processing time (from tracking table or fallback)
         
