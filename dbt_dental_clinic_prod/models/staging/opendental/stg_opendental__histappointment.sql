@@ -9,7 +9,7 @@ with source_data as (
     where "HistDateTStamp" >= '2023-01-01'::timestamp
         AND "HistDateTStamp" <= CURRENT_TIMESTAMP
     {% if is_incremental() %}
-        AND "HistDateTStamp" > (SELECT max(_created_at) FROM {{ this }})
+        AND "HistDateTStamp" > (SELECT max(_loaded_at) FROM {{ this }})
     {% endif %}
 ),
 
@@ -36,20 +36,21 @@ renamed_columns as (
         ]) }},
         
         -- Timestamp fields
-        "HistDateTStamp"::timestamp with time zone as history_timestamp,
-        "AptDateTime"::timestamp as appointment_datetime,
-        "DateTimeArrived"::timestamp as arrived_datetime,
-        "DateTimeSeated"::timestamp as seated_datetime,
-        "DateTimeDismissed"::timestamp as dismissed_datetime,
-        "DateTimeAskedToArrive"::timestamp as asked_to_arrive_datetime,
+        {{ clean_opendental_date('"HistDateTStamp"') }} as history_timestamp,
+        {{ clean_opendental_date('"AptDateTime"') }} as appointment_datetime,
+        {{ clean_opendental_date('"DateTimeArrived"') }} as arrived_datetime,
+        {{ clean_opendental_date('"DateTimeSeated"') }} as seated_datetime,
+        {{ clean_opendental_date('"DateTimeDismissed"') }} as dismissed_datetime,
+        {{ clean_opendental_date('"DateTimeAskedToArrive"') }} as asked_to_arrive_datetime,
         
         -- Status and classification fields
         "AptStatus"::smallint as appointment_status,
         "HistApptAction"::smallint as history_action,
-        "ApptSource"::smallint as appointment_source,
-        "Priority"::smallint as priority,
+
         
         -- Boolean fields using macro
+        {{ convert_opendental_boolean('"ApptSource"') }} as appointment_source,
+        {{ convert_opendental_boolean('"Priority"') }} as priority,
         {{ convert_opendental_boolean('"TimeLocked"') }} as is_time_locked,
         {{ convert_opendental_boolean('"IsNewPatient"') }} as is_new_patient,
         {{ convert_opendental_boolean('"IsHygiene"') }} as is_hygiene,
@@ -67,12 +68,13 @@ renamed_columns as (
         "ColorOverride"::integer as color_override,
         "ItemOrderPlanned"::integer as item_order_planned,
         
-        -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"HistDateTStamp"',
-            updated_at_column='"DateTStamp"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        -- Metadata columns
+        {{ clean_opendental_date('"HistDateTStamp"') }} as hist_date_timestamp,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_timestamp,
+        "SecUserNumEntry"::integer as sec_user_num_entry,
+
+        -- Standardized metadata columns
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )
