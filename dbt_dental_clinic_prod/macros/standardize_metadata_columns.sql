@@ -32,7 +32,7 @@ l{% macro standardize_metadata_columns(
         COALESCE(
             (SELECT _loaded_at 
              FROM {{ source('opendental', 'etl_load_status') }} 
-             WHERE table_name = '{{ this.name }}'
+             WHERE table_name = '{{ this.name | replace('stg_opendental__', '') }}'
              AND load_status = 'success'
              ORDER BY _loaded_at DESC 
              LIMIT 1),
