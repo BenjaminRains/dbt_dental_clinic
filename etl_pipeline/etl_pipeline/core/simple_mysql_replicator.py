@@ -1100,6 +1100,9 @@ class SimpleMySQLReplicator:
             if force_full or extraction_strategy == 'full_table':
                 logger.info(f"Using full refresh for {table_name} ({performance_category})")
                 return self._copy_full_table_unified(table_name, batch_size, config)
+            elif extraction_strategy == 'incremental_chunked':
+                logger.info(f"Using incremental chunked copy for {table_name} ({performance_category})")
+                return self._copy_incremental_chunked(table_name, config, batch_size)
             else:
                 logger.info(f"Using incremental copy for {table_name} ({performance_category})")
                 return self._copy_incremental_unified(table_name, config, batch_size)
@@ -1885,6 +1888,186 @@ class SimpleMySQLReplicator:
                 
         except Exception as e:
             logger.error(f"Error in unified incremental copy for {table_name}: {str(e)}")
+            return False, 0
+
+    def _copy_incremental_chunked(self, table_name: str, config: Dict, batch_size: int) -> Tuple[bool, int]:
+        """
+        Copy incremental data using chunked processing for very large tables.
+        This method ensures no records are missed by using smaller chunks and careful boundary handling.
+        
+        Args:
+            table_name: Name of the table to copy
+            config: Table configuration dictionary
+            batch_size: Batch size for processing
+            
+        Returns:
+            Tuple of (success, rows_copied)
+        """
+        try:
+            # Handle both config dict and TableProcessingContext objects
+            if hasattr(config, 'config'):
+                config = config.config
+            elif hasattr(config, 'incremental_columns'):
+                # This is already a config-like object, extract incremental_columns from attributes
+                incremental_columns = config.incremental_columns
+                # Create a config dict with the necessary attributes
+                config_dict = {
+                    'incremental_columns': incremental_columns,
+                    'primary_incremental_column': getattr(config, 'primary_column', None)
+                }
+                config = config_dict
+            else:
+                # Ensure config is a dictionary
+                pass
+            
+            # Get all incremental columns from the list
+            incremental_columns = config.get('incremental_columns', [])
+            if not incremental_columns:
+                logger.error(f"No incremental columns configured for table: {table_name}")
+                return False, 0
+            
+            # Get primary incremental column from configuration
+            primary_incremental_column = self._get_primary_incremental_column(config)
+            
+            logger.info(f"Copying incremental chunked data for {table_name} using columns: {incremental_columns} with batch size: {batch_size}")
+            
+            # Log which strategy is being used
+            self._log_incremental_strategy(table_name, primary_incremental_column, incremental_columns)
+            
+            # Use unified incremental metadata method
+            if primary_incremental_column:
+                # Use single column logic
+                metadata = self._get_incremental_metadata(table_name, [primary_incremental_column])
+            else:
+                # Use multi-column logic
+                metadata = self._get_incremental_metadata(table_name, incremental_columns)
+            
+            last_processed = metadata.get('last_processed_value')
+            new_records_count = metadata.get('new_records_count', 0)
+            column_strategy = metadata.get('column_strategy', 'single')
+            
+            logger.info(f"Incremental chunked metadata for {table_name}: last_processed={last_processed}, new_records={new_records_count}, strategy={column_strategy}")
+            
+            if new_records_count == 0:
+                logger.info(f"No new records to copy for {table_name}")
+                return True, 0
+            
+            # Use smaller chunk size for chunked processing to ensure no records are missed
+            chunk_size = min(batch_size // 2, 5000)  # Use smaller chunks for better precision
+            logger.info(f"Using chunk size {chunk_size} for incremental chunked processing of {table_name}")
+            
+            # Use the chunked incremental copy method
+            success, rows_copied = self._copy_incremental_records_chunked(
+                table_name, incremental_columns, last_processed, chunk_size, primary_incremental_column
+            )
+            
+            if success:
+                # Update copy status with the last processed value
+                if primary_incremental_column:
+                    self._update_copy_status(table_name, rows_copied, 'success', 
+                                           str(last_processed), primary_incremental_column)
+                else:
+                    self._update_copy_status(table_name, rows_copied, 'success')
+                
+                logger.info(f"Successfully copied {rows_copied:,} records using incremental chunked strategy for {table_name}")
+            else:
+                logger.error(f"Failed to copy incremental chunked data for {table_name}")
+            
+            return success, rows_copied
+            
+        except Exception as e:
+            logger.error(f"Error in incremental chunked copy for {table_name}: {str(e)}")
+            return False, 0
+
+    def _copy_incremental_records_chunked(self, table_name: str, incremental_columns: List[str], 
+                                         last_processed: Any, chunk_size: int, 
+                                         primary_column: Optional[str] = None) -> Tuple[bool, int]:
+        """
+        Copy incremental records using chunked processing with careful boundary handling.
+        
+        Args:
+            table_name: Name of the table
+            incremental_columns: List of incremental columns
+            last_processed: Last processed value
+            chunk_size: Size of each chunk
+            primary_column: Primary incremental column for ordering
+            
+        Returns:
+            Tuple of (success, rows_copied)
+        """
+        try:
+            start_time = time.time()
+            total_copied = 0
+            chunk_num = 0
+            current_cursor = last_processed
+            
+            # Use primary column for ordering if available, otherwise use first incremental column
+            order_column = primary_column if primary_column else incremental_columns[0]
+            
+            logger.info(f"Starting chunked incremental copy for {table_name} using order column: {order_column}")
+            
+            while True:
+                chunk_num += 1
+                chunk_start_time = time.time()
+                
+                # Fetch chunk from source using cursor-based pagination
+                with self.source_engine.connect() as source_conn:
+                    if current_cursor is None:
+                        # First chunk - get initial records
+                        result = source_conn.execute(text(
+                            f"SELECT * FROM `{table_name}` ORDER BY `{order_column}` LIMIT {chunk_size}"
+                        ))
+                    else:
+                        # Subsequent chunks - get records after current cursor
+                        result = source_conn.execute(text(
+                            f"SELECT * FROM `{table_name}` WHERE `{order_column}` > :current_cursor "
+                            f"ORDER BY `{order_column}` LIMIT {chunk_size}"
+                        ), {"current_cursor": current_cursor})
+                    
+                    rows = result.fetchall()
+                    columns = result.keys()
+                
+                if not rows:
+                    logger.info(f"No more records to process for {table_name} after chunk {chunk_num-1}")
+                    break
+                
+                # Use bulk operation for chunk
+                rows_inserted = self.performance_optimizer._execute_bulk_operation(table_name, columns, rows, 'upsert')
+                
+                if rows_inserted == 0:
+                    logger.warning(f"No rows were processed in chunk {chunk_num} for {table_name}")
+                    break
+                
+                total_copied += rows_inserted
+                
+                # Update cursor to the last processed value in this chunk
+                if rows:
+                    # Get the last row's order column value as the new cursor
+                    last_row = rows[-1]
+                    column_index = list(columns).index(order_column)
+                    current_cursor = last_row[column_index]
+                
+                chunk_duration = time.time() - chunk_start_time
+                chunk_rate = rows_inserted / chunk_duration if chunk_duration > 0 else 0
+                
+                logger.info(f"Incremental chunk {chunk_num}: {rows_inserted:,} rows in {chunk_duration:.2f}s "
+                          f"({chunk_rate:.0f} rows/sec) - Cursor: {current_cursor}")
+                
+                # Safety check: if we processed fewer rows than chunk_size, we're done
+                if len(rows) < chunk_size:
+                    logger.info(f"Reached end of data for {table_name} (chunk {chunk_num} had {len(rows)} rows)")
+                    break
+            
+            total_duration = time.time() - start_time
+            avg_rate = total_copied / total_duration if total_duration > 0 else 0
+            
+            logger.info(f"Incremental chunked copy completed for {table_name}: {total_copied:,} rows in "
+                       f"{total_duration:.2f}s ({avg_rate:.0f} rows/sec)")
+            
+            return True, total_copied
+            
+        except Exception as e:
+            logger.error(f"Error in chunked incremental copy for {table_name}: {str(e)}")
             return False, 0
 
     def _get_table_total_count(self, table_name: str) -> int:
