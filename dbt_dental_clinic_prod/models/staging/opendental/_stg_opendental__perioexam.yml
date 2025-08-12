@@ -95,6 +95,8 @@ models:
           Timestamp indicating when the periodontal measurements were last edited or modified 
           in the OpenDental system. This may differ from the original exam_date if measurements 
           were updated after the initial examination. Used for incremental loading logic.
+        tests:
+          - not_null
 
       - name: note
         description: >
@@ -109,20 +111,11 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
+      - name: _transformed_at
         description: >
-          Timestamp when the periodontal examination record was created in the source system 
-          (OpenDental). Maps to ExamDate field. Represents the original examination date.
+          Timestamp when the model was transformed (when the model was built).
         tests:
           - not_null
-
-      - name: _updated_at
-        description: >
-          Timestamp when the record was last updated in the source system (OpenDental). 
-          Maps to DateTMeasureEdit field. Used for incremental loading to identify 
-          records that have been modified since the last ETL run.
-        tests:
-          - not_null
-
+      
     config:
       tags: ['staging', 'opendental', 'periodontal', 'clinical']
