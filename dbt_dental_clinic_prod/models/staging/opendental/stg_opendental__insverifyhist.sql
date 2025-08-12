@@ -25,7 +25,8 @@ renamed_columns as (
         {{ clean_opendental_date('"DateLastAssigned"') }} as last_assigned_date,
         
         -- Timestamp fields
-        "DateTimeEntry"::timestamp as entry_timestamp,
+        "DateTimeEntry"::timestamp as date_created,
+        "SecDateTEdit"::timestamp as date_updated,
         
         -- Attributes
         "VerifyType"::smallint as verify_type,
@@ -33,11 +34,7 @@ renamed_columns as (
         "HoursAvailableForVerification"::double precision as hours_available_for_verification,
 
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTimeEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )
