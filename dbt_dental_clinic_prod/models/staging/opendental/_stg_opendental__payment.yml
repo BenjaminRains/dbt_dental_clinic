@@ -304,15 +304,12 @@ models:
       - name: entry_date
         description: "Date when the payment was entered into the OpenDental system by staff. Used for audit tracking and workflow analysis."
         tests:
-          - not_null
+          - not_null:
+              config:
+                test_name: "entry_date_not_null"
       
       - name: _loaded_at
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
-        tests:
-          - not_null
-      
-      - name: entry_date
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry column. Used for audit tracking and data lineage."
         tests:
           - not_null
       
