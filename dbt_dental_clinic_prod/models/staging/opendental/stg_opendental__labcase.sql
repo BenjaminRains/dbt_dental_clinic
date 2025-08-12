@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'labcase') }}
     where "DateTimeCreated" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTimeCreated" > (select max(_created_at) from {{ this }})
+        and "DateTimeCreated" > (select max(date_created) from {{ this }})
     {% endif %}
 ),
 
@@ -25,11 +25,11 @@ renamed_columns as (
         
         -- Date/Timestamp Fields
         {{ clean_opendental_date('"DateTimeDue"') }} as due_at,
-        {{ clean_opendental_date('"DateTimeCreated"') }} as created_at,
+        {{ clean_opendental_date('"DateTimeCreated"') }} as date_created,
         {{ clean_opendental_date('"DateTimeSent"') }} as sent_at,
         {{ clean_opendental_date('"DateTimeRecd"') }} as received_at,
         {{ clean_opendental_date('"DateTimeChecked"') }} as checked_at,
-        {{ clean_opendental_date('"DateTStamp"') }} as updated_at,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_updated,
         
         -- Additional Attributes
         "Instructions" as instructions,
@@ -37,11 +37,8 @@ renamed_columns as (
         "InvoiceNum" as invoice_number,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTimeCreated"',
-            updated_at_column='"DateTStamp"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
+        
     from source_data
 )
 
