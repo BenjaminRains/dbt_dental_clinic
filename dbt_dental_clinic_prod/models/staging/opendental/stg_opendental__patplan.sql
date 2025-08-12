@@ -4,7 +4,7 @@
 
 with source_data as (
     select * from {{ source('opendental', 'patplan') }}
-    where "SecDateTEdit" >= '2023-01-01'  -- Following pattern from other staging models
+    where {{ clean_opendental_date('"SecDateTEdit"') }} >= '2023-01-01'  -- Following pattern from other staging models
 ),
 
 renamed_columns as (
@@ -27,13 +27,11 @@ renamed_columns as (
         
         -- Date Fields
         {{ clean_opendental_date('"OrthoAutoNextClaimDate"') }} as ortho_auto_next_claim_date,
+        {{ clean_opendental_date('"SecDateTEntry"') }} as date_created,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
         
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateTEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )
