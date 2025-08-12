@@ -395,12 +395,12 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
+      - name: entry_date
         description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry, cleaned for invalid dates."
         tests:
           - not_null
 
-      - name: _updated_at
+      - name: date_updated
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit."
         tests:
           - not_null
