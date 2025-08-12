@@ -36,9 +36,9 @@ renamed_columns as (
         nullif(trim("Receipt"), '') as receipt_text,
 
         -- Status and type fields
-        "PaymentStatus"::smallint as payment_status,
-        "ProcessStatus"::smallint as process_status,
-        "PaymentSource"::smallint as payment_source,
+        {{ convert_opendental_boolean('"PaymentStatus"') }} as payment_status,
+        {{ convert_opendental_boolean('"ProcessStatus"') }} as process_status,
+        {{ convert_opendental_boolean('"PaymentSource"') }} as payment_source,
 
         -- Boolean fields using macro
         {{ convert_opendental_boolean('"IsSplit"') }} as is_split,
@@ -48,13 +48,11 @@ renamed_columns as (
         -- Date fields using macro
         {{ clean_opendental_date('"RecurringChargeDate"') }} as recurring_charge_date,
         {{ clean_opendental_date('"DateEntry"') }} as entry_date,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
 
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"DateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }},
+        "SecUserNumEntry" as created_by_user_id
 
     from source_data
 )
