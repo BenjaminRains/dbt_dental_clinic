@@ -1015,73 +1015,84 @@ class PostgresLoader:
         try:
             with self.analytics_engine.connect() as conn:
                 result = conn.execute(text(f"""
-                    SELECT last_primary_value, primary_column_name
+                    SELECT last_primary_value, primary_column_name, last_loaded
                     FROM {self.analytics_schema}.etl_load_status
                     WHERE table_name = :table_name
                     AND load_status = 'success'
-                    AND last_primary_value IS NOT NULL
                     ORDER BY _loaded_at DESC
                     LIMIT 1
                 """), {"table_name": table_name}).fetchone()
                 
-                if result and result[0]:
+                if result:
                     last_primary_value = result[0]
                     primary_column_name = result[1]
+                    last_loaded = result[2]
                     
-                    # Parse timestamp and primary key
-                    last_timestamp = None
-                    last_primary_id = None
+                    # If last_primary_value is empty but we have last_loaded, use that
+                    if not last_primary_value and last_loaded:
+                        logger.info(f"Using last_loaded timestamp for {table_name} since last_primary_value is empty: {last_loaded}")
+                        return last_loaded, None
                     
-                    try:
-                        if isinstance(last_primary_value, str):
-                            # Check if it's a combined format: "timestamp|primary_key"
-                            if '|' in last_primary_value:
-                                parts = last_primary_value.split('|', 1)
-                                if len(parts) == 2:
-                                    timestamp_str, primary_key_str = parts
-                                    
-                                    # Parse timestamp
-                                    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
-                                        try:
-                                            last_timestamp = datetime.strptime(timestamp_str, fmt)
-                                            break
-                                        except ValueError:
-                                            continue
-                                    
-                                    # Parse primary key
-                                    try:
-                                        last_primary_id = int(primary_key_str)
-                                    except (ValueError, TypeError):
-                                        logger.warning(f"Could not parse primary key '{primary_key_str}' for {table_name}")
-                                    
-                                    logger.info(f"Parsed hybrid format for {table_name}: timestamp={last_timestamp}, primary_id={last_primary_id}")
-                                    return last_timestamp, last_primary_id
-                            
-                            # If not combined format, try to parse as individual values
-                            # Try to parse as datetime first
-                            for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
-                                try:
-                                    last_timestamp = datetime.strptime(last_primary_value, fmt)
-                                    break
-                                except ValueError:
-                                    continue
-                            
-                            # If not a datetime, try to parse as integer (primary key)
-                            if last_timestamp is None:
-                                try:
-                                    last_primary_id = int(last_primary_value)
-                                except (ValueError, TypeError):
-                                    pass
+                    # If we have a valid last_primary_value, process it
+                    if last_primary_value:
+                        # Parse timestamp and primary key
+                        last_timestamp = None
+                        last_primary_id = None
                         
-                        # If it's already a datetime object
-                        elif isinstance(last_primary_value, datetime):
-                            last_timestamp = last_primary_value
+                        try:
+                            if isinstance(last_primary_value, str):
+                                # Check if it's a combined format: "timestamp|primary_key"
+                                if '|' in last_primary_value:
+                                    parts = last_primary_value.split('|', 1)
+                                    if len(parts) == 2:
+                                        timestamp_str, primary_key_str = parts
+                                        
+                                        # Parse timestamp
+                                        for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
+                                            try:
+                                                last_timestamp = datetime.strptime(timestamp_str, fmt)
+                                                break
+                                            except ValueError:
+                                                continue
+                                        
+                                        # Parse primary key
+                                        try:
+                                            last_primary_id = int(primary_key_str)
+                                        except (ValueError, TypeError):
+                                            logger.warning(f"Could not parse primary key '{primary_key_str}' for {table_name}")
+                                        
+                                        logger.info(f"Parsed hybrid format for {table_name}: timestamp={last_timestamp}, primary_id={last_primary_id}")
+                                        return last_timestamp, last_primary_id
+                                
+                                # If not combined format, try to parse as individual values
+                                # Try to parse as datetime first
+                                for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d']:
+                                    try:
+                                        last_timestamp = datetime.strptime(last_primary_value, fmt)
+                                        break
+                                    except ValueError:
+                                        continue
+                                
+                                # If not a datetime, try to parse as integer (primary key)
+                                if last_timestamp is None:
+                                    try:
+                                        last_primary_id = int(last_primary_value)
+                                    except (ValueError, TypeError):
+                                        pass
                             
-                    except Exception as e:
-                        logger.warning(f"Could not parse last_primary_value '{last_primary_value}' for {table_name}: {str(e)}")
-                    
-                    logger.info(f"DEBUG: Hybrid incremental info for {table_name}: timestamp={last_timestamp}, primary_id={last_primary_id}")
-                    return last_timestamp, last_primary_id
+                            # If it's already a datetime object
+                            elif isinstance(last_primary_value, datetime):
+                                last_timestamp = last_primary_value
+                                
+                        except Exception as e:
+                            logger.warning(f"Could not parse last_primary_value '{last_primary_value}' for {table_name}: {str(e)}")
+                        
+                        logger.info(f"DEBUG: Hybrid incremental info for {table_name}: timestamp={last_timestamp}, primary_id={last_primary_id}")
+                        return last_timestamp, last_primary_id
+                    else:
+                        # No valid last_primary_value found
+                        logger.info(f"No valid last_primary_value found for {table_name}")
+                        return None, None
                 else:
                     logger.info(f"DEBUG: No hybrid incremental info found for {table_name}")
                     return None, None
@@ -1121,6 +1132,35 @@ class PostgresLoader:
         # Get hybrid incremental info
         last_timestamp, last_primary_id = self._get_hybrid_incremental_info(table_name)
         
+        # If no incremental info found, check if the table has data in analytics
+        if not last_timestamp and not last_primary_id:
+            # Check if the table has any data in the analytics database
+            try:
+                with self.analytics_engine.connect() as conn:
+                    result = conn.execute(text(f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}")).scalar()
+                    if result and result > 0:
+                        # Table has data, get the maximum primary key value
+                        max_result = conn.execute(text(f"""
+                            SELECT MAX("{primary_key}") 
+                            FROM {self.analytics_schema}.{table_name}
+                            WHERE "{primary_key}" IS NOT NULL
+                        """)).scalar()
+                        if max_result:
+                            last_primary_id = int(max_result)
+                            logger.info(f"No incremental info found for {table_name}, but table has {result} rows. Using max {primary_key}: {last_primary_id}")
+                        else:
+                            logger.info(f"No incremental info found for {table_name}, but table has {result} rows. No valid {primary_key} values found.")
+                    else:
+                        # Table is empty, perform full load
+                        logger.info(f"No incremental info found for {table_name} and table is empty, using full load")
+                        return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+            except Exception as e:
+                logger.warning(f"Error checking analytics table data for {table_name}: {str(e)}")
+                # Fall back to full load if we can't check
+                logger.info(f"No incremental info found for {table_name}, using full load")
+                return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+        
+        # If still no incremental info, perform full load
         if not last_timestamp and not last_primary_id:
             logger.info(f"No incremental info found for {table_name}, using full load")
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
@@ -1594,8 +1634,8 @@ class PostgresLoader:
                 if incremental_columns:
                     last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                 
-                # Get the last datetime value from the incremental column
-                # Query the analytics database to get the max datetime value from the primary incremental column
+                # Get the last primary value from the incremental column
+                # Query the analytics database to get the max value from the primary incremental column
                 try:
                     with self.analytics_engine.connect() as conn:
                         # Get the primary incremental column from table config
@@ -1607,14 +1647,19 @@ class PostgresLoader:
                                 WHERE "{primary_incremental_column}" IS NOT NULL
                             """)).scalar()
                             if result:
-                                last_primary_value = str(result)
-                                logger.info(f"Got max datetime value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
+                                # Check if this is an integer column and handle accordingly
+                                if self._is_integer_column(table_name, primary_incremental_column):
+                                    last_primary_value = str(result)  # Keep as string for storage
+                                    logger.info(f"Got max integer value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
+                                else:
+                                    last_primary_value = str(result)
+                                    logger.info(f"Got max datetime value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
                             else:
-                                logger.warning(f"No datetime values found in {primary_incremental_column} for {table_name}")
+                                logger.warning(f"No values found in {primary_incremental_column} for {table_name}")
                         else:
                             logger.warning(f"No primary incremental column configured for {table_name}")
                 except Exception as e:
-                    logger.warning(f"Could not get last datetime value for {table_name}: {str(e)}")
+                    logger.warning(f"Could not get last primary value for {table_name}: {str(e)}")
                 
                 self._update_load_status_hybrid(
                     table_name, rows_loaded, 'success', 
@@ -1928,9 +1973,9 @@ class PostgresLoader:
                     if incremental_columns:
                         last_timestamp = self._get_loaded_at_time_max(table_name, incremental_columns)
                     
-                    # Get the last datetime value from the incremental column
+                    # Get the last primary value from the incremental column
                     if rows_loaded > 0:
-                        # Query the analytics database to get the max datetime value from the primary incremental column
+                        # Query the analytics database to get the max value from the primary incremental column
                         try:
                             with self.analytics_engine.connect() as conn:
                                 # Get the primary incremental column from table config
@@ -1942,14 +1987,19 @@ class PostgresLoader:
                                         WHERE "{primary_incremental_column}" IS NOT NULL
                                     """)).scalar()
                                     if result:
-                                        last_primary_value = str(result)
-                                        logger.info(f"Got max datetime value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
+                                        # Check if this is an integer column and handle accordingly
+                                        if self._is_integer_column(table_name, primary_incremental_column):
+                                            last_primary_value = str(result)  # Keep as string for storage
+                                            logger.info(f"Got max integer value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
+                                        else:
+                                            last_primary_value = str(result)
+                                            logger.info(f"Got max datetime value for {table_name}: {last_primary_value} from column {primary_incremental_column}")
                                     else:
-                                        logger.warning(f"No datetime values found in {primary_incremental_column} for {table_name}")
+                                        logger.warning(f"No values found in {primary_incremental_column} for {table_name}")
                                 else:
                                     logger.warning(f"No primary incremental column configured for {table_name}")
                         except Exception as e:
-                            logger.warning(f"Could not get last datetime value for {table_name}: {str(e)}")
+                            logger.warning(f"Could not get last primary value for {table_name}: {str(e)}")
                     
                     self._update_load_status_hybrid(
                         table_name, rows_loaded, 'success', 
@@ -2068,29 +2118,130 @@ class PostgresLoader:
         replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
         replication_db = replication_config.get('database', 'opendental_replication')
 
-        # Use only the primary_incremental_column for incremental logic
+        # ENHANCED: Respect the incremental_strategy configuration
+        # Don't override incremental_columns - use what was passed in
         table_config = self.get_table_config(table_name)
         primary_incremental_column = table_config.get('primary_incremental_column') if table_config else None
-        if primary_incremental_column:
-            incremental_columns = [primary_incremental_column]
-        else:
-            incremental_columns = []
+        
+        # Validate incremental columns
+        if not incremental_columns:
+            logger.warning(f"No incremental columns provided for {table_name}, falling back to primary column")
+            if primary_incremental_column:
+                incremental_columns = [primary_incremental_column]
+            else:
+                logger.error(f"No incremental columns available for {table_name}")
+                return f"SELECT * FROM `{replication_db}`.`{table_name}`"
 
-        if force_full or not incremental_columns:
+        if force_full:
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
 
         # Get last analytics load time to determine what's new
         last_analytics_load = self._get_loaded_at_time(table_name)
         
-        if not last_analytics_load:
-            # No previous analytics load found, perform full load
+        # FIXED: Handle integer primary keys correctly
+        # Get the last primary value for integer primary keys
+        last_primary_value = self._get_last_primary_value(table_name)
+        
+        # If no previous load record exists, check if the table has data in analytics
+        if not last_analytics_load and not last_primary_value:
+            # Check if the table has any data in the analytics database
+            try:
+                with self.analytics_engine.connect() as conn:
+                    result = conn.execute(text(f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}")).scalar()
+                    if result and result > 0:
+                        # Table has data, get the maximum primary key value
+                        if primary_incremental_column:
+                            max_result = conn.execute(text(f"""
+                                SELECT MAX("{primary_incremental_column}") 
+                                FROM {self.analytics_schema}.{table_name}
+                                WHERE "{primary_incremental_column}" IS NOT NULL
+                            """)).scalar()
+                            if max_result:
+                                last_primary_value = str(max_result)
+                                logger.info(f"No previous load record found for {table_name}, but table has {result} rows. Using max {primary_incremental_column}: {last_primary_value}")
+                            else:
+                                logger.info(f"No previous load record found for {table_name}, but table has {result} rows. No valid {primary_incremental_column} values found.")
+                        else:
+                            logger.info(f"No previous load record found for {table_name}, but table has {result} rows. No primary incremental column configured.")
+                    else:
+                        # Table is empty, perform full load
+                        logger.info(f"No previous analytics load found for {table_name} and table is empty, performing full load")
+                        return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+            except Exception as e:
+                logger.warning(f"Error checking analytics table data for {table_name}: {str(e)}")
+                # Fall back to full load if we can't check
+                logger.info(f"No previous analytics load found for {table_name}, performing full load")
+                return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+        
+        # If still no previous load info, perform full load
+        if not last_analytics_load and not last_primary_value:
             logger.info(f"No previous analytics load found for {table_name}, performing full load")
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+        
+        # ENHANCED: Implement proper multi-column incremental logic based on strategy
+        if incremental_strategy == 'or_logic':
+            # Use OR logic for multiple columns
+            conditions = []
+            for col in incremental_columns:
+                if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
+                    # Handle integer primary key columns
+                    conditions.append(f"`{col}` > {last_primary_value}")
+                elif last_analytics_load:
+                    # Handle timestamp columns only if we have a valid analytics load time
+                    conditions.append(f"(`{col}` > '{last_analytics_load}' AND `{col}` != '0001-01-01 00:00:00')")
+                # If no valid analytics load time, skip timestamp conditions
+            where_clause = " OR ".join(conditions) if conditions else "1=1"  # Default to all records if no conditions
+        elif incremental_strategy == 'and_logic':
+            # Use AND logic for multiple columns
+            conditions = []
+            for col in incremental_columns:
+                if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
+                    # Handle integer primary key columns
+                    conditions.append(f"`{col}` > {last_primary_value}")
+                elif last_analytics_load:
+                    # Handle timestamp columns only if we have a valid analytics load time
+                    conditions.append(f"(`{col}` > '{last_analytics_load}' AND `{col}` != '0001-01-01 00:00:00')")
+                # If no valid analytics load time, skip timestamp conditions
+            where_clause = " AND ".join(conditions) if conditions else "1=1"  # Default to all records if no conditions
+        elif incremental_strategy == 'single_column':
+            # Use only the primary incremental column
+            if primary_incremental_column and primary_incremental_column in incremental_columns:
+                if last_primary_value and self._is_integer_column(table_name, primary_incremental_column):
+                    # Handle integer primary key columns
+                    where_clause = f"`{primary_incremental_column}` > {last_primary_value}"
+                elif last_analytics_load:
+                    # Handle timestamp columns only if we have a valid analytics load time
+                    where_clause = f"`{primary_incremental_column}` > '{last_analytics_load}' AND `{primary_incremental_column}` != '0001-01-01 00:00:00'"
+                else:
+                    # No valid conditions, use full load
+                    where_clause = "1=1"
+            else:
+                # Fallback to first column
+                if last_primary_value and self._is_integer_column(table_name, incremental_columns[0]):
+                    where_clause = f"`{incremental_columns[0]}` > {last_primary_value}"
+                elif last_analytics_load:
+                    where_clause = f"`{incremental_columns[0]}` > '{last_analytics_load}' AND `{incremental_columns[0]}` != '0001-01-01 00:00:00'"
+                else:
+                    # No valid conditions, use full load
+                    where_clause = "1=1"
+        else:
+            # Default to OR logic
+            conditions = []
+            for col in incremental_columns:
+                if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
+                    # Handle integer primary key columns
+                    conditions.append(f"`{col}` > {last_primary_value}")
+                elif last_analytics_load:
+                    # Handle timestamp columns only if we have a valid analytics load time
+                    conditions.append(f"(`{col}` > '{last_analytics_load}' AND `{col}` != '0001-01-01 00:00:00')")
+                # If no valid analytics load time, skip timestamp conditions
+            where_clause = " OR ".join(conditions) if conditions else "1=1"  # Default to all records if no conditions
 
-        # HYBRID APPROACH: First try timestamp-based incremental loading
-        # If that returns 0 rows but analytics needs updating, we'll handle it in the calling method
-        where_clause = f"{primary_incremental_column} > '{last_analytics_load}'"
-        logger.info(f"Using primary incremental column '{primary_incremental_column}' and analytics load time '{last_analytics_load}' for incremental loading of {table_name}")
+        logger.info(f"Using {incremental_strategy} strategy for {table_name} with columns: {incremental_columns}")
+        logger.info(f"Analytics load time: {last_analytics_load}")
+        logger.info(f"Last primary value: {last_primary_value}")
+        logger.info(f"Where clause: {where_clause}")
+        
         return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
     
     def _build_load_query(self, table_name: str, incremental_columns: List[str], force_full: bool = False) -> str:
@@ -2153,20 +2304,32 @@ class PostgresLoader:
         
         # Get last load time from analytics (correct cutoff for incremental loads)
         last_load = self._get_loaded_at_time(table_name)
+        last_primary_value = self._get_last_primary_value(table_name)
         
         logger.info(f"DEBUG: Last load time for {table_name}: {last_load}")
+        logger.info(f"DEBUG: Last primary value for {table_name}: {last_primary_value}")
         
         # If no previous successful load, check if there's any data in replication that needs loading
-        if last_load is None:
+        if last_load is None and last_primary_value is None:
             # Check if replication has any data for this table
             replication_has_data_query = f"SELECT COUNT(*) FROM `{actual_db}`.`{table_name}`"
             logger.info(f"DEBUG: No previous load found for {table_name}, checking if replication has data: {replication_has_data_query}")
             return replication_has_data_query
         
         if last_load and incremental_columns:
+            # FIXED: Handle integer primary keys correctly
+            table_config = self.get_table_config(table_name)
+            primary_incremental_column = table_config.get('primary_incremental_column') if table_config else None
+            last_primary_value = self._get_last_primary_value(table_name)
+            
             conditions = []
             for col in incremental_columns:
-                conditions.append(f"{col} > '{last_load}'")
+                if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
+                    # Handle integer primary key columns
+                    conditions.append(f"`{col}` > {last_primary_value}")
+                else:
+                    # Handle timestamp columns
+                    conditions.append(f"({col} > '{last_load}' AND {col} != '0001-01-01 00:00:00')")
             
             # Use strategy-based logic
             if incremental_strategy == 'or_logic':
@@ -2174,11 +2337,21 @@ class PostgresLoader:
             elif incremental_strategy == 'and_logic':
                 where_clause = " AND ".join(conditions)
             elif incremental_strategy == 'single_column':
-                # Use only the first column
-                if incremental_columns:
-                    where_clause = f"{incremental_columns[0]} > '{last_load}'"
+                # Use only the primary incremental column
+                if primary_incremental_column and primary_incremental_column in incremental_columns:
+                    if last_primary_value and self._is_integer_column(table_name, primary_incremental_column):
+                        where_clause = f"`{primary_incremental_column}` > {last_primary_value}"
+                    else:
+                        where_clause = f"({primary_incremental_column} > '{last_load}' AND {primary_incremental_column} != '0001-01-01 00:00:00')"
                 else:
-                    where_clause = "1=0"
+                    # Fallback to first column
+                    if incremental_columns:
+                        if last_primary_value and self._is_integer_column(table_name, incremental_columns[0]):
+                            where_clause = f"`{incremental_columns[0]}` > {last_primary_value}"
+                        else:
+                            where_clause = f"({incremental_columns[0]} > '{last_load}' AND {incremental_columns[0]} != '0001-01-01 00:00:00')"
+                    else:
+                        where_clause = "1=0"
             else:
                 # Default to OR logic
                 where_clause = " OR ".join(conditions)
@@ -2808,6 +2981,17 @@ class PostgresLoader:
                 if result:
                     last_primary_value, primary_column_name = result
                     logger.debug(f"Retrieved last primary value for {table_name}: {last_primary_value} (column: {primary_column_name})")
+                    
+                    # If this is an integer column, ensure we return a proper integer value
+                    if primary_column_name and self._is_integer_column(table_name, primary_column_name):
+                        try:
+                            # Try to convert to integer to validate it's a proper integer
+                            int_value = int(last_primary_value)
+                            return str(int_value)  # Return as string for consistency
+                        except (ValueError, TypeError):
+                            logger.warning(f"Invalid integer value for {table_name}.{primary_column_name}: {last_primary_value}")
+                            return None
+                    
                     return last_primary_value
                 return None
                 
@@ -2829,6 +3013,34 @@ class PostgresLoader:
     def _get_incremental_strategy(self, config: Dict) -> str:
         """Get the incremental strategy from table configuration."""
         return config.get('incremental_strategy', 'or_logic')
+    
+    def _is_integer_column(self, table_name: str, column_name: str) -> bool:
+        """Check if a column is an integer type based on table configuration."""
+        try:
+            table_config = self.get_table_config(table_name)
+            if not table_config:
+                return False
+            
+            # Check if this is the primary key and if it's likely an integer
+            primary_key = table_config.get('primary_key')
+            primary_incremental_column = table_config.get('primary_incremental_column')
+            
+            # Check if this column is either the primary key or the primary incremental column
+            if column_name == primary_key or column_name == primary_incremental_column:
+                # Common integer primary key patterns
+                integer_primary_patterns = [
+                    'Num', 'ID', 'Id', 'id'
+                ]
+                return any(pattern in column_name for pattern in integer_primary_patterns)
+            
+            # For non-primary keys, check if it's explicitly marked as integer
+            # This is a simplified check - in a real implementation, you might want to
+            # query the database schema to get the actual column type
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking if column {column_name} is integer for table {table_name}: {str(e)}")
+            return False
 
     def _log_incremental_strategy(self, table_name: str, primary_column: Optional[str], incremental_columns: List[str], strategy: str):
         """Log which incremental strategy is being used."""
@@ -3195,21 +3407,60 @@ class PostgresLoader:
                     table_config = self.get_table_config(table_name)
                     incremental_columns = table_config.get('incremental_columns', []) if table_config else []
                     
-                    # ENHANCED: First check if replication copy time is newer than analytics load time
-                    # This is the primary indicator that there's new data to load
-                    if replication_copy_time and analytics_load_time and replication_copy_time > analytics_load_time:
-                        logger.info(f"Replication copy time ({replication_copy_time}) is newer than analytics load time ({analytics_load_time}), analytics needs updating")
-                        return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
-                    
-                    # If timestamps are the same or replication is older, check for actual new records
+                    # ENHANCED: Check for actual new records in replication since last analytics load
+                    # Don't rely on replication copy time comparison - check actual data timestamps
                     if incremental_columns and analytics_load_time:
-                        # Check if there are new records in replication since last analytics load
+                        # Get incremental strategy from table configuration
+                        incremental_strategy = table_config.get('incremental_strategy', 'or_logic')
+                        
+                        # FIXED: Check if there are new records in replication since last analytics load
+                        # The issue is that records with timestamps older than analytics_load_time might still be new
+                        # if they weren't in analytics before. We need to check if replication has more records than analytics.
+                        
+                        # First, check if replication has more records than analytics (this catches all new records regardless of timestamp)
+                        replication_count_query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"
+                        replication_count = conn.execute(text(replication_count_query)).scalar()
+                        
+                        if replication_count > analytics_row_count:
+                            logger.info(f"Replication has {replication_count} rows vs analytics {analytics_row_count} rows for {table_name}, analytics needs updating")
+                            return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
+                        
+                        # If row counts are the same, check for records with timestamps newer than analytics load time
+                        # FIXED: Handle integer primary keys correctly
+                        primary_incremental_column = table_config.get('primary_incremental_column')
+                        last_primary_value = self._get_last_primary_value(table_name)
+                        
                         conditions = []
                         for col in incremental_columns:
-                            conditions.append(f"{col} > '{analytics_load_time}'")
+                            if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
+                                # Handle integer primary key columns
+                                conditions.append(f"`{col}` > {last_primary_value}")
+                            else:
+                                # Handle timestamp columns
+                                conditions.append(f"({col} > '{analytics_load_time}' AND {col} != '0001-01-01 00:00:00')")
                         
-                        # Use OR logic for multiple columns
-                        where_clause = " OR ".join(conditions)
+                        # Use strategy-based logic
+                        if incremental_strategy == 'or_logic':
+                            where_clause = " OR ".join(conditions)
+                        elif incremental_strategy == 'and_logic':
+                            where_clause = " AND ".join(conditions)
+                        elif incremental_strategy == 'single_column':
+                            # Use only the primary incremental column
+                            if primary_incremental_column and primary_incremental_column in incremental_columns:
+                                if last_primary_value and self._is_integer_column(table_name, primary_incremental_column):
+                                    where_clause = f"`{primary_incremental_column}` > {last_primary_value}"
+                                else:
+                                    where_clause = f"({primary_incremental_column} > '{analytics_load_time}' AND {primary_incremental_column} != '0001-01-01 00:00:00')"
+                            else:
+                                # Fallback to first column
+                                if last_primary_value and self._is_integer_column(table_name, incremental_columns[0]):
+                                    where_clause = f"`{incremental_columns[0]}` > {last_primary_value}"
+                                else:
+                                    where_clause = f"({incremental_columns[0]} > '{analytics_load_time}' AND {incremental_columns[0]} != '0001-01-01 00:00:00')"
+                        else:
+                            # Default to OR logic
+                            where_clause = " OR ".join(conditions)
+                        
                         new_records_query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
                         
                         result = conn.execute(text(new_records_query))
@@ -3221,6 +3472,24 @@ class PostgresLoader:
                         else:
                             logger.info(f"No new records found in replication for {table_name} since last analytics load")
                             return False, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
+                    
+                    # Fallback: Only use replication copy time comparison if no incremental columns available
+                    if replication_copy_time and analytics_load_time and replication_copy_time > analytics_load_time:
+                        logger.info(f"Replication copy time ({replication_copy_time}) is newer than analytics load time ({analytics_load_time}), but no incremental columns configured. Checking for any data differences.")
+                        # Check if replication has more rows than analytics
+                        replication_count_query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"
+                        analytics_count_query = f"SELECT COUNT(*) FROM {self.analytics_schema}.{table_name}"
+                        
+                        replication_count = conn.execute(text(replication_count_query)).scalar()
+                        analytics_count = self._get_analytics_row_count(table_name)
+                        
+                        if replication_count > analytics_count:
+                            logger.info(f"Replication has {replication_count} rows vs analytics {analytics_count} rows for {table_name}, analytics needs updating")
+                            return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
+                        else:
+                            logger.info(f"Replication and analytics have same row count for {table_name} ({replication_count}), no update needed")
+                            return False, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
+                    
                     else:
                         # Fallback to timestamp comparison if no incremental columns or no analytics load time
                         if replication_copy_time > analytics_load_time or force_full_load_recommended:
