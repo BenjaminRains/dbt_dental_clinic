@@ -32,7 +32,7 @@ renamed_columns as (
         {{ clean_opendental_string('"Note"') }} as note,
         
         -- Timestamps
-        "DateTStamp" as date_tstamp,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
 
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
