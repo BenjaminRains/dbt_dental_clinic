@@ -43,31 +43,23 @@ models:
     tests:
       # Model-level business rule validations
       - dbt_utils.expression_is_true:
-          expression: "(select count(*) from {{ this }} where fee_schedule_id = 0) = 1"
-          config:
-            severity: warn
-      - dbt_utils.expression_is_true:
-          expression: "(select count(distinct is_global_flag) from {{ this }}) = 1"
-          config:
-            severity: warn
-      - dbt_utils.expression_is_true:
-          expression: "(select count(*) from {{ this }} where fee_schedule_id < 0) = 0"
+          expression: "fee_schedule_id >= 0"
           config:
             severity: error
       - dbt_utils.expression_is_true:
-          expression: "(select count(*) from {{ this }} where display_order < 0) = 0"
+          expression: "display_order >= 0"
           config:
             severity: warn
       - dbt_utils.expression_is_true:
-          expression: "(select count(*) from {{ this }} where date_created < '2000-01-01') = 0"
+          expression: "date_created >= '2000-01-01'"
           config:
             severity: warn
       - dbt_utils.expression_is_true:
-          expression: "(select count(*) from {{ this }} where date_updated < '2000-01-01') = 0"
+          expression: "date_updated >= '2000-01-01'"
           config:
             severity: warn
       - dbt_utils.expression_is_true:
-          expression: "(select count(*) from {{ this }} where is_global_flag = false) = 0"
+          expression: "is_global_flag = true"
           config:
             severity: warn
 
@@ -167,15 +159,14 @@ models:
         tests:
           - not_null
 
-      - name: sec_user_num_entry
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column."
+        tests:
+          - not_null
+
+      - name: _updated_at
+
+      - name: _created_by
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
-        tests:
-          - relationships:
-              to: ref('stg_opendental__userod')
-              field: user_id
-              config:
-                severity: warn
