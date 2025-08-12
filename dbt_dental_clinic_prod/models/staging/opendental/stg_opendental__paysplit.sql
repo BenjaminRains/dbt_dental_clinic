@@ -36,7 +36,7 @@ renamed_columns as (
         "ProcDate" as procedure_date,
         
         -- Type and category fields
-        "DiscountType" as discount_type,
+        "DiscountType"::integer as discount_type,
         "UnearnedType" as unearned_type,
         "PayPlanDebitType" as payplan_debit_type,
 
@@ -45,13 +45,11 @@ renamed_columns as (
 
         -- Date fields using macro
         {{ clean_opendental_date('"DateEntry"') }} as entry_date,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
 
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"DateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }},
+        "SecUserNumEntry" as created_by_user_id
 
     from source_data
 )
