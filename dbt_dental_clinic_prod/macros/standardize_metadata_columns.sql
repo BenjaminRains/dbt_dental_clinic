@@ -1,8 +1,8 @@
-l{% macro standardize_metadata_columns(
-    created_at_column=null, 
-    updated_at_column=null, 
-    created_by_column=null,
-    fallback_created_at_column=null,
+{% macro standardize_metadata_columns(
+    created_at_column=none, 
+    updated_at_column=none, 
+    created_by_column=none,
+    fallback_created_at_column=none,
     auto_detect_columns=false
 ) %}
 {#- 
