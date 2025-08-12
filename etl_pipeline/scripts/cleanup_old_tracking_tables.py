@@ -180,7 +180,7 @@ def check_table_schema_postgresql(analytics_engine, analytics_schema, table_name
             
             # Check if it has the expected columns for tracking tables
             if table_name == 'etl_load_status':
-                expected_columns = ['id', 'table_name', 'last_loaded', 'rows_loaded', 'load_status', '_loaded_at', '_created_at', '_updated_at']
+                expected_columns = ['id', 'table_name', 'rows_loaded', 'load_status', '_loaded_at', '_transformed_at']
                 missing_columns = [col for col in expected_columns if col not in columns]
                 if missing_columns:
                     logger.warning(f"Table {analytics_schema}.{table_name} is missing expected columns: {missing_columns}")
