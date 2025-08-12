@@ -10,7 +10,7 @@ with source_data as (
         on m."PerioExamNum" = e."PerioExamNum"
     where e."ExamDate" >= '2023-01-01'
     {% if is_incremental() %}
-        and m."SecDateTEdit" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
