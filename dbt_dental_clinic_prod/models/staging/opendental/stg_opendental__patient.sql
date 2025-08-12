@@ -62,18 +62,19 @@ renamed_columns as (
         -- Scheduling Preferences
         "SchedBeforeTime" as schedule_not_before_time,
         "SchedAfterTime" as schedule_not_after_time,
-        "SchedDayOfWeek" as preferred_day_of_week,
+        "SchedDayOfWeek"::integer as preferred_day_of_week,
         "AskToArriveEarly" as ask_to_arrive_early_minutes,
         
         -- Business Logic
         "PlannedIsDone" as planned_treatment_complete,
+
+        -- date fields
+        {{ clean_opendental_date('"SecDateEntry"') }} as date_created,
+        {{ clean_opendental_date('"DateTStamp"') }} as date_updated,
         
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateEntry"',
-            updated_at_column='"DateTStamp"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }}, 
+        "SecUserNumEntry" as created_by_user_id
 
     from source_data
 )
