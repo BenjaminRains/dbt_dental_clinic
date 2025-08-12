@@ -27,10 +27,10 @@ models:
           test: "dbt_utils_relationships_where_stg_opendental__insverify_foreign_key_id__inssub_id__verify_type_1"
           jira_ticket: "TBD"
         
-        - description: "Some records may have null _created_at timestamps for system-generated records where DateTimeEntry is null but last_verified_date is populated"
+        - description: "Some records may have null date_created values for system-generated records where DateTimeEntry is null but last_verified_date is populated"
           severity: "warn"
           identified_date: "2025-01-27"
-          test: "not_null _created_at (if implemented)"
+          test: "not_null date_created (if implemented)"
           jira_ticket: "TBD"
       
       business_rules:
@@ -118,28 +118,6 @@ models:
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-
-      - name: _created_at
-        description: >
-          Timestamp when the record was created in the source system (OpenDental), sourced from DateTimeEntry 
-          with fallback to SecDateTEdit. May be null for system-generated records where DateTimeEntry is null 
-          but last_verified_date is populated.
-        tests:
-          - not_null:
-              config:
-                severity: warn
-                description: >
-                  This test verifies that every record has a creation timestamp.
-                  Note: System-generated records (user_id = 0) may have null DateTimeEntry
-                  but populated last_verified_date. This is expected behavior.
-
-      - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental), sourced from SecDateTEdit with fallback to DateTimeEntry"
-        tests:
-          - not_null
-
-      - name: _created_by_user_id
-        description: "User who created the record in the source system (OpenDental). Always null for this table as no user tracking is available in the source."
 
     tests:
       # Test that verify_type=1 records have valid inssub references
