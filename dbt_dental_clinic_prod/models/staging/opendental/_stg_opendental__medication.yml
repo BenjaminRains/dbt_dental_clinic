@@ -112,18 +112,3 @@ models:
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-
-      - name: _created_at
-        description: >
-          Timestamp when the medication record was created in the source system (OpenDental),
-          sourced from DateTStamp. For medication records, this represents when the 
-          medication was first added to the medication database.
-        tests:
-          - not_null
-
-      - name: _updated_at
-        description: >
-          Timestamp when the medication record was last updated in the source system (OpenDental),
-          sourced from DateTStamp. Used for change tracking and data synchronization.
-        tests:
-          - not_null
