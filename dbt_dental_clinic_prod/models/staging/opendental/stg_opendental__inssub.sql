@@ -50,11 +50,10 @@ renamed_columns as (
         END as subscriber_status,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"SecDateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+        {{ standardize_metadata_columns() }},
+        
+        -- User tracking
+        "SecUserNumEntry" as sec_user_num_entry
 
     from source_data
 )
