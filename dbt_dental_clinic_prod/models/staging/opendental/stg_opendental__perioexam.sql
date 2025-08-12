@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'perioexam') }}
     where "ExamDate" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTMeasureEdit" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTMeasureEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -28,11 +28,8 @@ renamed_columns as (
         "Note" as note,
         
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"ExamDate"',
-            updated_at_column='"DateTMeasureEdit"',
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns(created_at_column='"DateTMeasureEdit"') }}
+        
     from source_data
 )
 
