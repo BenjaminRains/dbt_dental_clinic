@@ -14,10 +14,10 @@
         {{ clean_opendental_date('"DateTimeDeceased"') }} as deceased_datetime
 -#}
     CASE 
-        WHEN {{ column_name }} = '0001-01-01'::date 
-            OR {{ column_name }} = '1900-01-01'::date 
-            OR {{ column_name }} = '0001-01-01 00:00:00.000'::timestamp
+        WHEN {{ column_name }} = '0001-01-01 00:00:00.000'::timestamp
             OR {{ column_name }} = '1900-01-01 00:00:00.000'::timestamp
+            OR {{ column_name }} = '0001-01-01'::date 
+            OR {{ column_name }} = '1900-01-01'::date 
         THEN {% if default_null %}null{% else %}'1900-01-01'::date{% endif %}
         ELSE {{ column_name }}
     END
