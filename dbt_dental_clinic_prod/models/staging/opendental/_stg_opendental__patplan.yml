@@ -43,7 +43,7 @@ models:
             description: "Validates that ordinal values are valid priority numbers (must be >= 1)"
       
       - dbt_utils.expression_is_true:
-          expression: "_updated_at >= _created_at"
+          expression: "date_updated >= date_created"
           name: "patplan_updated_after_created"
           config:
             severity: warn
@@ -113,17 +113,15 @@ models:
           Next scheduled date for automatic orthodontic claim submission for this patient's plan.
           Used by automated billing systems to schedule recurring orthodontic claims.
 
+      - name: date_created
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateTEntry. Records without creation dates are excluded."
+
+      - name: date_updated
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit."
+
       - name: _loaded_at
         description: "Timestamp when the record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
-      - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateTEntry. Records without creation dates are excluded."
-        tests:
-          - not_null
 
-      - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit."
-        tests:
-          - not_null
