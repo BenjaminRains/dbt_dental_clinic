@@ -165,12 +165,11 @@ def create_postgresql_tracking_tables(analytics_engine, analytics_schema):
             CREATE TABLE {analytics_schema}.etl_load_status (
                 id SERIAL PRIMARY KEY,
                 table_name VARCHAR(255) NOT NULL UNIQUE,
-                last_loaded TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01',
                 last_primary_value VARCHAR(255) NULL,
                 primary_column_name VARCHAR(255) NULL,
                 rows_loaded INTEGER DEFAULT 0,
                 load_status VARCHAR(50) DEFAULT 'pending',
-                _loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                _loaded_at TIMESTAMP NOT NULL DEFAULT '1970-01-01 00:00:01', CURRENT_TIMESTAMP
             )
             """
             conn.execute(text(create_load_status_sql))
@@ -336,11 +335,11 @@ def create_postgresql_tracking_records(tables_with_incremental, settings):
                 try:
                     conn.execute(text(f"""
                         INSERT INTO {analytics_schema}.etl_load_status (
-                            table_name, last_loaded, last_primary_value, primary_column_name,
+                            table_name, last_primary_value, primary_column_name,
                             rows_loaded, load_status, _loaded_at
                         ) VALUES (
-                            :table_name, '1970-01-01 00:00:01', NULL, NULL,
-                            0, 'pending', CURRENT_TIMESTAMP
+                            :table_name, NULL, NULL,
+                            0, 'pending', '1970-01-01 00:00:01'
                         )
                     """), {"table_name": table_name})
                     
@@ -359,13 +358,13 @@ def create_postgresql_tracking_records(tables_with_incremental, settings):
         with analytics_engine.connect() as conn:
             for table_name in missing_tables[:5]:  # Show first 5 for verification
                 result = conn.execute(text(f"""
-                    SELECT table_name, last_loaded, rows_loaded, load_status, _loaded_at
+                    SELECT table_name, rows_loaded, load_status, _loaded_at
                     FROM {analytics_schema}.etl_load_status 
                     WHERE table_name = :table_name
                 """), {"table_name": table_name}).fetchone()
                 
                 if result:
-                    logger.info(f"  {result.table_name}: {result.load_status} status, {result.rows_loaded} rows, loaded {result._loaded_at}")
+                    logger.info(f"  {result.table_name}: {result.load_status} status, {result.rows_loaded} rows, loaded at {result._loaded_at}")
         
         return True
         
