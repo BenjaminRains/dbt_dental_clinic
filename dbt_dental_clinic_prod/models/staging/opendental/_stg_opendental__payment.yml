@@ -113,20 +113,20 @@ models:
       
       # Status field validation
       - dbt_utils.expression_is_true:
-          expression: "payment_status >= 0"
+          expression: "payment_status IS NOT NULL"
           config:
             severity: error
-            error_msg: "Payment status must be non-negative"
+            error_msg: "Payment status must not be null"
       - dbt_utils.expression_is_true:
-          expression: "process_status >= 0"
+          expression: "process_status IS NOT NULL"
           config:
             severity: error
-            error_msg: "Process status must be non-negative"
+            error_msg: "Process status must not be null"
       - dbt_utils.expression_is_true:
-          expression: "payment_source >= 0"
+          expression: "payment_source IS NOT NULL"
           config:
             severity: error
-            error_msg: "Payment source must be non-negative"
+            error_msg: "Payment source must not be null"
       
       # Date field validation
       - dbt_utils.expression_is_true:
@@ -152,22 +152,22 @@ models:
             severity: error
             error_msg: "Loaded timestamp cannot be in the future"
       - dbt_utils.expression_is_true:
-          expression: "_created_at <= current_timestamp"
+          expression: "entry_date <= current_timestamp"
           config:
             severity: error
             error_msg: "Created timestamp cannot be in the future"
       - dbt_utils.expression_is_true:
-          expression: "_updated_at <= current_timestamp"
+          expression: "date_updated <= current_timestamp"
           config:
             severity: error
             error_msg: "Updated timestamp cannot be in the future"
       - dbt_utils.expression_is_true:
-          expression: "_updated_at >= _created_at"
+          expression: "date_updated >= entry_date"
           config:
             severity: error
-            error_msg: "Updated timestamp must be after or equal to created timestamp"
+            error_msg: "Updated timestamp must be after or equal to entry timestamp"
       - dbt_utils.expression_is_true:
-          expression: "_created_by_user_id > 0 OR _created_by_user_id IS NULL"
+          expression: "created_by_user_id > 0 OR created_by_user_id IS NULL"
           config:
             severity: warn
             error_msg: "Created by user ID must be positive when not null"
@@ -269,17 +269,17 @@ models:
         description: "Text content of the payment receipt generated for the patient. Used for patient communication and record keeping."
       
       - name: payment_status
-        description: "Current processing status of the payment in the OpenDental system. Non-negative integer representing various payment states."
+        description: "Current processing status of the payment in the OpenDental system. Boolean field indicating payment state (true/false)."
         tests:
           - not_null
       
       - name: process_status
-        description: "Processing status indicating where the payment is in the workflow (pending, processing, completed, etc.). Non-negative integer."
+        description: "Processing status indicating where the payment is in the workflow (pending, processing, completed, etc.). Boolean field (true/false)."
         tests:
           - not_null
       
       - name: payment_source
-        description: "Source system or method that generated the payment record. Non-negative integer identifying the origin of the payment."
+        description: "Source system or method that generated the payment record. Boolean field identifying the origin of the payment (true/false)."
         tests:
           - not_null
       
@@ -311,15 +311,15 @@ models:
         tests:
           - not_null
       
-      - name: _created_at
+      - name: entry_date
         description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry column. Used for audit tracking and data lineage."
         tests:
           - not_null
       
-      - name: _updated_at
+      - name: date_updated
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column. Used for incremental loading and change tracking."
         tests:
           - not_null
       
-      - name: _created_by_user_id
+      - name: created_by_user_id
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column. May be null for system-generated payments or legacy data."
