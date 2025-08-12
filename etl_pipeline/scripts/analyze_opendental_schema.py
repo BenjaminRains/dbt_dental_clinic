@@ -535,6 +535,7 @@ class OpenDentalSchemaAnalyzer:
         - Column prioritization (limit to most reliable columns)
         - Business logic for column selection
         - Exclusion of workflow-specific columns
+        - Primary key inclusion for auto-incrementing tables
         """
         columns = schema_info.get('columns', {})
         timestamp_columns = []
@@ -603,24 +604,40 @@ class OpenDentalSchemaAnalyzer:
         # Limit to 2-3 most reliable columns to avoid complexity
         final_columns = prioritized_columns[:3]
         
+        # Special case: Add primary key for auto-incrementing tables
+        primary_keys = schema_info.get('primary_keys', [])
+        if primary_keys:
+            primary_key = primary_keys[0]
+            # Check if it's an auto-incrementing primary key (bigint/int with auto_increment)
+            primary_key_info = columns.get(primary_key, {})
+            primary_key_type = str(primary_key_info.get('type', '')).lower()
+            
+            # Add primary key if it's auto-incrementing (bigint/int) and not already included
+            if ('bigint' in primary_key_type or 'int' in primary_key_type) and primary_key not in final_columns:
+                final_columns.insert(0, primary_key)  # Add at the beginning for highest priority
+                logger.debug(f"Added auto-incrementing primary key '{primary_key}' to incremental columns for {table_name}")
+        
         if len(final_columns) != len(timestamp_columns):
             logger.info(f"Filtered incremental columns for {table_name}: {len(timestamp_columns)} -> {len(final_columns)} columns")
         
         return final_columns
     
-    def select_primary_incremental_column(self, incremental_columns: List[str]) -> Optional[str]:
+    def select_primary_incremental_column(self, table_name: str, incremental_columns: List[str], schema_info: Dict) -> Optional[str]:
         """
-        Select the primary incremental column from a list based on priority order.
+        Select the primary incremental column from a list based on priority order and table-specific logic.
         
         Priority order (highest to lowest):
-        1. DateTStamp - Most recent timestamp (when record was last modified)
-        2. SecDateTEdit - Security date edit (when record was last edited)
-        3. SecDateTEntry - Security date entry (when record was created/modified)
-        4. DateTEntry - Date entry
-        5. All others - Any remaining timestamp columns
+        1. Primary key columns (for auto-incrementing tables)
+        2. DateTStamp - Most recent timestamp (when record was last modified)
+        3. SecDateTEdit - Security date edit (when record was last edited)
+        4. SecDateTEntry - Security date entry (when record was created/modified)
+        5. DateTEntry - Date entry
+        6. All others - Any remaining timestamp columns
         
         Args:
+            table_name: Name of the table
             incremental_columns: List of incremental column names
+            schema_info: Schema information for the table
             
         Returns:
             The selected primary incremental column, or None if no columns provided
@@ -628,7 +645,21 @@ class OpenDentalSchemaAnalyzer:
         if not incremental_columns:
             return None
         
-        # Priority order for selecting the best incremental column
+        # Special case: For tables with auto-incrementing primary keys, prefer the primary key
+        primary_keys = schema_info.get('primary_keys', [])
+        if primary_keys:
+            primary_key = primary_keys[0]
+            # Check if primary key is in incremental columns (should be for auto-incrementing tables)
+            if primary_key in incremental_columns:
+                logger.debug(f"Selected primary key '{primary_key}' as primary incremental column for table {table_name}")
+                return primary_key
+            
+            # Special case for securitylog table - use SecurityLogNum even if not in incremental_columns
+            if table_name.lower() == 'securitylog' and primary_key == 'SecurityLogNum':
+                logger.debug(f"Selected primary key '{primary_key}' as primary incremental column for securitylog table")
+                return primary_key
+        
+        # Priority order for selecting the best incremental column (timestamp-based)
         priority_order = [
             'DateTStamp',      # Most recent timestamp - highest priority
             'SecDateTEdit',    # Security date edit - second priority
@@ -824,7 +855,7 @@ class OpenDentalSchemaAnalyzer:
         else:  # tiny
             # Tiny tables - consider full refresh for simplicity
             # unless they have very reliable incremental columns
-            primary_incremental = self.select_primary_incremental_column(incremental_columns)
+            primary_incremental = self.select_primary_incremental_column(table_name, incremental_columns, schema_info)
             if primary_incremental and primary_incremental in ['DateTStamp', 'SecDateTEdit']:
                 return 'incremental'
             else:
@@ -1073,7 +1104,7 @@ class OpenDentalSchemaAnalyzer:
                         # Get incremental columns and strategy
                         incremental_columns = self.find_incremental_columns(table_name, schema_info)
                         incremental_strategy = self.determine_incremental_strategy(table_name, schema_info, incremental_columns)
-                        primary_incremental_column = self.select_primary_incremental_column(incremental_columns)
+                        primary_incremental_column = self.select_primary_incremental_column(table_name, incremental_columns, schema_info)
                         
                         # Check if table has dbt models
                         is_modeled = False
