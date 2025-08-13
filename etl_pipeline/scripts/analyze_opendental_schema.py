@@ -369,11 +369,20 @@ class OpenDentalSchemaAnalyzer:
                 logger.warning(f"dbt models directory not found: {models_dir}")
                 return dbt_models
             
-            # Discover staging models
+            # Discover staging models from subdirectories
             staging_dir = models_dir / 'staging'
             if staging_dir.exists():
-                for sql_file in staging_dir.rglob('*.sql'):
-                    dbt_models['staging'].append(sql_file.stem)
+                # Look in staging/opendental/ for OpenDental staging models
+                opendental_staging_dir = staging_dir / 'opendental'
+                if opendental_staging_dir.exists():
+                    for sql_file in opendental_staging_dir.rglob('*.sql'):
+                        dbt_models['staging'].append(sql_file.stem)
+                
+                # Look in staging/raw/ for raw staging models
+                raw_staging_dir = staging_dir / 'raw'
+                if raw_staging_dir.exists():
+                    for sql_file in raw_staging_dir.rglob('*.sql'):
+                        dbt_models['staging'].append(sql_file.stem)
             
             # Discover mart models
             marts_dir = models_dir / 'marts'
@@ -381,11 +390,14 @@ class OpenDentalSchemaAnalyzer:
                 for sql_file in marts_dir.rglob('*.sql'):
                     dbt_models['mart'].append(sql_file.stem)
             
-            # Discover intermediate models
+            # Discover intermediate models from subdirectories
             intermediate_dir = models_dir / 'intermediate'
             if intermediate_dir.exists():
-                for sql_file in intermediate_dir.rglob('*.sql'):
-                    dbt_models['intermediate'].append(sql_file.stem)
+                # Look in all subdirectories of intermediate/
+                for subdir in intermediate_dir.iterdir():
+                    if subdir.is_dir():
+                        for sql_file in subdir.rglob('*.sql'):
+                            dbt_models['intermediate'].append(sql_file.stem)
             
             total_models = sum(len(models) for models in dbt_models.values())
             logger.info(f"Discovered {total_models} dbt models: {len(dbt_models['staging'])} staging, {len(dbt_models['mart'])} mart, {len(dbt_models['intermediate'])} intermediate")
@@ -1110,21 +1122,21 @@ class OpenDentalSchemaAnalyzer:
                         is_modeled = False
                         dbt_model_types = []
                         
-                        # Check staging models
+                        # Check staging models - look for stg_opendental__{table_name} pattern
                         staging_models = [model for model in dbt_models['staging'] 
-                                        if table_name.lower() in model.lower()]
+                                        if f"stg_opendental__{table_name.lower()}" == model.lower()]
                         if staging_models:
                             is_modeled = True
                             dbt_model_types.append('staging')
                         
-                        # Check mart models
+                        # Check mart models - look for dim_*, fact_*, mart_* patterns that might reference the table
                         mart_models = [model for model in dbt_models['mart'] 
                                      if table_name.lower() in model.lower()]
                         if mart_models:
                             is_modeled = True
                             dbt_model_types.append('mart')
                         
-                        # Check intermediate models
+                        # Check intermediate models - look for any intermediate models that might reference the table
                         intermediate_models = [model for model in dbt_models['intermediate'] 
                                             if table_name.lower() in model.lower()]
                         if intermediate_models:
