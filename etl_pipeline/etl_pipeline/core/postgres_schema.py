@@ -217,7 +217,9 @@ class PostgresSchema:
             # Special handling for known columns that should always be smallint
             # These columns are known to support values beyond 0/1 in business logic
             known_smallint_columns = {
-                'apptview': ['StackBehavUR', 'StackBehavLR']
+                'apptview': ['StackBehavUR', 'StackBehavLR'],
+                'provider': ['ProvStatus', 'AnesthProvType', 'EhrMuStage'],
+                'tasklist': ['TaskListStatus']
             }
             
             if (table_name.lower() in known_smallint_columns and 
@@ -341,7 +343,9 @@ class PostgresSchema:
             # Special handling for known columns that should always be smallint
             # These columns are known to support values beyond 0/1 in business logic
             known_smallint_columns = {
-                'apptview': ['StackBehavUR', 'StackBehavLR']
+                'apptview': ['StackBehavUR', 'StackBehavLR'],
+                'provider': ['ProvStatus', 'AnesthProvType', 'EhrMuStage'],
+                'tasklist': ['TaskListStatus']
             }
             
             if (table_name.lower() in known_smallint_columns and 
