@@ -5,7 +5,7 @@
 with source_data as (
     select 
         sfd.*,
-        sd."DateTCreated"
+        {{ clean_opendental_date('"DateTCreated"') }} as date_created
     from {{ source('opendental', 'sheetfielddef') }} sfd
     inner join {{ source('opendental', 'sheetdef') }} sd
         on sfd."SheetDefNum" = sd."SheetDefNum"
@@ -43,7 +43,7 @@ renamed_columns as (
         "TabOrderMobile"::integer as tab_order_mobile,
         nullif(trim("UiLabelMobile"), '') as ui_label_mobile,
         nullif(trim("UiLabelMobileRadioButton"), '') as ui_label_mobile_radio_button,
-        "LayoutMode"::smallint as layout_mode,
+        {{ convert_opendental_boolean('"LayoutMode"') }} as layout_mode,
         nullif(trim("Language"), '') as language,
         
         -- Boolean fields using macro
@@ -53,11 +53,12 @@ renamed_columns as (
         {{ convert_opendental_boolean('"IsLocked"') }} as is_locked,
         {{ convert_opendental_boolean('"CanElectronicallySign"') }} as can_electronically_sign,
         {{ convert_opendental_boolean('"IsSigProvRestricted"') }} as is_sig_prov_restricted,
+    
         
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
-            created_at_column='"DateTCreated"',
-            updated_at_column='"DateTCreated"',
+            created_at_column=none,
+            updated_at_column=none,
             created_by_column=none
         ) }}
 

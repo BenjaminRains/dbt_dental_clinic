@@ -41,7 +41,11 @@ renamed_columns as (
         -- Note: SecUserNumEntry column does not exist in the benefit table
         
         -- Metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateTEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column=none
+        ) }}
 
     from source_data
 )

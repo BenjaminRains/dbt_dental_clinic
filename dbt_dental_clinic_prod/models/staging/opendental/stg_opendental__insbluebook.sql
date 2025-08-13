@@ -32,7 +32,7 @@ renamed_columns as (
         {{ clean_opendental_date('"ProcDate"') }} as procedure_date,
         
         -- Standardized metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(created_at_column='"DateTEntry"') }}
     
     from source_data
 )

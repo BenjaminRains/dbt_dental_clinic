@@ -22,7 +22,9 @@ renamed_columns as (
         {{ clean_opendental_date('"DateTimeLink"') }} as linked_at,
         
         -- Standardized metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTimeLink"'
+        ) }}
 
     from source_data
 )

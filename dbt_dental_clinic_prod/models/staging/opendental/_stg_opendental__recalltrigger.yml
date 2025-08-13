@@ -87,23 +87,8 @@ models:
         description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-      
-      - name: _created_at
-        description: >
-          Timestamp when this record was created in the source system (OpenDental). 
-          Note: OpenDental recall trigger table does not have a native created timestamp, 
-          so this is populated with the ETL load timestamp for new records. May be null 
-          for records where the source timestamp is not available.
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
-          - not_null:
-              where: "_created_at is not null"
-      
-      - name: _updated_at
-        description: >
-          Timestamp when this record was last updated in the source system (OpenDental). 
-          Note: OpenDental recall trigger table does not have a native updated timestamp, 
-          so this is populated with the ETL load timestamp. May be null for records 
-          where the source timestamp is not available.
-        tests:
-          - not_null:
-              where: "_updated_at is not null"
+          - not_null

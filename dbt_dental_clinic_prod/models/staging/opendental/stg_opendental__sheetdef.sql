@@ -31,7 +31,7 @@ renamed_columns as (
         {{ convert_opendental_boolean('"HasMobileLayout"') }} as has_mobile_layout,
         {{ convert_opendental_boolean('"AutoCheckSaveImage"') }} as auto_check_save_image,
         
-        -- Date fields using macro
+        -- Source Metadata
         {{ clean_opendental_date('"DateTCreated"') }} as date_created,
         
         -- Standardized metadata using macro

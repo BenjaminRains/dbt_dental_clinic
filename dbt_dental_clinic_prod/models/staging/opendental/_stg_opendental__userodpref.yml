@@ -24,13 +24,6 @@ models:
         - description: >
             The clinic_id field is set to NULL in this staging model, even though it is NOT NULL in the source system.
             This is intentional as the field is not used in our analytics and its values are not meaningful for our use cases.
-          severity: info
-          identified_date: "2024-03-19"
-          business_impact: >
-            No impact on analytics as the clinic_id field is not used in our data models.
-        - description: >
-            The _created_at and _updated_at fields are NULL for all records as they are not tracked in the source system.
-            This is expected behavior and does not impact the validity of the preference data.
           severity: warn
           identified_date: "2024-03-19"
           business_impact: >
@@ -68,16 +61,6 @@ models:
       - dbt_utils.expression_is_true:
           expression: "is null"
           column_name: clinic_id
-          config:
-            severity: warn
-      - dbt_utils.expression_is_true:
-          expression: "is null"
-          column_name: _created_at
-          config:
-            severity: warn
-      - dbt_utils.expression_is_true:
-          expression: "is null"
-          column_name: _updated_at
           config:
             severity: warn
       - dbt_utils.expression_is_true:
@@ -135,8 +118,7 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
-        description: Timestamp when the record was created in the source system (NULL as not tracked)
-
-      - name: _updated_at
-        description: Timestamp when the record was last updated in the source system (NULL as not tracked)
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null

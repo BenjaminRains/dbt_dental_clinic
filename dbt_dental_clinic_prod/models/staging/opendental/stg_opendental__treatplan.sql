@@ -6,9 +6,9 @@
 with source_data as (
     select * 
     from {{ source('opendental', 'treatplan') }}
-    where "DateTP" >= '2023-01-01'
+    where {{ clean_opendental_date('"DateTP"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -27,7 +27,10 @@ renamed_columns as (
         
         -- Timestamps and dates with cleaning
         {{ clean_opendental_date('"DateTP"') }} as treatment_plan_date,
-        "SecDateEntry" as entry_date,
+        {{ clean_opendental_date('"SecDateEntry"') }} as entry_date,
+        -- Source Metadata
+        {{ clean_opendental_date('"SecDateEntry"') }} as date_tentry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_tedit,
         {{ clean_opendental_date('"DateTSigned"') }} as signed_timestamp,
         {{ clean_opendental_date('"DateTPracticeSigned"') }} as practice_signed_timestamp,
         

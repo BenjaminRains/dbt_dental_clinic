@@ -8,7 +8,7 @@ with source_data as (
     from {{ source('opendental', 'refattach') }}
     where {{ clean_opendental_date('"RefDate"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        AND "DateTStamp" > (select max(_updated_at) from {{ this }})
+        AND {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -35,6 +35,8 @@ renamed_columns as (
         "Note" as note,
         {{ convert_opendental_boolean('"IsTransitionOfCare"') }} as is_transition_of_care,
         {{ clean_opendental_date('"DateProcComplete"') }} as procedure_completion_date,
+
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
         
         -- Metadata columns
         {{ standardize_metadata_columns(

@@ -99,6 +99,11 @@ models:
         tests:
           - not_null
 
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
     tests:
       - dbt_utils.expression_is_true:
           expression: "exists (select 1 from {{ ref('stg_opendental__task') }} t where t.task_id = task_id and t.original_timestamp >= '2023-01-01')"

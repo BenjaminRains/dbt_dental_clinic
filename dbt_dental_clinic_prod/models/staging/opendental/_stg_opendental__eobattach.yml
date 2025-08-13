@@ -122,3 +122,4 @@ models:
         description: "Timestamp when this staging model was built by dbt (dbt model build timestamp)"
         tests:
           - not_null
+

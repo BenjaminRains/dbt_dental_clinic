@@ -122,19 +122,10 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
-        description: "Timestamp when the view preference was created in the source system (OpenDental). Since no creation timestamp exists in the source, this uses current_timestamp to track when the record was loaded into our warehouse."
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
-          - not_null:
-              where: "_created_at is not null"
-              severity: warn
-
-      - name: _updated_at
-        description: "Timestamp when the view preference was last updated in the source system (OpenDental). Since no update timestamp exists in the source, this uses current_timestamp to track when the record was loaded into our warehouse."
-        tests:
-          - not_null:
-              where: "_updated_at is not null"
-              severity: warn
+          - not_null
 
     # Model-level tests
     tests:

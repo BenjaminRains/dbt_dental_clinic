@@ -132,3 +132,10 @@ models:
         description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
         tests:
           - not_null
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2000-01-01'"

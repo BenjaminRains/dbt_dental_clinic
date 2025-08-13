@@ -119,6 +119,15 @@ models:
         tests:
           - not_null
 
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecTimeEntry column."
+        tests:
+          - not_null
+      - name: _updated_at
+        description: "Timestamp when the record was updated in the source system (OpenDental). Maps to SecDateTEdit column."
+        tests:
+          - not_null
+
     tests:
       # Test that verify_type=1 records have valid inssub references
       - dbt_utils.relationships_where:

@@ -52,10 +52,10 @@ models:
     tests:
       - dbt_utils.expression_is_true:
           name: valid_timestamp_sequence
-          expression: "_updated_at >= _created_at"
+          expression: "_loaded_at >= _created_at"
           config:
             severity: warn
-            description: "Metadata timestamps should be chronologically consistent - updated_at should not be earlier than created_at"
+            description: "Metadata timestamps should be chronologically consistent - loaded_at should not be earlier than created_at"
       - dbt_utils.expression_is_true:
           name: entry_timestamp_not_future
           expression: "entry_timestamp <= current_timestamp"
@@ -162,10 +162,5 @@ models:
       
       - name: _created_at
         description: "Timestamp when the record was created in the source system (OpenDental), sourced from EntryDateTime. Represents when the clinical note was first documented."
-        tests:
-          - not_null
-      
-      - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental), sourced from EntryDateTime. For procedure notes, this typically matches _created_at as notes are rarely modified after creation."
         tests:
           - not_null

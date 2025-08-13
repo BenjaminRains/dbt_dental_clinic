@@ -9,7 +9,7 @@ with source_data as (
     where "HistDateTStamp" >= '2023-01-01'::timestamp
         AND "HistDateTStamp" <= CURRENT_TIMESTAMP
     {% if is_incremental() %}
-        AND "HistDateTStamp" > (SELECT max(_loaded_at) FROM {{ this }})
+        AND clean_opendental_date("HistDateTStamp") > (SELECT max(_loaded_at) FROM {{ this }})
     {% endif %}
 ),
 
@@ -74,7 +74,11 @@ renamed_columns as (
         "SecUserNumEntry"::integer as sec_user_num_entry,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"HistDateTStamp"',
+            updated_at_column='"HistDateTStamp"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
     from source_data
 )

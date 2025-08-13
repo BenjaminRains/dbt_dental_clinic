@@ -48,7 +48,11 @@ renamed_columns as (
         "SecUserNumEntry" as sec_user_num_entry,
         
         -- Metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
     
     from source_data
 )

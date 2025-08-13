@@ -532,6 +532,20 @@ models:
         description: "Timestamp when this dbt model was last built/transformed"
         tests:
           - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column. Uses SecDateTEdit as fallback for invalid dates."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2000-01-01'"
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column. Uses SecDateEntry as fallback for invalid dates."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2000-01-01'"
 
       - name: sec_date_entry
         description: "Date when the record was created in the source system (OpenDental). Maps to SecDateEntry column. Uses SecDateTEdit as fallback for invalid dates."

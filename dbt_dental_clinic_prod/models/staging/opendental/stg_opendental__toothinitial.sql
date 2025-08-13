@@ -23,6 +23,10 @@ renamed_columns as (
         "ColorDraw" as color_draw,
         "DrawText" as draw_text,
         
+        -- Source Metadata
+        {{ clean_opendental_date('"SecDateTEntry"') }} as date_tentry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as date_tedit,
+
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
             created_at_column='"SecDateTEntry"',

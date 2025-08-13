@@ -177,8 +177,7 @@ models:
         description: "Type of date associated with the task (maps to DateType in OpenDental)"
         tests:
           - not_null
-          - accepted_values:
-              values: [0, 1, 2]
+          - boolean_values
 
       - name: object_type
         description: "Type of object the task is associated with (maps to ObjectType in OpenDental)"
@@ -215,6 +214,11 @@ models:
       # Required Metadata Columns
       - name: _loaded_at
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 

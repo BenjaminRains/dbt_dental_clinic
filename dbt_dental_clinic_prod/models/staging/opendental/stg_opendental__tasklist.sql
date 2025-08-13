@@ -5,9 +5,9 @@
 
 with source_data as (
     select * from {{ source('opendental', 'tasklist') }}
-    where "DateTimeEntry" >= '2023-01-01'
+    where {{ clean_opendental_date('"DateTimeEntry"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTimeEntry" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTimeEntry"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -25,13 +25,13 @@ renamed_columns as (
         "GlobalTaskFilterType" as global_task_filter_type,
         "TaskListStatus" as task_status,
         "ObjectType" as object_type,
-        "DateType" as date_type,
+        {{ convert_opendental_boolean('"DateType"') }} as date_type,
         
         -- Date fields using macro
         {{ clean_opendental_date('"DateTL"') }} as task_date,
         
         -- Timestamps
-        "DateTimeEntry" as entry_datetime,
+        {{ clean_opendental_date('"DateTimeEntry"') }} as entry_datetime,
         
         -- Boolean fields using macro
         {{ convert_opendental_boolean('"IsRepeating"') }} as is_repeating,

@@ -119,8 +119,7 @@ models:
         tests:
           - not_null
       
-      - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). NULL for this table as the source programproperty table doesn't track creation timestamps."
-      
-      - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental). NULL for this table as the source programproperty table doesn't track update timestamps."
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null

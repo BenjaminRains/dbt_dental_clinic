@@ -120,7 +120,7 @@ models:
           - positive_values:
               where: "tracking_error_definition_id is not null AND tracking_error_definition_id > 0"
 
-      - name: entry_timestamp
+      - name: date_time_entry
         description: >
           Timestamp when this tracking entry was created (maps to DateTimeEntry in OpenDental).
           Represents the actual time when the tracked event occurred in the claim processing workflow.
@@ -153,6 +153,13 @@ models:
         description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
         tests:
           - not_null
+
+      - name: _created_at
+        description: "Raw creation timestamp from source system (OpenDental). Maps to DateTimeEntry column."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2023-01-01'"
 
     tests:
       - relationships_with_third_table:

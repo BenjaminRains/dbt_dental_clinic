@@ -110,6 +110,11 @@ models:
         tests:
           - not_null
 
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
     tests:
       - dbt_utils.expression_is_true:
           expression: "(task_id is not null and task_list_id is null) or (task_id is null and task_list_id is not null)"

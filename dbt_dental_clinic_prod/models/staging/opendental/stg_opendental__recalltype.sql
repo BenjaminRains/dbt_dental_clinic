@@ -6,7 +6,7 @@
 with source_data as (
     select * from {{ source('opendental', 'recalltype') }}
     {% if is_incremental() %}
-        where current_timestamp > (select max(_updated_at) from {{ this }})
+        where current_timestamp > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

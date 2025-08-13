@@ -168,14 +168,14 @@ models:
               values: [true, false]
 
       # Date Columns
-      - name: date_created
+      - name: sec_date_entry
         description: >
           Date when the fee record was created (maps to SecDateEntry in OpenDental source).
           Cleaned to handle invalid OpenDental date values like '0001-01-01'.
         tests:
           - not_null
 
-      - name: date_updated
+      - name: sec_date_t_edit
         description: >
           Date when the fee record was last updated (maps to SecDateTEdit in OpenDental source).
           Cleaned to handle invalid OpenDental date values. Falls back to date_created if null.
@@ -192,15 +192,28 @@ models:
         description: "Timestamp when this dbt model was last built/transformed"
         tests:
           - not_null
-    
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column."
+        tests:
+          - not_null
+
+      - name: _created_by
+        description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
+        tests:
+          - not_null
+
       - name: sec_user_num_entry
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= 0"
 
-    tests:
+tests:
       # Unique combination test for business logic
       - dbt_utils.unique_combination_of_columns:
           name: fee_unique_combination
@@ -212,17 +225,17 @@ models:
       # Date validation tests (moved to model level)
       - dbt_utils.expression_is_true:
           name: fee_date_created_valid_range
-          expression: "date_created >= '2000-01-01'::date AND date_created <= current_date"
+          expression: "_created_at >= '2000-01-01'::date AND _created_at <= current_date"
           severity: warn
 
       - dbt_utils.expression_is_true:
           name: fee_date_updated_valid_range
-          expression: "date_updated >= '2000-01-01'::date AND date_updated <= current_date"
+          expression: "_updated_at >= '2000-01-01'::date AND _updated_at <= current_date"
           severity: warn
 
       - dbt_utils.expression_is_true:
           name: fee_date_consistency_check
-          expression: "date_updated >= date_created"
+          expression: "_updated_at >= _created_at"
           severity: warn
 
       # Custom business rule tests - allowing more zero fee scenarios

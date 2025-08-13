@@ -92,27 +92,3 @@ models:
           This is automatically set to current_timestamp when the model runs.
         tests:
           - not_null
-      
-      - name: _created_at
-        description: >
-          Timestamp when the record was created in the source system (OpenDental).
-          Set to null because the source table has no creation timestamp columns.
-        tests:
-          - accepted_values:
-              values: [null]
-      
-      - name: _updated_at
-        description: >
-          Timestamp when the record was last updated in the source system (OpenDental).
-          Set to null because the source table has no update timestamp columns.
-        tests:
-          - accepted_values:
-              values: [null]
-      
-      - name: _created_by_user_id
-        description: >
-          User who created the record in the source system (OpenDental).
-          Set to null because the source table has no user tracking columns.
-        tests:
-          - accepted_values:
-              values: [null]

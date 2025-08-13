@@ -172,15 +172,12 @@ models:
       
       - name: priority
         description: >
-          Numeric priority level for the recall appointment, with lower numbers
-          indicating higher priority. Used for scheduling prioritization and
-          communication sequencing. Defaults to 0 if not specified.
+          Boolean flag indicating whether this recall has high priority.
+          True indicates high priority, false indicates normal priority.
+          Used for scheduling prioritization and communication sequencing.
         tests:
           - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 100
-              severity: warn
+          - boolean_values
       
       - name: note
         description: >

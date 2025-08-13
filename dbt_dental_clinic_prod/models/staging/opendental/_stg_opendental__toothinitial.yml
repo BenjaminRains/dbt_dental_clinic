@@ -19,6 +19,10 @@ models:
         - description: "Multiple tooth numbering systems are in use (standard 1-32, letters A-T, and some non-standard numbers)"
           severity: "warn"
           identified_date: "2024-03-20"
+        - description: "161,596 records (99.8%) have NULL _created_at values due to invalid source dates (0001-01-01 00:00:00) in OpenDental. Only 288 records have valid creation dates."
+          severity: "warn"
+          identified_date: "2024-12-19"
+          impact: "Creation timestamp tracking is unreliable for most records"
       
       business_rules:
         - rule: "Each tooth initial record must be associated with a valid patient"
@@ -99,10 +103,15 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
-        description: "Timestamp when the tooth initial was created in the source system (OpenDental). Maps to SecDateTEntry."
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
+
+      - name: _created_at
+        description: "Timestamp when the tooth initial was created in the source system (OpenDental). Maps to SecDateTEntry."
+        # Note: Most records (99.8%) have NULL values due to invalid source dates (0001-01-01 00:00:00)
+        # Only 288 records have valid creation dates. This is a known data quality issue in OpenDental.
 
       - name: _updated_at
         description: "Timestamp when the tooth initial was last updated in the source system (OpenDental). Maps to SecDateTEdit."

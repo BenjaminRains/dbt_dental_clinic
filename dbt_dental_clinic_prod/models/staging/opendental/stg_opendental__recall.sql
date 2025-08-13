@@ -6,10 +6,10 @@
 with source_data as (
     select * 
     from {{ source('opendental', 'recall') }}
-    where "DateDue" >= '2023-01-01'::date  
-        and "DateDue" <= current_date
+    where {{ clean_opendental_date('"DateDue"') }} >= '2023-01-01'::date  
+        and {{ clean_opendental_date('"DateDue"') }} <= current_date
     {% if is_incremental() %}
-        and "DateTStamp" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -32,7 +32,7 @@ renamed_columns as (
         -- Status and configuration
         "RecallInterval"::integer as recall_interval,
         "RecallStatus"::smallint as recall_status,
-        coalesce("Priority", 0)::smallint as priority,
+        {{ convert_opendental_boolean('"Priority"') }} as priority,
         "DisableUntilBalance"::double precision as disable_until_balance,
         
         -- Boolean fields using macro

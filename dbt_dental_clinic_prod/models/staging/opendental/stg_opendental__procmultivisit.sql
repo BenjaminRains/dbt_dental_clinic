@@ -34,9 +34,8 @@ renamed_columns as (
         -- Standardized metadata columns
         {{ standardize_metadata_columns(
             created_at_column='"SecDateTEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column=none
-        ) }}
+            updated_at_column='"SecDateTEdit"'
+            ) }}
     from source_data
 )
 

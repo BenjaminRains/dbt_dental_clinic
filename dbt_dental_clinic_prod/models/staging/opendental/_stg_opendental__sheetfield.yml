@@ -193,6 +193,11 @@ models:
         tests:
           - not_null
 
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
       - name: _created_at
         description: "Timestamp when the record was created in the source system (OpenDental), using coalesce(DateTimeSheet, DateTimeSig)"
         tests:

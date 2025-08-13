@@ -9,7 +9,7 @@ with source_data as (
     where {{ clean_opendental_date('"AdjDate"') }} >= '2023-01-01'::date
         and {{ clean_opendental_date('"AdjDate"') }} <= {{ var("max_valid_date") }}::date
     {% if is_incremental() %}
-        and {{ clean_opendental_date('"AdjDate"') }} > (select max(adjustment_date) from {{ this }})
+        and {{ clean_opendental_date('"AdjDate"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -34,7 +34,7 @@ renamed_columns as (
         -- Date fields using macro
         {{ clean_opendental_date('"AdjDate"') }} as adjustment_date,
         {{ clean_opendental_date('"ProcDate"') }} as procedure_date,
-        {{ clean_opendental_date('"DateEntry"') }} as entry_date,
+        {{ clean_opendental_date('"DateEntry"') }} as date_entry,
         
         -- Basic calculated fields only (minimal staging logic)
         case 
@@ -54,10 +54,11 @@ renamed_columns as (
         end as is_retroactive_adjustment,
         
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns() }},
-        {{ clean_opendental_date('"DateEntry"') }} as date_entry,
-        {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
-        "SecUserNumEntry" as sec_user_num_entry
+        {{ standardize_metadata_columns(
+            created_at_column='"DateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
     from source_data
 )
 

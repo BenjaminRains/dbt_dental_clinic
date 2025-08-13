@@ -64,7 +64,7 @@ models:
           impact: "Maintains proper task list organization"
         - rule: "Repeating task lists must have valid date patterns"
           impact: "Ensures proper task list scheduling"
-        - rule: "Tasks with date_type = 0 may reference non-existent task lists"
+        - rule: "Tasks with date_type = false may reference non-existent task lists"
           impact: "Affects how undated tasks are organized"
         - rule: "Patient-related tasks are more likely to have missing task list references"
           impact: "May affect patient task tracking and analysis"
@@ -75,10 +75,10 @@ models:
         - Use parent_id to analyze task list hierarchies
         - Check is_repeating for recurring task patterns
         - Task status values: 0=New, 1=In Progress, 2=Completed
-        - Date type values: 0=No Date, 1=Due Date, 2=Start Date
+        - Date type values: false=No Date, true=Due Date
         - Object type values: 0=None, 1=Patient, 2=Procedure
         - Global task filter types affect how tasks are filtered within lists
-        - Be aware that tasks with date_type = 0 may reference non-existent task lists
+        - Be aware that tasks with date_type = false may reference non-existent task lists
         - Patient-related tasks are more likely to have missing task list references
         - Future-dated task subscriptions should be reviewed for validity
         - Missing task list references are more common in completed tasks
@@ -125,7 +125,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2]
+              values: [true, false]
 
       - name: object_type
         description: "Type of object the task list is associated with (maps to ObjectType in OpenDental)"
@@ -160,6 +160,11 @@ models:
       # Required Metadata Columns
       - name: _loaded_at
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 

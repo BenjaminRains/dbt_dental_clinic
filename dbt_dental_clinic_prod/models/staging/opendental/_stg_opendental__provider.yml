@@ -212,11 +212,11 @@ models:
           Provider status in the system (maps to ProvStatus in OpenDental):
           0 = Active
           1 = Inactive
-          2 = Hidden
+          Note: Value 2 (Hidden) is not currently present in the source data
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2]
+              values: [0, 1]
       
       - name: anesthesia_provider_type
         description: >
@@ -308,13 +308,19 @@ models:
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-      
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
       - name: _created_at
         description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTStamp in OpenDental which tracks creation time."
         tests:
           - not_null
-      
+
       - name: _updated_at
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp in OpenDental which tracks last modification time."
         tests:
           - not_null
+    

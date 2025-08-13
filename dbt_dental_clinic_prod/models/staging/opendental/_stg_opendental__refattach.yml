@@ -104,13 +104,13 @@ models:
       - name: referral_type
         description: >
           Type of referral (maps to RefType in OpenDental). Possible values:
-          0 = From another provider
-          1 = To another provider
-          2 = Within practice
+          false = From another provider
+          true = To another provider
+          Note: No "Within practice" (2) records found in current dataset
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2]
+              values: [true, false]
 
       - name: referral_to_status
         description: >
@@ -120,10 +120,11 @@ models:
           2 = Scheduled
           3 = Completed
           4 = Inactive
+          5 = Completed External (rare - only 2 records found)
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4]
+              values: [0, 1, 2, 3, 4, 5]
 
       - name: note
         description: "Additional notes about the referral attachment (maps to Note in OpenDental)."
@@ -145,6 +146,11 @@ models:
 
       - name: _loaded_at
         description: "Timestamp when this record was loaded into the data warehouse by the ETL pipeline (using current_timestamp)."
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 

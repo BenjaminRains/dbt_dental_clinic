@@ -145,7 +145,12 @@ models:
         tests:
           - not_null
       
-      - name: _created_by_user_id
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_by
         description: "User who created the time adjustment in OpenDental (maps to SecuUserNumEntry)"
 
     tests:

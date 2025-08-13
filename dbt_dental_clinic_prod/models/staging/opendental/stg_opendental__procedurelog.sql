@@ -21,7 +21,7 @@ with source_data as (
         where "EntryDateTime" >= '2023-01-01'
     )
     {% if is_incremental() %}
-        and "DateTStamp" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

@@ -23,7 +23,9 @@ renamed_columns as (
         {{ clean_opendental_date('"DateTStamp"') }} as date_updated,
         
         -- Standardized metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTStamp"'
+        ) }}
 
     from source_data
 )

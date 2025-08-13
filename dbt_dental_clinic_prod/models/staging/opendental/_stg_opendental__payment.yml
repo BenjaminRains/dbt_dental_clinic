@@ -167,7 +167,7 @@ models:
             severity: error
             error_msg: "Updated timestamp must be after or equal to entry timestamp"
       - dbt_utils.expression_is_true:
-          expression: "created_by_user_id > 0 OR created_by_user_id IS NULL"
+          expression: "_created_by > 0 OR _created_by IS NULL"
           config:
             severity: warn
             error_msg: "Created by user ID must be positive when not null"
@@ -312,11 +312,26 @@ models:
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-      
+
+      - name: _transformed_at
+        description: "Timestamp when the record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry column."
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: "Timestamp when the record was updated in the source system (OpenDental). Maps to SecDateTEdit column."
+        tests:
+          - not_null
+
       - name: date_updated
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column. Used for incremental loading and change tracking."
         tests:
           - not_null
       
-      - name: created_by_user_id
+      - name: _created_by
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column. May be null for system-generated payments or legacy data."

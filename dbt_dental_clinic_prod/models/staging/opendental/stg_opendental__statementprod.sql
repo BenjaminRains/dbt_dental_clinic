@@ -23,7 +23,7 @@ source_data as (
     inner join statement_data s
         on s."StatementNum" = sp."StatementNum"
     {% if is_incremental() %}
-    where s."DateTStamp" > (select max(_updated_at) from {{ this }})
+    where {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -44,6 +44,9 @@ renamed_columns as (
         -- Additional Fields
         "FKey" as fkey,
         "ProdType" as prod_type,
+
+        -- Source Metadata
+        {{ clean_opendental_date('"statement_timestamp"') }} as statement_timestamp,
 
         -- Metadata columns (using statement timestamp since statementprod has no timestamps)
         {{ standardize_metadata_columns(

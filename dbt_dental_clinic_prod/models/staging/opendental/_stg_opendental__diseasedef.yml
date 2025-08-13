@@ -119,3 +119,5 @@ models:
         description: "Timestamp when this dbt model was built/transformed (current_timestamp when model runs)"
         tests:
           - not_null
+          
+      - name: _created_at

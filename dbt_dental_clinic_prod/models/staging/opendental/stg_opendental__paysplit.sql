@@ -48,8 +48,13 @@ renamed_columns as (
         {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
 
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns() }},
-        "SecUserNumEntry" as created_by_user_id
+        {{ standardize_metadata_columns(
+            created_by_column='"SecUserNumEntry"'
+        ) }},
+        
+        -- Manual creation of _created_at and _updated_at columns
+        {{ clean_opendental_date('"DateEntry"') }} as _created_at,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as _updated_at
 
     from source_data
 )

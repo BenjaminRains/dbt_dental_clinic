@@ -8,7 +8,7 @@ with source_data as (
     select * from {{ source('opendental', 'claimtracking') }}
     where "DateTimeEntry" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTimeEntry" > (select max(_loaded_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTimeEntry"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -24,12 +24,14 @@ renamed_columns as (
         ]) }},
         
         -- Attributes
-        {{ clean_opendental_date('"DateTimeEntry"') }} as entry_timestamp,
         "TrackingType" as tracking_type,
         "Note" as note,
         
+        -- Raw metadata columns (preserved from source)
+        {{ clean_opendental_date('"DateTimeEntry"') }} as date_time_entry,
+        
         -- Metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(created_at_column='"DateTimeEntry"') }}
 
     from source_data
 )

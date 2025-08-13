@@ -6,7 +6,7 @@
 with source_data as (
     select * from {{ source('opendental', 'rxpat') }}
     {% if is_incremental() %}
-        where "DateTStamp" > (select max(_updated_at) from {{ this }})
+        where {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -49,6 +49,9 @@ renamed_columns as (
         "ErxPharmacyInfo" as erx_pharmacy_info,
         {{ convert_opendental_boolean('"IsProcRequired"') }} as is_proc_required,
         "RxType" as rx_type,
+        
+        -- Source Metadata
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
         
         -- Metadata columns
         {{ standardize_metadata_columns(

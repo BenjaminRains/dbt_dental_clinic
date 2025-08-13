@@ -11,7 +11,7 @@ with source_data as (
         where "ScheduleNum" in (
             select "ScheduleNum" 
             from {{ source('opendental', 'schedule') }}
-            where "DateTStamp" > (select max(_updated_at) from {{ ref('stg_opendental__schedule') }})
+            where {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ ref('stg_opendental__schedule') }})
         )
     {% endif %}
 ),
@@ -33,6 +33,9 @@ renamed_columns as (
             {'source': 'sop."OperatoryNum"', 'target': 'operatory_id'}
         ]) }},
         
+        -- Source Metadata
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
+
         -- Metadata columns (using joined schedule table for timestamps)
         {{ standardize_metadata_columns(
             created_at_column='s."DateTStamp"',

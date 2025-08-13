@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'procedurecode') }}
     
     {% if is_incremental() %}
-    AND "DateTStamp"::timestamp > (select max(_updated_at) from {{ this }})
+    AND {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -63,8 +63,11 @@ renamed_columns as (
         -- Numeric and specialized fields
         "BaseUnits"::integer as base_units,
         "CanadaTimeUnits"::double precision as canada_time_units,
-        "PreExisting"::boolean as pre_existing_flag,
-        
+        {{ convert_opendental_boolean('"PreExisting"') }} as pre_existing_flag,
+
+        -- Date Fields
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
+
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(
             created_at_column='"DateTStamp"',

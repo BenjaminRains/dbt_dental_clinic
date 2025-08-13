@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'task') }}
     where "DateTimeOriginal" >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -26,15 +26,15 @@ renamed_columns as (
         
         -- Date and Timestamps using macro
         {{ clean_opendental_date('"DateTask"') }} as task_date,
-        "DateTimeEntry" as entry_timestamp,
-        "DateTimeFinished" as finished_timestamp,
-        "DateTimeOriginal" as original_timestamp,
-        "SecDateTEdit" as last_edit_timestamp,
+        {{ clean_opendental_date('"DateTimeEntry"') }} as entry_timestamp,
+        {{ clean_opendental_date('"DateTimeFinished"') }} as finished_timestamp,
+        {{ clean_opendental_date('"DateTimeOriginal"') }} as original_timestamp,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as last_edit_timestamp,
         
         -- Task attributes
         "Descript" as description,
         "TaskStatus" as task_status,
-        "DateType" as date_type,
+        {{ convert_opendental_boolean('"DateType"') }} as date_type,
         "ObjectType" as object_type,
         "ReminderGroupId" as reminder_group_id,
         "ReminderType" as reminder_type,

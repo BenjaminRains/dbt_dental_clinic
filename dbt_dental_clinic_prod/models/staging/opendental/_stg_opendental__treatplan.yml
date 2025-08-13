@@ -168,15 +168,23 @@ models:
         description: "Timestamp when the ETL pipeline loaded the data"
         tests:
           - not_null
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+
       - name: _created_at
         description: "Timestamp when the treatment plan was created in OpenDental (maps to SecDateEntry)"
         tests:
           - not_null
+
       - name: _updated_at
         description: "Timestamp when the treatment plan was last updated in OpenDental (maps to SecDateTEdit)"
         tests:
           - not_null
-      - name: _created_by_user_id
+
+      - name: _created_by
         description: "User who created the treatment plan in OpenDental (maps to SecUserNumEntry)"
         tests:
           - not_null

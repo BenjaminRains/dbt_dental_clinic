@@ -109,16 +109,7 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
-        description: >
-          Timestamp when the zipcode was created in the source system (OpenDental).
-          This will be NULL as the source system does not track creation timestamps.
-          The _loaded_at column should be used to track when records were added to our warehouse.
-        tests: []  # No tests since this will always be NULL
-
-      - name: _updated_at
-        description: >
-          Timestamp when the zipcode was last updated in the source system (OpenDental).
-          This will be NULL as the source system does not track update timestamps.
-          The _loaded_at column should be used to track when records were added to our warehouse.
-        tests: []  # No tests since this will always be NULL
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null

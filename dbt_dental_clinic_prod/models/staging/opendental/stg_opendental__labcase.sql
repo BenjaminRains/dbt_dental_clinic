@@ -37,7 +37,10 @@ renamed_columns as (
         "InvoiceNum" as invoice_number,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTimeCreated"',
+            updated_at_column='"DateTStamp"'
+        ) }}
         
     from source_data
 )

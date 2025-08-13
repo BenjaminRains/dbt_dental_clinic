@@ -9,7 +9,7 @@ with source_data as (
     left join {{ source('opendental', 'sheet') }} s 
         on sf."SheetNum" = s."SheetNum"
     {% if is_incremental() %}
-    where s."DateTSheetEdited" > (select max(_updated_at) from {{ this }})
+    where {{ clean_opendental_date('"DateTSheetEdited"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -54,8 +54,9 @@ renamed_columns as (
         {{ convert_opendental_boolean('"CanElectronicallySign"') }} as can_electronically_sign,
         {{ convert_opendental_boolean('"IsSigProvRestricted"') }} as is_sig_prov_restricted,
         
-        -- Date fields using macro
+        -- Source Metadata
         {{ clean_opendental_date('"DateTimeSig"') }} as date_time_signature,
+        {{ clean_opendental_date('"DateTSheetEdited"') }} as date_tstamp,
         
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(

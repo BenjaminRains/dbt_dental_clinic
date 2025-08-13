@@ -182,7 +182,9 @@ models:
         description: "Default mobile-specific label for radio buttons, trimmed of whitespace"
 
       - name: layout_mode
-        description: "Defines how the field is laid out in the form as a smallint code"
+        description: "Indicates the layout mode for the field (0=No, 1=Yes converted to boolean)"
+        tests:
+          - not_null
 
       - name: language
         description: "Language setting for the field definition, trimmed of whitespace"
@@ -203,12 +205,7 @@ models:
         tests:
           - not_null
 
-      - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTCreated from sheetdef table."
-        tests:
-          - not_null
-
-      - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTCreated from sheetdef table."
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null

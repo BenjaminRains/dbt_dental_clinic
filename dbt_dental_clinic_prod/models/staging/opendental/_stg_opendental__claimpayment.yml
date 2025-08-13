@@ -198,6 +198,20 @@ models:
         tests:
           - not_null
 
+      - name: sec_date_entry
+        description: "Raw creation timestamp from source system (OpenDental). Maps to SecDateEntry column."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2000-01-01'"
+
+      - name: sec_date_t_edit
+        description: "Raw update timestamp from source system (OpenDental). Maps to SecDateTEdit column."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2000-01-01'"
+
       - name: sec_user_num_entry
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         tests:

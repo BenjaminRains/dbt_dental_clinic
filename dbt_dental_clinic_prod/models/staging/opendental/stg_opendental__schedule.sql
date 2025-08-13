@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'schedule') }}
     where {{ clean_opendental_date('"SchedDate"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTStamp" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -33,7 +33,10 @@ renamed_columns as (
         "SchedType" as schedule_type,
         "Note" as note,
         "Status" as status,
-        
+
+        -- Source Metadata
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
+
         -- Metadata columns
         {{ standardize_metadata_columns(
             created_at_column='"DateTStamp"',

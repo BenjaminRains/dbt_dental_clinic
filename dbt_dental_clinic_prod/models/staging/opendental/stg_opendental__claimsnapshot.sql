@@ -8,7 +8,7 @@ with source_data as (
     select * from {{ source('opendental', 'claimsnapshot') }}
     where "DateTEntry" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTEntry" > (select max(_loaded_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTEntry"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -30,7 +30,7 @@ renamed_columns as (
         "SnapshotTrigger" as snapshot_trigger,
         
         -- Metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(created_at_column='"DateTEntry"') }}
 
     from source_data
 )

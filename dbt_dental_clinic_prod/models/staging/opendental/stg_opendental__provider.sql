@@ -6,7 +6,7 @@
 with source_data as (
     select * from {{ source('opendental', 'provider') }}
     {% if is_incremental() %}
-    where "DateTStamp" > (select max(_updated_at) from {{ this }})
+    where {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -46,9 +46,9 @@ renamed_columns as (
         "TaxonomyCodeOverride" as taxonomy_code_override,
         
         -- Classification and status
-        "ProvStatus" as provider_status,
-        "AnesthProvType" as anesthesia_provider_type,
-        "EhrMuStage" as ehr_mu_stage,
+        "ProvStatus"::integer as provider_status,
+        "AnesthProvType"::integer as anesthesia_provider_type,
+        "EhrMuStage"::integer as ehr_mu_stage,
         
         -- UI and display properties
         "ProvColor" as provider_color,

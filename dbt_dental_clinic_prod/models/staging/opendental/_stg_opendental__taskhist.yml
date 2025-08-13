@@ -69,16 +69,16 @@ models:
           impact: "Maintains accurate task workflow history"
         - rule: "Note changes are tracked separately from other modifications"
           impact: "Enables focused analysis of task communication history"
-        - rule: "Tasks with date_type = 0 may have null task_list_id and reference deleted tasks"
+        - rule: "Tasks with date_type = false may have null task_list_id and reference deleted tasks"
           impact: "Affects how task history is interpreted for undated tasks"
       
       usage_notes: >
         - Use timestamp for chronological analysis of task changes
         - Check is_note_change to filter note-specific modifications
-        - Be aware that tasks with date_type = 0 may reference deleted tasks or task lists
+        - Be aware that tasks with date_type = false may reference deleted tasks or task lists
         - Future dates (2024-11-05) may indicate data entry issues
         - Task status values: 0=New, 1=In Progress, 2=Completed
-        - Date type values: 0=No Date, 1=Due Date, 2=Start Date
+        - Date type values: false=No Date, true=Due Date
         - Object type values: 0=None, 1=Patient, 2=Procedure
 
     columns:
@@ -150,11 +150,11 @@ models:
               severity: warn
 
       - name: triage_category_id
-        description: "Triage category identifier (maps to TriageCategory in OpenDental, 0 values converted to NULL). May be null for tasks with date_type = 0 (No Date)"
+        description: "Triage category identifier (maps to TriageCategory in OpenDental, 0 values converted to NULL). May be null for tasks with date_type = false (No Date)"
         tests:
           - not_null:
               severity: warn
-              where: "date_type != 0"
+              where: "date_type = true"
 
       # Timestamps and Dates
       - name: timestamp
@@ -201,7 +201,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2]
+              values: [true, false]
 
       - name: object_type
         description: "Type of object the task is associated with (maps to ObjectType in OpenDental)"
@@ -244,6 +244,11 @@ models:
       # Required Metadata Columns
       - name: _loaded_at
         description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 

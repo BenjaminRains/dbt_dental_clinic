@@ -32,7 +32,10 @@ renamed_columns as (
         {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTimeEntry"',
+            updated_at_column='"SecDateTEdit"'
+            ) }}
 
     from source_data
 )

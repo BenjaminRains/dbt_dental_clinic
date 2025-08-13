@@ -5,7 +5,7 @@
 
 with source_data as (
     select * from {{ source('opendental', 'timeadjust') }}
-    where "TimeEntry" >= '2023-01-01'
+    where {{ clean_opendental_date('"TimeEntry"') }} >= '2023-01-01'
 ),
 
 renamed_columns as (
@@ -20,7 +20,7 @@ renamed_columns as (
         ]) }},
         
         -- Timestamps
-        "TimeEntry" as time_entry_ts,
+        {{ clean_opendental_date('"TimeEntry"') }} as time_entry_ts,
         
         -- Time durations - convert time values to hours
         EXTRACT(EPOCH FROM "RegHours")/3600 as regular_hours,

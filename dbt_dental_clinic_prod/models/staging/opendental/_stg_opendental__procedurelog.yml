@@ -550,6 +550,12 @@ models:
         tests:
           - not_null
       
+      - name: _transformed_at
+        description: >
+          Timestamp when the model was transformed (when the model was built).
+        tests:
+          - not_null
+
       - name: _created_at
         description: >
           Timestamp when the record was created in the source system (OpenDental). 

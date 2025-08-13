@@ -10,7 +10,7 @@ with source_data as (
         and {{ clean_opendental_date('"DateSent"') }} <= current_date
         and {{ clean_opendental_date('"DateSent"') }} > '2000-01-01'::date
     {% if is_incremental() %}
-        and "DateTStamp" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -57,9 +57,12 @@ renamed_columns as (
         {{ convert_opendental_boolean('"IsInvoice"') }} as is_invoice,
         {{ convert_opendental_boolean('"IsInvoiceCopy"') }} as is_invoice_copy,
         {{ convert_opendental_boolean('"IsBalValid"') }} as is_balance_valid,
-        "SmsSendStatus"::smallint as sms_send_status,
+        {{ convert_opendental_boolean('"SmsSendStatus"') }} as sms_send_status,
         {{ convert_opendental_boolean('"LimitedCustomFamily"') }} as limited_custom_family,
         
+        -- Source Metadata
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
+
         -- Metadata columns
         {{ standardize_metadata_columns(
             created_at_column='"DateTStamp"',

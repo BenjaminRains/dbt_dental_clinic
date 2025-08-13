@@ -6,9 +6,9 @@
 with source_data as (
     select * 
     from {{ source('opendental', 'referral') }}
-    where "DateTStamp" >= '2023-01-01'
+    where {{ clean_opendental_date('"DateTStamp"') }} >= '2023-01-01'
     {% if is_incremental() %}
-    and "DateTStamp" > (select max(_updated_at) from {{ this }})
+    and {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -56,6 +56,9 @@ renamed_columns as (
         nullif(trim("Note"), '') as note,
         nullif(trim("DisplayNote"), '') as display_note,
         "Slip"::integer as slip,
+
+        -- Source Metadata
+        {{ clean_opendental_date('"DateTStamp"') }} as date_tstamp,
         
         -- Standardized metadata using macro
         {{ standardize_metadata_columns(

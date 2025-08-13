@@ -6,9 +6,9 @@
 with source_data as (
     select * 
     from {{ source('opendental', 'commlog') }}
-    where "CommDateTime" >= '2023-01-01'
+    where {{ clean_opendental_date('"CommDateTime"') }} >= '2023-01-01'
     {% if is_incremental() %}
-        and "CommDateTime" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"CommDateTime"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -41,7 +41,9 @@ renamed_columns as (
         {{ convert_opendental_boolean('"SigIsTopaz"') }} as is_topaz_signature,
         
         -- Metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"DateTEntry"'
+        ) }}
 
     from source_data
 )

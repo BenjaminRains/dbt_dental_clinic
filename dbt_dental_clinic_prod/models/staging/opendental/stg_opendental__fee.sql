@@ -34,14 +34,18 @@ renamed_columns as (
         {{ convert_opendental_boolean('"UseDefaultCov"') }} as is_default_coverage,
         
         -- Date Fields
-        {{ clean_opendental_date('"SecDateEntry"') }} as date_created,
-        {{ clean_opendental_date('"SecDateTEdit"') }} as date_updated,
+        {{ clean_opendental_date('"SecDateEntry"') }} as sec_date_entry,
+        {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
         
         -- User tracking column
         "SecUserNumEntry" as sec_user_num_entry,
         
         -- Standardized metadata columns
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateEntry"',
+            updated_at_column='"SecDateTEdit"',
+            created_by_column='"SecUserNumEntry"'
+        ) }}
 
     from source_data
 )

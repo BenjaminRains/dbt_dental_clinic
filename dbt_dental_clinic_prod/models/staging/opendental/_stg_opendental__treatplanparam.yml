@@ -117,19 +117,10 @@ models:
         tests:
           - not_null
       
-      - name: _created_at
-        description: "Timestamp when the parameters were created (using current_timestamp since source lacks creation timestamp)"
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
-          - not_null:
-              severity: warn
-              where: "_created_at IS NOT NULL"
-      
-      - name: _updated_at
-        description: "Timestamp when the parameters were last updated (using current_timestamp since source lacks update timestamp)"
-        tests:
-          - not_null:
-              severity: warn
-              where: "_updated_at IS NOT NULL"
+          - not_null
 
     # Relationships with other models
     meta:

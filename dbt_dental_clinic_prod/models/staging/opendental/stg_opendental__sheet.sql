@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'sheet') }}
     where "DateTimeSheet" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTSheetEdited" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"DateTSheetEdited"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

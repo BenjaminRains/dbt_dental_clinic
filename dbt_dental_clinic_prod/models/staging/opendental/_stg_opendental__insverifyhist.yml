@@ -215,6 +215,15 @@ models:
         tests:
           - not_null
 
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTimeEntry column."
+        tests:
+          - not_null
+      - name: _updated_at
+        description: "Timestamp when the record was updated in the source system (OpenDental). Maps to SecDateTEdit column."
+        tests:
+          - not_null
+          
       - name: date_updated
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column."
         tests:

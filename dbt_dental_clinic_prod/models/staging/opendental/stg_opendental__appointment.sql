@@ -63,10 +63,12 @@ renamed_columns as (
         -- Raw metadata columns (preserved from source)
         {{ clean_opendental_date('"SecDateTEntry"') }} as sec_date_t_entry,
         {{ clean_opendental_date('"DateTStamp"') }} as date_t_stamp,
-        "SecUserNumEntry" as sec_user_num_entry,
         
         -- Standardized metadata using macro
-        {{ standardize_metadata_columns() }}
+        {{ standardize_metadata_columns(
+            created_at_column='"SecDateTEntry"',
+            updated_at_column='"DateTStamp"',
+            created_by_column='"SecUserNumEntry"') }}
 
     from source_data
 )

@@ -30,11 +30,7 @@ renamed_columns as (
         "CustErr" as custom_error,
 
         -- Standardized metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column=none,
-            updated_at_column=none,
-            created_by_column=none
-        ) }}
+        {{ standardize_metadata_columns() }}
 
     from source_data
 )

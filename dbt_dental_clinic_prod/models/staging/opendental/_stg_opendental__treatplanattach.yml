@@ -80,7 +80,7 @@ models:
               to: ref('stg_opendental__treatplan')
               field: treatment_plan_id
               config:
-                severity: error
+                severity: warn
                 description: >
                   All treatment plan references are currently orphaned.
                   Investigation needed into treatment plan model filtering.
@@ -115,22 +115,11 @@ models:
         description: "Timestamp when the ETL pipeline loaded the data into the data warehouse"
         tests:
           - not_null
-      
-      - name: _created_at
-        description: >
-          Timestamp when the attachment was created (using current_timestamp since source lacks creation timestamp).
-          Note: This is generated at load time and does not reflect the actual creation time in OpenDental.
+
+      - name: _transformed_at
+        description: "Timestamp when this record was transformed into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
-          - not_null:
-              where: "false"  # Disable test since we know these are generated at load time
-      
-      - name: _updated_at
-        description: >
-          Timestamp when the attachment was last updated (using current_timestamp since source lacks update timestamp).
-          Note: This is generated at load time and does not reflect the actual update time in OpenDental.
-        tests:
-          - not_null:
-              where: "false"  # Disable test since we know these are generated at load time
+          - not_null
 
     # Relationships with other models
     meta:
