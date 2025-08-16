@@ -44,7 +44,7 @@ with source_claim as (
         claim_status,
         claim_type,
         service_date as claim_date,
-        secure_edit_timestamp as last_tracking_date
+        sec_date_t_edit as last_tracking_date
     from {{ ref('stg_opendental__claim') }}
 ),
 
@@ -81,11 +81,11 @@ procedure_definitions as (
         procedure_time,
         procedure_category_id,
         treatment_area,
-        is_prosthetic_flag,
-        is_hygiene_flag,
+        is_prosthetic,
+        is_hygiene,
         base_units,
-        is_radiology_flag,
-        no_bill_insurance_flag,
+        is_radiology,
+        no_bill_insurance,
         default_claim_note,
         medical_code,
         diagnostic_codes
@@ -137,11 +137,11 @@ claim_details_integrated as (
         pc.procedure_time,
         pc.procedure_category_id,
         pc.treatment_area,
-        pc.is_prosthetic_flag,
-        pc.is_hygiene_flag,
+        pc.is_prosthetic,
+        pc.is_hygiene,
         pc.base_units,
-        pc.is_radiology_flag,
-        pc.no_bill_insurance_flag,
+        pc.is_radiology,
+        pc.no_bill_insurance,
         pc.default_claim_note,
         pc.medical_code,
         pc.diagnostic_codes,
@@ -163,10 +163,11 @@ claim_details_integrated as (
         ic.effective_date,
         ic.termination_date,
 
-        -- Metadata
+        -- Generate metadata for this intermediate model
+        current_timestamp as _loaded_at,
         c.claim_date as _created_at,
         coalesce(c.last_tracking_date, c.claim_date) as _updated_at,
-        current_timestamp as _transformed_at
+        0 as _created_by
 
     from source_claim c
     left join source_claim_proc cp
@@ -178,6 +179,59 @@ claim_details_integrated as (
     left join insurance_coverage ic
         on c.patient_id = ic.patient_id
         and c.plan_id = ic.insurance_plan_id
+),
+
+final as (
+    select
+        -- Core business fields
+        claim_detail_id,
+        claim_id,
+        claim_procedure_id,
+        patient_id,
+        insurance_plan_id,
+        carrier_id,
+        subscriber_id,
+        procedure_id,
+        claim_status,
+        claim_type,
+        claim_date,
+        claim_procedure_status,
+        procedure_code,
+        code_prefix,
+        procedure_description,
+        abbreviated_description,
+        procedure_time,
+        procedure_category_id,
+        treatment_area,
+        is_prosthetic,
+        is_hygiene,
+        base_units,
+        is_radiology,
+        no_bill_insurance,
+        default_claim_note,
+        medical_code,
+        diagnostic_codes,
+        billed_amount,
+        allowed_amount,
+        paid_amount,
+        write_off_amount,
+        patient_responsibility,
+        plan_type,
+        group_number,
+        group_name,
+        verification_date,
+        benefit_details,
+        verification_status,
+        effective_date,
+        termination_date,
+        
+        -- Standardized metadata (preserved from staging models)
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by,
+        current_timestamp as _transformed_at
+    from claim_details_integrated
 )
 
-select * from claim_details_integrated 
+select * from final 
