@@ -181,7 +181,7 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
-              row_condition: "is_hygiene_flag = 1"
+              row_condition: "is_hygiene = true"
               config:
                 severity: warn
                 name: warn_high_hygiene_fees
@@ -218,26 +218,26 @@ models:
       - name: abbreviated_description
         description: Short description of the procedure
 
-      - name: is_hygiene_flag
+      - name: is_hygiene
         description: Flag indicating if this is a hygiene procedure
         tests:
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
 
       - name: treatment_area
         description: Area of treatment
 
-      - name: is_prosthetic_flag
+      - name: is_prosthetic
         description: Flag indicating if this is a prosthetic procedure
         tests:
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
 
-      - name: is_multi_visit_flag
+      - name: is_multi_visit
         description: Flag indicating if procedure requires multiple visits
         tests:
           - accepted_values:
-              values: [0, 1]
+              values: [true, false]
 
       - name: standard_fee_id
         description: ID of the standard fee record used
@@ -333,11 +333,11 @@ models:
       - name: last_note_timestamp
         description: Timestamp of the most recent note
 
-      - name: _extracted_at
+      - name: _loaded_at
         description: >
-          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          ETL pipeline loading timestamp - when the record was loaded from the source system
           
-          Source: ETL pipeline metadata (added during extraction process)
+          Source: ETL pipeline metadata (added during loading process)
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
         tests:
@@ -451,7 +451,7 @@ models:
           name: warn_extreme_fee_mismatches
 
       - dbt_utils.expression_is_true:
-          expression: "not (is_hygiene_flag = 1 and procedure_fee > 500)"
+          expression: "not (is_hygiene = true and procedure_fee > 500)"
           severity: warn
           name: warn_procedure_complete_high_hygiene_fees
 
