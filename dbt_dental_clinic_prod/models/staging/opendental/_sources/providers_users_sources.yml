@@ -79,91 +79,83 @@ sources:
       - name: userod
         description: "User information for OpenDental"
         columns:
-          - name: user_id
+          - name: "UserNum"
             description: "Primary key for users"
             tests:
               - unique
               - not_null
-          - name: user_group_id
+          - name: "UserGroupNum"
             description: "Foreign key to user group table"
-          - name: employee_id
+          - name: "EmployeeNum"
             description: "Foreign key to employee table"
-          - name: clinic_id
+          - name: "ClinicNum"
             description: "Foreign key to clinic table"
-          - name: provider_id
+          - name: "ProvNum"
             description: "Foreign key to provider table"
-          - name: cemt_user_id
+          - name: "UserNumCEMT"
             description: "Foreign key to another user record (CEMT user reference)"
-          - name: username
+          - name: "UserName"
             description: "User's login username"
-          - name: password_hash
+          - name: "Password"
             description: "Hashed password value"
-          - name: domain_username
+          - name: "DomainUser"
             description: "Domain username for network authentication"
-          - name: badge_id
+          - name: "BadgeId"
             description: "User's badge identifier"
-          - name: is_hidden
+          - name: "IsHidden"
             description: "Flag indicating if the user account is hidden"
-          - name: has_strong_password
+          - name: "PasswordIsStrong"
             description: "Flag indicating if the password meets strong password requirements"
-          - name: is_clinic_restricted
+          - name: "ClinicIsRestricted"
             description: "Flag indicating if the user is restricted to specific clinics"
-          - name: is_password_reset_required
+          - name: "IsPasswordResetRequired"
             description: "Flag indicating if the user needs to reset their password"
-          - name: task_list_inbox
+          - name: "TaskListInBox"
             description: "User's task list inbox configuration"
-          - name: anesthesia_provider_type
+          - name: "AnesthProvType"
             description: "Type of anesthesia provider if applicable"
-          - name: is_default_hide_popups
+          - name: "DefaultHidePopups"
             description: "Flag for default popup visibility settings"
-          - name: is_inbox_hide_popups
+          - name: "InboxHidePopups"
             description: "Flag for inbox popup visibility settings"
-          - name: mobile_web_pin
+          - name: "MobileWebPin"
             description: "PIN for mobile web access"
-          - name: mobile_web_pin_failed_attempts
+          - name: "MobileWebPinFailedAttempts"
             description: "Count of failed mobile web PIN attempts"
-          - name: eclipboard_clinical_pin
+          - name: "EClipboardClinicalPin"
             description: "PIN for eClipboard clinical access"
-          - name: last_failed_login_at
+          - name: "DateTFail"
             description: "Timestamp of last failed login attempt"
-          - name: failed_login_attempts
+          - name: "FailedAttempts"
             description: "Count of failed login attempts"
-          - name: last_login_at
+          - name: "DateTLastLogin"
             description: "Timestamp of last successful login"
 
       - name: usergroup
         description: "User security groups"
         columns:
-          - name: user_group_id
+          - name: "UserGroupNum"
             description: "Primary key for user groups"
             tests:
               - unique
               - not_null
-          - name: description
+          - name: "Description"
             description: "Description or name of the user group"
-          - name: usergroup_num_cemt
+          - name: "UserGroupNumCEMT"
             description: "Reference to CEMT user group number"
-          - name: _airbyte_ab_id
-            description: "Unique identifier created by Airbyte for each record"
-          - name: _airbyte_emitted_at
-            description: "Timestamp when the record was emitted by Airbyte"
-          - name: _airbyte_normalized_at
-            description: "Timestamp when the record was normalized"
 
       - name: usergroupattach
         description: "User-group assignments"
         columns:
-          - name: user_group_attach_id
+          - name: "UserGroupAttachNum"
             description: "Primary key for user group assignments"
             tests:
               - unique
               - not_null
-          - name: user_num
+          - name: "UserNum"
             description: "Foreign key to the user table"
-          - name: user_group_num
+          - name: "UserGroupNum"
             description: "Foreign key to the user group table"
-          - name: _loaded_at
-            description: "Timestamp when this record was loaded into the staging model"
 
       - name: employee
         description: "Employee information for dental practice staff"
@@ -210,37 +202,37 @@ sources:
           System audit log tracking user actions and system events. Contains a record 
           of who performed what action and when, with references to the affected records.
         columns:
-          - name: EntryLogNum
+          - name: "EntryLogNum"
             description: "Primary key - Unique identifier for each log entry"
             tests:
               - unique
               - not_null
-          - name: UserNum
+          - name: "UserNum"
             description: "Foreign key to the user who performed the action"
             tests:
               - not_null
               - relationships:
                   to: source('opendental', 'userod')
-                  field: user_id
-          - name: FKeyType
+                  field: "UserNum"
+          - name: "FKeyType"
             description: >
               Type identifier for the foreign key reference. Indicates what type of 
               record the FKey points to.
             tests:
               - not_null
-          - name: FKey
+          - name: "FKey"
             description: >
               Foreign key reference to the related record. The actual table referenced 
               depends on the FKeyType value.
             tests:
               - not_null
-          - name: LogSource
+          - name: "LogSource"
             description: >
               Source of the log entry. Indicates which system component or module 
               generated the log entry.
             tests:
               - not_null
-          - name: EntryDateTime
+          - name: "EntryDateTime"
             description: "Timestamp when the log entry was created"
             tests:
               - not_null
@@ -318,7 +310,7 @@ sources:
             tests:
               - relationships:
                   to: source('opendental', 'userod')
-                  field: user_id
+                  field: "UserNum"
           - name: "DateTStamp"
             description: "Timestamp when the history record was created"
             tests:
@@ -332,13 +324,13 @@ sources:
             tests:
               - relationships:
                   to: source('opendental', 'task')
-                  field: task_id
+                  field: "TaskNum"
           - name: "TaskListNum"
             description: "Foreign key to the task list this task belongs to"
             tests:
               - relationships:
                   to: source('opendental', 'tasklist')
-                  field: task_list_id
+                  field: "TaskListNum"
           - name: "DateTask"
             description: "Date when the task is scheduled for"
             tests:
@@ -376,7 +368,7 @@ sources:
             tests:
               - relationships:
                   to: source('opendental', 'userod')
-                  field: user_id
+                  field: "UserNum"
           - name: "DateTimeFinished"
             description: "Timestamp when the task was completed"
           - name: "PriorityDefNum"
@@ -384,7 +376,7 @@ sources:
             tests:
               - relationships:
                   to: source('opendental', 'prioritydef')
-                  field: priority_def_id
+                  field: "PriorityDefNum"
           - name: "ReminderGroupId"
             description: "Identifier for the reminder group"
           - name: "ReminderType"
@@ -404,7 +396,7 @@ sources:
             tests:
               - relationships:
                   to: source('opendental', 'triagedef')
-                  field: triage_def_id
+                  field: "TriageCategory"
 
       - name: timeadjust
         description: >
@@ -496,7 +488,7 @@ sources:
               - not_null
               - relationships:
                   to: source('opendental', 'userod')
-                  field: user_id
+                  field: "UserNum"
           - name: "DateTimeNote"
             description: "Timestamp when the note was created"
             tests:
@@ -525,7 +517,7 @@ sources:
               - not_null
               - relationships:
                   to: source('opendental', 'userod')
-                  field: user_id
+                  field: "UserNum"
           - name: "TaskListNum"
             description: "Foreign key to the task list that contains the task"
             tests:
@@ -565,7 +557,7 @@ sources:
               - not_null
               - relationships:
                   to: source('opendental', 'userod')
-                  field: user_id
+                  field: "UserNum"
 
       - name: userodpref
         description: "User-specific preferences and settings for OpenDental users"
