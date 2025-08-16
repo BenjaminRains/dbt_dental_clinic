@@ -1,13 +1,14 @@
-{{ config(        materialized='incremental',
-        
-        unique_key='procedure_id',
-        on_schema_change='fail',
-        incremental_strategy='merge',
-        indexes=[
-            {'columns': ['procedure_id'], 'unique': true},
-            {'columns': ['patient_id']},
-            {'columns': ['_updated_at']}
-        ]) }}
+{{ config(
+    materialized='incremental',
+    schema='intermediate',
+    unique_key='procedure_id',
+    on_schema_change='fail',
+    incremental_strategy='merge',
+    indexes=[
+        {'columns': ['procedure_id'], 'unique': true},
+        {'columns': ['patient_id']},
+        {'columns': ['_updated_at']}
+    ]) }}
 
 /*
     Intermediate model for procedure_complete
@@ -51,10 +52,10 @@ source_procedure_codes as (
         procedure_code,
         description,
         abbreviated_description,
-        is_hygiene_flag,
+        is_hygiene,
         treatment_area,
-        is_prosthetic_flag,
-        is_multi_visit_flag
+        is_prosthetic,
+        is_multi_visit
     FROM {{ ref('stg_opendental__procedurecode') }}
 ),
 
@@ -92,10 +93,10 @@ standard_fees_ranked as (
         clinic_id,
         provider_id,
         fee_amount AS standard_fee,
-        created_at,
+        _created_at,
         ROW_NUMBER() OVER (
             PARTITION BY procedure_code_id, clinic_id
-            ORDER BY created_at DESC
+            ORDER BY _created_at DESC
         ) AS fee_rank
     FROM {{ ref('stg_opendental__fee') }}
 ),
@@ -143,11 +144,11 @@ procedure_complete_integrated as (
         pc.procedure_code,
         pc.description AS procedure_description,
         pc.abbreviated_description,
-        pc.is_hygiene_flag,
+        pc.is_hygiene,
         pc.treatment_area,
         def_treatment.item_name as treatment_area_desc,
-        pc.is_prosthetic_flag,
-        pc.is_multi_visit_flag,
+        pc.is_prosthetic,
+        pc.is_multi_visit,
         
         -- Fee information
         sf.fee_id AS standard_fee_id,
@@ -179,11 +180,10 @@ procedure_complete_integrated as (
         pn.note_count,
         pn.last_note_timestamp,
         
-        -- Metadata and timestamps
-        pl._extracted_at,
-        pl.date_entry as _created_at,
-        coalesce(pl.date_timestamp, pl.date_entry) as _updated_at,
-        current_timestamp as _transformed_at
+        -- Metadata fields (standardized pattern)
+        pl._loaded_at,
+        pl._created_at,
+        {{ standardize_intermediate_metadata(primary_source_alias='pl') }}
         
     from source_procedure_log pl
     left join source_procedure_codes pc 
@@ -210,9 +210,4 @@ procedure_complete_integrated as (
         and def_fee_type.item_value = fs.fee_schedule_type_id::text
 )
 
--- 6. Final selection
-final as (
-    select * from procedure_complete_integrated
-)
-
-select * from final
+select * from procedure_complete_integrated
