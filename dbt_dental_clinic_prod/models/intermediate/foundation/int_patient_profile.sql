@@ -1,15 +1,15 @@
-{{ config(        
-        
-        materialized='table',
-        unique_key='patient_id',
-        on_schema_change='fail',
-        indexes=[
-            {'columns': ['patient_id'], 'unique': true},
-            {'columns': ['guarantor_id']},
-            {'columns': ['primary_provider_id']},
-            {'columns': ['_updated_at']}
-        ],
-        tags=['foundation', 'weekly']) }}
+{{ config(
+    materialized='table',
+    schema='intermediate',
+    unique_key='patient_id',
+    on_schema_change='fail',
+    indexes=[
+        {'columns': ['patient_id'], 'unique': true},
+        {'columns': ['guarantor_id']},
+        {'columns': ['primary_provider_id']},
+        {'columns': ['_updated_at']}
+    ],
+    tags=['foundation', 'weekly']) }}
 
 /*
     Intermediate model for patient profile
@@ -124,11 +124,12 @@ patient_demographics_enhanced as (
         -- Important dates
         first_visit_date,
         
-        -- Metadata
+        -- Metadata (preserved from source staging model)
         _loaded_at,
         _created_at,
         _updated_at,
-        _created_by_user_id
+        _created_by
+        
     from source_patient
 ),
 
@@ -187,11 +188,7 @@ patient_integrated as (
         pnl.notes_updated_at,
         
         -- Metadata fields (standardized pattern)
-        pde._loaded_at,
-        pde._created_at,
-        pde._updated_at,
-        pde._created_by_user_id,
-        current_timestamp as _transformed_at
+        {{ standardize_intermediate_metadata(source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']) }}
         
     from patient_demographics_enhanced pde
     left join patient_family_links pfl
