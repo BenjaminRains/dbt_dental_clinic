@@ -1,26 +1,52 @@
 {{ config(        materialized='table',
         
-        unique_key='insurance_plan_id') }}
+        unique_key='insurance_plan_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['insurance_plan_id'], 'unique': true},
+            {'columns': ['patient_id']},
+            {'columns': ['carrier_id']},
+            {'columns': ['_updated_at']}
+        ]) }}
 
 /*
-Data Quality Note:
-Incomplete records are preserved with:
-- carrier_id = -1 and empty carrier_name when carrier info is missing
-- subscriber_id = -1 when carrier info is missing or subscriber doesn't exist
-- is_incomplete_record = true in both cases
-
-Historical Plan Handling:
-- All insurance plans are included, regardless of age
-- Plan status is determined by multiple factors:
-  * is_active: Based on verification status and pending flags
-  * is_incomplete_record: Based on missing carrier or subscriber info
-  * hide_from_verify_list: Inherited from the insurance plan
-- Effective and termination dates are tracked to support historical analysis
-- Template benefits (patient_plan_id = 0) are preserved for reference
+    Intermediate model for insurance coverage
+    Part of System B: Insurance & Claims Processing
+    
+    This model:
+    1. Integrates patient insurance plans with carrier, employer, and benefit information
+    2. Provides comprehensive insurance coverage data for claims processing
+    3. Handles incomplete records and historical plan data
+    
+    Business Logic Features:
+    - Insurance Plan Integration: Links patient plans with carrier and employer details
+    - Benefit Aggregation: Consolidates template benefits into JSON structure
+    - Verification Status: Tracks insurance verification and active status
+    - Incomplete Record Handling: Preserves records with missing carrier or subscriber info
+    
+    Data Quality Notes:
+    - Incomplete records are preserved with carrier_id = -1 and empty carrier_name
+    - Subscriber_id = -1 when carrier info is missing or subscriber doesn't exist
+    - is_incomplete_record = true in both cases
+    - Historical plans are included regardless of age for audit trail
+    
+    Performance Considerations:
+    - Table materialization for complex joins across multiple large tables
+    - Indexed on key lookup fields (patient_id, carrier_id)
+    - JSON aggregation for benefit details to reduce row count
 */
 
+
+
 with Source as (
-    select * from {{ ref('stg_opendental__insplan') }}
+    select
+        *,
+        -- Include metadata fields for standardization
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by
+    from {{ ref('stg_opendental__insplan') }}
 ),
 
 InsurancePlan as (
@@ -46,9 +72,12 @@ InsurancePlan as (
         has_ppo_subst_writeoffs,
         is_blue_book_enabled,
         
-        -- Meta Fields
-        created_at,
-        updated_at
+        -- Metadata fields (preserved from staging model)
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by
+
     from Source
 ),
 
@@ -72,8 +101,11 @@ Subscriber as (
     select
         inssub_id as subscriber_id,
         subscriber_external_id,
-        entry_date as subscriber_created_at,
-        last_modified_at as subscriber_updated_at
+        -- Include metadata fields for standardization
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by
     from {{ ref('stg_opendental__inssub') }}
 ),
 
@@ -207,24 +239,18 @@ Final as (
             else null
         end as termination_date,
 
-        -- Meta Fields
-        coalesce(
-            greatest(
-                ip.created_at,
-                pp.patient_plan_created_at,
-                v.entry_timestamp
-            ),
-            greatest(
-                ip.updated_at,
-                pp.patient_plan_updated_at,
-                v.last_modified_at
-            )
-        ) as created_at,
-        greatest(
-            ip.updated_at,
-            pp.patient_plan_updated_at,
-            v.last_modified_at
-        ) as updated_at
+        -- Metadata fields from joined tables (for macro usage)
+        ip._loaded_at,
+        ip._created_at,
+        ip._updated_at,
+        ip._created_by,
+        s._loaded_at as subscriber_loaded_at,
+        s._created_at as subscriber_created_at,
+        s._updated_at as subscriber_updated_at,
+        s._created_by as subscriber_created_by,
+
+        -- Standardized metadata using macro
+        {{ standardize_intermediate_metadata() }}
 
     from PatientPlan pp
     left join InsurancePlan ip
