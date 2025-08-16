@@ -103,11 +103,15 @@ renamed_columns as (
         {{ clean_opendental_date('"SecDateEntry"') }} as sec_date_entry,
         {{ clean_opendental_date('"SecDateTEdit"') }} as sec_date_t_edit,
         
+        -- User ID column (using transform_id_columns for proper type conversion)
+        {{ transform_id_columns([
+            {'source': '"SecUserNumEntry"', 'target': 'sec_user_num_entry'}
+        ]) }},
+        
         -- Metadata columns
         {{ standardize_metadata_columns(
             created_at_column='"SecDateEntry"',
-            updated_at_column='"SecDateTEdit"',
-            created_by_column='"SecUserNumEntry"'
+            updated_at_column='"SecDateTEdit"'
         ) }}
     
     from source_data
