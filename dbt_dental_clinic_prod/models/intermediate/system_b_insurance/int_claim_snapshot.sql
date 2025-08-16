@@ -288,9 +288,11 @@ final as (
         -- Temporal analysis
         days_to_payment,
         
-        -- Metadata (standardized approach)
+        -- Generate metadata for this intermediate model
+        current_timestamp as _loaded_at,
         entry_timestamp as _created_at,
         entry_timestamp as _updated_at,
+        0 as _created_by,
         current_timestamp as _transformed_at
     from snapshot_integration
     where claim_snapshot_id is not null
