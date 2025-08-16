@@ -8,12 +8,12 @@
 with load_status as (
     select 
         table_name,
-        last_extracted,
-        rows_extracted,
-        extraction_status,
+        last_loaded,
+        rows_loaded,
+        load_status,
         _loaded_at as load_timestamp,
         case 
-            when extraction_status = 'completed' then true
+            when load_status = 'completed' then true
             else false
         end as is_loaded
     from {{ source('opendental', 'etl_load_status') }}
@@ -24,10 +24,10 @@ transform_status as (
         table_name,
         last_transformed,
         rows_transformed,
-        transformation_status,
+        transform_status,
         _transformed_at as transform_timestamp,
         case 
-            when transformation_status = 'completed' then true
+            when transform_status = 'completed' then true
             else false
         end as is_transformed
     from {{ source('opendental', 'etl_transform_status') }}
@@ -36,14 +36,14 @@ transform_status as (
 final as (
     select 
         coalesce(ls.table_name, ts.table_name) as table_name,
-        ls.last_extracted,
-        ls.rows_extracted,
-        ls.extraction_status,
+        ls.last_loaded,
+        ls.rows_loaded,
+        ls.load_status,
         ls.load_timestamp,
         ls.is_loaded,
         ts.last_transformed,
         ts.rows_transformed,
-        ts.transformation_status,
+        ts.transform_status,
         ts.transform_timestamp,
         ts.is_transformed,
         case 
