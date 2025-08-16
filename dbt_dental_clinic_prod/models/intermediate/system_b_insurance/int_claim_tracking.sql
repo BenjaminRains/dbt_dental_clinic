@@ -48,10 +48,11 @@ claim_tracking_enhanced as (
         entry_timestamp,
         note as tracking_note,
 
-        -- Metadata fields (standardized pattern)
-        _extracted_at,
+        -- Generate metadata for this intermediate model
+        current_timestamp as _loaded_at,
         entry_timestamp as _created_at,
         entry_timestamp as _updated_at,
+        0 as _created_by,
         current_timestamp as _transformed_at
 
     from source_claim_tracking
