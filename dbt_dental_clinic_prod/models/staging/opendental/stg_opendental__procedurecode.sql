@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'procedurecode') }}
     
     {% if is_incremental() %}
-    AND {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
+    where {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
