@@ -1,12 +1,13 @@
-{{ config(        materialized='table',
-        
-        unique_key='adjustment_id',
-        on_schema_change='fail',
-        indexes=[
-            {'columns': ['adjustment_id'], 'unique': true},
-            {'columns': ['patient_id']},
-            {'columns': ['_updated_at']}
-        ]) }}
+{{ config(
+    materialized='table',
+    schema='intermediate',
+    unique_key='adjustment_id',
+    on_schema_change='fail',
+    indexes=[
+        {'columns': ['adjustment_id'], 'unique': true},
+        {'columns': ['patient_id']},
+        {'columns': ['_updated_at']}
+    ]) }}
 
 /*
     Intermediate model for adjustments
@@ -171,7 +172,7 @@ adjustment_integrated as (
         af.procedure_date,
         af.adjustment_type_id,
         af.adjustment_note,
-        af.entry_date,
+        af.date_entry,
         af.statement_id,
         af.tax_transaction_id,
         
@@ -221,12 +222,8 @@ adjustment_integrated as (
             else 'minor'
         end as adjustment_impact,
         
-        -- Metadata fields
-        af._loaded_at as _extracted_at,
-        af._created_at,
-        af._updated_at,
-        current_timestamp as _transformed_at,
-        af._created_by_user_id
+        -- Metadata fields (standardized pattern)
+        {{ standardize_intermediate_metadata(primary_source_alias='af') }}
         
     from adjustment_flags af
     left join source_procedures pc
@@ -235,12 +232,7 @@ adjustment_integrated as (
         on af.adjustment_type_id = def.definition_id
     left join paysplit_unearned pu
         on af.adjustment_id = pu.adjustment_id
-),
-
--- 5. Final validation and filtering
-final as (
-    select * from adjustment_integrated
-    where adjustment_id is not null
 )
 
-select * from final
+select * from adjustment_integrated
+where adjustment_id is not null
