@@ -1,5 +1,6 @@
-{{ config(        materialized='incremental',
-        
+{{ config(
+        materialized='incremental',
+        schema='intermediate',
         unique_key='provider_id',
         on_schema_change='fail',
         incremental_strategy='merge',
@@ -7,7 +8,8 @@
             {'columns': ['provider_id'], 'unique': true},
             {'columns': ['is_active_provider']},
             {'columns': ['_updated_at']}
-        ]) }}
+        ],
+        tags=['foundation', 'weekly']) }}
 
 /*
     Intermediate model for provider profile and business logic
@@ -154,11 +156,10 @@ provider_enhanced as (
             else false
         end as has_state_license,
         
-        -- Metadata
+        -- Metadata (preserved from source staging model)
         _loaded_at,
         _created_at,
-        _updated_at,
-        _created_by_user_id
+        _updated_at
         
     from source_providers
 ),
@@ -182,6 +183,90 @@ provider_capabilities as (
         end as can_bill_procedures
         
     from provider_enhanced
+),
+
+-- 4. Final integration with standardized metadata
+provider_integrated as (
+    select
+        -- Core provider fields
+        pc.provider_id,
+        pc.provider_abbreviation,
+        pc.display_order,
+        
+        -- Provider name fields
+        pc.last_name,
+        pc.first_name,
+        pc.middle_initial,
+        pc.name_suffix,
+        pc.preferred_name,
+        pc.custom_id,
+        
+        -- Professional identifiers  
+        pc.social_security_number,
+        pc.state_license_number,
+        pc.dea_number,
+        pc.blue_cross_id,
+        pc.medicaid_id,
+        pc.national_provider_id,
+        pc.canadian_office_number,
+        pc.ecw_id,
+        pc.state_rx_id,
+        pc.state_where_licensed,
+        pc.taxonomy_code_override,
+        
+        -- Classification and relationships
+        pc.fee_schedule_id,
+        pc.specialty_id,
+        pc.school_class_id,
+        pc.billing_override_provider_id,
+        pc.email_address_id,
+        
+        -- Status and type fields
+        pc.provider_status,
+        pc.anesthesia_provider_type,
+        pc.ehr_mu_stage,
+        
+        -- UI and display properties
+        pc.provider_color,
+        pc.outline_color,
+        pc.schedule_note,
+        pc.web_schedule_description,
+        pc.web_schedule_image_location,
+        
+        -- Financial goals
+        pc.hourly_production_goal_amount,
+        
+        -- Boolean flags
+        pc.is_secondary,
+        pc.is_hidden,
+        pc.is_using_tin,
+        pc.has_signature_on_file,
+        pc.is_cdanet,
+        pc.is_not_person,
+        pc.is_instructor,
+        pc.is_hidden_report,
+        pc.is_erx_enabled,
+        
+        -- Date fields
+        pc.birth_date,
+        pc.termination_date,
+        
+        -- Business logic flags
+        pc.is_system_provider,
+        pc.is_active_provider,
+        pc.is_non_person_provider,
+        pc.is_terminated_provider,
+        pc.can_prescribe_controlled_substances,
+        pc.has_state_license,
+        
+        -- Capability flags
+        pc.can_treat_patients,
+        pc.can_bill_procedures,
+        
+        -- Standardized metadata (provider staging model has _loaded_at, _created_at, _updated_at)
+        {{ standardize_intermediate_metadata(source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']) }}
+        
+    from provider_capabilities pc
 )
 
-select * from provider_capabilities
+select * from provider_integrated
