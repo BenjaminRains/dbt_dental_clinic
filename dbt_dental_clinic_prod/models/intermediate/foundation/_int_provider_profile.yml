@@ -33,8 +33,8 @@ models:
       - Billing override logic prevents duplicate billing when providers have billing delegates
       
       Performance Notes:
-      - Incremental materialization with _updated_at filtering for efficient processing
-      - Indexed on provider_id (unique), is_active_provider, and _updated_at for query optimization
+      - Incremental materialization with _transformed_at filtering for efficient processing
+      - Indexed on provider_id (unique), is_active_provider, and _transformed_at for query optimization
       - Efficient boolean flag calculations using CASE statements with early termination logic
     
     config:
@@ -253,7 +253,7 @@ models:
               config:
                 description: "Billing capability flag validation for financial workflow integrity"
       
-      - name: _extracted_at
+      - name: _loaded_at
         description: >
           ETL pipeline extraction timestamp - when the record was extracted from the source system
           
