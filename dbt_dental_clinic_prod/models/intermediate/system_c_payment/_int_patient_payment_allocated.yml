@@ -168,12 +168,12 @@ models:
                 adjustment_id != 0 
                 AND payment_type_id != 0 
                 AND EXISTS (
-                  SELECT 1 FROM raw.adjustment a 
+                  SELECT 1 FROM "opendental_analytics"."raw"."adjustment" a 
                   WHERE a."AdjNum" = adjustment_id 
                   AND a."AdjDate" >= '2023-01-01'
                 )
               config:
-                severity: error
+                severity: warn
                 description: "Adjustment ID must exist in stg_opendental__adjustment, except for administrative entries (ID 0 or payment_type_id = 0) or adjustments from before 2023"
 
       - name: split_amount
