@@ -433,11 +433,11 @@ models:
           - Used for document organization and retrieval processes
           - Enables audit trail and compliance documentation
       
-      - name: _extracted_at
+      - name: _loaded_at
         description: >
-          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          ETL pipeline extraction timestamp - when the record was loaded from the source system
           
-          Source: ETL pipeline metadata (added during extraction process)
+          Source: ETL pipeline metadata (preserved from staging models)
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
         tests:
@@ -446,30 +446,30 @@ models:
               min_value: "'2020-01-01 00:00:00'::timestamp"
               max_value: "current_timestamp"
               config:
-                description: "Extraction timestamps must be within reasonable data processing window"
+                description: "Loading timestamps must be within reasonable data processing window"
       
       - name: _created_at
         description: >
           Original creation timestamp from OpenDental source system
           
-          Source Transformation:
-          - OpenDental source: "DateEntry" or equivalent creation field
-          - Represents: When the payment record was originally created in OpenDental
-          - Usage: Business timeline analysis and record lifecycle tracking
+          Source: Preserved from staging models (stg_opendental__claimproc, stg_opendental__claimpayment)
+          Business Context: When the payment record was originally created in OpenDental
+          Usage: Business timeline analysis and record lifecycle tracking
         tests:
-          - not_null:
-              where: "claim_payment_id != 0"
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
               config:
-                description: "Creation timestamps must be present for payment audit trails"
+                description: "Creation timestamps must be within reasonable business date range"
 
       - name: _updated_at
         description: >
           Last update timestamp from OpenDental source system
           
-          Source Transformation:
-          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
-          - Logic: Uses DateTStamp if available, falls back to DateEntry
-          - Purpose: Change tracking and incremental loading
+          Source: Preserved from staging models (stg_opendental__claimproc, stg_opendental__claimpayment)
+          Business Context: When the payment record was last modified in OpenDental
+          Purpose: Change tracking and incremental loading
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
@@ -478,13 +478,23 @@ models:
               config:
                 description: "Update timestamps must be within reasonable business date range"
       
+      - name: _created_by
+        description: >
+          User who created the record in the source system (OpenDental)
+          
+          Source: Preserved from staging models (stg_opendental__claimproc, stg_opendental__claimpayment)
+          Business Context: User responsible for creating the payment record
+          Usage: Audit trails and user activity analysis
+        tests:
+          - not_null
+      
       - name: _transformed_at
         description: >
-          dbt model processing timestamp - when this intermediate model was last run
+          dbt intermediate model processing timestamp - when this model was last built
           
           Source: current_timestamp at dbt model execution
-          Purpose: Model execution tracking and debugging
-          Usage: Understanding data processing timeline
+          Purpose: Intermediate model execution tracking and debugging
+          Usage: Understanding data processing timeline and model refresh frequency
         tests:
           - not_null
 
