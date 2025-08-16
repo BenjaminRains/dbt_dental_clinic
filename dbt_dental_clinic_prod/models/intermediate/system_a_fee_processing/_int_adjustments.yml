@@ -391,11 +391,11 @@ models:
           Values: 288, 439, or NULL if not unearned income
 
       # Metadata fields (from staging layer)
-      - name: _extracted_at
+      - name: _loaded_at
         description: >
-          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          ETL pipeline loading timestamp - when the record was loaded from the source system
           
-          Source: ETL pipeline metadata (added during extraction process)
+          Source: ETL pipeline metadata (added during loading process)
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
         tests:
