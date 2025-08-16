@@ -202,11 +202,31 @@ select * from final
 
 **Metadata Fields Pattern (Standardized Approach):**
 ```sql
--- Use the single metadata approach from naming conventions
-_extracted_at,                              -- From ETL pipeline
-"DateEntry" as _created_at,                 -- Original creation timestamp  
-coalesce("DateTStamp", "DateEntry") as _updated_at,  -- Last update
-current_timestamp as _transformed_at        -- dbt processing time
+-- Use the standardized macro for intermediate models
+{{ standardize_intermediate_metadata() }}
+
+-- For staging models with different metadata configurations:
+-- Complete metadata (patient model):
+{{ standardize_intermediate_metadata() }}
+
+-- Partial metadata (provider model - no _created_by):
+{{ standardize_intermediate_metadata(source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']) }}
+
+-- Minimal metadata (only _loaded_at, _updated_at):
+{{ standardize_intermediate_metadata(source_metadata_fields=['_loaded_at', '_updated_at']) }}
+
+-- No source metadata (legacy models):
+{{ standardize_intermediate_metadata(preserve_source_metadata=false) }}
+
+-- This macro provides:
+-- Source metadata fields (varies by staging model configuration)
+-- _transformed_at: dbt intermediate model processing timestamp (current_timestamp)
+
+-- For manual implementation (if macro not available):
+-- _loaded_at,                              -- From ETL pipeline (preserved from staging)
+-- _created_at,                             -- Original creation timestamp (preserved from staging)
+-- _updated_at,                             -- Last update (preserved from staging)
+-- current_timestamp as _transformed_at     -- dbt processing time
 ```
 
 ### 1.4 Incremental Model Patterns (Aligned with Naming Conventions)
@@ -604,6 +624,46 @@ ABS(MOD(
     - System G: Scheduling
 */
 ```
+
+### 1.9 Intermediate Model Metadata Standardization
+
+**Standardized Metadata Macro Usage:**
+```sql
+-- In the final SELECT statement of integration CTEs:
+select
+    -- Your business logic columns here
+    {{ standardize_intermediate_metadata() }}
+from your_integration_cte
+```
+
+**Metadata Macro Benefits:**
+- **Consistency**: All intermediate models use the same metadata pattern
+- **Data Lineage**: Preserves source metadata from staging models
+- **Processing Tracking**: Adds intermediate-specific transformation timestamps
+- **Maintainability**: Centralized metadata logic reduces code duplication
+
+**Macro Configuration Options:**
+```sql
+-- Default usage (recommended):
+{{ standardize_intermediate_metadata() }}
+
+-- Custom configuration:
+{{ standardize_intermediate_metadata(
+    preserve_source_metadata=true,
+    add_intermediate_metadata=true
+) }}
+
+-- Minimal metadata (not recommended):
+{{ standardize_intermediate_metadata(
+    preserve_source_metadata=false,
+    add_intermediate_metadata=true
+) }}
+```
+
+**Required Source Model Setup:**
+- All staging models must use `{{ standardize_metadata_columns() }}` macro
+- Ensures consistent metadata field names across the data pipeline
+- Enables proper data lineage tracking from source to intermediate models
 
 ## Model-Specific Implementation Priority
 
