@@ -17,8 +17,10 @@ renamed_columns as (
             {'source': '"DefNum"', 'target': 'definition_id'}
         ]) }},
         
-        -- User ID (preserve 0 as it indicates system-generated records)
-        "UserNum" as user_id,
+        -- User ID (using transform_id_columns for proper type conversion)
+        {{ transform_id_columns([
+            {'source': '"UserNum"', 'target': 'user_id'}
+        ]) }},
         
         -- Attributes
         "VerifyType" as verify_type,

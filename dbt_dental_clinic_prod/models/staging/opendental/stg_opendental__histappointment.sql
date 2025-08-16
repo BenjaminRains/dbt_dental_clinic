@@ -9,7 +9,7 @@ with source_data as (
     where "HistDateTStamp" >= '2023-01-01'::timestamp
         AND "HistDateTStamp" <= CURRENT_TIMESTAMP
     {% if is_incremental() %}
-        AND clean_opendental_date("HistDateTStamp") > (SELECT max(_loaded_at) FROM {{ this }})
+        AND "HistDateTStamp" > (SELECT max(_loaded_at) FROM {{ this }})
     {% endif %}
 ),
 
@@ -71,14 +71,22 @@ renamed_columns as (
         -- Metadata columns
         {{ clean_opendental_date('"HistDateTStamp"') }} as hist_date_timestamp,
         {{ clean_opendental_date('"DateTStamp"') }} as date_timestamp,
-        "SecUserNumEntry"::integer as sec_user_num_entry,
+        
+        -- User ID column (using transform_id_columns for proper type conversion)
+        {{ transform_id_columns([
+            {'source': '"SecUserNumEntry"', 'target': 'sec_user_num_entry'}
+        ]) }},
 
         -- Standardized metadata columns
         {{ standardize_metadata_columns(
             created_at_column='"HistDateTStamp"',
-            updated_at_column='"HistDateTStamp"',
-            created_by_column='"SecUserNumEntry"'
-        ) }}
+            updated_at_column='"HistDateTStamp"'
+        ) }},
+        
+        -- User ID column for compatibility with existing table structure
+        {{ transform_id_columns([
+            {'source': '"SecUserNumEntry"', 'target': '_created_by'}
+        ]) }}
 
     from source_data
 )
