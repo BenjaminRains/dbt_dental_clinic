@@ -1,6 +1,28 @@
 {{ config(
     materialized='table',
-    
+    indexes=[
+        {'columns': ['patient_id']},
+        {'columns': ['procedure_id']},
+        {'columns': ['transaction_date']},
+        {'columns': ['aging_bucket']},
+        {'columns': ['days_outstanding']},
+        {'columns': ['payment_date']},
+        {'columns': ['adjustment_date']},
+        {'columns': ['is_insurance_payment']},
+        {'columns': ['is_patient_payment']},
+        {'columns': ['payment_type']},
+        {'columns': ['adjustment_type']},
+        {'columns': ['patient_id', 'procedure_id']},
+        {'columns': ['patient_id', 'transaction_date']},
+        {'columns': ['patient_id', 'aging_bucket']},
+        {'columns': ['procedure_id', 'transaction_date']},
+        {'columns': ['transaction_date', 'aging_bucket']},
+        {'columns': ['payment_date', 'is_insurance_payment']},
+        {'columns': ['adjustment_date', 'adjustment_type']},
+        {'columns': ['_loaded_at']},
+        {'columns': ['_created_at']},
+        {'columns': ['_updated_at']}
+    ]
 ) }}
 
 /*
@@ -71,8 +93,8 @@ BaseAdjustments AS (
         adjustment_date,
         adjustment_amount,
         adjustment_category,
-        CASE WHEN is_procedure_adjustment = 1 THEN true ELSE false END as is_procedure_adjustment,
-        CASE WHEN is_retroactive_adjustment = 1 THEN true ELSE false END as is_retroactive_adjustment,
+        is_procedure_adjustment,
+        is_retroactive_adjustment,
         CAST(adjustment_id AS TEXT) AS adjustment_id
     FROM {{ ref('int_adjustments') }}
 ),
@@ -86,7 +108,12 @@ BaseProcedures AS (
         procedure_fee,
         procedure_code,
         procedure_description,
-        procedure_status_desc
+        procedure_status_desc,
+        -- Metadata fields (preserved from primary source)
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by
     FROM {{ ref('int_procedure_complete') }}
     WHERE procedure_status_desc IN ('Complete', 'Existing Current')
 ),
@@ -217,9 +244,15 @@ SELECT DISTINCT
     END AS adjustment_type,
     CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.adjustment_category ELSE NULL END AS adjustment_category,
     CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.is_procedure_adjustment ELSE NULL END AS is_procedure_adjustment,
-    CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.is_retroactive_adjustment ELSE NULL END AS is_retroactive_adjustment
+    CASE WHEN ac.transaction_type IN ('GENERAL_ADJUSTMENT', 'PROCEDURE_ADJUSTMENT') THEN ba.is_retroactive_adjustment ELSE NULL END AS is_retroactive_adjustment,
+    
+    -- Standardized metadata from primary source (int_procedure_complete)
+    {{ standardize_intermediate_metadata(primary_source_alias='pc') }}
     
 FROM AgingCalculations ac
+LEFT JOIN BaseProcedures pc
+    ON ac.patient_id = pc.patient_id
+    AND ac.procedure_id = pc.procedure_id
 -- Use proper join keys and transaction type filters to avoid cartesian products
 LEFT JOIN BasePayments bp
     ON ac.patient_id = bp.patient_id
