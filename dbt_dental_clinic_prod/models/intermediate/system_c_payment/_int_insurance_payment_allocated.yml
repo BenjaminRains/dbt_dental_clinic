@@ -162,14 +162,14 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_value: "current_date"
 
       - name: procedure_date
         description: Date of the associated procedure, sourced from stg_opendental__claimproc
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_value: "current_date"
 
       - name: payment_type_id
         description: |
@@ -211,7 +211,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              max_value: "current_timestamp"
 
       - name: updated_at
         description: Timestamp when the record was last updated
@@ -219,9 +219,9 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "DATE_TRUNC('day', CAST('{{ var('max_valid_date', 'current_date') }}' AS timestamp)) + INTERVAL '1 day' - INTERVAL '1 second'"
+              max_value: "current_timestamp"
               config:
-                description: "updated_at should be between 2023-01-01 and the end of the current max valid date (inclusive of time component)"
+                description: "updated_at should be between 2023-01-01 and the current timestamp"
 
       - name: deposit_id
         description: Foreign key to the deposit record
@@ -401,27 +401,73 @@ models:
           - accepted_values:
               values: [true, false]
 
-      - name: model_created_at
+      - name: _loaded_at
         description: |
-          Timestamp when this model was created during ETL execution.
-          This is used for monitoring ETL run times and data freshness, not for business data validation.
-          The timestamp will reflect when the ETL job processed this record.
+          ETL extraction timestamp from primary source (claim procedures)
+          Source: stg_opendental__claimproc._loaded_at
+          Purpose: Data lineage tracking and pipeline monitoring
         tests:
-          - not_null:
-              config:
-                severity: warn
-                description: "Used for ETL monitoring and audit purposes only"
+          - not_null
 
-      - name: model_updated_at
+      - name: _created_at
         description: |
-          Timestamp when this model was last updated during ETL execution.
-          This is used for monitoring ETL run times and data freshness, not for business data validation.
-          The timestamp will reflect when the ETL job last processed this record.
+          Business creation timestamp from primary source (claim procedures)
+          Source: stg_opendental__claimproc._created_at
+          Purpose: Business timeline analysis and audit trail
         tests:
-          - not_null:
-              config:
-                severity: warn
-                description: "Used for ETL monitoring and audit purposes only"
+          - not_null
+
+      - name: _updated_at
+        description: |
+          Business update timestamp from primary source (claim procedures)
+          Source: stg_opendental__claimproc._updated_at
+          Purpose: Change tracking and incremental loading support
+        tests:
+          - not_null
+
+      - name: _created_by
+        description: |
+          Business user ID from primary source (claim procedures)
+          Source: stg_opendental__claimproc._created_by
+          Purpose: User accountability and audit trail
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: |
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution (current_timestamp)
+          Purpose: Model-specific tracking and pipeline debugging
+        tests:
+          - not_null
+
+      - name: payment_loaded_at
+        description: |
+          ETL extraction timestamp from secondary source (insurance payments)
+          Source: stg_opendental__claimpayment._loaded_at
+          Note: May be NULL if insurance payment data is unavailable
+          Purpose: Secondary data lineage tracking
+
+      - name: payment_created_at
+        description: |
+          Business creation timestamp from secondary source (insurance payments)
+          Source: stg_opendental__claimpayment._created_at
+          Note: May be NULL if insurance payment data is unavailable
+          Purpose: Secondary business timeline analysis
+
+      - name: payment_updated_at
+        description: |
+          Business update timestamp from secondary source (insurance payments)
+          Source: stg_opendental__claimpayment._updated_at
+          Note: May be NULL if insurance payment data is unavailable
+          Purpose: Secondary change tracking
+
+      - name: payment_created_by
+        description: |
+          Business user ID from secondary source (insurance payments)
+          Source: stg_opendental__claimpayment._created_by
+          Note: May be NULL if insurance payment data is unavailable
+          Purpose: Secondary user accountability
 
       - name: bluebook_payment_amount
         description: Insurance payment amount from the bluebook table, used for validation against claimproc amount
@@ -481,7 +527,7 @@ models:
                 description: "allowed_fee_updated_at should be non-null when allowed_fee exists"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              max_value: "current_timestamp"
               row_condition: "allowed_fee_updated_at IS NOT NULL"
 
     tests:

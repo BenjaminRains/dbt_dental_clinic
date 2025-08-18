@@ -58,11 +58,14 @@ InsurancePayments AS MATERIALIZED (
         ip.is_partial,
         ip.payment_type_id,
         ip.payment_group_id,
-        ip.created_by_user_id,
-        ip.created_date,
-        ip.last_modified_at,
         ip.deposit_id,
-        ip.note
+        ip.note,
+        -- Preserve metadata from insurance payment source
+        ip._loaded_at as payment_loaded_at,
+        ip._transformed_at as payment_transformed_at,
+        ip._created_at as payment_created_at,
+        ip._updated_at as payment_updated_at,
+        ip._created_by as payment_created_by
     FROM {{ ref('stg_opendental__claimpayment') }} ip
     WHERE ip.claim_payment_id IS NOT NULL
     AND COALESCE(ip.check_date, ip.date_issued) >= '2023-01-01'
@@ -98,7 +101,12 @@ ClaimProcedures AS MATERIALIZED (
         remarks,
         code_sent,
         estimate_note,
-        last_modified_at
+        -- Metadata fields for standardize_intermediate_metadata macro
+        _loaded_at,
+        _transformed_at,
+        _created_at,
+        _updated_at,
+        _created_by
     FROM {{ ref('stg_opendental__claimproc') }}
     WHERE status IN (1, 3)
     AND claim_payment_id != 0
@@ -109,25 +117,25 @@ ClaimProcedures AS MATERIALIZED (
 -- Get bluebook information for payment validation
 BluebookInfo AS MATERIALIZED (
     SELECT
-        ib.proc_id,
+        ib.procedure_id,
         ib.claim_id,
         ib.plan_id,
         ib.carrier_id,
         ib.insurance_payment_amount AS bluebook_payment_amount,
         ib.allowed_override_amount,
-        ib.group_id,
+        ib.group_number as group_id,
         ib.claim_type,
         ibl.allowed_fee,
         ibl.description AS allowed_fee_description,
-        ibl.created_at AS allowed_fee_updated_at
+        ibl._created_at AS allowed_fee_updated_at
     FROM {{ ref('stg_opendental__insbluebook') }} ib
     LEFT JOIN {{ ref('stg_opendental__claimproc') }} cp
-        ON ib.proc_id = cp.procedure_id
+        ON ib.procedure_id = cp.procedure_id
         AND ib.claim_id = cp.claim_id
         AND ib.plan_id = cp.plan_id
     LEFT JOIN {{ ref('stg_opendental__insbluebooklog') }} ibl
-        ON cp.claim_procedure_id = ibl.claimprocedure_id
-    WHERE ib.created_at >= '2023-01-01'
+        ON cp.claim_procedure_id = ibl.claim_procedure_id
+    WHERE ib._created_at >= '2023-01-01'
 )
 
 -- Final select with insurance payment allocations
@@ -156,9 +164,9 @@ SELECT DISTINCT
     ip.note AS payment_notes,
     ip.check_number,
     ip.bank_branch,
-    ip.created_by_user_id,
-    COALESCE(cp.claim_procedure_date, ip.created_date) AS entry_date,
-    COALESCE(cp.last_modified_at, ip.last_modified_at) AS updated_at,
+    ip.payment_created_by AS created_by_user_id,
+    COALESCE(cp.claim_procedure_date, ip.check_date) AS entry_date,
+    COALESCE(cp._updated_at, ip.payment_updated_at) AS updated_at,
     ip.deposit_id,
     NULL::TEXT AS external_id,
     NULL::BOOLEAN AS is_cc_completed_flag,
@@ -197,14 +205,22 @@ SELECT DISTINCT
         WHEN COALESCE(cp.insurance_finalized_date, ip.check_date) <= CURRENT_DATE THEN TRUE
         ELSE FALSE
     END AS include_in_ar,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    
+    -- Standardized metadata from primary source (claim procedures)
+    {{ standardize_intermediate_metadata(primary_source_alias='cp') }},
+    
+    -- Secondary source metadata (insurance payments - may be NULL)
+    ip.payment_loaded_at,
+    ip.payment_created_at,
+    ip.payment_updated_at,
+    ip.payment_created_by
+    
 FROM ClaimProcedures cp
 INNER JOIN InsurancePayments ip 
     ON cp.claim_payment_id = ip.claim_payment_id
 LEFT JOIN PaymentDefinitions pd
     ON ip.payment_type_id = pd.definition_id
 LEFT JOIN BluebookInfo bb
-    ON cp.procedure_id = bb.proc_id
+    ON cp.procedure_id = bb.procedure_id
     AND cp.claim_id = bb.claim_id
     AND cp.plan_id = bb.plan_id 
