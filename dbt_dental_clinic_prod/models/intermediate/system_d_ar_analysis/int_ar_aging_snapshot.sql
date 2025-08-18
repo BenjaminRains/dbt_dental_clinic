@@ -1,7 +1,18 @@
 {{ config(
-    materialized='incremental',
-    
-    unique_key=['snapshot_date', 'patient_id']
+    materialized='table',
+    unique_key=['snapshot_date', 'patient_id'],
+    indexes=[
+        {'columns': ['snapshot_date'], 'type': 'btree'},
+        {'columns': ['patient_id'], 'type': 'btree'},
+        {'columns': ['snapshot_date', 'patient_id'], 'type': 'btree'},
+        {'columns': ['total_ar_balance'], 'type': 'btree'},
+        {'columns': ['balance_over_90_days'], 'type': 'btree'},
+        {'columns': ['collection_efficiency_30_days'], 'type': 'btree'},
+        {'columns': ['ar_balance_change'], 'type': 'btree'},
+        {'columns': ['_loaded_at'], 'type': 'btree'},
+        {'columns': ['_created_at'], 'type': 'btree'},
+        {'columns': ['_transformed_at'], 'type': 'btree'}
+    ]
 ) }}
 
 /*
@@ -14,6 +25,16 @@
     3. Monitors collection efficiency
     4. Builds on int_ar_balance for consistency
     5. Uses shared calculations for payment activity
+    
+    Indexes added for performance:
+    - snapshot_date: For date-based filtering and incremental processing
+    - patient_id: For patient-specific queries
+    - snapshot_date + patient_id: Composite index for unique key lookups
+    - total_ar_balance: For balance-based filtering and sorting
+    - balance_over_90_days: For aging analysis queries
+    - collection_efficiency_30_days: For efficiency analysis
+    - ar_balance_change: For change tracking queries
+    - _loaded_at, _created_at, _transformed_at: For metadata-based queries
 */
 
 WITH PreviousSnapshot AS (
@@ -30,7 +51,12 @@ WITH PreviousSnapshot AS (
         insurance_responsibility,
         open_procedures_count,
         active_claims_count,
-        model_created_at as source_created_at
+        -- Preserve metadata from previous snapshot
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by,
+        _transformed_at as source_transformed_at
     FROM {{ this }}
     WHERE snapshot_date = CURRENT_DATE - INTERVAL '1 day'
 ),
@@ -48,7 +74,12 @@ CurrentSnapshot AS (
         SUM(CASE WHEN responsible_party = 'PATIENT' THEN current_balance ELSE 0 END) AS patient_responsibility,
         SUM(CASE WHEN responsible_party = 'INSURANCE' THEN current_balance ELSE 0 END) AS insurance_responsibility,
         COUNT(DISTINCT CASE WHEN current_balance > 0 THEN procedure_id END) AS open_procedures_count,
-        COUNT(DISTINCT CASE WHEN claim_id IS NOT NULL THEN claim_id END) AS active_claims_count
+        COUNT(DISTINCT CASE WHEN claim_id IS NOT NULL THEN claim_id END) AS active_claims_count,
+        -- Preserve metadata from primary source (int_ar_balance)
+        MAX(_loaded_at) AS _loaded_at,
+        MAX(_created_at) AS _created_at,
+        MAX(_updated_at) AS _updated_at,
+        MAX(_created_by) AS _created_by
     FROM {{ ref('int_ar_balance') }}
     GROUP BY 1, 2
 ),
@@ -137,10 +168,15 @@ SELECT
     ce.collection_efficiency_60_days,
     ce.collection_efficiency_90_days,
     
-    -- Metadata
-    ps.source_created_at,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    -- Previous snapshot metadata (for change tracking)
+    ps._loaded_at AS previous_loaded_at,
+    ps._created_at AS previous_created_at,
+    ps._updated_at AS previous_updated_at,
+    ps._created_by AS previous_created_by,
+    ps.source_transformed_at AS previous_transformed_at,
+    
+    -- Standardized metadata from primary source (int_ar_balance)
+    {{ standardize_intermediate_metadata(primary_source_alias='cs') }}
     
 FROM CurrentSnapshot cs
 LEFT JOIN PreviousSnapshot ps
