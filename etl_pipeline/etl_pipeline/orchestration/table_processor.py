@@ -195,8 +195,8 @@ class TableProcessingContext:
         if not self.config:
             return None
         
-        # Look for primary column in configuration
-        primary_column = self.config.get('primary_column')
+        # Look for primary incremental column in configuration
+        primary_column = self.config.get('primary_incremental_column')
         if primary_column and primary_column != 'none':
             return primary_column
         
