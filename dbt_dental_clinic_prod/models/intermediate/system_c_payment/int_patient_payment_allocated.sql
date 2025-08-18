@@ -152,27 +152,33 @@ PatientPayments AS MATERIALIZED (
         p.check_number,
         p.bank_branch,
         p.payment_source,
-        p.is_split_flag,
-        p.is_recurring_cc_flag,
+        p.is_split,
+        p.is_recurring_cc,
         p.payment_status,
         p.process_status,
         p.merchant_fee,
         p.payment_notes,
-        p.created_by_user_id,
+        p._created_by as created_by_user_id,
         p.entry_date,
-        p.updated_at,
+        p._updated_at as updated_at,
         p.deposit_id,
         p.external_id,
-        p.is_cc_completed_flag,
+        p.is_cc_completed,
         p.recurring_charge_date,
         p.receipt_text,
         ps.procedure_id,
         ps.procedure_date,
         proc.provider_id,
         ps.adjustment_id,
-        ps.is_discount_flag,
+        ps.is_discount,
         ps.discount_type,
         ps.unearned_type,
+        -- Metadata fields for standardize_intermediate_metadata macro
+        p._loaded_at,
+        p._transformed_at,
+        p._created_at,
+        p._updated_at,
+        p._created_by,
         ROW_NUMBER() OVER (
             PARTITION BY p.payment_id, ps.procedure_id, ps.split_amount, ps.unearned_type
             ORDER BY p.entry_date, ps.entry_date
@@ -195,9 +201,9 @@ PatientPayments AS MATERIALIZED (
     -- Exclude future-dated payments
     AND p.payment_date <= CURRENT_DATE
     -- Validate refund payments (type 72)
-    AND NOT (p.payment_type_id = 72 AND p.is_cc_completed_flag = true)
+    AND NOT (p.payment_type_id = 72 AND p.is_cc_completed = true)
     -- Validate recurring payments
-    AND NOT (p.is_cc_completed_flag = true AND p.recurring_charge_date IS NULL)
+    AND NOT (p.is_cc_completed = true AND p.recurring_charge_date IS NULL)
 )
 
 -- Final select with patient payment allocations
@@ -218,7 +224,7 @@ SELECT
     pp.payment_source::TEXT,
     pp.payment_status,
     pp.process_status,
-    pp.is_discount_flag,
+    pp.is_discount,
     pp.discount_type,
     pp.unearned_type,
     NULL::INTEGER AS payplan_debit_type,
@@ -231,7 +237,7 @@ SELECT
     pp.updated_at,
     pp.deposit_id,
     pp.external_id,
-    pp.is_cc_completed_flag,
+    pp.is_cc_completed,
     pp.recurring_charge_date,
     pp.receipt_text,
     pd.item_name AS payment_type_description,
@@ -240,8 +246,10 @@ SELECT
         WHEN pp.payment_date <= CURRENT_DATE THEN TRUE  -- Include non-Type 0 payments on or before current date
         ELSE FALSE  -- Exclude future-dated payments
     END AS include_in_ar,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    
+    -- Standardized metadata from primary source (patient payments)
+    {{ standardize_intermediate_metadata(primary_source_alias='pp') }}
+    
 FROM PatientPayments pp
 LEFT JOIN PaymentDefinitions pd
     ON pp.payment_type_id = pd.definition_id
