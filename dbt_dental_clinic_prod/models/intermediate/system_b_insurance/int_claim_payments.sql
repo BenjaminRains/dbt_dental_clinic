@@ -31,6 +31,13 @@
     Performance Considerations:
     - Uses table materialization due to complex joins and aggregations
     - Indexed on primary key and common lookup fields
+    
+    Metadata Strategy:
+    - Primary source: claim_proc (stg_opendental__claimproc) - contains core payment details
+    - Secondary source: claim_payment (stg_opendental__claimpayment) - contains check/payment metadata
+    - EOB attachments: eob_attach (stg_opendental__eobattach) - contains documentation references
+    - Preserves business timestamps from primary source for audit trail
+    - Includes secondary source metadata for complete data lineage
 */
 
 with source_claim as (
@@ -142,11 +149,17 @@ claim_payment_enhanced as (
         eob.eob_attachment_ids,
         eob.eob_attachment_file_names,
 
-        -- Metadata fields (from claim_proc as primary source)
+        -- Primary source metadata (claim_proc - primary source for payment details)
         dc._loaded_at,
         dc._created_at,
         dc._updated_at,
-        dc._created_by
+        dc._created_by,
+
+        -- Secondary source metadata (claim_payment - may be NULL)
+        cpy._loaded_at as claim_payment_loaded_at,
+        cpy._created_at as claim_payment_created_at,
+        cpy._updated_at as claim_payment_updated_at,
+        cpy._created_by as claim_payment_created_by
 
     from claim_payment_details dc
     left join source_claim_payment cpy
@@ -178,8 +191,20 @@ final as (
         eob_attachment_ids,
         eob_attachment_file_names,
         
-        -- Standardized metadata using macro
-        {{ standardize_intermediate_metadata() }}
+        -- Primary source metadata (claim_proc - primary source for payment details)
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by,
+        
+        -- Secondary source metadata (claim_payment - may be NULL)
+        claim_payment_loaded_at,
+        claim_payment_created_at,
+        claim_payment_updated_at,
+        claim_payment_created_by,
+        
+        -- dbt intermediate model build timestamp
+        current_timestamp as _transformed_at
     from claim_payment_enhanced
 )
 

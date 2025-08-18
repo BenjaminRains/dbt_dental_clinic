@@ -15,10 +15,17 @@ models:
       - Payment tracking: Maintains complete payment history with check details and payment types
       
       Data Sources:
-      - stg_opendental__claimproc: Procedure-level claim processing data with financial details
-      - stg_opendental__claimpayment: Insurance payment transactions and check information
+      - stg_opendental__claimproc: Procedure-level claim processing data with financial details (PRIMARY SOURCE)
+      - stg_opendental__claimpayment: Insurance payment transactions and check information (SECONDARY SOURCE)
       - stg_opendental__claim: Base claim information for patient linking
       - stg_opendental__eobattach: Explanation of benefits attachment documentation
+      
+      Metadata Strategy:
+      - Primary source: claim_proc (stg_opendental__claimproc) - contains core payment details and business timestamps
+      - Secondary source: claim_payment (stg_opendental__claimpayment) - contains check/payment metadata with separate lineage
+      - Preserves business timestamps from primary source for audit trail
+      - Includes secondary source metadata for complete data lineage
+      - Maintains pipeline tracking with _loaded_at and _transformed_at for debugging
       
       Insurance Logic Features:
       - Payment allocation: Distributes insurance payments across multiple procedures within a single claim payment
@@ -497,6 +504,38 @@ models:
           Usage: Understanding data processing timeline and model refresh frequency
         tests:
           - not_null
+
+      - name: claim_payment_loaded_at
+        description: >
+          ETL extraction timestamp from secondary source (claim_payment)
+          
+          Source: stg_opendental__claimpayment._loaded_at
+          Note: May be NULL if claim_payment data is unavailable
+          Purpose: Secondary data lineage tracking for payment transaction metadata
+
+      - name: claim_payment_created_at
+        description: >
+          Business creation timestamp from secondary source (claim_payment)
+          
+          Source: stg_opendental__claimpayment._created_at
+          Note: May be NULL if claim_payment data is unavailable
+          Purpose: Secondary business timeline tracking for payment transactions
+
+      - name: claim_payment_updated_at
+        description: >
+          Business update timestamp from secondary source (claim_payment)
+          
+          Source: stg_opendental__claimpayment._updated_at
+          Note: May be NULL if claim_payment data is unavailable
+          Purpose: Secondary change tracking for payment transaction updates
+
+      - name: claim_payment_created_by
+        description: >
+          Business user ID from secondary source (claim_payment)
+          
+          Source: stg_opendental__claimpayment._created_by
+          Note: May be NULL if claim_payment data is unavailable
+          Purpose: Secondary user accountability for payment transaction creation
 
     tests:
       # Data Volume Monitoring
