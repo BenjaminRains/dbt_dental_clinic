@@ -1,7 +1,26 @@
 {{ config(
     materialized='table',
-    
-    unique_key='patient_id'
+    unique_key='patient_id',
+    indexes=[
+        {'columns': ['patient_status']},
+        {'columns': ['patient_category']},
+        {'columns': ['total_ar_balance']},
+        {'columns': ['balance_over_90_days']},
+        {'columns': ['last_payment_date']},
+        {'columns': ['last_visit_date']},
+        {'columns': ['primary_insurance_id']},
+        {'columns': ['secondary_insurance_id']},
+        {'columns': ['active_claims_count']},
+        {'columns': ['open_procedures_count']},
+        {'columns': ['patient_status', 'total_ar_balance']},
+        {'columns': ['patient_category', 'total_ar_balance']},
+        {'columns': ['last_payment_date', 'total_ar_balance']},
+        {'columns': ['balance_over_90_days', 'patient_status']},
+        {'columns': ['active_claims_count', 'pending_claims_count']},
+        {'columns': ['_loaded_at']},
+        {'columns': ['_created_at']},
+        {'columns': ['_updated_at']}
+    ]
 ) }}
 
 /*
@@ -30,7 +49,12 @@ WITH PatientBalances AS (
         SUM(CASE WHEN responsible_party = 'INSURANCE' THEN current_balance ELSE 0 END) AS insurance_responsibility,
         MAX(last_payment_date) AS last_payment_date,
         COUNT(DISTINCT CASE WHEN current_balance > 0 THEN procedure_id END) AS open_procedures_count,
-        COUNT(DISTINCT CASE WHEN claim_id IS NOT NULL THEN claim_id END) AS active_claims_count
+        COUNT(DISTINCT CASE WHEN claim_id IS NOT NULL THEN claim_id END) AS active_claims_count,
+        -- Metadata fields (preserved from int_ar_balance)
+        MAX(_loaded_at) AS _loaded_at,
+        MAX(_created_at) AS _created_at,
+        MAX(_updated_at) AS _updated_at,
+        MAX(_created_by) AS _created_by
     FROM {{ ref('int_ar_balance') }}
     GROUP BY 1
 ),
@@ -40,7 +64,12 @@ ActivePatients AS (
     SELECT
         patient_id,
         patient_status,
-        total_balance
+        total_balance,
+        -- Metadata fields (preserved from int_patient_profile)
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _created_by
     FROM {{ ref('int_patient_profile') }}
     WHERE patient_status IN (0, 1, 2, 3)
 ),
@@ -277,14 +306,14 @@ BasePatientInfo AS (
         GREATEST(
             COALESCE(MAX(CASE 
                 WHEN ha.appointment_datetime <= CURRENT_TIMESTAMP 
-                AND ha.appointment_datetime::date <= '{{ var('max_valid_date', 'current_date') }}'::date
+                AND ha.appointment_datetime::date <= CURRENT_DATE
                 AND ha.appointment_status = 2  -- Completed appointments (status 2)
                 THEN ha.appointment_datetime::date
                 ELSE NULL 
             END), '1900-01-01'::date),
             COALESCE(MAX(CASE 
                 WHEN pl.procedure_date <= CURRENT_DATE 
-                AND pl.procedure_date <= '{{ var('max_valid_date', 'current_date') }}'::date
+                AND pl.procedure_date <= CURRENT_DATE
                 AND pl.procedure_status = 2  -- Completed procedures (status 2)
                 THEN pl.procedure_date 
                 ELSE NULL 
@@ -465,8 +494,15 @@ SELECT
     pi.deductible_remaining,
     pi.annual_max_met,
     pi.annual_max_remaining,
-    CURRENT_TIMESTAMP as model_created_at,
-    CURRENT_TIMESTAMP as model_updated_at
+    
+    -- Secondary source metadata (from int_ar_balance - for AR-specific lineage)
+    pb._loaded_at as ar_balance_loaded_at,
+    pb._created_at as ar_balance_created_at,
+    pb._updated_at as ar_balance_updated_at,
+    pb._created_by as ar_balance_created_by,
+    
+    -- Standardized metadata from primary source (int_patient_profile)
+    {{ standardize_intermediate_metadata(primary_source_alias='ap') }}
 FROM ActivePatients ap
 LEFT JOIN PatientBalances pb
     ON ap.patient_id = pb.patient_id
