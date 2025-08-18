@@ -108,7 +108,7 @@ class PerformanceOptimizations:
             # Create a config dict with the necessary attributes
             config_dict = {
                 'incremental_columns': incremental_columns,
-                'primary_incremental_column': getattr(config, 'primary_column', None),
+                'primary_incremental_column': getattr(config, 'primary_incremental_column', None),
                 'batch_size': getattr(config, 'batch_size', None),
                 'performance_category': getattr(config, 'performance_category', 'medium'),
                 'estimated_size_mb': getattr(config, 'estimated_size_mb', 0),
@@ -177,7 +177,7 @@ class PerformanceOptimizations:
             # Create a config dict with the necessary attributes
             config_dict = {
                 'incremental_columns': incremental_columns,
-                'primary_incremental_column': getattr(config, 'primary_column', None),
+                'primary_incremental_column': getattr(config, 'primary_incremental_column', None),
                 'time_gap_threshold_days': getattr(config, 'time_gap_threshold_days', 30),
                 'performance_category': getattr(config, 'performance_category', 'medium'),
                 'estimated_size_mb': getattr(config, 'estimated_size_mb', 0)
@@ -352,7 +352,7 @@ class PerformanceOptimizations:
                 # Create a config dict with the necessary attributes
                 config_dict = {
                     'incremental_columns': incremental_columns,
-                    'primary_incremental_column': getattr(config, 'primary_column', None)
+                    'primary_incremental_column': getattr(config, 'primary_incremental_column', None)
                 }
                 config = config_dict
             else:
@@ -1234,7 +1234,7 @@ class SimpleMySQLReplicator:
                 # Create a config dict with the necessary attributes
                 config_dict = {
                     'incremental_columns': incremental_columns,
-                    'primary_incremental_column': getattr(config, 'primary_column', None)
+                    'primary_incremental_column': getattr(config, 'primary_incremental_column', None)
                 }
                 config = config_dict
             else:
@@ -1303,7 +1303,7 @@ class SimpleMySQLReplicator:
             config = config.config
         elif hasattr(config, 'incremental_columns'):
             # This is already a config-like object, extract primary_column from attributes
-            primary_column = getattr(config, 'primary_column', None)
+            primary_column = getattr(config, 'primary_incremental_column', None)
             # Create a config dict with the necessary attributes
             config_dict = {
                 'primary_incremental_column': primary_column
@@ -1913,7 +1913,7 @@ class SimpleMySQLReplicator:
                 # Create a config dict with the necessary attributes
                 config_dict = {
                     'incremental_columns': incremental_columns,
-                    'primary_incremental_column': getattr(config, 'primary_column', None)
+                    'primary_incremental_column': getattr(config, 'primary_incremental_column', None)
                 }
                 config = config_dict
             else:
