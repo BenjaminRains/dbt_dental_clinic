@@ -33,19 +33,25 @@ PaymentInfo AS MATERIALIZED (
         p.payment_notes,
         p.patient_id,
         p.payment_amount,
-        p.is_split_flag,
-        p.is_recurring_cc_flag,
+        p.is_split,
+        p.is_recurring_cc,
         p.payment_status,
         p.process_status,
         p.merchant_fee,
-        p.created_by_user_id,
+        p._created_by as created_by_user_id,
         p.entry_date,
-        p.updated_at,
+        p._updated_at as updated_at,
         p.deposit_id,
         p.external_id,
-        p.is_cc_completed_flag,
+        p.is_cc_completed,
         p.recurring_charge_date,
-        p.receipt_text
+        p.receipt_text,
+        -- Metadata fields for standardize_intermediate_metadata macro
+        p._loaded_at,
+        p._transformed_at,
+        p._created_at,
+        p._updated_at,
+        p._created_by
     FROM {{ ref('stg_opendental__payment') }} p
     WHERE p.payment_date >= '2023-01-01'
 ),
@@ -86,14 +92,20 @@ BaseSplits AS (
         ps.procedure_date,
         
         -- Flags and types
-        ps.is_discount_flag,
+        ps.is_discount,
         ps.discount_type,
         ps.unearned_type,
         
-        -- Metadata
+        -- Metadata fields for standardize_intermediate_metadata macro
+        ps._loaded_at,
+        ps._created_at,
+        ps._updated_at,
+        ps._created_by,
+        
+        -- Legacy metadata fields (for compatibility)
         ps.entry_date,
-        ps.updated_at,
-        ps.created_by_user_id,
+        ps._updated_at as updated_at,
+        ps._created_by as created_by_user_id,
         
         -- Link to procedure data if available
         pc.procedure_code,
@@ -111,12 +123,12 @@ BaseSplits AS (
         -- Payment info
         p.payment_type_id,
         p.payment_notes,
-        p.is_split_flag,
-        p.is_recurring_cc_flag,
+        p.is_split,
+        p.is_recurring_cc,
         p.payment_status,
         p.process_status,
         p.merchant_fee,
-        p.is_cc_completed_flag,
+        p.is_cc_completed,
         p.recurring_charge_date,
         
         -- Split counts
@@ -235,16 +247,17 @@ SplitCategorization AS (
             WHEN procedure_discount > 0 THEN 'PROCEDURE'
             WHEN procedure_discount > 0 AND adjustment_amount < 0 THEN 'COMBINED'
             ELSE NULL
-        END as discount_source_type,
-        
-        -- Tracking fields
-        CURRENT_TIMESTAMP AS model_created_at,
-        CURRENT_TIMESTAMP AS model_updated_at
+        END as discount_source_type
         
     FROM BaseSplits
 )
 
-SELECT * FROM SplitCategorization
+SELECT 
+    *,
+    -- dbt intermediate model build timestamp (model-specific tracking)
+    current_timestamp as _transformed_at
+    
+FROM SplitCategorization
 WHERE 
     -- Exclude invalid high-split payments
     (NOT is_high_split_payment OR is_valid_split_count)
