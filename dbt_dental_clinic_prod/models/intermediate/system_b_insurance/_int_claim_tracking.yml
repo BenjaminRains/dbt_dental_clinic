@@ -13,13 +13,19 @@ models:
       - Maintains chronological history of claim progression
       
       Data Sources:
-      - stg_opendental__claimtracking: Base tracking information
+      - stg_opendental__claimtracking: Base tracking information (PRIMARY SOURCE)
       - int_claim_details: Validation against claim details
+      
+      Metadata Strategy:
+      - Primary source: claimtracking (stg_opendental__claimtracking) - contains core tracking details and business timestamps
+      - Preserves business timestamps from primary source for audit trail (_created_at only, no _updated_at or _created_by available)
+      - Maintains pipeline tracking with _loaded_at and _transformed_at for debugging
+      - Uses standardize_intermediate_metadata macro for consistency
     
     config:
       materialized: table
       schema: intermediate
-      unique_key: [claim_id, claim_tracking_id, tracking_type, entry_timestamp]
+      unique_key: [claim_tracking_id, claim_id, date_time_entry]
     
     columns:
       - name: claim_id
@@ -62,9 +68,9 @@ models:
 
       - name: _loaded_at
         description: >
-          ETL pipeline extraction timestamp - when the record was loaded from the source system
+          ETL extraction timestamp from primary source (claimtracking)
           
-          Source: ETL pipeline metadata (preserved from staging models)
+          Source: stg_opendental__claimtracking._loaded_at
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
         tests:
@@ -75,25 +81,11 @@ models:
               config:
                 description: "Extraction timestamps must be within reasonable data processing window"
       
-      - name: _created_by
-        description: >
-          User who created the record in the source system (OpenDental)
-          
-          Source: Preserved from staging models (stg_opendental__claimtracking)
-          Business Context: User identifier for audit trail and accountability
-          Usage: Security auditing and user activity tracking
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "_created_by IS NOT NULL OR _created_by = 0"
-              config:
-                severity: warn
-                description: "User identification should be available for audit purposes"
-      
       - name: _created_at
         description: >
-          Original creation timestamp from OpenDental source system
+          Business creation timestamp from primary source (claimtracking)
           
-          Source: Preserved from staging models (stg_opendental__claimtracking)
+          Source: stg_opendental__claimtracking._created_at
           Business Context: When the tracking entry was originally created in OpenDental
           Usage: Business timeline analysis and tracking lifecycle
         tests:
@@ -102,19 +94,6 @@ models:
               min_value: "'2020-01-01'"
               max_value: "'2026-12-31'"
 
-      - name: _updated_at
-        description: >
-          Last update timestamp from OpenDental source system
-          
-          Source: Preserved from staging models (stg_opendental__claimtracking)
-          Business Context: When the tracking entry was last updated in OpenDental
-          Purpose: Change tracking and incremental loading support
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "'2026-12-31'"
-      
       - name: _transformed_at
         description: >
           dbt intermediate model processing timestamp - when this model was last built
@@ -138,11 +117,6 @@ models:
           name: warn_future_tracking_entries
 
       - dbt_utils.expression_is_true:
-          expression: "created_at <= updated_at"
-          severity: warn
-          name: warn_invalid_timestamp_order
-
-      - dbt_utils.expression_is_true:
           expression: "not (tracking_type = 'denied' and tracking_note is null)"
           severity: warn
           name: warn_missing_denial_note
@@ -153,7 +127,7 @@ models:
           name: warn_missing_pending_note
 
       - dbt_expectations.expect_compound_columns_to_be_unique:
-          column_list: [claim_id, claim_tracking_id, tracking_type, entry_timestamp]
+          column_list: [claim_tracking_id, claim_id, entry_timestamp]
           quote_columns: true
           ignore_row_if: "any_value_is_missing"
           severity: warn 
