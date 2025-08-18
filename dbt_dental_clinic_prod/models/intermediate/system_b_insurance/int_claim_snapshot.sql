@@ -1,13 +1,13 @@
 {{ config(        materialized='table',
         
-        unique_key='claim_snapshot_id',
+        unique_key=['claim_snapshot_id', 'claim_procedure_id', 'entry_timestamp'],
         on_schema_change='fail',
         indexes=[
-            {'columns': ['claim_snapshot_id'], 'unique': true},
+            {'columns': ['claim_snapshot_id']},
             {'columns': ['claim_id']},
             {'columns': ['patient_id']},
             {'columns': ['entry_timestamp']},
-            {'columns': ['_updated_at']}
+            {'columns': ['_created_at']}
         ]) }}
 
 /*
@@ -35,6 +35,12 @@
     - Table materialization for complex joins and calculations
     - Indexed on claim_id, patient_id, and temporal fields
     - Row number partitioning for efficient deduplication
+    
+    Metadata Strategy:
+    - Primary source: claimsnapshot (stg_opendental__claimsnapshot) - contains core snapshot details
+    - Preserves business timestamps from primary source for audit trail
+    - Maintains pipeline tracking with _loaded_at and _transformed_at for debugging
+    - Uses standardize_intermediate_metadata macro for consistency
 */
 
 -- 1. Source CTEs (multiple sources)
@@ -243,59 +249,60 @@ snapshot_integration as (
 final as (
     select
         -- Primary identification
-        claim_snapshot_id,
-        claim_procedure_id,
+        si.claim_snapshot_id,
+        si.claim_procedure_id,
         
         -- Foreign keys
-        claim_id,
-        procedure_id,
-        patient_id,
-        plan_id,
+        si.claim_id,
+        si.procedure_id,
+        si.patient_id,
+        si.plan_id,
         
         -- Tracking information
-        claim_tracking_id,
-        tracking_type,
-        tracking_note,
+        si.claim_tracking_id,
+        si.tracking_type,
+        si.tracking_note,
         
         -- Procedure information
-        procedure_code,
-        claim_type,
-        claim_status,
+        si.procedure_code,
+        si.claim_type,
+        si.claim_status,
         
         -- Snapshot details
-        snapshot_claim_type,
-        estimated_write_off,
-        insurance_payment_estimate,
-        fee_amount,
-        entry_timestamp,
-        snapshot_trigger,
+        si.snapshot_claim_type,
+        si.estimated_write_off,
+        si.insurance_payment_estimate,
+        si.fee_amount,
+        si.entry_timestamp,
+        si.snapshot_trigger,
         
         -- Actual amounts
-        actual_payment_amount,
-        actual_write_off,
-        actual_allowed_amount,
-        claim_procedure_status,
-        claim_adjustment_reason_codes,
+        si.actual_payment_amount,
+        si.actual_write_off,
+        si.actual_allowed_amount,
+        si.claim_procedure_status,
+        si.claim_adjustment_reason_codes,
         
         -- Payment information
-        most_recent_payment,
-        most_recent_payment_date,
+        si.most_recent_payment,
+        si.most_recent_payment_date,
         
         -- Variance analysis
-        payment_variance,
-        write_off_variance,
+        si.payment_variance,
+        si.write_off_variance,
         
         -- Temporal analysis
-        days_to_payment,
+        si.days_to_payment,
         
-        -- Generate metadata for this intermediate model
-        current_timestamp as _loaded_at,
-        entry_timestamp as _created_at,
-        entry_timestamp as _updated_at,
-        0 as _created_by,
-        current_timestamp as _transformed_at
-    from snapshot_integration
-    where claim_snapshot_id is not null
+        -- Primary source metadata using macro (claimsnapshot - primary source for snapshot details)
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='cs',
+            source_metadata_fields=['_loaded_at', '_created_at']
+        ) }}
+    from snapshot_integration si
+    inner join source_claim_snapshots cs
+        on si.claim_snapshot_id = cs.claim_snapshot_id
+    where si.claim_snapshot_id is not null
 )
 
 select * from final
