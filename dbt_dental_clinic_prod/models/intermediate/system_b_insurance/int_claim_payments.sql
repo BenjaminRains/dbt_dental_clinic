@@ -1,13 +1,20 @@
-{{ config(        materialized='table',
-        
-        unique_key='claim_payment_detail_id',
-        on_schema_change='fail',
-        indexes=[
+{{ config(        
+    materialized='table',
+    unique_key='claim_payment_detail_id',
+    on_schema_change='fail',
+    indexes=[
             {'columns': ['claim_payment_detail_id'], 'unique': true},
             {'columns': ['patient_id']},
             {'columns': ['claim_id']},
             {'columns': ['_updated_at']}
-        ]) }}
+    ],
+    post_hook=[
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_check_date_idx ON {{ this }} (check_date)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_type_id_idx ON {{ this }} (payment_type_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_patient_claim_idx ON {{ this }} (patient_id, claim_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_partial_payments_idx ON {{ this }} (claim_payment_id, is_partial) WHERE is_partial = true"
+    ]
+) }}
 
 /*
     Intermediate model for claim_payments

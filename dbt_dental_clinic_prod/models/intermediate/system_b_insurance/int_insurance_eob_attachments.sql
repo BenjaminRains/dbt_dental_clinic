@@ -1,6 +1,14 @@
-{{ config(        materialized='table',
-        
-        unique_key='eob_attach_id') }}
+{{ config(        
+    materialized='table',
+    unique_key='eob_attach_id',
+    post_hook=[
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_claim_payment_id_idx ON {{ this }} (claim_payment_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_check_date_idx ON {{ this }} (check_date)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_type_id_idx ON {{ this }} (payment_type_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_is_partial_idx ON {{ this }} (is_partial) WHERE is_partial = true",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_claim_payment_check_date_idx ON {{ this }} (claim_payment_id, check_date)"
+    ]
+) }}
 
 /*
 This model integrates EOB (Explanation of Benefits) attachments with claim payment data.

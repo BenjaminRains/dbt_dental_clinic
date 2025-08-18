@@ -1,6 +1,14 @@
-{{ config(        materialized='table',
-        
-        unique_key='employer_id') }}
+{{ config(        
+    materialized='table',
+    unique_key='employer_id',
+    post_hook=[
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_employer_name_idx ON {{ this }} (employer_name)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_state_idx ON {{ this }} (state)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_plan_count_idx ON {{ this }} (plan_count)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_state_plan_count_idx ON {{ this }} (state, plan_count)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_employer_name_state_idx ON {{ this }} (employer_name, state)"
+    ]
+) }}
 
 /*
 This model integrates employer data with insurance plans. Employers are entities

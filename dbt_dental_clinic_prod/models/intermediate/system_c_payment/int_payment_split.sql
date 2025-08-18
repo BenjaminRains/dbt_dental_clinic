@@ -1,5 +1,13 @@
-{{ config(        materialized='incremental',
-        unique_key='paysplit_id',) }}
+{{ config(
+    materialized='incremental',
+    unique_key='paysplit_id',
+    post_hook=[
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_id_idx ON {{ this }} (payment_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_patient_id_idx ON {{ this }} (patient_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_date_idx ON {{ this }} (payment_date)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_patient_payment_date_idx ON {{ this }} (patient_id, payment_date)"
+    ]
+) }}
 
 /*
     Intermediate model for payment splits

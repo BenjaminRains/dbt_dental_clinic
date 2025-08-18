@@ -1,7 +1,15 @@
 {{ config(
     materialized='incremental',
     unique_key='payment_allocation_id',
-    
+    post_hook=[
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_id_idx ON {{ this }} (payment_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_patient_id_idx ON {{ this }} (patient_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_date_idx ON {{ this }} (payment_date)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_patient_payment_date_idx ON {{ this }} (patient_id, payment_date)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_provider_id_idx ON {{ this }} (provider_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_type_id_idx ON {{ this }} (payment_type_id)",
+        "CREATE INDEX IF NOT EXISTS {{ this.name }}_include_in_ar_idx ON {{ this }} (include_in_ar) WHERE include_in_ar = true"
+    ]
 ) }}
 
 /*
