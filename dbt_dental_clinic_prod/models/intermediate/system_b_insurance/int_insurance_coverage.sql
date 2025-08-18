@@ -1,13 +1,15 @@
-{{ config(        materialized='table',
-        
-        unique_key='insurance_plan_id',
-        on_schema_change='fail',
-        indexes=[
-            {'columns': ['insurance_plan_id'], 'unique': true},
-            {'columns': ['patient_id']},
-            {'columns': ['carrier_id']},
-            {'columns': ['_updated_at']}
-        ]) }}
+{{ config(
+    materialized='table',
+    schema='intermediate',
+    unique_key='insurance_plan_id',
+    on_schema_change='fail',
+    indexes=[
+        {'columns': ['insurance_plan_id'], 'unique': true},
+        {'columns': ['patient_id']},
+        {'columns': ['carrier_id']},
+        {'columns': ['_updated_at']}
+    ]
+) }}
 
 /*
     Intermediate model for insurance coverage
@@ -36,20 +38,73 @@
     - JSON aggregation for benefit details to reduce row count
 */
 
-
-
-with Source as (
-    select
-        *,
-        -- Include metadata fields for standardization
-        _loaded_at,
-        _created_at,
-        _updated_at,
-        _created_by
-    from {{ ref('stg_opendental__insplan') }}
+-- 1. Source data retrieval
+with source_insurance_plan as (
+    select * from {{ ref('stg_opendental__insplan') }}
 ),
 
-InsurancePlan as (
+source_subscriber as (
+    select * from {{ ref('stg_opendental__inssub') }}
+),
+
+source_patient_plan as (
+    select * from {{ ref('stg_opendental__patplan') }}
+),
+
+-- 2. Lookup/reference data
+carrier_lookup as (
+    select
+        carrier_id,
+        carrier_name
+    from {{ ref('stg_opendental__carrier') }}
+),
+
+employer_lookup as (
+    select
+        employer_id,
+        employer_name,
+        city,
+        state
+    from {{ ref('stg_opendental__employer') }}
+),
+
+verification_lookup as (
+    select
+        foreign_key_id as insurance_plan_id,
+        last_verified_date,
+        date_created,
+        date_updated
+    from {{ ref('stg_opendental__insverify') }}
+    where verify_type = 1  -- Only get insurance subscriber verifications
+),
+
+-- 3. Calculation/aggregation CTEs
+benefit_aggregation as (
+    select
+        insurance_plan_id,
+        json_agg(
+            json_build_object(
+                'benefit_id', benefit_id,
+                'coverage_category_id', coverage_category_id,
+                'procedure_code_id', procedure_code_id,
+                'code_group_id', code_group_id,
+                'benefit_type', benefit_type,
+                'coverage_percent', coverage_percent,
+                'monetary_amount', monetary_amount,
+                'time_period', time_period,
+                'quantity_qualifier', quantity_qualifier,
+                'quantity', quantity,
+                'coverage_level', coverage_level,
+                'treatment_area', treatment_area
+            )
+        ) as benefit_details
+    from {{ ref('stg_opendental__benefit') }}
+    where patient_plan_id = 0  -- Only get template benefits
+    group by insurance_plan_id
+),
+
+-- 4. Business logic CTEs
+insurance_plan_enhanced as (
     select
         -- Primary Key
         insurance_plan_id,
@@ -78,38 +133,22 @@ InsurancePlan as (
         _updated_at,
         _created_by
 
-    from Source
+    from source_insurance_plan
 ),
 
-Carrier as (
-    select
-        carrier_id,
-        carrier_name
-    from {{ ref('stg_opendental__carrier') }}
-),
-
-Employer as (
-    select
-        employer_id,
-        employer_name,
-        city,
-        state
-    from {{ ref('stg_opendental__employer') }}
-),
-
-Subscriber as (
+subscriber_enhanced as (
     select
         inssub_id as subscriber_id,
         subscriber_external_id,
-        -- Include metadata fields for standardization
+        -- Metadata fields for standardization
         _loaded_at,
         _created_at,
         _updated_at,
         _created_by
-    from {{ ref('stg_opendental__inssub') }}
+    from source_subscriber
 ),
 
-PatientPlan as (
+patient_plan_enhanced as (
     select
         patient_id,
         patplan_id,
@@ -117,46 +156,13 @@ PatientPlan as (
         ordinal,
         is_pending,
         relationship as patient_relationship,
-        created_at as patient_plan_created_at,
-        updated_at as patient_plan_updated_at
-    from {{ ref('stg_opendental__patplan') }}
+        date_created as patient_plan_created_at,
+        date_updated as patient_plan_updated_at
+    from source_patient_plan
 ),
 
-Verification as (
-    select
-        foreign_key_id as insurance_plan_id,
-        last_verified_date,
-        entry_timestamp,
-        last_modified_at
-    from {{ ref('stg_opendental__insverify') }}
-    where verify_type = 1  -- Only get insurance subscriber verifications
-),
-
-Benefits as (
-    select
-        insurance_plan_id,
-        json_agg(
-            json_build_object(
-                'benefit_id', benefit_id,
-                'coverage_category_id', coverage_category_id,
-                'procedure_code_id', procedure_code_id,
-                'code_group_id', code_group_id,
-                'benefit_type', benefit_type,
-                'coverage_percent', coverage_percent,
-                'monetary_amount', monetary_amount,
-                'time_period', time_period,
-                'quantity_qualifier', quantity_qualifier,
-                'quantity', quantity,
-                'coverage_level', coverage_level,
-                'treatment_area', treatment_area
-            )
-        ) as benefit_details
-    from {{ ref('stg_opendental__benefit') }}
-    where patient_plan_id = 0  -- Only get template benefits
-    group by insurance_plan_id
-),
-
-Final as (
+-- 5. Integration CTE (joins everything together)
+insurance_coverage_integrated as (
     select
         -- Primary Key
         pp.patplan_id as insurance_plan_id,
@@ -218,7 +224,7 @@ Final as (
         
         -- Status Flags
         case
-            when pp.is_pending = 1 then false
+            when pp.is_pending = true then false
             when v.last_verified_date is not null then true
             else false
         end as is_active,
@@ -235,36 +241,33 @@ Final as (
             else '2020-01-01'::timestamp
         end as effective_date,
         case
-            when pp.is_pending = 1 then pp.patient_plan_updated_at
+            when pp.is_pending = true then pp.patient_plan_updated_at
             else null
         end as termination_date,
 
-        -- Metadata fields from joined tables (for macro usage)
-        ip._loaded_at,
-        ip._created_at,
-        ip._updated_at,
-        ip._created_by,
+        -- Primary source metadata (insurance plan - primary source)
+        {{ standardize_intermediate_metadata(primary_source_alias='ip') }},
+        
+        -- Secondary source metadata (subscriber - may be NULL)
         s._loaded_at as subscriber_loaded_at,
         s._created_at as subscriber_created_at,
         s._updated_at as subscriber_updated_at,
-        s._created_by as subscriber_created_by,
+        s._created_by as subscriber_created_by
 
-        -- Standardized metadata using macro
-        {{ standardize_intermediate_metadata() }}
-
-    from PatientPlan pp
-    left join InsurancePlan ip
+    from patient_plan_enhanced pp
+    left join insurance_plan_enhanced ip
         on pp.patplan_id = ip.insurance_plan_id
-    left join Carrier c
+    left join carrier_lookup c
         on ip.carrier_id = c.carrier_id
-    left join Employer e
+    left join employer_lookup e
         on ip.employer_id = e.employer_id
-    left join Subscriber s
+    left join subscriber_enhanced s
         on pp.insurance_subscriber_id = s.subscriber_id
-    left join Verification v
+    left join verification_lookup v
         on pp.patplan_id = v.insurance_plan_id
-    left join Benefits b
+    left join benefit_aggregation b
         on pp.patplan_id = b.insurance_plan_id
 )
 
-select * from Final 
+-- 6. Final selection
+select * from insurance_coverage_integrated 

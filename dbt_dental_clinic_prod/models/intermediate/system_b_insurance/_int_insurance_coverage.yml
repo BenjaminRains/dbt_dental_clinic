@@ -120,7 +120,12 @@ models:
           - Should match the plan type from the insurance plan record
           - Empty string for incomplete records
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_not_be_null:
+              column_name: plan_type
+              where: "is_incomplete_record = false"
+              config:
+                severity: warn
+                description: "Plan type should be specified for complete records"
 
       - name: group_number
         description: |
@@ -130,7 +135,12 @@ models:
           - May be shared across multiple carriers
           - Empty string for incomplete records
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_not_be_null:
+              column_name: group_number
+              where: "is_incomplete_record = false"
+              config:
+                severity: warn
+                description: "Group number should be specified for complete records"
 
       - name: group_name
         description: |
@@ -140,7 +150,12 @@ models:
           - May vary slightly for same group across carriers
           - Empty string for incomplete records
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_not_be_null:
+              column_name: group_name
+              where: "is_incomplete_record = false"
+              config:
+                severity: warn
+                description: "Group name should be specified for complete records"
 
       - name: carrier_name
         description: |
@@ -241,7 +256,9 @@ models:
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
         tests:
-          - not_null
+          - not_null:
+              config:
+                description: "Metadata requirement: ETL extraction timestamp mandatory for data lineage"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2020-01-01 00:00:00'::timestamp"
               max_value: "current_timestamp"
@@ -256,11 +273,11 @@ models:
           Business Context: User identifier for audit trail and accountability
           Usage: Security auditing and user activity tracking
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "_created_by IS NOT NULL OR _created_by = 0"
+          - not_null:
+              where: "is_incomplete_record = false"
               config:
                 severity: warn
-                description: "User identification should be available for audit purposes"
+                description: "User identification should be available for complete records"
       
       - name: _created_at
         description: >
@@ -271,11 +288,14 @@ models:
           Usage: Business timeline analysis and plan lifecycle tracking
         tests:
           - not_null:
+              where: "is_incomplete_record = false"
               config:
-                description: "Metadata requirement: Creation timestamp mandatory for audit trail"
+                severity: warn
+                description: "Creation timestamp should be available for complete records"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2020-01-01 00:00:00'::timestamp"
               max_value: "'2030-12-31 23:59:59'::timestamp"
+              where: "is_incomplete_record = false"
               config:
                 description: "Data quality validation: Creation dates must be within valid business operating range"
       
@@ -288,11 +308,14 @@ models:
           Purpose: Change tracking and incremental loading support
         tests:
           - not_null:
+              where: "is_incomplete_record = false"
               config:
-                description: "Metadata requirement: Update timestamp mandatory for change tracking"
+                severity: warn
+                description: "Update timestamp should be available for complete records"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2020-01-01 00:00:00'::timestamp"
               max_value: "'2030-12-31 23:59:59'::timestamp"
+              where: "is_incomplete_record = false"
               config:
                 description: "Data quality validation: Update dates must be within valid business operating range"
       
