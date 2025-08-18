@@ -1,48 +1,50 @@
 version: 2
 
 models:
-  - name: int_ar_aging_snapshot
-    description: >
-      AR aging snapshot model that tracks changes in accounts receivable balances
-      over time and calculates collection efficiency metrics. This model provides
-      historical context for AR analysis and helps monitor collection performance.
+     - name: int_ar_aging_snapshot
+       description: >
+        AR aging snapshot model that tracks changes in accounts receivable balances
+        over time and calculates collection efficiency metrics. This model provides
+        historical context for AR analysis and helps monitor collection performance.
+        Materialized as a table with comprehensive indexes for optimal query performance.
       
-      Key features:
-      - Creates daily snapshots of AR aging buckets
-      - Tracks changes in balances over time
-      - Calculates collection efficiency metrics
-      - Monitors insurance vs patient responsibility
-      - Tracks open procedures and active claims
-      - Preserves source tracking information
+       Key features:
+       - Creates daily snapshots of AR aging buckets
+       - Tracks changes in balances over time
+       - Calculates collection efficiency metrics
+       - Monitors insurance vs patient responsibility
+       - Tracks open procedures and active claims
+       - Preserves source tracking information
       
-      Data Sources:
-      - int_ar_balance: Current AR balances and aging information
-      - int_ar_shared_calculations: Payment activity for collection efficiency
-      - self: Previous day's snapshot for change tracking
+       Data Sources:
+       - int_ar_balance: Current AR balances and aging information
+       - int_ar_shared_calculations: Payment activity for collection efficiency
+       - self: Previous day's snapshot for change tracking
       
-      Business rules:
-      - Snapshots are created daily
-      - Balances are grouped by aging buckets (0-30, 31-60, 61-90, 90+ days)
-      - Collection efficiency is calculated over 30, 60, and 90 day periods
-      - Changes are calculated against previous day's snapshot
-      - Insurance and patient responsibility are tracked separately
-      - Source tracking information is preserved from int_ar_balance
-      - Balances older than 18 months are considered unenforceable and should be written off
-      - Historical data beyond 18 months is retained for analysis but marked as warnings
+       Business rules:
+       - Snapshots are created daily
+       - Balances are grouped by aging buckets (0-30, 31-60, 61-90, 90+ days)
+       - Collection efficiency is calculated over 30, 60, and 90 day periods
+       - Changes are calculated against previous day's snapshot
+       - Insurance and patient responsibility are tracked separately
+       - Source tracking information is preserved from int_ar_balance
+       - Balances older than 18 months are considered unenforceable and should be written off
+       - Historical data beyond 18 months is retained for analysis but marked as warnings
+       - Indexes are created on all key columns for efficient querying
       
-    config:
-      materialized: table
-      schema: intermediate
+       config:
+        materialized: table
+        schema: intermediate
     
-    columns:
-      - name: snapshot_date
-        description: >
-          Date of the AR snapshot. Note: Balances older than 18 months are considered
-          unenforceable and should be written off per business policy. Historical data
-          beyond 18 months is retained for analysis but marked as warnings.
-        tests:
-          - not_null
-          - dbt_utils.expression_is_true:
+       columns:
+        - name: snapshot_date
+          description: >
+           Date of the AR snapshot. Note: Balances older than 18 months are considered
+           unenforceable and should be written off per business policy. Historical data
+           beyond 18 months is retained for analysis but marked as warnings.
+          tests:
+           - not_null
+           - dbt_utils.expression_is_true:
               expression: ">= CURRENT_DATE - INTERVAL '18 months'"
               column_name: snapshot_date
               config:
@@ -52,9 +54,9 @@ models:
                   unenforceable and should be written off. Please review these accounts
                   for potential write-off actions.
 
-      - name: patient_id
-        description: Unique identifier for the patient
-        tests:
+     - name: patient_id
+       description: Unique identifier for the patient
+       tests:
           - not_null
           - relationships:
               to: ref('int_patient_profile')
@@ -62,198 +64,216 @@ models:
               config:
                 severity: error
 
-      - name: total_ar_balance
-        description: Total outstanding AR balance
-        tests:
+     - name: total_ar_balance
+       description: Total outstanding AR balance
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: balance_0_30_days
-        description: AR balance aged 0-30 days
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000000
-
-      - name: balance_31_60_days
-        description: AR balance aged 31-60 days
-        tests:
+     - name: balance_0_30_days
+       description: AR balance aged 0-30 days
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000000
 
-      - name: balance_61_90_days
-        description: AR balance aged 61-90 days
-        tests:
+     - name: balance_31_60_days
+       description: AR balance aged 31-60 days
+       tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000000
+
+     - name: balance_61_90_days
+       description: AR balance aged 61-90 days
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: balance_over_90_days
-        description: AR balance aged over 90 days
-        tests:
+     - name: balance_over_90_days
+       description: AR balance aged over 90 days
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: estimated_insurance_ar
-        description: Estimated amount pending from insurance
-        tests:
+     - name: estimated_insurance_ar
+       description: Estimated amount pending from insurance
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: patient_responsibility
-        description: Amount owed by patient
-        tests:
+     - name: patient_responsibility
+       description: Amount owed by patient
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: insurance_responsibility
-        description: Amount owed by insurance
-        tests:
+     - name: insurance_responsibility
+       description: Amount owed by insurance
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: open_procedures_count
-        description: Number of procedures with outstanding balances
-        tests:
+     - name: open_procedures_count
+       description: Number of procedures with outstanding balances
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
 
-      - name: active_claims_count
-        description: Number of active insurance claims
-        tests:
+     - name: active_claims_count
+       description: Number of active insurance claims
+       tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
 
-      - name: previous_total_ar_balance
-        description: Total AR balance from previous snapshot
-        tests:
+     - name: previous_total_ar_balance
+       description: Total AR balance from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: previous_balance_0_30_days
-        description: 0-30 day balance from previous snapshot
-        tests:
+     - name: previous_balance_0_30_days
+       description: 0-30 day balance from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: previous_balance_31_60_days
-        description: 31-60 day balance from previous snapshot
-        tests:
+     - name: previous_balance_31_60_days
+       description: 31-60 day balance from previous snapshot
+       tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -50000
+              max_value: 50000
+                 
+     - name: previous_balance_61_90_days
+       description: 61-90 day balance from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: previous_balance_61_90_days
-        description: 61-90 day balance from previous snapshot
-        tests:
+     - name: previous_balance_over_90_days
+       description: Over 90 day balance from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: previous_balance_over_90_days
-        description: Over 90 day balance from previous snapshot
-        tests:
+     - name: previous_estimated_insurance_ar
+       description: Estimated insurance AR from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: previous_estimated_insurance_ar
-        description: Estimated insurance AR from previous snapshot
-        tests:
+     - name: previous_patient_responsibility
+       description: Patient responsibility from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: previous_patient_responsibility
-        description: Patient responsibility from previous snapshot
-        tests:
+     - name: previous_insurance_responsibility
+       description: Insurance responsibility from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: previous_insurance_responsibility
-        description: Insurance responsibility from previous snapshot
-        tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -50000
-              max_value: 50000
-
-      - name: previous_open_procedures_count
-        description: Open procedures count from previous snapshot
-        tests:
+     - name: previous_open_procedures_count
+       description: Open procedures count from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
 
-      - name: previous_active_claims_count
-        description: Active claims count from previous snapshot
-        tests:
+     - name: previous_active_claims_count
+       description: Active claims count from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
 
-      - name: ar_balance_change
-        description: Change in total AR balance from previous snapshot
-        tests:
+     - name: ar_balance_change
+       description: Change in total AR balance from previous snapshot
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -50000
               max_value: 50000
 
-      - name: ar_balance_change_percentage
-        description: Percentage change in total AR balance
-        tests:
+     - name: ar_balance_change_percentage
+       description: Percentage change in total AR balance
+       tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: -4
               max_value: 4
 
-      - name: collection_efficiency_30_days
-        description: Collection efficiency over 30 days (payments / total balance)
-        tests:
+     - name: collection_efficiency_30_days
+       description: Collection efficiency over 30 days (payments / total balance)
+       tests:
           - valid_collection_efficiency
 
-      - name: collection_efficiency_60_days
-        description: Collection efficiency over 60 days (payments / total balance)
-        tests:
+     - name: collection_efficiency_60_days
+       description: Collection efficiency over 60 days (payments / total balance)
+       tests:
           - valid_collection_efficiency
 
-      - name: collection_efficiency_90_days
-        description: Collection efficiency over 90 days (payments / total balance)
-        tests:
-          - valid_collection_efficiency
+     - name: collection_efficiency_90_days
+       description: Collection efficiency over 90 days (payments / total balance)
+       tests:
+           - valid_collection_efficiency
 
-      - name: model_created_at
-        description: >
-          Timestamp when the record was created in the model.
-        tests:
-          - not_null
+     - name: _loaded_at
+       description: >
+           ETL extraction timestamp from primary source (int_ar_balance)
+       tests:
+           - not_null
 
-      - name: model_updated_at
-        description: >
-          Timestamp when the record was last updated in the model.
-        tests:
-          - not_null
+     - name: _created_at
+       description: >
+           Business creation timestamp from primary source (int_ar_balance)
+       tests:
+           - not_null
 
-    tests:
+     - name: _updated_at
+       description: >
+           Business update timestamp from primary source (int_ar_balance)
+       tests:
+           - not_null
+
+     - name: _created_by
+       description: >
+           Business user ID from primary source (int_ar_balance)
+       tests:
+           - not_null
+
+     - name: _transformed_at
+       description: >
+           Timestamp when the record was created in the model.
+       tests:
+           - not_null
+
+tests:
       # Balance validation
       - dbt_utils.expression_is_true:
           expression: >
@@ -294,12 +314,12 @@ models:
 
       # Source tracking validation
       - dbt_utils.expression_is_true:
-          expression: "source_created_at <= model_created_at"
+          expression: "_created_at <= _transformed_at"
           config:
             severity: error
             description: "Source creation time must be before model creation time"
 
-    meta:
+meta:
       business_owners: ["dental_finance_team", "insurance_team"]
       technical_owners: ["data_engineering_team"]
       refresh_frequency: "daily"
