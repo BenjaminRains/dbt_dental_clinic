@@ -15,11 +15,17 @@ models:
       - Data Deduplication: Ensures unique claim_snapshot_id values through systematic deduplication logic
       
       Data Sources:
-      - stg_opendental__claimsnapshot: Base snapshot information with trigger events and estimated amounts
+      - stg_opendental__claimsnapshot: Base snapshot information with trigger events and estimated amounts (PRIMARY SOURCE)
       - stg_opendental__claimproc: Actual claim procedure details with payment and adjustment data
       - int_claim_tracking: Claim tracking events for audit trail and workflow monitoring
       - int_claim_details: Comprehensive claim information including procedure codes and status
       - int_claim_payments: Payment history for most recent payment calculations
+      
+      Metadata Strategy:
+      - Primary source: claimsnapshot (stg_opendental__claimsnapshot) - contains core snapshot details and business timestamps
+      - Preserves business timestamps from primary source for audit trail (_created_at only, no _updated_at or _created_by available)
+      - Maintains pipeline tracking with _loaded_at and _transformed_at for debugging
+      - Uses standardize_intermediate_metadata macro for consistency
       
       Insurance Logic Features:
       - Snapshot Lifecycle Tracking: Captures INITIAL, RESUBMIT, PAYMENT, ADJUSTMENT, DENIAL, APPEAL events
@@ -356,40 +362,28 @@ models:
       
       - name: _loaded_at
         description: >
-          ETL pipeline extraction timestamp - when the record was loaded from the source system
+          ETL extraction timestamp from primary source (claimsnapshot)
           
-          Source: ETL pipeline metadata (preserved from staging models)
+          Source: stg_opendental__claimsnapshot._loaded_at
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
         tests:
-          - not_null
+          - not_null:
+              config:
+                description: "Metadata requirement: Loading timestamp mandatory for pipeline monitoring"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01 00:00:00'::timestamp"
-              max_value: "current_timestamp"
+              min_value: "'2023-01-01'::timestamp"
+              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
               config:
-                description: "Extraction timestamps must be within reasonable data processing window"
-      
-      - name: _created_by
-        description: >
-          User who created the record in the source system (OpenDental)
-          
-          Source: Preserved from staging models (stg_opendental__claimsnapshot)
-          Business Context: User identifier for audit trail and accountability
-          Usage: Security auditing and user activity tracking
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "_created_by IS NOT NULL OR _created_by = 0"
-              config:
-                severity: warn
-                description: "User identification should be available for audit purposes"
+                description: "Data quality validation: Loading dates must be within valid business operating range"
       
       - name: _created_at
         description: >
-          Original creation timestamp from OpenDental source system
+          Business creation timestamp from primary source (claimsnapshot)
           
-          Source: Preserved from staging models (stg_opendental__claimsnapshot)
+          Source: stg_opendental__claimsnapshot._created_at
           Business Context: When the snapshot record was originally created in OpenDental
-          Usage: Business timeline analysis and record lifecycle tracking
+          Usage: Business timeline analysis and audit trail
         tests:
           - not_null:
               config:
@@ -400,30 +394,13 @@ models:
               config:
                 description: "Data quality validation: Creation dates must be within valid business operating range"
       
-      - name: _updated_at
-        description: >
-          Last update timestamp from OpenDental source system
-          
-          Source: Preserved from staging models (stg_opendental__claimsnapshot)
-          Business Context: When the snapshot record was last updated in OpenDental
-          Purpose: Change tracking and incremental loading support
-        tests:
-          - not_null:
-              config:
-                description: "Metadata requirement: Update timestamp mandatory for change tracking"
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
-              config:
-                description: "Data quality validation: Update dates must be within valid business operating range"
-      
       - name: _transformed_at
         description: >
-          dbt model processing timestamp - when this intermediate model was last run
+          dbt intermediate model processing timestamp - when this model was last built
           
           Source: current_timestamp at dbt model execution
-          Purpose: Model execution tracking and debugging
-          Usage: Understanding data processing timeline
+          Purpose: Intermediate model execution tracking and debugging
+          Usage: Understanding data processing timeline and model refresh monitoring
         tests:
           - not_null:
               config:
@@ -432,7 +409,7 @@ models:
     config:
       materialized: table
       schema: intermediate
-      unique_key: claim_snapshot_id
+      unique_key: [claim_snapshot_id, claim_procedure_id, entry_timestamp]
     
     tests:
       - dbt_expectations.expression_is_true:
