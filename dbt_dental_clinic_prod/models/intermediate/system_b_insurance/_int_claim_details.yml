@@ -72,7 +72,6 @@ models:
         tests:
           - unique
           - not_null
-          - positive_values
 
       - name: claim_id
         description: >

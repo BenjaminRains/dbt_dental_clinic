@@ -234,7 +234,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
+              max_value: "current_timestamp"
       
       - name: actual_payment_amount
         description: Actual insurance payment amount from claim procedure
@@ -319,9 +319,9 @@ models:
               config:
                 description: "Business requirement: Trigger identification mandatory for workflow tracking"
           - accepted_values:
-              values: ['INITIAL', 'RESUBMIT', 'PAYMENT', 'ADJUSTMENT', 'DENIAL', 'APPEAL']
+              values: ['0', '1']
               config:
-                description: "Business validation: Only recognized claim lifecycle events are acceptable triggers"
+                description: "Source system validation: SnapshotTrigger is tinyint(4) with values 0 or 1"
       
       - name: days_to_payment
         description: >
@@ -373,7 +373,7 @@ models:
                 description: "Metadata requirement: Loading timestamp mandatory for pipeline monitoring"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
+              max_value: "current_timestamp"
               config:
                 description: "Data quality validation: Loading dates must be within valid business operating range"
       
@@ -390,7 +390,7 @@ models:
                 description: "Metadata requirement: Creation timestamp mandatory for audit trail"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}T23:59:59'::timestamp"
+              max_value: "current_timestamp"
               config:
                 description: "Data quality validation: Creation dates must be within valid business operating range"
       
