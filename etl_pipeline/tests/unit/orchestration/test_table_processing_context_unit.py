@@ -281,7 +281,7 @@ class TestSimpleMySQLReplicatorWithTableProcessingContext:
                                 incremental_columns = config.incremental_columns
                                 config_dict = {
                                     'incremental_columns': incremental_columns,
-                                    'primary_incremental_column': getattr(config, 'primary_column', None)
+                                    'primary_incremental_column': getattr(config, 'primary_incremental_column', None)
                                 }
                                 config = config_dict
                             
