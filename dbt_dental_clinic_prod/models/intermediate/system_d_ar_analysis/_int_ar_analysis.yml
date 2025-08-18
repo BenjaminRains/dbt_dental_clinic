@@ -176,7 +176,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "CURRENT_DATE"
 
       - name: open_procedures_count
         description: >
@@ -241,14 +241,14 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "CURRENT_DATE"
 
       - name: last_patient_payment_date
         description: Date of most recent patient payment
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "CURRENT_DATE"
 
       - name: writeoff_count
         description: Number of write-off adjustments
@@ -291,7 +291,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "CURRENT_DATE"
               config:
                 severity: error
                 description: "Last adjustment date must be between 2023-01-01 and current date"
@@ -337,14 +337,14 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "CURRENT_DATE"
 
       - name: last_denied_claim_date
         description: Date of most recent denied claim
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              max_value: "CURRENT_DATE"
 
       - name: patient_status
         description: Current status of the patient (0-3 for active patients)
@@ -382,7 +382,7 @@ models:
         tests:
           - date_range_test:
               min_date: "'1900-01-01'::date"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_date: "CURRENT_DATE"
               column_name: "birth_date::date"
               config:
                 severity: error
@@ -459,7 +459,7 @@ models:
         tests:
           - date_range_test:
               min_date: "'2020-01-01'::date"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_date: "CURRENT_DATE"
               column_name: "coverage_start_date::date"
               config:
                 severity: error
@@ -470,7 +470,7 @@ models:
         tests:
           - date_range_test:
               min_date: "'2020-01-01'::date"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_date: "CURRENT_DATE"
               column_name: "coverage_end_date::date"
               config:
                 severity: error
@@ -553,7 +553,7 @@ models:
         tests:
           - date_range_test:
               min_date: "'1900-01-01'::date"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_date: "CURRENT_DATE"
               column_name: "last_visit_date::date"
               config:
                 severity: error
@@ -564,7 +564,7 @@ models:
         tests:
           - date_range_test:
               min_date: "'1900-01-01'::date"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_date: "CURRENT_DATE"
               column_name: "first_visit_date::date"
               config:
                 severity: warn
@@ -576,13 +576,38 @@ models:
                 severity: error
                 description: "First visit dates should not be in the future unless they are test records"
 
-      - name: model_created_at
-        description: Timestamp when the record was created
+      - name: _loaded_at
+        description: >
+          Timestamp when the record was loaded from the source system.
+          This field is preserved from the primary source for business lineage.
         tests:
           - not_null
 
-      - name: model_updated_at
-        description: Timestamp when the record was last updated
+      - name: _created_at
+        description: >
+          Timestamp when the record was created in the source system.
+          This field is preserved from the primary source for business lineage.
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: >
+          Timestamp when the record was last updated in the source system.
+          This field is preserved from the primary source for business lineage.
+        tests:
+          - not_null
+
+      - name: _created_by
+        description: >
+          User or system that created the record in the source system.
+          This field is preserved from the primary source for business lineage.
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: >
+          Timestamp when the record was last transformed by this dbt model.
+          This field is added by the standardize_intermediate_metadata macro.
         tests:
           - not_null
 
@@ -647,7 +672,7 @@ models:
         tests:
           - date_range_test:
               min_date: "'2023-01-01'::date"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              max_date: "CURRENT_DATE"
               column_name: "last_status_change_date::date"
               config:
                 severity: error
@@ -689,7 +714,7 @@ models:
         tests:
           - date_range_test:
               min_date: "'2023-01-01'::timestamp"
-              max_date: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              max_date: "CURRENT_TIMESTAMP"
               config:
                 severity: error
                 description: "Last claim verification must be between 2023-01-01 and current date"
