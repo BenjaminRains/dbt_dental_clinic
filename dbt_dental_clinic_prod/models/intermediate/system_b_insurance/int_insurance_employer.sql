@@ -10,6 +10,12 @@ insurance plan analysis and reporting.
 Key relationships:
 - Employers are linked to insurance plans through the employer_id field
 - Insurance plans may have one employer but an employer can sponsor multiple plans
+
+Primary Source: stg_opendental__employer (preserves employer metadata)
+Secondary Source: stg_opendental__insplan (for plan aggregation only)
+
+Note: Employer table does not have business timestamps (_created_at, _updated_at, _created_by)
+      Only pipeline metadata (_loaded_at, _transformed_at) is available
 */
 
 with Employer as (
@@ -24,7 +30,11 @@ with Employer as (
         city,
         state,
         zip,
-        phone
+        phone,
+        
+        -- Metadata (only pipeline metadata available from employer table)
+        _loaded_at,
+        _transformed_at
     from {{ ref('stg_opendental__employer') }}
 ),
 
@@ -80,7 +90,13 @@ Final as (
         
         -- Insurance Plan Information
         coalesce(epc.plan_count, 0) as plan_count,
-        coalesce(ep.insurance_plans, '[]') as insurance_plans
+        coalesce(ep.insurance_plans, '[]') as insurance_plans,
+        
+        -- Primary source metadata (employer - only pipeline metadata available)
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='e',
+            source_metadata_fields=['_loaded_at']
+        ) }}
         
     from Employer e
     left join EmployerPlanCount epc
