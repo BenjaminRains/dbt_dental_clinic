@@ -1,7 +1,33 @@
 {{ config(
-    materialized='incremental',
+    materialized='table',
     unique_key='ar_balance_id',
-    
+    indexes=[
+        {'columns': ['patient_id']},
+        {'columns': ['procedure_id']},
+        {'columns': ['provider_id']},
+        {'columns': ['procedure_date']},
+        {'columns': ['current_balance']},
+        {'columns': ['aging_bucket']},
+        {'columns': ['days_outstanding']},
+        {'columns': ['claim_id']},
+        {'columns': ['claim_status']},
+        {'columns': ['responsible_party']},
+        {'columns': ['include_in_ar']},
+        {'columns': ['last_payment_date']},
+        {'columns': ['patient_id', 'current_balance']},
+        {'columns': ['patient_id', 'aging_bucket']},
+        {'columns': ['patient_id', 'claim_id']},
+        {'columns': ['procedure_date', 'current_balance']},
+        {'columns': ['aging_bucket', 'current_balance']},
+        {'columns': ['claim_status', 'current_balance']},
+        {'columns': ['responsible_party', 'current_balance']},
+        {'columns': ['days_outstanding', 'current_balance']},
+        {'columns': ['patient_id', 'procedure_date']},
+        {'columns': ['patient_id', 'include_in_ar']},
+        {'columns': ['_loaded_at']},
+        {'columns': ['_created_at']},
+        {'columns': ['_updated_at']}
+    ]
 ) }}
 
 /*
@@ -34,7 +60,12 @@ WITH ProcedureInfo AS MATERIALIZED (
         ci.received_date AS claim_date,
         ci.received_date,
         cr.carrier_name,
-        ci.insurance_payment_estimate AS insurance_estimate
+        ci.insurance_payment_estimate AS insurance_estimate,
+        -- Metadata fields (preserved from primary source)
+        pc._loaded_at,
+        pc._created_at,
+        pc._updated_at,
+        pc._created_by
     FROM {{ ref('int_procedure_complete') }} pc
     LEFT JOIN {{ ref('stg_opendental__claimproc') }} cp
         ON pc.procedure_id = cp.procedure_id
@@ -167,9 +198,11 @@ ARBalances AS (
             ELSE TRUE
         END AS include_in_ar,
         
-        -- Metadata fields
-        CURRENT_TIMESTAMP AS model_created_at,
-        CURRENT_TIMESTAMP AS model_updated_at
+        -- Metadata fields (preserved from primary source)
+        pi._loaded_at,
+        pi._created_at,
+        pi._updated_at,
+        pi._created_by
         
     FROM ProcedureInfo pi
     LEFT JOIN BalanceCalculations bc
@@ -208,8 +241,9 @@ SELECT
     last_payment_date,
     responsible_party,
     include_in_ar,
-    model_created_at,
-    model_updated_at
-FROM ARBalances
+    
+    -- Standardized metadata from primary source (int_procedure_complete)
+    {{ standardize_intermediate_metadata(primary_source_alias='ar') }}
+FROM ARBalances ar
 WHERE include_in_ar = TRUE
 OR current_balance <> 0
