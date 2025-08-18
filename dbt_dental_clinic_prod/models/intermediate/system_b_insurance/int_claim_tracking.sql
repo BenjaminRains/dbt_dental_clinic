@@ -1,11 +1,11 @@
 {{ config(        materialized='table',
         
-        unique_key='claim_tracking_id',
+        unique_key=['claim_tracking_id', 'claim_id', 'date_time_entry'],
         on_schema_change='fail',
         indexes=[
-            {'columns': ['claim_tracking_id'], 'unique': true},
+            {'columns': ['claim_tracking_id']},
             {'columns': ['claim_id']},
-            {'columns': ['_updated_at']}
+            {'columns': ['_created_at']}
         ]) }}
 
 /*
@@ -24,41 +24,56 @@
     
     Data Quality Notes:
     - All tracking entries must reference valid claims in int_claim_details
-    - Entry timestamps are used for both created_at and updated_at metadata
+    - Deduplication logic handles potential duplicate tracking records in source data
+    - Uses composite unique key (claim_tracking_id, claim_id, date_time_entry) for data integrity
     - Tracking notes may contain free-text information from users
     
     Performance Considerations:
     - Table materialization for stable tracking history
     - Indexed on claim_id for efficient claim-based queries
     - Indexed on _updated_at for metadata-based filtering
+    
+    Metadata Strategy:
+    - Primary source: claimtracking (stg_opendental__claimtracking) - contains core tracking details
+    - Preserves business timestamps from primary source for audit trail (_created_at only, no _updated_at available)
+    - Maintains pipeline tracking with _loaded_at and _transformed_at for debugging
 */
 
 with source_claim_tracking as (
     select * from {{ ref('stg_opendental__claimtracking') }}
 ),
 
+deduplicated_claim_tracking as (
+    select *,
+        row_number() over(
+            partition by claim_tracking_id, claim_id, date_time_entry
+            order by _created_at desc
+        ) as rn
+    from source_claim_tracking
+),
+
 claim_tracking_enhanced as (
     select
         -- Primary identification
-        claim_tracking_id,
-        claim_id,
+        source_claim_tracking.claim_tracking_id,
+        source_claim_tracking.claim_id,
 
         -- Tracking information
-        tracking_type,
-        entry_timestamp,
-        note as tracking_note,
+        source_claim_tracking.tracking_type,
+        source_claim_tracking.date_time_entry as entry_timestamp,
+        source_claim_tracking.note as tracking_note,
 
-        -- Generate metadata for this intermediate model
-        current_timestamp as _loaded_at,
-        entry_timestamp as _created_at,
-        entry_timestamp as _updated_at,
-        0 as _created_by,
-        current_timestamp as _transformed_at
+        -- Primary source metadata using macro (only available fields)
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='source_claim_tracking',
+            source_metadata_fields=['_loaded_at', '_created_at']
+        ) }}
 
-    from source_claim_tracking
+    from deduplicated_claim_tracking source_claim_tracking
     -- Ensure the claim exists in int_claim_details
     inner join {{ ref('int_claim_details') }} cd
         on source_claim_tracking.claim_id = cd.claim_id
+    where source_claim_tracking.rn = 1
 )
 
 select * from claim_tracking_enhanced 
