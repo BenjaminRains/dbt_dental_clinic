@@ -113,8 +113,53 @@ models:
       - name: resulted_in_payment
         description: Flag indicating if statement resulted in a payment
       - name: payment_result
-        description: Outcome of statement (full_payment, partial_payment, no_payment)
-      - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+        description: >
+          Outcome of statement (full_payment, partial_payment, no_payment)
+          
+          Business Logic:
+          - no_payment: When payment_amount_30days = 0 (regardless of balance)
+          - partial_payment: When payment_amount_30days > 0 but < 90% of positive balance, or for negative/zero balances with payments
+          - full_payment: When payment_amount_30days >= 90% of positive balance
+          
+          Edge Cases:
+          - Zero balance statements with no payments: Always 'no_payment'
+          - Negative balance statements: Always 'partial_payment' if payments exist, 'no_payment' if no payments
+          - Zero balance statements with payments: Always 'partial_payment'
+          
+          Note: Payment amount inconsistencies (7-day > 14-day > 30-day) may occur due to payment processing timing and are considered legitimate edge cases.
+      
+      # Metadata columns
+      - name: _loaded_at
+        description: >
+          ETL extraction timestamp from primary source (statement)
+          Source: stg_opendental__statement._loaded_at
+          Purpose: Data lineage tracking and pipeline monitoring
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: >
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
+        tests:
+          - not_null
+
+      - name: _created_at
+        description: >
+          Business creation timestamp from primary source (statement)
+          Source: stg_opendental__statement._created_at
+          Purpose: Business timeline analysis
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: >
+          Business update timestamp from primary source (statement)
+          Source: stg_opendental__statement._updated_at
+          Purpose: Change tracking
+        tests:
+          - not_null
+
+      # Note: _created_by is not available in the statement staging model
+      # The source table does not track user creation information

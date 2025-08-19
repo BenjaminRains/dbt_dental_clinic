@@ -52,11 +52,17 @@ WITH StatementBase AS (
         s.is_invoice,
         s.statement_type,
         s.sms_send_status,
-        s.date_timestamp,
+        s.date_tstamp,
         s.note,
         s.email_subject,
         s.email_body,
-        s.super_family_id
+        s.super_family_id,
+        
+        -- Preserve primary source metadata
+        s._loaded_at,
+        s._transformed_at,
+        s._created_at,
+        s._updated_at
     FROM {{ ref('stg_opendental__statement') }} s
     WHERE s.date_sent >= CURRENT_DATE - INTERVAL '18 months'
     {% if is_incremental() %}
@@ -112,24 +118,24 @@ PaymentActivity AS (
         s.statement_id,
         s.patient_id,
         s.date_sent,
-        -- Payment within 7 days
-        SUM(CASE 
-            WHEN p.payment_date BETWEEN s.date_sent AND s.date_sent + INTERVAL '7 days'
+        -- Payment within 7 days (exclusive of statement date)
+        COALESCE(SUM(CASE 
+            WHEN p.payment_date > s.date_sent AND p.payment_date <= s.date_sent + INTERVAL '7 days'
             THEN p.payment_amount
             ELSE 0
-        END) AS payment_amount_7days,
-        -- Payment within 14 days
-        SUM(CASE 
-            WHEN p.payment_date BETWEEN s.date_sent AND s.date_sent + INTERVAL '14 days'
+        END), 0) AS payment_amount_7days,
+        -- Payment within 14 days (exclusive of statement date)
+        COALESCE(SUM(CASE 
+            WHEN p.payment_date > s.date_sent AND p.payment_date <= s.date_sent + INTERVAL '14 days'
             THEN p.payment_amount
             ELSE 0
-        END) AS payment_amount_14days,
-        -- Payment within 30 days
-        SUM(CASE 
-            WHEN p.payment_date BETWEEN s.date_sent AND s.date_sent + INTERVAL '30 days'
+        END), 0) AS payment_amount_14days,
+        -- Payment within 30 days (exclusive of statement date)
+        COALESCE(SUM(CASE 
+            WHEN p.payment_date > s.date_sent AND p.payment_date <= s.date_sent + INTERVAL '30 days'
             THEN p.payment_amount
             ELSE 0
-        END) AS payment_amount_30days,
+        END), 0) AS payment_amount_30days,
         -- Count of payments
         COUNT(DISTINCT CASE 
             WHEN p.payment_date > s.date_sent AND p.payment_date <= s.date_sent + INTERVAL '30 days'
@@ -138,7 +144,8 @@ PaymentActivity AS (
     FROM StatementBase s
     LEFT JOIN {{ ref('stg_opendental__payment') }} p
         ON s.patient_id = p.patient_id
-        AND p.payment_date >= s.date_sent
+        AND p.payment_date > s.date_sent
+        AND p.payment_date <= s.date_sent + INTERVAL '30 days'
     GROUP BY s.statement_id, s.patient_id, s.date_sent
 ),
 
@@ -158,9 +165,17 @@ CollectionFlag AS (
             ELSE FALSE
         END AS resulted_in_payment,
         CASE
-            WHEN pa.payment_amount_30days >= s.balance_total * 0.9 THEN 'full_payment'
-            WHEN pa.payment_amount_30days > 0 THEN 'partial_payment'
-            ELSE 'no_payment'
+            -- First, handle the case where there are no payments (most important)
+            WHEN pa.payment_amount_30days = 0 THEN 'no_payment'
+            -- Then handle different balance scenarios when there are payments
+            WHEN s.balance_total < 0 THEN 'partial_payment'  -- Negative balance with payment
+            WHEN s.balance_total > 0 THEN
+                CASE
+                    WHEN pa.payment_amount_30days >= s.balance_total * 0.9 THEN 'full_payment'
+                    ELSE 'partial_payment'
+                END
+            WHEN s.balance_total = 0 THEN 'partial_payment'  -- Zero balance with payment
+            ELSE 'no_payment'  -- Fallback
         END AS payment_result
     FROM StatementBase s
     LEFT JOIN PatientInfo p
@@ -230,9 +245,11 @@ SELECT
     cf.resulted_in_payment,
     cf.payment_result,
     
-    -- Metadata
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    -- Standardized metadata using the macro
+    {{ standardize_intermediate_metadata(
+        primary_source_alias='sb',
+        source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+    ) }}
 FROM StatementBase sb
 LEFT JOIN PatientInfo pi
     ON sb.patient_id = pi.patient_id
