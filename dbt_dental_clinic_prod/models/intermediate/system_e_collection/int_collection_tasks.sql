@@ -218,17 +218,26 @@ WITH CollectionTasks AS (
         CASE WHEN t.description ~ '(f/u|follow up|follow-up)' THEN true ELSE false END AS has_follow_up,
         CASE WHEN t.description ~ 'paid|received|promised|will pay' THEN true ELSE false END AS has_outcome,
         
-        -- Metadata
-        CURRENT_TIMESTAMP AS model_created_at,
-        CURRENT_TIMESTAMP AS model_updated_at
+        -- Standardized metadata from primary source (stg_opendental__task)
+        t._loaded_at,
+        t._created_at,
+        t._updated_at,
+        NULL as _created_by,  -- Not available in source
+        current_timestamp as _transformed_at
     FROM {{ ref('stg_opendental__task') }} t
-    -- Changed to LEFT JOIN so we don't filter out tasks without campaign association
-    LEFT JOIN {{ ref('int_collection_campaigns') }} cc 
-        ON (cc.campaign_status = 'active' 
-            AND (t.description LIKE '%' || cc.campaign_name || '%' 
-                OR t.description LIKE '%collection%'))
     LEFT JOIN {{ ref('int_ar_analysis') }} ar
         ON t.key_id = ar.patient_id
+    -- Join to campaigns based on patient AR criteria (after ar table is available)
+    LEFT JOIN {{ ref('int_collection_campaigns') }} cc 
+        ON (
+            -- Direct campaign assignment based on patient AR criteria
+            (ar.total_ar_balance >= CAST(cc.target_ar_balance_min AS NUMERIC) OR cc.target_ar_balance_min IS NULL)
+            AND (cc.target_ar_balance_max IS NULL OR ar.total_ar_balance <= CAST(cc.target_ar_balance_max AS NUMERIC))
+            AND (cc.target_aging_min IS NULL OR ar.balance_over_90_days >= cc.target_aging_min)
+            AND (cc.target_aging_max IS NULL OR ar.balance_over_90_days <= CAST(cc.target_aging_max AS INTEGER))
+            AND cc.campaign_status = 'active'
+            AND (t.task_date IS NULL OR t.task_date BETWEEN cc.start_date AND cc.end_date)
+        )
     WHERE 
         -- Enhanced collection task filtering with expanded keywords
         (
@@ -263,11 +272,7 @@ WITH CollectionTasks AS (
             )
         )
         
-    {% if is_incremental() %}
-        -- If this is an incremental run, only process new or changed tasks
-        AND (t.entry_timestamp > (SELECT MAX(model_created_at) FROM {{ this }})
-            OR t.finished_timestamp > (SELECT MAX(model_updated_at) FROM {{ this }}))
-    {% endif %}
+    -- Incremental logic removed for testing campaign assignment
 )
 
-SELECT * FROM CollectionTasks
+SELECT DISTINCT * FROM CollectionTasks

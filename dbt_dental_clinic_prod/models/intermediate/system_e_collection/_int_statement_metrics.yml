@@ -16,6 +16,8 @@ model:
       - Provides snapshot-based historical performance tracking
       - Integrates with collection campaigns and delivery methods
       - Calculates early payment response ratios
+      - Preserves business timestamps and data lineage from primary source
+      - Maintains pipeline monitoring capabilities with _loaded_at and _transformed_at
       
       Data Sources:
       - int_billing_statements: Base statement data and payment tracking
@@ -98,7 +100,31 @@ model:
             column_name: full_payment_rate
       - name: day7_response_ratio
         description: Ratio of 7-day payments to 30-day payments
-      - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+      - name: _loaded_at
+        description: >
+          ETL extraction timestamp from primary source (int_billing_statements)
+          Source: Aggregated from stg_opendental__statement._loaded_at
+          Purpose: Data lineage tracking and pipeline monitoring
+        tests:
+          - not_null
+      - name: _transformed_at
+        description: >
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
+        tests:
+          - not_null
+      - name: _created_at
+        description: >
+          Business creation timestamp from primary source (earliest statement creation)
+          Source: Aggregated from stg_opendental__statement._created_at
+          Purpose: Business timeline analysis and audit trail
+        tests:
+          - not_null
+      - name: _updated_at
+        description: >
+          Business update timestamp from primary source (latest statement update)
+          Source: Aggregated from stg_opendental__statement._updated_at
+          Purpose: Change tracking and incremental loading support
+        tests:
+          - not_null

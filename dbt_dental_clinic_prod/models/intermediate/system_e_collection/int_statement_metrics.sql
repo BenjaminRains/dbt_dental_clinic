@@ -55,7 +55,12 @@ StatementMetrics AS (
         SUM(payment_amount_30days) AS payment_amount_30days,
         COUNT(DISTINCT CASE WHEN resulted_in_payment THEN statement_id END) AS statements_with_payment,
         COUNT(DISTINCT CASE WHEN payment_result = 'full_payment' THEN statement_id END) AS statements_with_full_payment,
-        COUNT(DISTINCT CASE WHEN payment_result = 'partial_payment' THEN statement_id END) AS statements_with_partial_payment
+        COUNT(DISTINCT CASE WHEN payment_result = 'partial_payment' THEN statement_id END) AS statements_with_partial_payment,
+        -- Preserve primary source metadata for aggregation
+        MIN(_loaded_at) AS earliest_loaded_at,
+        MAX(_transformed_at) AS latest_transformed_at,
+        MIN(_created_at) AS earliest_created_at,
+        MAX(_updated_at) AS latest_updated_at
     FROM {{ ref('int_billing_statements') }}
     WHERE date_sent >= CURRENT_DATE - INTERVAL '90 days'
     
@@ -76,7 +81,12 @@ StatementMetrics AS (
         SUM(payment_amount_30days) AS payment_amount_30days,
         COUNT(DISTINCT CASE WHEN resulted_in_payment THEN statement_id END) AS statements_with_payment,
         COUNT(DISTINCT CASE WHEN payment_result = 'full_payment' THEN statement_id END) AS statements_with_full_payment,
-        COUNT(DISTINCT CASE WHEN payment_result = 'partial_payment' THEN statement_id END) AS statements_with_partial_payment
+        COUNT(DISTINCT CASE WHEN payment_result = 'partial_payment' THEN statement_id END) AS statements_with_partial_payment,
+        -- Preserve primary source metadata for aggregation
+        MIN(_loaded_at) AS earliest_loaded_at,
+        MAX(_transformed_at) AS latest_transformed_at,
+        MIN(_created_at) AS earliest_created_at,
+        MAX(_updated_at) AS latest_updated_at
     FROM {{ ref('int_billing_statements') }}
     WHERE date_sent >= CURRENT_DATE - INTERVAL '90 days'
     GROUP BY delivery_method
@@ -98,7 +108,12 @@ StatementMetrics AS (
         SUM(payment_amount_30days) AS payment_amount_30days,
         COUNT(DISTINCT CASE WHEN resulted_in_payment THEN statement_id END) AS statements_with_payment,
         COUNT(DISTINCT CASE WHEN payment_result = 'full_payment' THEN statement_id END) AS statements_with_full_payment,
-        COUNT(DISTINCT CASE WHEN payment_result = 'partial_payment' THEN statement_id END) AS statements_with_partial_payment
+        COUNT(DISTINCT CASE WHEN payment_result = 'partial_payment' THEN statement_id END) AS statements_with_partial_payment,
+        -- Preserve primary source metadata for aggregation
+        MIN(_loaded_at) AS earliest_loaded_at,
+        MAX(_transformed_at) AS latest_transformed_at,
+        MIN(_created_at) AS earliest_created_at,
+        MAX(_updated_at) AS latest_updated_at
     FROM {{ ref('int_billing_statements') }}
     WHERE 
         date_sent >= CURRENT_DATE - INTERVAL '90 days'
@@ -123,8 +138,16 @@ DerivedMetrics AS (
         statements_with_payment,
         statements_with_full_payment,
         statements_with_partial_payment,
+        earliest_loaded_at,
+        latest_transformed_at,
+        earliest_created_at,
+        latest_updated_at,
         
         -- Calculated metrics
+        -- Note: Using LEAST() to cap rates at 1.0 to handle edge cases where:
+        -- - Payment amounts exceed statement balances (due to payment timing or multiple payments)
+        -- - Statement counts exceed expected ratios (due to payment tracking across statements)
+        -- - Early payment ratios exceed 100% (due to payment timing windows)
         CASE 
             WHEN total_statements > 0 THEN ROUND((collection_statements::numeric / total_statements::numeric), 4) 
             ELSE 0 
@@ -136,17 +159,20 @@ DerivedMetrics AS (
         END AS statement_payment_rate,
         
         CASE 
-            WHEN collection_statements > 0 THEN ROUND((statements_with_payment::numeric / collection_statements::numeric), 4) 
+            WHEN collection_statements > 0 THEN 
+                ROUND(LEAST((statements_with_payment::numeric / collection_statements::numeric), 1.0), 4) 
             ELSE 0 
         END AS collection_payment_rate,
         
         CASE 
-            WHEN total_balance > 0 THEN ROUND((payment_amount_30days::numeric / total_balance::numeric), 4) 
+            WHEN total_balance > 0 THEN 
+                ROUND(LEAST((payment_amount_30days::numeric / total_balance::numeric), 1.0), 4)
             ELSE 0 
         END AS balance_collection_rate_30days,
         
         CASE 
-            WHEN collection_balance > 0 THEN ROUND((payment_amount_30days::numeric / collection_balance::numeric), 4) 
+            WHEN collection_balance > 0 THEN 
+                ROUND(LEAST((payment_amount_30days::numeric / collection_balance::numeric), 1.0), 4)
             ELSE 0 
         END AS collection_balance_rate_30days,
         
@@ -158,7 +184,7 @@ DerivedMetrics AS (
         
         CASE 
             WHEN payment_amount_7days > 0 AND payment_amount_30days > 0
-            THEN ROUND((payment_amount_7days::numeric / payment_amount_30days::numeric), 4)
+            THEN ROUND(LEAST((payment_amount_7days::numeric / payment_amount_30days::numeric), 1.0), 4)
             ELSE 0 
         END AS day7_response_ratio
     FROM StatementMetrics
@@ -198,8 +224,13 @@ SELECT
     collection_balance_rate_30days,
     full_payment_rate,
     day7_response_ratio,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    
+    -- Standardized metadata using the macro
+    -- Note: Since this is an aggregation model, we use the earliest/latest metadata from source
+    earliest_loaded_at as _loaded_at,
+    earliest_created_at as _created_at,
+    latest_updated_at as _updated_at,
+    current_timestamp as _transformed_at
 FROM DerivedMetrics
 
 {% if is_incremental() %}

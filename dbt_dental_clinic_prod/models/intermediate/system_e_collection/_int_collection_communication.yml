@@ -18,11 +18,16 @@ model:
       - Provides communication history for patient accounts
       
       Data Sources:
-      - stg_opendental__commlog: Base communication log data
+      - stg_opendental__commlog: Base communication log data (primary source for metadata)
       - stg_opendental__patient: Patient information
       - stg_opendental__payment: Payment tracking
       - int_collection_campaigns: Collection campaign details
       - int_collection_tasks: Collection task information
+      
+      Metadata Strategy:
+      - Preserves business timestamps from stg_opendental__commlog as primary source
+      - Uses standardized metadata fields (_loaded_at, _transformed_at, _created_at, _updated_at, _created_by)
+      - Maintains data lineage for pipeline debugging and monitoring
       
       Business rules:
       - Communications are linked to campaigns and tasks when applicable
@@ -82,7 +87,48 @@ model:
         description: ID of the follow-up task (if any)
       - name: notes
         description: Additional notes about the communication
-      - name: model_created_at
-        description: Timestamp when this record was last created in the dbt model
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+      - name: _loaded_at
+        description: >
+          ETL extraction timestamp from primary source (stg_opendental__commlog)
+          Source: stg_opendental__commlog._loaded_at
+          Purpose: Data lineage tracking and pipeline monitoring
+        tests:
+          - not_null
+      - name: _transformed_at
+        description: >
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
+        tests:
+          - not_null
+      - name: _created_at
+        description: >
+          Business creation timestamp from primary source (stg_opendental__commlog)
+          Source: stg_opendental__commlog._created_at
+          Purpose: Business timeline analysis and audit trail
+        tests:
+          - not_null
+      - name: _updated_at
+        description: >
+          Business update timestamp from primary source (stg_opendental__commlog)
+          Source: stg_opendental__commlog._updated_at
+          Note: This field is NULL for this model as the source table does not track updates
+          Purpose: Change tracking and incremental loading support (when available)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "_updated_at IS NULL"
+              config:
+                severity: warn
+                description: "This model does not track updates - field is intentionally NULL"
+      - name: _created_by
+        description: >
+          Business user ID from primary source (stg_opendental__commlog)
+          Source: stg_opendental__commlog._created_by
+          Note: This field is NULL for this model as the source table does not track user creation
+          Purpose: User accountability and audit trail (when available)
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "_created_by IS NULL"
+              config:
+                severity: warn
+                description: "This model does not track user creation - field is intentionally NULL"

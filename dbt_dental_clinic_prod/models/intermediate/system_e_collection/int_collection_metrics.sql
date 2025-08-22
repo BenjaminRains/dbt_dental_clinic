@@ -285,9 +285,13 @@ FinalMetrics AS (
         mb.tasks_pending,
         mb.communications_sent,
         mb.communications_received,
-        CURRENT_TIMESTAMP AS model_created_at,
-        CURRENT_TIMESTAMP AS model_updated_at
+        
+        -- Standardized metadata from primary source (int_collection_campaigns)
+        {{ standardize_intermediate_metadata(primary_source_alias='cc') }}
     FROM MetricsBase mb
+    LEFT JOIN {{ ref('int_collection_campaigns') }} cc
+        ON mb.campaign_id = cc.campaign_id
+        AND mb.metric_level = 'campaign'
 )
 
 SELECT
@@ -321,8 +325,11 @@ SELECT
     tasks_pending,
     communications_sent,
     communications_received,
-    model_created_at,
-    model_updated_at
+    _loaded_at,
+    _transformed_at,
+    _created_at,
+    _updated_at,
+    _created_by
 FROM FinalMetrics
 
 {% if is_incremental() %}

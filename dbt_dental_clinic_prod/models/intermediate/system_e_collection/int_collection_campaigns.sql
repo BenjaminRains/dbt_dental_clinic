@@ -158,11 +158,23 @@ SELECT
         ELSE 0.00::NUMERIC
     END AS collection_rate,
     
-    -- Metadata fields
-    CURRENT_TIMESTAMP AS created_at,
-    CURRENT_TIMESTAMP AS updated_at,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    -- Standardized metadata from primary source (int_ar_analysis)
+    ar._loaded_at,
+    ar._created_at,
+    ar._updated_at,
+    ar._created_by,
+    current_timestamp as _transformed_at
 FROM CampaignDefinitions cd
 LEFT JOIN CampaignMetrics cm
     ON cd.campaign_id = cm.campaign_id
+LEFT JOIN (
+    -- Get representative metadata from int_ar_analysis for each campaign
+    SELECT DISTINCT
+        campaign_id,
+        FIRST_VALUE(ar._loaded_at) OVER (PARTITION BY campaign_id ORDER BY ar._loaded_at DESC) as _loaded_at,
+        FIRST_VALUE(ar._created_at) OVER (PARTITION BY campaign_id ORDER BY ar._created_at DESC) as _created_at,
+        FIRST_VALUE(ar._updated_at) OVER (PARTITION BY campaign_id ORDER BY ar._updated_at DESC) as _updated_at,
+        FIRST_VALUE(ar._created_by) OVER (PARTITION BY campaign_id ORDER BY ar._created_at DESC) as _created_by
+    FROM CampaignAccounts ca
+    JOIN {{ ref('int_ar_analysis') }} ar ON ca.patient_id = ar.patient_id
+) ar ON cd.campaign_id = ar.campaign_id

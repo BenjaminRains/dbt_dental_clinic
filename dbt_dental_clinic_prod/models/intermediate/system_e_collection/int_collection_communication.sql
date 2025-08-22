@@ -45,7 +45,7 @@ WITH CollectionCommunications AS (
             ELSE 'other'
         END AS communication_type,
         CASE 
-            WHEN cl.is_sent = 1 THEN 'outbound'
+            WHEN cl.is_sent = true THEN 'outbound'
             ELSE 'inbound'
         END AS direction,
         CASE
@@ -105,14 +105,28 @@ WITH CollectionCommunications AS (
         NULL::integer AS follow_up_task_id, -- Would be linked to follow-up task
         
         cl.note AS notes,
-        CURRENT_TIMESTAMP AS model_created_at,
-        CURRENT_TIMESTAMP AS model_updated_at
+        
+        -- Standardized metadata using the macro
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='cl',
+            source_metadata_fields=['_loaded_at', '_created_at']
+        ) }}
     FROM {{ ref('stg_opendental__commlog') }} cl
     LEFT JOIN {{ ref('int_collection_tasks') }} ct
         ON cl.patient_id = ct.patient_id
         AND cl.communication_datetime::date BETWEEN ct.due_date AND COALESCE(ct.completion_date, CURRENT_DATE)
+    LEFT JOIN {{ ref('int_ar_analysis') }} ar
+        ON cl.patient_id = ar.patient_id
     LEFT JOIN {{ ref('int_collection_campaigns') }} cc
-        ON ct.campaign_id = cc.campaign_id
+        ON (
+            -- Direct campaign assignment based on patient AR criteria
+            (ar.total_ar_balance >= CAST(cc.target_ar_balance_min AS NUMERIC) OR cc.target_ar_balance_min IS NULL)
+            AND (cc.target_ar_balance_max IS NULL OR ar.total_ar_balance <= CAST(cc.target_ar_balance_max AS NUMERIC))
+            AND (cc.target_aging_min IS NULL OR ar.balance_over_90_days >= cc.target_aging_min)
+            AND (cc.target_aging_max IS NULL OR ar.balance_over_90_days <= CAST(cc.target_aging_max AS INTEGER))
+            AND cc.campaign_status = 'active'
+            AND (cl.communication_datetime::date BETWEEN cc.start_date AND cc.end_date)
+        )
     WHERE 
         -- Filter for collection-related communications with expanded keywords
         (cl.note LIKE '%collect%'
@@ -130,7 +144,7 @@ WITH CollectionCommunications AS (
         
     {% if is_incremental() %}
         -- If this is an incremental run, only process new communications
-        AND cl.communication_datetime > (SELECT MAX(model_created_at) FROM {{ this }})
+        AND cl.communication_datetime > (SELECT MAX(_transformed_at) FROM {{ this }})
     {% endif %}
 )
 
