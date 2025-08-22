@@ -228,16 +228,30 @@ WITH CollectionTasks AS (
     LEFT JOIN {{ ref('int_ar_analysis') }} ar
         ON t.key_id = ar.patient_id
     -- Join to campaigns based on patient AR criteria (after ar table is available)
-    LEFT JOIN {{ ref('int_collection_campaigns') }} cc 
-        ON (
-            -- Direct campaign assignment based on patient AR criteria
-            (ar.total_ar_balance >= CAST(cc.target_ar_balance_min AS NUMERIC) OR cc.target_ar_balance_min IS NULL)
-            AND (cc.target_ar_balance_max IS NULL OR ar.total_ar_balance <= CAST(cc.target_ar_balance_max AS NUMERIC))
-            AND (cc.target_aging_min IS NULL OR ar.balance_over_90_days >= cc.target_aging_min)
-            AND (cc.target_aging_max IS NULL OR ar.balance_over_90_days <= CAST(cc.target_aging_max AS INTEGER))
-            AND cc.campaign_status = 'active'
-            AND (t.task_date IS NULL OR t.task_date BETWEEN cc.start_date AND cc.end_date)
-        )
+    LEFT JOIN (
+        SELECT DISTINCT ON (t.task_id) 
+            t.task_id,
+            cc.campaign_id,
+            cc.campaign_name,
+            cc.campaign_status,
+            cc.start_date,
+            cc.end_date
+        FROM {{ ref('stg_opendental__task') }} t
+        LEFT JOIN {{ ref('int_ar_analysis') }} ar
+            ON t.key_id = ar.patient_id
+        LEFT JOIN {{ ref('int_collection_campaigns') }} cc 
+            ON (
+                -- Direct campaign assignment based on patient AR criteria
+                (ar.total_ar_balance >= CAST(cc.target_ar_balance_min AS NUMERIC) OR cc.target_ar_balance_min IS NULL)
+                AND (cc.target_ar_balance_max IS NULL OR ar.total_ar_balance <= CAST(cc.target_ar_balance_max AS NUMERIC))
+                AND (cc.target_aging_min IS NULL OR ar.balance_over_90_days >= cc.target_aging_min)
+                AND (cc.target_aging_max IS NULL OR ar.balance_over_90_days <= CAST(cc.target_aging_max AS INTEGER))
+                AND cc.campaign_status = 'active'
+                AND (t.task_date IS NULL OR t.task_date BETWEEN cc.start_date AND cc.end_date)
+            )
+        WHERE cc.campaign_id IS NOT NULL
+        ORDER BY t.task_id, cc.campaign_id  -- Choose the first (lowest) campaign_id
+    ) cc ON t.task_id = cc.task_id
     WHERE 
         -- Enhanced collection task filtering with expanded keywords
         (
