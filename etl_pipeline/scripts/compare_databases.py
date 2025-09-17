@@ -8,6 +8,13 @@ This script connects to all three databases and compares their tables:
 - opendental_analytics (target PostgreSQL)
 
 It creates pandas DataFrames for analysis and comparison.
+
+NEW FEATURES:
+- Percentage difference analysis between source and analytics databases
+- Configurable threshold (default: 3%) for identifying significant differences
+- Detailed logging of tables with differences above threshold
+- Summary statistics including top differences and distribution analysis
+- Command line option to customize threshold: --threshold <percentage>
 """
 
 import sys
@@ -47,6 +54,162 @@ log_file_path = setup_run_logging(
 )
 logger = get_logger(__name__)
 logger.info(f"Starting database comparison analysis - Log file: {log_file_path}")
+
+
+def calculate_percentage_difference(source_count, analytics_count, threshold=3.0):
+    """
+    Calculate percentage difference between source and analytics row counts.
+    
+    Args:
+        source_count: Row count from source database
+        analytics_count: Row count from analytics database
+        threshold: Percentage threshold for significant differences (default: 3.0)
+        
+    Returns:
+        Tuple of (percentage_difference, is_significant)
+    """
+    if source_count is None or analytics_count is None:
+        return None, False
+    
+    if source_count == 0:
+        if analytics_count == 0:
+            return 0.0, False
+        else:
+            return float('inf'), True
+    
+    percentage_diff = abs(analytics_count - source_count) / source_count * 100
+    is_significant = percentage_diff > threshold
+    
+    return round(percentage_diff, 2), is_significant
+
+
+def log_percentage_differences(comparison_df, threshold=3.0):
+    """
+    Log tables with percentage differences above the threshold.
+    
+    Args:
+        comparison_df: DataFrame with comparison results
+        threshold: Percentage threshold for significant differences (default: 3.0)
+    """
+    logger.info(f"Analyzing percentage differences with {threshold}% threshold...")
+    
+    # Filter for tables that exist in both source and analytics
+    valid_comparisons = comparison_df[
+        (comparison_df['source_exists'] == True) & 
+        (comparison_df['analytics_exists'] == True) &
+        (comparison_df['source_count'].notna()) & 
+        (comparison_df['analytics_count'].notna())
+    ].copy()
+    
+    if valid_comparisons.empty:
+        logger.info("No valid comparisons found for percentage difference analysis")
+        return None, None
+    
+    # Calculate percentage differences
+    percentage_data = []
+    significant_differences = []
+    
+    for _, row in valid_comparisons.iterrows():
+        source_count = row['source_count']
+        analytics_count = row['analytics_count']
+        
+        percentage_diff, is_significant = calculate_percentage_difference(source_count, analytics_count)
+        
+        if percentage_diff is not None:
+            percentage_data.append({
+                'table_name': row['table_name'],
+                'source_count': source_count,
+                'analytics_count': analytics_count,
+                'percentage_difference': percentage_diff,
+                'is_significant': is_significant,
+                'status': row['status']
+            })
+            
+            if is_significant:
+                significant_differences.append({
+                    'table_name': row['table_name'],
+                    'source_count': source_count,
+                    'analytics_count': analytics_count,
+                    'percentage_difference': percentage_diff,
+                    'status': row['status']
+                })
+    
+    # Log summary statistics
+    total_tables = len(percentage_data)
+    significant_count = len(significant_differences)
+    
+    logger.info(f"Percentage difference analysis complete:")
+    logger.info(f"  Total tables analyzed: {total_tables}")
+    logger.info(f"  Tables with >{threshold}% difference: {significant_count}")
+    logger.info(f"  Tables within {threshold}% threshold: {total_tables - significant_count}")
+    
+    # Log significant differences
+    if significant_differences:
+        logger.warning(f"Tables with >{threshold}% difference from source:")
+        for diff in sorted(significant_differences, key=lambda x: x['percentage_difference'], reverse=True):
+            logger.warning(f"  {diff['table_name']}: {diff['percentage_difference']}% "
+                         f"(Source: {diff['source_count']:,}, Analytics: {diff['analytics_count']:,}) "
+                         f"Status: {diff['status']}")
+    else:
+        logger.info(f"All tables are within {threshold}% threshold of source database")
+    
+    # Log detailed percentage differences for all tables
+    logger.info("Detailed percentage differences for all tables:")
+    for diff in sorted(percentage_data, key=lambda x: x['percentage_difference'], reverse=True):
+        logger.info(f"  {diff['table_name']}: {diff['percentage_difference']}% "
+                   f"(Source: {diff['source_count']:,}, Analytics: {diff['analytics_count']:,}) "
+                   f"Status: {diff['status']}")
+    
+    return percentage_data, significant_differences
+
+
+def print_percentage_difference_summary(percentage_data, significant_differences, threshold=3.0):
+    """
+    Print a summary of percentage differences for console output.
+    
+    Args:
+        percentage_data: List of percentage difference data for all tables
+        significant_differences: List of tables with significant differences
+        threshold: Percentage threshold used
+    """
+    if not percentage_data:
+        print(f"\n📊 No percentage difference data available")
+        return
+    
+    total_tables = len(percentage_data)
+    significant_count = len(significant_differences)
+    
+    print(f"\n📊 Percentage Difference Summary (Source vs Analytics):")
+    print(f"  Total tables analyzed: {total_tables}")
+    print(f"  Tables with >{threshold}% difference: {significant_count}")
+    print(f"  Tables within {threshold}% threshold: {total_tables - significant_count}")
+    
+    if significant_differences:
+        print(f"\n⚠️  Tables with >{threshold}% difference from source:")
+        for diff in sorted(significant_differences, key=lambda x: x['percentage_difference'], reverse=True):
+            print(f"  {diff['table_name']}: {diff['percentage_difference']}% "
+                 f"(Source: {diff['source_count']:,}, Analytics: {diff['analytics_count']:,})")
+        
+        # Show top 5 largest differences
+        print(f"\n🔝 Top 5 Largest Differences:")
+        top_5 = sorted(significant_differences, key=lambda x: x['percentage_difference'], reverse=True)[:5]
+        for i, diff in enumerate(top_5, 1):
+            print(f"  {i}. {diff['table_name']}: {diff['percentage_difference']}% "
+                 f"(Source: {diff['source_count']:,}, Analytics: {diff['analytics_count']:,})")
+    else:
+        print(f"\n✅ All tables are within {threshold}% threshold of source database")
+    
+    # Show distribution of differences
+    if percentage_data:
+        differences = [diff['percentage_difference'] for diff in percentage_data if diff['percentage_difference'] is not None]
+        if differences:
+            avg_diff = sum(differences) / len(differences)
+            max_diff = max(differences)
+            min_diff = min(differences)
+            print(f"\n📈 Difference Statistics:")
+            print(f"  Average difference: {avg_diff:.2f}%")
+            print(f"  Maximum difference: {max_diff:.2f}%")
+            print(f"  Minimum difference: {min_diff:.2f}%")
 
 
 def get_mysql_tables(engine, database_name):
@@ -675,6 +838,19 @@ def compare_table_counts(source_engine, replication_engine, analytics_engine, ta
         print(summary_msg)
         logger.info(summary_msg)
         
+        # Calculate and display percentage differences
+        if source_count is not None and analytics_count is not None:
+            percentage_diff, is_significant = calculate_percentage_difference(source_count, analytics_count, threshold=3.0)
+            if percentage_diff is not None:
+                if is_significant:
+                    diff_msg = f"⚠️  Source vs Analytics: {percentage_diff}% difference (>3% threshold)"
+                    print(diff_msg)
+                    logger.warning(diff_msg)
+                else:
+                    diff_msg = f"✅ Source vs Analytics: {percentage_diff}% difference (within 3% threshold)"
+                    print(diff_msg)
+                    logger.info(diff_msg)
+        
         if source_count == replication_count == analytics_count:
             success_msg = "✅ All databases have the same row count"
             print(success_msg)
@@ -1162,7 +1338,7 @@ def get_tracking_details_for_table(source_engine, replication_engine, analytics_
     return details
 
 
-def compare_all_tables(source_engine, replication_engine, analytics_engine, source_df, replication_df, analytics_df):
+def compare_all_tables(source_engine, replication_engine, analytics_engine, source_df, replication_df, analytics_df, threshold=3.0):
     """
     Compare all tables across all three databases.
     
@@ -1303,6 +1479,13 @@ def compare_all_tables(source_engine, replication_engine, analytics_engine, sour
         if len(synced_df) > 10:
             print(f"  ... and {len(synced_df) - 10} more")
     
+    # Add percentage difference analysis
+    print(f"\n📊 Percentage Difference Analysis (Source vs Analytics):")
+    percentage_data, significant_differences = log_percentage_differences(comparison_df, threshold=threshold)
+    
+    if percentage_data and significant_differences:
+        print_percentage_difference_summary(percentage_data, significant_differences, threshold=threshold)
+    
     logger.info(f"All tables comparison completed - {len(comparison_df)} tables processed")
     return comparison_df
 
@@ -1322,6 +1505,8 @@ def main():
                        help='Compare ETL tracking tables across databases')
     parser.add_argument('--tracking-details', type=str,
                        help='Get detailed tracking information for a specific table')
+    parser.add_argument('--threshold', type=float, default=3.0,
+                       help='Percentage threshold for significant differences (default: 3.0)')
     
     args = parser.parse_args()
     
