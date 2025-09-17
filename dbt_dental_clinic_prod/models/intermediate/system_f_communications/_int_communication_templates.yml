@@ -28,8 +28,16 @@ models:
       - Implements GIN index on content for fast trigram searches
 
       Data Sources:
-      - int_patient_communications_base: Source for PbN campaign templates and auto-detected patterns
+      - int_patient_communications_base: Primary source for PbN campaign templates and auto-detected patterns
       - Standardized text message templates defined in the model
+
+      Metadata Strategy (Architectural Deviation):
+      - Simplified to only _transformed_at for essential pipeline tracking
+      - Business metadata (_loaded_at, _created_at, _updated_at, _created_by) intentionally omitted
+      - Rationale: Templates are derived/aggregated data without meaningful business lifecycle
+      - Templates represent discovered patterns, not business records with creation/update timelines
+      - _transformed_at provides sufficient pipeline monitoring and debugging capability
+      - This deviates from standard intermediate model metadata strategy for business justification
 
       Business rules:
       - PbN templates extracted from campaign messages with distinct subjects
@@ -42,6 +50,7 @@ models:
       - Each template has a standardized format regardless of source
       - Template matching uses trigram similarity for accurate content comparison
       - Only active templates are used for matching
+      - Standardized metadata preserved from primary source using standardize_intermediate_metadata macro
     tests:
       # Validates template_name and content have at least one non-null value
       - dbt_utils.expression_is_true:
@@ -191,28 +200,37 @@ models:
                 description: "Updated timestamp must be after or equal to created timestamp"
               where: "updated_at IS NOT NULL"
       
-      - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
-        tests:
-          - not_null
-      
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+      - name: _transformed_at
+        description: >
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
+          Note: Only essential pipeline metadata preserved. Business metadata (_loaded_at, _created_at, 
+          _updated_at, _created_by) intentionally omitted as templates are derived/aggregated data 
+          without meaningful business lifecycle.
         tests:
           - not_null
 
     meta:
-      business_owners: ["dental_communications_team", "marketing_team"]
-      technical_owners: ["data_engineering_team"]
-      refresh_frequency: "daily"
+      owner: "dental_communications_team"
       contains_pii: false
+      business_process: "Patient Communication Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System F: Communications"
       data_quality_requirements:
         - "All templates must have unique template_id values"
-        - "Template types must be one of the accepted values (email, SMS)"
+        - "Template types must be one of the accepted values (email, SMS, letter)"
         - "Template categories must follow the established taxonomy"
-        - "Template content must be substantial (over 10 characters)"
+        - "Template content must be substantial (over 10 characters when present)"
         - "Templates with variables must have non-empty variables array"
         - "Email templates must have subject lines"
         - "Variables should be defined in the format {VARIABLE_NAME}"
         - "Template names should be descriptive and unique"
         - "Content must be properly formatted for the template type"
+        - "Auto-detected templates must meet minimum frequency threshold (3+ occurrences)"
+      performance_requirements:
+        - "GIN index on content field for efficient trigram matching"
+        - "pg_trgm extension required for text similarity operations"
+        - "GROUP BY operations optimized for large communication datasets"
+        - "Template pattern detection limited to first 50 characters for performance"

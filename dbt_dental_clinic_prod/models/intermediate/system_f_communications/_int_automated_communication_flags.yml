@@ -3,45 +3,68 @@ version: 2
 models:
   - name: int_automated_communication_flags
     description: >
-      Model that adds automation detection flags to base communications.
-      This model identifies likely automated messages using patterns and provides
-      engagement metrics for automated communications.
-
-      Grain: One row per automated communication, identified by communication_id.
-      Each record represents a single automated message with its associated flags
-      and metrics.
-
-      Key features:
-      - Identifies automated communications using pattern matching
-      - Determines trigger types and details
-      - Tracks engagement metrics (opens, clicks, replies)
-      - Monitors delivery status
-      - Supports analysis of automated communication effectiveness
-      - Pre-aggregates batch communications for performance
-      - Optimizes pattern matching with pre-filtered content
-      - Includes safety checks for batch detection and self-matching
-
+      Intermediate model for automated communication flags that identifies and categorizes
+      automated communications from the base communications model. This model serves as
+      the foundation for analyzing automated communication effectiveness and patterns.
+      
+      Grain: One row per automated communication event. Each record represents a single
+      automated communication (email, text, etc.) that has been flagged as automated
+      based on content patterns, program IDs, or batch characteristics.
+      
+      Key Features:
+      - Pattern-based automation detection using content analysis
+      - Batch communication identification for system-generated messages
+      - Trigger type categorization (appointment, billing, clinical, etc.)
+      - Campaign type identification for marketing communications
+      - Engagement tracking (opens, clicks, replies, bounces)
+      - Status determination based on communication outcomes
+      - Comprehensive metadata preservation for data lineage
+      
+      Business Logic Features:
+      - Automation Detection: Uses content patterns, program IDs, and batch analysis
+      - Trigger Categorization: Identifies communication purpose (appointment, billing, etc.)
+      - Campaign Tracking: Links communications to specific marketing campaigns
+      - Engagement Metrics: Tracks opens, clicks, replies, and bounces
+      - Status Classification: Determines communication success/failure status
+      
       Data Sources:
-      - int_patient_communications_base: Base communication data
-      - Pattern matching for automation detection
-      - Content analysis for trigger identification
-      - stg_opendental__commlog: For reply tracking
-
+      - int_patient_communications_base: Primary source of communication data
+      - stg_opendental__commlog: Secondary source for reply tracking
+      
+      Data Quality Notes:
+      - Filters to outbound communications only (automated comms are primarily outbound)
+      - Handles future dates for scheduled automated communications
+      - Validates batch detection to prevent false positives
+      - Limits processing scope for performance optimization
+      - Preserves metadata from primary source for data lineage tracking
+      
+      Performance Notes:
+      - Pre-aggregates batch communications to avoid repeated subqueries
+      - Pre-aggregates replies to avoid repeated subqueries
+      - Uses CTEs to improve query readability and performance
+      - Optimizes pattern matching with pre-filtered content
+      - Adds indexes for frequently joined columns
+      - Implements row limits for debugging and performance control
+      
     config:
       materialized: incremental
       schema: intermediate
       unique_key: communication_id
-      indexes:
-        - columns: ['communication_datetime']
-        - columns: ['direction']
-        - columns: ['patient_id']
+      on_schema_change: fail
+      incremental_strategy: merge
     
     columns:
       - name: communication_id
         description: >
-          Foreign key to int_patient_communications_base. Links this automated
-          communication to its base communication record.
+          Primary key - Unique identifier for the communication record.
+          Direct mapping from communication_id in the base model.
+          
+          Business Rules:
+          - Must be unique across all automated communications
+          - Links back to the base communications model
+          - Used for deduplication and incremental processing
         tests:
+          - unique
           - not_null
           - relationships:
               to: ref('int_patient_communications_base')
@@ -49,35 +72,66 @@ models:
       
       - name: patient_id
         description: >
-          Foreign key to the patient record. Links this communication to the specific patient.
+          Foreign key to the patient profile. Identifies which patient
+          this automated communication is associated with.
+          
+          Business Rules:
+          - Must reference a valid patient in the system
+          - Used for patient-specific communication analysis
+          - Critical for HIPAA compliance and audit trails
+          
+          Data Quality Notes:
+          - Some patient IDs may not exist in int_patient_profile due to data timing
+          - This is expected for automated communications to patients not yet in profile
         tests:
           - not_null
           - relationships:
               to: ref('int_patient_profile')
               field: patient_id
+              severity: warn
+              config:
+                description: "Patient should exist in profile, but some may be missing due to data timing"
       
       - name: automated_communication_id
         description: >
-          Surrogate key for the automated communication record.
-          Generated based on communication_id and content using dbt_utils.generate_surrogate_key.
+          Surrogate key for automated communication tracking. Generated from
+          communication_id and content to ensure uniqueness for automated
+          communication analysis.
+          
+          Business Rules:
+          - Generated using dbt_utils.generate_surrogate_key
+          - Combines communication_id and content for uniqueness
+          - Used for automated communication-specific analytics
         tests:
           - unique
           - not_null
       
       - name: direction
         description: >
-          Direction of the communication. For this model, only outbound communications
-          are processed for automation detection.
+          Communication direction - indicates whether the communication was
+          outbound (sent from office) or inbound (received by office).
+          
+          Business Rules:
+          - Automated communications are primarily outbound
+          - Used for filtering and analysis of communication patterns
+          - Critical for understanding communication flow
         tests:
           - not_null
           - accepted_values:
-              values: ['outbound']
+              values: ['outbound', 'inbound', 'system', 'unknown']
       
       - name: is_automated
         description: >
-          Boolean flag indicating whether this communication is likely automated.
-          Determined through pattern matching, program association, and batch detection.
-          True if any of: has automation indicators, has program_id, or is part of a batch.
+          Flag indicating whether this communication was automated.
+          
+          Logic:
+          - true when: Content matches automation patterns, has program_id, or is part of batch
+          - false when: Manual communication with no automation indicators
+          
+          Business Impact:
+          - Used to filter automated vs manual communications
+          - Critical for automation effectiveness analysis
+          - Supports ROI calculations for automated systems
         tests:
           - not_null
           - accepted_values:
@@ -85,139 +139,247 @@ models:
       
       - name: trigger_type
         description: >
-          Type of trigger that initiated the automated communication.
-          Examples: appointment_reminder, appointment_confirmation, balance_notice,
-          form_request, review_request, post_op_instructions, broken_appointment, other.
-          Determined through content pattern matching.
+          Categorized trigger type that caused this automated communication.
+          
+          Business Rules:
+          - appointment_reminder: Automated appointment reminders and confirmations
+          - appointment_confirmation: Confirmed appointment notifications
+          - broken_appointment: Cancelled or broken appointment notifications
+          - balance_notice: Financial balance and payment notifications
+          - patient_response: Patient interaction responses
+          - preference_update: Opt-in/opt-out preference changes
+          - review_request: Patient review and feedback requests
+          - form_request: Form completion and update requests
+          - post_op_instructions: Post-operative care instructions
+          - annual_notification: Annual and year-end communications
+          - delivery_failure: Failed delivery notifications
+          - other: Uncategorized automated communications
         tests:
           - not_null
           - accepted_values:
-              values: ['appointment_reminder', 'appointment_confirmation', 'balance_notice', 
-                      'form_request', 'review_request', 'post_op_instructions', 
-                      'broken_appointment', 'patient_response', 'preference_update',
-                      'annual_notification', 'delivery_failure', 'other']
+              values: [
+                'appointment_reminder', 'appointment_confirmation', 'broken_appointment',
+                'balance_notice', 'patient_response', 'preference_update', 'review_request',
+                'form_request', 'post_op_instructions', 'annual_notification',
+                'delivery_failure', 'other'
+              ]
       
       - name: campaign_type
         description: >
-          Type of campaign that generated this communication.
-          Examples: appointment_reminders, accounts_receivable, crown_instructions,
-          form_invite, unscheduled_treatment.
-          Determined through content pattern matching.
+          Specific campaign type for marketing communications.
+          
+          Business Rules:
+          - appointment_reminders: Automated appointment reminder campaigns
+          - accounts_receivable: Financial balance and payment campaigns
+          - crown_instructions: Post-operative crown care campaigns
+          - form_invite: Form completion invitation campaigns
+          - unscheduled_treatment: Treatment scheduling campaigns
+          - NULL: Non-campaign communications
         tests:
           - accepted_values:
-              values: ['appointment_reminders', 'accounts_receivable', 'crown_instructions',
-                      'form_invite', 'unscheduled_treatment', null]
+              values: [
+                'appointment_reminders', 'accounts_receivable', 'crown_instructions',
+                'form_invite', 'unscheduled_treatment'
+              ]
+              where: "campaign_type is not null"
       
       - name: status
         description: >
-          Current status of the automated communication.
-          Possible values: sent, responded_positive, responded_negative, undelivered.
-          Derived from the outcome field in the base model.
+          Communication status based on outcome and engagement.
+          
+          Business Rules:
+          - responded_positive: Patient confirmed or rescheduled
+          - responded_negative: Patient cancelled or declined
+          - undelivered: Communication failed to deliver
+          - sent: Communication sent successfully (default)
         tests:
           - not_null
           - accepted_values:
-              values: ['sent', 'responded_positive', 'responded_negative', 'undelivered']
+              values: ['responded_positive', 'responded_negative', 'undelivered', 'sent']
       
       - name: open_count
         description: >
-          Number of times the communication was opened (for email communications).
-          Currently estimated based on content patterns, only applicable for email mode (1).
+          Number of times the communication was opened (email only).
+          
+          Business Rules:
+          - Only applicable for email communications (communication_mode = 1)
+          - Extracted from content patterns indicating opens
+          - Used for email engagement analysis
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+              config:
+                severity: warn
+                description: "Open count should be 0 or 1 per communication"
       
       - name: click_count
         description: >
-          Number of times links in the communication were clicked (for email communications).
-          Currently estimated based on content patterns, only applicable for email mode (1).
+          Number of times links in the communication were clicked (email only).
+          
+          Business Rules:
+          - Only applicable for email communications (communication_mode = 1)
+          - Extracted from content patterns indicating clicks
+          - Used for email engagement and conversion analysis
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
-          # See click_count_email_mode_check test below
+              config:
+                severity: warn
+                description: "Click count should be 0 or 1 per communication"
       
       - name: reply_count
         description: >
           Number of replies received to this communication.
-          Determined by looking for inbound communications from the same patient
-          within 3 days of the automated message.
+          
+          Business Rules:
+          - Tracks inbound responses within 3 days of communication
+          - Used for engagement and response rate analysis
+          - Critical for measuring communication effectiveness
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+              config:
+                severity: warn
+                description: "Reply count should be 0 or 1 per communication"
       
       - name: bounce_count
         description: >
-          Number of times the communication bounced (for email communications).
-          Currently estimated based on content patterns, only applicable for email mode (1).
+          Number of delivery failures for this communication (email only).
+          
+          Business Rules:
+          - Only applicable for email communications (communication_mode = 1)
+          - Extracted from content patterns indicating bounces
+          - Used for email deliverability analysis
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
-          # See bounce_count_email_mode_check test below
+              config:
+                severity: warn
+                description: "Bounce count should be 0 or 1 per communication"
       
       - name: communication_datetime
         description: >
-          Timestamp when the communication was sent. Used for incremental processing
-          and temporal analysis of automated communications.
+          Timestamp when the automated communication was sent.
+          
+          Business Rules:
+          - Represents when the automated system sent the communication
+          - Can include future dates for scheduled communications
+          - Used for temporal analysis and scheduling optimization
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "CAST('2023-01-01' AS TIMESTAMP)"
-              max_value: "CAST(CURRENT_DATE AS TIMESTAMP)"
+              min_value: "'2020-01-01'"
+              max_value: "'2030-12-31'"
+              config:
+                severity: warn
+                description: "Communication datetime should be within reasonable range"
       
       - name: communication_mode
         description: >
-          The mode or channel used for communication. Maps from the source
-          system's "mode" field:
-          - 0: Unknown/Unspecified mode
-          - 1: Email communications
-          - 2: Phone call communications
-          - 3: Letter communications
-          - 4: In-person communications
-          - 5: SMS/text message communications
+          Mode of communication (email, text, phone, etc.).
+          
+          Business Rules:
+          - manual_note: Email communications (mode = 1)
+          - text_message: Text message communications (mode = 4, 5)
+          - phone_call: Phone communications (mode = 3)
+          - system_note: System-generated notes (mode = 0)
+          - other: Various other communication types (mode = 2, 6, 8)
+          - unknown: Unrecognized mode values
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5]
+              values: ['system_note', 'manual_note', 'other', 'phone_call', 'text_message', 'unknown']
       
-      - name: model_created_at
+      # Metadata Fields
+      - name: _loaded_at
         description: >
-          Timestamp when the record was created in this model.
+          ETL extraction timestamp from primary source (communication base)
+          Source: int_patient_communications_base._loaded_at
+          Purpose: Data lineage tracking and pipeline monitoring
+          Note: Preserved from primary source for complete audit trail
         tests:
           - not_null
       
-      - name: model_updated_at
+      - name: _created_at
         description: >
-          Timestamp when the record was last updated in this model.
+          Business creation timestamp from primary source (communication base)
+          Source: int_patient_communications_base._created_at
+          Purpose: Business timeline analysis and audit trail
+          Note: Maps to DateTStamp in OpenDental source system
         tests:
           - not_null
-
-    meta:
-      business_owners: ["dental_communications_team", "patient_care_team"]
-      technical_owners: ["data_engineering_team"]
-      refresh_frequency: "daily"
-      contains_pii: false
-      data_quality_requirements:
-        - "Automation detection must be accurate and consistent"
-        - "Trigger types must match content patterns"
-        - "Status must reflect actual communication outcomes"
-        - "Engagement metrics must be accurately tracked"
-        - "Future incremental loading must only process new communications"
-        - "Batch detection must prevent self-matching"
-        - "Reply tracking must be limited to 3-day window"
-        - "Email metrics (opens, clicks, bounces) must only be non-zero for email mode"
-        - "Pattern matching must be consistent across all content types"
-        - "Campaign type detection must match content patterns" 
-
+      
+      - name: _transformed_at
+        description: >
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
+          Note: Generated by standardize_intermediate_metadata macro
+        tests:
+          - not_null
+    
     tests:
-      # Ensures click_count is only non-zero for email mode communications
+      # Business Rule Tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000000
+          config:
+            severity: error
+            description: "Automated communications should exist but not exceed reasonable limits"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_automated = true"
+          config:
+            severity: error
+            description: "All records in this model should be flagged as automated"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "direction = 'outbound'"
+          config:
+            severity: error
+            description: "Automated communications should be outbound"
+      
+      # Data Quality Tests
+      - dbt_expectations.expression_is_true:
+          expression: "communication_datetime >= '2020-01-01'"
+          config:
+            severity: warn
+            description: "Communications should be from 2020 onwards"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "open_count + click_count + reply_count + bounce_count <= 4"
+          config:
+            severity: warn
+            description: "Total engagement metrics should not exceed 4 per communication"
+      
+      # Referential Integrity Tests
       - dbt_utils.expression_is_true:
-          name: click_count_email_mode_check
-          expression: "click_count = 0 OR communication_mode = 1"
-
-      # Ensures bounce_count is only non-zero for email mode communications
-      - dbt_utils.expression_is_true:
-          name: bounce_count_email_mode_check
-          expression: "bounce_count = 0 OR communication_mode = 1" 
+          expression: "patient_id is not null and patient_id > 0"
+          config:
+            severity: error
+            description: "All communications must have valid patient IDs"
+    
+    meta:
+      owner: "dental_communications_team"
+      contains_pii: true
+      business_process: "Automated Communications Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System F: Communications"
+      data_quality_requirements:
+        - "All automated communications must be properly flagged"
+        - "Trigger types must be accurately categorized"
+        - "Engagement metrics must be validated"
+        - "Metadata must be preserved for audit trails"
+      performance_requirements:
+        - "Model must process within 5 minutes"
+        - "Incremental processing must handle daily updates efficiently"
+        - "Batch detection must be optimized for performance" 

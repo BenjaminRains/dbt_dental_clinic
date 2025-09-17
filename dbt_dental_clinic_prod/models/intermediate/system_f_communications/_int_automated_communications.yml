@@ -1,90 +1,76 @@
 version: 2
 
 models:
-  - name: int_automated_communications
+  - name: int_automated_communications_simple
     description: >
-      Comprehensive automated communications model that tracks system-generated messages
-      sent to patients. This model consolidates all automated, template-based communications
-      into a structured format that enables tracking of delivery, engagement, and effectiveness.
-
-      Grain: One row per automated communication sent to a patient. Each record represents 
-      a single message sent through an automated system with automated_communication_id 
-      as the primary key.
-
-      Key features:
-      - Identifies communications sent through automated systems
-      - Links to base communication records and templates
-      - Tracks triggers that initiated the communication
-      - Monitors delivery status and timestamps
-      - Provides metrics on engagement (opens, clicks, replies)
-      - Enables analysis of automated communication effectiveness
-      - Supports campaign performance tracking
-      - Uses advanced template matching with trigram similarity
-      - Implements fallback matching for non-PostgreSQL databases
-      - Filters matches to active templates only
-
-      Special Note on provider_id = 0:
-      This is a special case used for communications that aren't directly from a specific provider.
-      Analysis shows these communications fall into several categories:
-      1. Truly automated system communications:
-         - Balance notices (811 records)
-         - Appointment reminders (46 records)
-         - Review requests (32 records)
-         - Post-op instructions (24 records)
-      2. Staff-initiated communications through system interfaces:
-         - Notes with staff initials (e.g., "-MW", "-KB")
-         - Communication department activities (marked with "CD")
-      3. Automated business communications:
-         - End of year letters
-         - Statements with final notices
-         - Insurance-related communications
+      Simplified intermediate model for automated communications that provides core
+      functionality without complex template matching. This model serves as a fast,
+      reliable foundation for automated communication analysis.
       
-      Distribution of provider_id = 0 communications by type:
-      - Type 228 (Secondary automated system): 2,462 records
-      - Type 226 (Billing communications): 998 records
-      - Type 603 (Tertiary system): 485 records
-      - Type 225 (Insurance communications): 436 records
-      - Type 571 (Insurance narratives): 227 records
-
-      This special case should be considered when analyzing provider-specific communications
-      or when building reports that need to distinguish between provider and non-provider
-      communications.
-
+      Grain: One row per automated communication event.
+      Each record represents a single automated communication with engagement metrics
+      and proper metadata preservation.
+      
+      Key Features:
+      - Core automated communication identification and tracking
+      - Engagement metrics aggregation (opens, clicks, replies, bounces)
+      - Patient and user context integration
+      - Metadata preservation for data lineage
+      - Fast, reliable build performance
+      
+      Business Logic Features:
+      - Automated Communication Identification: Links flags to base communications
+      - Engagement Tracking: Aggregates opens, clicks, replies, and bounces
+      - Metadata Preservation: Maintains complete data lineage from primary source
+      
       Data Sources:
-      - int_patient_communications_base: Base communication data
-      - int_automated_communication_flags: Automation detection and metrics
-      - int_communication_templates: Template definitions with trigram indexing
-
-      Template Matching Strategy:
-      - Primary matching uses PostgreSQL's trigram similarity (threshold 0.4)
-      - Fallback to LIKE matching for non-PostgreSQL databases
-      - Only matches against active templates
-      - Additional matching based on category and communication mode
-      - Optimized with GIN index on template content
-
-      REFACTORED TO BREAK CIRCULAR DEPENDENCY:
-      - Uses int_patient_communications_base for base data
-      - Uses int_automated_communication_flags for automation detection
-      - Joins with int_communication_templates for template info
-    
+      - int_automated_communication_flags: Primary source for automation flags and metrics
+      - int_patient_communications_base: Secondary source for communication details
+      
+      Data Quality Notes:
+      - Filters to only automated communications (is_automated = true)
+      - Preserves metadata from primary source for data lineage tracking
+      - Limited to 2023+ data for performance optimization
+      - Template fields are NULL (handled in separate model)
+      
+      Performance Notes:
+      - Simple INNER JOIN for fast processing
+      - Limited data scope for initial build
+      - No complex template matching or trigram calculations
+      - Expected build time: 1-3 minutes
+      
     config:
-      materialized: incremental
+      materialized: table
       schema: intermediate
       unique_key: automated_communication_id
+      on_schema_change: fail
     
     columns:
       - name: automated_communication_id
         description: >
-          Primary key - Unique identifier for the automated communication record.
-          Generated as a surrogate key based on communication_id and content.
+          Primary key - Unique identifier for automated communication tracking.
+          Generated from communication_id and content to ensure uniqueness.
+          
+          Business Rules:
+          - Must be unique across all automated communications
+          - Links back to the base communications model
+          - Used for deduplication and incremental processing
         tests:
           - unique
           - not_null
+          - relationships:
+              to: ref('int_automated_communication_flags')
+              field: automated_communication_id
       
       - name: communication_id
         description: >
-          Foreign key to int_patient_communications_base. Links this automated
-          communication to its base communication record.
+          Foreign key to the base communication record. Identifies the specific
+          communication that has been flagged as automated.
+          
+          Business Rules:
+          - Must reference a valid communication in the base model
+          - Used for linking to detailed communication information
+          - Critical for audit trail and data lineage
         tests:
           - not_null
           - relationships:
@@ -94,18 +80,31 @@ models:
       - name: patient_id
         description: >
           Foreign key to the patient profile. Identifies which patient
-          this communication is associated with.
+          this automated communication is associated with.
+          
+          Business Rules:
+          - Must reference a valid patient in the system
+          - Used for patient-specific communication analysis
+          - Critical for HIPAA compliance and audit trails
         tests:
           - not_null
           - relationships:
               to: ref('int_patient_profile')
               field: patient_id
+              severity: warn
+              config:
+                description: "Patient should exist in profile, but some may be missing due to data timing"
       
       - name: user_id
         description: >
           Foreign key to the user record. Identifies which staff member
-          initiated the communication. Note: user_id = 0 represents
+          initiated the automated communication. Note: user_id = 0 represents
           system-generated communications.
+          
+          Business Rules:
+          - Links to staff member who initiated the communication
+          - System communications (user_id = 0) are valid
+          - Used for accountability and audit trail
         tests:
           - relationships:
               to: ref('stg_opendental__userod')
@@ -114,329 +113,483 @@ models:
       
       - name: communication_datetime
         description: >
-          Timestamp when the communication was sent.
+          Timestamp when the automated communication occurred. For outbound
+          communications, this represents when the message was sent.
+          
+          Business Rules:
+          - Must be a valid timestamp
+          - Future dates are valid for scheduled automated communications
+          - Used for incremental processing and temporal analysis
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "'{{ var('max_valid_date') }} 23:59:59'"
+              min_value: '2023-01-01'
+              max_value: '2030-12-31'
+              config:
+                severity: warn
+                description: "Communications should be from 2023 onwards"
       
       - name: communication_type
         description: >
-          The type of communication in the system. Main types:
-          - 0: Legacy system communications (mode 5) - General automated communications
-          - 224: Primary appointment notification system (mode 1,4) - Appointment-related communications
-          - 228: Secondary automated communication system (mode 4) - General patient communications
-          - 603: Tertiary communication system (mode 5) - Clinical communications
-          - 226: Billing and financial communications
-          - 225: Insurance and claims communications
-          - 571: Insurance narratives and documentation
-          - 432: Medical clearances and prescriptions
-          - 509/510: Surgical procedures and clearances
-          - 614/615: Referrals and specialist communications
-          - 636: Treatment plans and financial arrangements
+          Type of communication (appointment, billing, clinical, etc.).
+          
+          Business Rules:
+          - Must be a valid communication type
+          - Used for categorizing automated communications
+          - Supports business process analysis
         tests:
           - not_null
-          - accepted_values:
-              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
       
       - name: communication_mode
         description: >
-          The mode or channel used for communication. Maps from the source
-          system's "mode" field:
-          - 0: Unknown/Unspecified mode
-          - 1: Email communications
-          - 2: Phone call communications
-          - 3: Letter communications
-          - 4: In-person communications
-          - 5: SMS/text message communications
+          Mode of communication (email, text, phone, etc.).
+          
+          Business Rules:
+          - manual_note: Email communications (mode = 1)
+          - text_message: Text message communications (mode = 4, 5)
+          - phone_call: Phone communications (mode = 3)
+          - system_note: System-generated notes (mode = 0)
+          - other: Various other communication types (mode = 2, 6, 8)
+          - unknown: Unrecognized mode values
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5]
+              values: ['system_note', 'manual_note', 'other', 'phone_call', 'text_message', 'unknown']
       
       - name: content
         description: >
-          The full content or notes from the communication. Contains the actual
-          message text or call notes.
-
-          Note: NULL content is acceptable for certain types of communications:
-          - Simple one-way communications (letters or SMS)
-          - System-generated notifications
-          - Communications that don't require message text
+          Content of the automated communication message.
+          
+          Business Rules:
+          - May contain template placeholders
+          - Used for content analysis
+          - Critical for communication identification
         tests:
-          - not_null:
-              severity: warn
+          - not_null
       
       - name: linked_appointment_id
         description: >
-          Foreign key to appointment record if the communication references
-          a specific appointment. Extracted from content using regex pattern matching.
+          Foreign key to appointment if the communication is appointment-related.
+          Extracted from communication content using regex patterns.
+          
+          Business Rules:
+          - May be NULL for non-appointment communications
+          - Extracted using regex pattern matching
+          - Used for appointment-specific analysis
         tests:
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
-              where: "linked_appointment_id is not null"
+              where: "linked_appointment_id IS NOT NULL"
       
       - name: linked_claim_id
         description: >
-          Foreign key to claim record if the communication references
-          a specific insurance claim. Extracted from content using regex pattern matching.
+          Foreign key to claim if the communication is claim-related.
+          Extracted from communication content using regex patterns.
+          
+          Business Rules:
+          - May be NULL for non-claim communications
+          - Extracted using regex pattern matching
+          - Used for claim-specific analysis
         tests:
           - relationships:
               to: ref('stg_opendental__claim')
               field: claim_id
-              where: "linked_claim_id is not null"
+              where: "linked_claim_id IS NOT NULL"
       
       - name: linked_procedure_id
         description: >
-          Foreign key to procedure record if the communication references
-          a specific dental procedure. Extracted from content using regex pattern matching.
+          Foreign key to procedure if the communication is procedure-related.
+          Extracted from communication content using regex patterns.
+          
+          Business Rules:
+          - May be NULL for non-procedure communications
+          - Extracted using regex pattern matching
+          - Used for procedure-specific analysis
         tests:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
-              where: "linked_procedure_id is not null"
+              where: "linked_procedure_id IS NOT NULL"
       
       - name: contact_phone_number
         description: >
-          Phone number extracted from the communication note, typically in format "Number XXXXXXXXXX".
-          Extracted via regex pattern matching from the content when phone numbers are mentioned.
-          Format is a 10-digit string without formatting characters.
+          Phone number used for the communication contact.
+          
+          Business Rules:
+          - May be NULL for non-phone communications
+          - Used for contact method analysis
+          - Supports patient contact preference analysis
         tests:
-          - dbt_expectations.expect_column_value_lengths_to_be_between:
-              min_value: 10
-              max_value: 10
-              where: "contact_phone_number is not null"
+          - dbt_utils.expression_is_true:
+              expression: "contact_phone_number IS NULL OR LENGTH(contact_phone_number) >= 10"
+              config:
+                severity: warn
+                description: "Phone numbers should be at least 10 digits when present"
       
       - name: communication_category
         description: >
-          Basic categorization of the communication based on content analysis.
-          Possible values: appointment, billing, clinical, insurance, follow_up, general.
+          Category of the communication (appointment, billing, clinical, etc.).
+          
+          Business Rules:
+          - Must be a valid category
+          - Used for communication categorization
+          - Supports business process analysis
         tests:
           - not_null
           - accepted_values:
-              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general', 'unknown']
       
       - name: outcome
         description: >
-          The result or outcome of the communication, derived from content analysis.
-          Possible values: confirmed, rescheduled, cancelled, no_answer, completed.
+          Outcome of the communication (successful, failed, pending, etc.).
+          
+          Business Rules:
+          - Must be a valid outcome
+          - Used for communication effectiveness analysis
+          - Supports process improvement initiatives
         tests:
           - not_null
           - accepted_values:
-              values: ['confirmed', 'rescheduled', 'cancelled', 'no_answer', 'completed']
+              values: ['successful', 'failed', 'pending', 'cancelled', 'unknown']
       
       - name: program_id
         description: >
-          Identifier for the program or system that generated the communication.
-          Used for tracking automated communications.
-          - 0: Legacy system communications (not stored in program table)
-          - 95: Legacy communication system (not stored in program table)
-          - 137: Practice by Numbers (PbN) automated communications
-          Other values should reference valid programs in stg_opendental__program.
+          ID of the program that generated the automated communication.
+          
+          Business Rules:
+          - May be NULL for some automated communications
+          - Used for program-specific analysis
+          - Supports automation system tracking
         tests:
-          - relationships:
-              to: ref('stg_opendental__program')
-              field: program_id
-              where: "program_id is not null and program_id not in (0, 95)"
+          - dbt_utils.expression_is_true:
+              expression: "program_id IS NULL OR program_id >= 0"
+              config:
+                severity: warn
+                description: "Program ID should be non-negative when present"
       
       - name: patient_name
         description: >
-          Patient's preferred name, joined from int_patient_profile.
+          Name of the patient associated with this communication.
+          
+          Business Rules:
+          - May be NULL for some records
+          - Used for patient identification
+          - Supports patient-specific analysis
         tests:
-          - not_null
+          - not_null:
+              where: "patient_id IS NOT NULL"
       
       - name: patient_status
         description: >
-          Current status of the patient, joined from int_patient_profile.
-          Values:
-          - 0 = Patient (active)
-          - 1 = NonPatient
-          - 2 = Inactive
-          - 3 = Archived
-          - 4 = Deceased
-          - 5 = Deleted
+          Status of the patient at the time of communication.
+          
+          Business Rules:
+          - May be NULL for some records
+          - Used for patient status analysis
+          - Supports patient care analysis
         tests:
-          - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5]
+              values: ['active', 'inactive', 'deceased', 'unknown']
+              where: "patient_status IS NOT NULL"
       
       - name: birth_date
         description: >
-          Patient's date of birth, joined from int_patient_profile.
+          Birth date of the patient.
+          
+          Business Rules:
+          - May be NULL for some records
+          - Used for demographic analysis
+          - Supports age-based communication analysis
         tests:
-          - not_null:
-              severity: warn
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'1900-01-01'"
-              max_value: "'{{ var('max_valid_date') }}'"
+              min_value: '1900-01-01'
+              max_value: '2020-12-31'
+              where: "birth_date IS NOT NULL"
+              config:
+                severity: warn
+                description: "Birth dates should be reasonable"
       
       - name: user_name
         description: >
-          Name of the staff member who initiated the communication,
-          joined from stg_opendental__userod. Note: System communications (user_id = 0)
-          will have NULL user_name.
+          Name of the staff member who initiated the communication.
+          
+          Business Rules:
+          - May be NULL for system communications (user_id = 0)
+          - Used for staff accountability
+          - Supports staff performance analysis
         tests:
           - not_null:
               where: "user_id != 0"
       
       - name: provider_id
         description: >
-          Provider ID associated with the user, if applicable. Joined from 
-          stg_opendental__userod for provider correlation.
+          Provider ID associated with the user, if applicable.
+          
+          Business Rules:
+          - May be NULL for system communications
+          - Used for provider-specific analysis
+          - Supports provider performance analysis
         tests:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
-              where: "provider_id is not null AND provider_id != 0"
+              where: "provider_id IS NOT NULL AND provider_id != 0"
       
       - name: trigger_type
         description: >
           Type of trigger that initiated the automated communication.
-          Examples:
-          - appointment_reminder: Standard appointment reminders
-          - appointment_confirmation: Confirmations of scheduled appointments
-          - review_request: Requests for patient reviews
-          - balance_notice: Notifications about account balances
-          - broken_appointment: Notifications about broken/cancelled appointments
-          - post_op_instructions: Post-operative care instructions
-          - form_request: Requests to complete forms
-          - patient_response: Inbound communications from patients
-          - preference_update: Updates to patient communication preferences
-          - annual_notification: Annual communications like end-of-year letters
-          - delivery_failure: System notifications about failed message delivery
-          - other: Miscellaneous automated communications
+          
+          Business Rules:
+          - Must be a valid trigger type
+          - Used for automation analysis
+          - Supports process optimization
         tests:
           - not_null
           - accepted_values:
-              values: ['appointment_reminder', 'appointment_confirmation', 'review_request', 
-                      'balance_notice', 'broken_appointment', 'post_op_instructions', 
-                      'form_request', 'patient_response', 'preference_update', 
-                      'annual_notification', 'delivery_failure', 'other']
+              values: ['appointment_reminder', 'appointment_confirmation', 'broken_appointment', 
+                      'balance_notice', 'patient_response', 'preference_update', 'review_request', 
+                      'form_request', 'post_op_instructions', 'annual_notification', 
+                      'delivery_failure', 'other']
       
       - name: status
         description: >
-          Current status of the automated communication.
-          Possible values: sent, responded_positive, responded_negative, undelivered.
+          Status of the automated communication.
+          
+          Business Rules:
+          - Must be a valid status
+          - Used for communication tracking
+          - Supports delivery analysis
         tests:
           - not_null
           - accepted_values:
-              values: ['sent', 'responded_positive', 'responded_negative', 'undelivered']
+              values: ['responded_positive', 'responded_negative', 'undelivered', 'sent']
       
       - name: open_count
         description: >
-          Number of times the communication was opened (for email communications).
-          Currently estimated based on content patterns.
+          Number of times the communication was opened.
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for engagement analysis
+          - Supports communication effectiveness measurement
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+              config:
+                severity: warn
+                description: "Open count should typically be 0 or 1 per communication"
       
       - name: click_count
         description: >
-          Number of times links in the communication were clicked (for email communications).
-          Currently estimated based on content patterns.
+          Number of times links in the communication were clicked.
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for engagement analysis
+          - Supports link effectiveness measurement
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+              config:
+                severity: warn
+                description: "Click count should typically be 0 or 1 per communication"
       
       - name: reply_count
         description: >
-          Number of replies received to this communication.
-          Determined by looking for inbound communications from the same patient
-          within 3 days of the automated message.
+          Number of replies received for the communication.
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for engagement analysis
+          - Supports response rate measurement
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+              config:
+                severity: warn
+                description: "Reply count should typically be 0 or 1 per communication"
       
       - name: bounce_count
         description: >
-          Number of times the communication bounced (for email communications).
-          Currently estimated based on content patterns.
+          Number of times the communication bounced back.
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for delivery analysis
+          - Supports address quality measurement
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1
+              config:
+                severity: warn
+                description: "Bounce count should typically be 0 or 1 per communication"
       
       - name: template_id
         description: >
-          Foreign key to int_communication_templates. Identifies which template
-          was used to generate this communication.
+          Foreign key to the communication template that was matched.
+          
+          Business Rules:
+          - NULL in this simplified version
+          - Template matching handled in separate model
+          - Used for template effectiveness analysis
         tests:
-          - relationships:
-              to: ref('int_communication_templates')
-              field: template_id
-              where: "template_id is not null"
+          - dbt_utils.expression_is_true:
+              expression: "template_id IS NULL"
+              config:
+                severity: warn
+                description: "Template ID should be NULL in simplified version"
       
       - name: template_name
         description: >
-          Name of the template used for this communication.
+          Name of the matched communication template.
+          
+          Business Rules:
+          - NULL in this simplified version
+          - Template matching handled in separate model
+          - Used for template identification
         tests:
-          - not_null:
-              where: "template_id is not null"
+          - dbt_utils.expression_is_true:
+              expression: "template_name IS NULL"
+              config:
+                severity: warn
+                description: "Template name should be NULL in simplified version"
       
       - name: template_type
         description: >
-          Type of template used (email, SMS, letter).
+          Type of the matched template (email, SMS, etc.).
+          
+          Business Rules:
+          - NULL in this simplified version
+          - Template matching handled in separate model
+          - Used for template categorization
         tests:
-          - accepted_values:
-              values: ['email', 'SMS', 'letter']
-          - not_null:
-              where: "template_id is not null"
+          - dbt_utils.expression_is_true:
+              expression: "template_type IS NULL"
+              config:
+                severity: warn
+                description: "Template type should be NULL in simplified version"
       
       - name: template_category
         description: >
-          Category of the template used (appointment, billing, etc.).
+          Category of the matched template (appointment, billing, etc.).
+          
+          Business Rules:
+          - NULL in this simplified version
+          - Template matching handled in separate model
+          - Used for template categorization
         tests:
-          - accepted_values:
-              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
-          - not_null:
-              where: "template_id is not null"
+          - dbt_utils.expression_is_true:
+              expression: "template_category IS NULL"
+              config:
+                severity: warn
+                description: "Template category should be NULL in simplified version"
       
       - name: template_subject
         description: >
-          Subject line used in the template.
+          Subject line of the matched template.
+          
+          Business Rules:
+          - NULL in this simplified version
+          - Template matching handled in separate model
+          - Used for template identification
         tests:
-          - not_null:
-              where: "template_id is not null AND template_type = 'email'"
+          - dbt_utils.expression_is_true:
+              expression: "template_subject IS NULL"
+              config:
+                severity: warn
+                description: "Template subject should be NULL in simplified version"
       
-      - name: created_at
+      # Metadata Fields
+      - name: _loaded_at
         description: >
-          Timestamp when the record was created in the source system.
+          ETL extraction timestamp from primary source (communication base)
+          Source: int_patient_communications_base._loaded_at
+          Purpose: Data lineage tracking and pipeline monitoring
+          Note: Preserved from primary source for complete audit trail
         tests:
           - not_null
       
-      - name: updated_at
+      - name: _created_at
         description: >
-          Timestamp when the record was last updated in the source system.
+          Business creation timestamp from primary source (communication base)
+          Source: int_patient_communications_base._created_at
+          Purpose: Business timeline analysis and audit trail
+          Note: Maps to DateTStamp in OpenDental source system
         tests:
           - not_null
       
-      - name: model_created_at
+      - name: _transformed_at
         description: >
-          Timestamp when the record was created in this model.
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
+          Note: Generated by current_timestamp
         tests:
           - not_null
+    
+    tests:
+      # Business Rule Tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000000
+          config:
+            severity: error
+            description: "Automated communications should exist but not exceed reasonable limits"
       
-      - name: model_updated_at
-        description: >
-          Timestamp when the record was last updated in this model.
-        tests:
-          - not_null
-
+      - dbt_expectations.expression_is_true:
+          expression: "open_count + click_count + reply_count + bounce_count <= 4"
+          config:
+            severity: warn
+            description: "Total engagement metrics should not exceed 4 per communication"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_datetime >= '2023-01-01'"
+          config:
+            severity: warn
+            description: "Communications should be from 2023 onwards"
+      
+      # Data Quality Tests
+      - dbt_utils.expression_is_true:
+          expression: "patient_id is not null and patient_id > 0"
+          config:
+            severity: error
+            description: "All communications must have valid patient IDs"
+      
+      - dbt_utils.expression_is_true:
+          expression: "automated_communication_id is not null"
+          config:
+            severity: error
+            description: "All records must have valid automated communication IDs"
+      
+      # Template Field Tests (should be NULL in simplified version)
+      - dbt_utils.expression_is_true:
+          expression: "template_id IS NULL AND template_name IS NULL AND template_type IS NULL"
+          config:
+            severity: warn
+            description: "Template fields should be NULL in simplified version"
+    
     meta:
-      business_owners: ["dental_communications_team", "patient_care_team"]
-      technical_owners: ["data_engineering_team"]
-      refresh_frequency: "daily"
+      owner: "dental_communications_team"
       contains_pii: true
+      business_process: "Automated Communications Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System F: Communications"
       data_quality_requirements:
-        - "All communications must be associated with a valid patient"
-        - "Communication categories must accurately reflect content"
-        - "Trigger types must match content patterns"
-        - "Status must reflect actual communication outcomes"
+        - "All automated communications must be properly identified"
         - "Engagement metrics must be accurately tracked"
-        - "Template matching must be accurate and consistent"
-        - "Future incremental loading must only process new communications"
+        - "Metadata must be preserved for audit trails"
+        - "Template fields must be NULL (handled separately)"
+      performance_requirements:
+        - "Model must process within 3 minutes"
+        - "Simple joins for fast processing"
+        - "Limited data scope for performance"

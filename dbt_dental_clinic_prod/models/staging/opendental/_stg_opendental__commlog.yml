@@ -42,7 +42,7 @@ models:
           impact: "Affects user productivity metrics and communication attribution reporting"
         - rule: "Mode 4 (in-person) communications represent 37.31% of all communications and indicate direct patient interactions"
           impact: "Critical for patient engagement scoring and visit completion tracking"
-        - rule: "is_sent values indicate communication direction: 0=received, 1=sent, 2=system-processed"
+        - rule: "is_sent values indicate communication direction: 0=system, 1=outbound, 2=inbound"
           impact: "Essential for understanding communication flow and response tracking"
       
       usage_notes: >
@@ -272,28 +272,27 @@ models:
 
       - name: is_sent
         description: >
-          Flag indicating the direction and status of communication, converted from SentOrReceived in OpenDental to boolean.
-          Original values and their meanings:
+          Communication direction indicator, preserved as smallint from SentOrReceived in OpenDental.
+          Values and their meanings:
           
-          - 2: System-processed communications (57.90% of records) -> converted to true
-            * Used for automated communications and system notifications
-            * Spans all communication types (17 distinct types)
-            * Used with all standard modes (0-5)
-            * Earliest records from 2023-01-01
+          - 0: System-generated communications (3.64% of records)
+            * System-generated notes, appointment changes, automated events
+            * Used primarily with mode 0 (system_note)
+            * Examples: "Appt BROKEN", appointment cancellations, system notifications
           
-          - 1: Practice-to-patient communications (38.25% of records) -> converted to true
-            * Communications sent from the practice to patients
-            * Used with all communication types (16 distinct types)
-            * Used with all modes including rare modes 6 and 8
-            * Earliest records from 2023-01-02
+          - 1: Outbound communications (48.90% of records)
+            * Communications sent by the clinic to the patient
+            * Used across all communication modes (manual_note, phone_call, text_message)
+            * Examples: "Phone Call Placed", "Patient Text Sent via PbN"
           
-          - 0: Patient-to-practice communications (3.86% of records) -> converted to false
-            * Communications received from patients
-            * Used with 13 distinct communication types
-            * Used with all standard modes (0-5)
-            * Earliest records from 2023-01-02
+          - 2: Inbound communications (47.46% of records)
+            * Communications received by the clinic from the patient
+            * Used across all communication modes (manual_note, phone_call, text_message)
+            * Examples: "Phone Call Received", "Patient Text Received via PbN"
         tests:
           - not_null
+          - accepted_values:
+              values: [0, 1, 2]
 
       - name: is_topaz_signature
         description: "Indicates if the signature was created using Topaz signature pad (converted from 0=No, 1=Yes to boolean)"
@@ -311,7 +310,10 @@ models:
         tests:
           - not_null
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column."
+        description: >
+          Timestamp when the record was created/updated in the source system (OpenDental).
+          Maps to DateTStamp column which contains actual timestamps when records were last modified.
+          Note: DateTEntry field is always set to minimum date (0001-01-01) and is not used.
         tests:
           - not_null
           - dbt_utils.expression_is_true:

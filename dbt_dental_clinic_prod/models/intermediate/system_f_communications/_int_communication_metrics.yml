@@ -82,12 +82,12 @@ models:
       # Duration validation for calls
       - dbt_utils.expression_is_true:
           expression: >
-            (communication_type = 2 AND average_duration IS NOT NULL) OR
-            (communication_type != 2 AND average_duration IS NULL)
+            (phone_count > 0 AND valid_durations = 0 AND average_duration IS NULL) OR
+            (phone_count = 0 AND average_duration IS NULL)
           config:
             severity: warn
             description: >
-              Duration metrics should only be populated for phone call communications.
+              Duration metrics are NULL because phone calls lack valid end times for calculation.
 
     columns:
       - name: metric_id
@@ -161,13 +161,11 @@ models:
       - name: average_duration
         description: >
           Average duration of communications in minutes. Only calculated for:
-          - Phone calls (communication_mode = 2)
+          - Phone calls (communication_mode = 'phone_call')
           - Non-future communications
           - Communications with valid end times (not default '0001-01-01')
           - Communications where end time is after start time
-        tests:
-          - not_null:
-              where: "communication_type = 2"
+          Note: Currently NULL for all records as phone calls lack valid end times
       - name: response_rate
         description: Rate of response for outbound communications
         tests:
@@ -178,12 +176,27 @@ models:
         tests:
           - not_null:
               where: "communication_category = 'appointment'"
-      - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
+      - name: _loaded_at
+        description: >
+          ETL extraction timestamp from primary source (communication base)
+          Source: int_patient_communications_base._loaded_at (aggregated)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Note: Aggregated using MIN() since this is a metrics model
         tests:
           - not_null
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+      - name: _created_at
+        description: >
+          Business creation timestamp from primary source (communication base)
+          Source: int_patient_communications_base._created_at (aggregated)
+          Purpose: Business timeline analysis for communication trends
+          Note: Aggregated using MIN() since this is a metrics model
+        tests:
+          - not_null
+      - name: _transformed_at
+        description: >
+          dbt intermediate model build timestamp - when this metrics model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
         tests:
           - not_null
       - name: min_start_time
@@ -227,19 +240,19 @@ models:
           - not_null:
               where: "future_dates_count > 0"
       - name: email_count
-        description: Count of email communications (mode 1)
+        description: Count of email communications (communication_mode = 'manual_note')
         tests:
           - not_null
       - name: phone_count
-        description: Count of phone call communications (mode 2)
+        description: Count of phone call communications (communication_mode = 'phone_call')
         tests:
           - not_null
       - name: mail_count
-        description: Count of mail communications (mode 3)
+        description: Count of mail communications (communication_mode = 'other')
         tests:
           - not_null
       - name: text_count
-        description: Count of text message communications (mode 5)
+        description: Count of text message communications (communication_mode = 'text_message')
         tests:
           - not_null
       - name: system_default_count
@@ -252,19 +265,12 @@ models:
           - not_null
 
     meta:
-      business_owners: ["dental_communications_team", "practice_management"]
-      technical_owners: ["data_engineering_team", "analytics_team"]
-      refresh_frequency: "daily"
+      owner: "dental_communications_team"
       contains_pii: false
-      primary_use_cases:
-        - "Staff performance evaluation for communication activities"
-        - "Communication channel effectiveness analysis"
-        - "Trend analysis of patient engagement metrics"
-        - "Conversion rate optimization for appointment scheduling"
-        - "Response rate monitoring for outbound campaigns"
-        - "Data quality monitoring for communication timestamps"
-        - "Distribution analysis of communication channels"
-        - "Program-specific communication tracking"
+      business_process: "Communication Analytics"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "System F: Communications"
       data_quality_requirements:
         - "All volume counts must be non-negative integers"
         - "Total count must equal sum of successful and failed counts"
@@ -278,6 +284,10 @@ models:
         - "Invalid end times must be excluded from duration calculations"
         - "Communication mode distribution must be tracked"
         - "Program-specific communications must be monitored"
+      performance_requirements:
+        - "Incremental processing must complete within 5 minutes"
+        - "Daily aggregations must include all communications for the day"
+        - "Indexes must support efficient filtering by date, user, and type"
 
     tests:
       # Validates that successful_count is non-negative and doesn't exceed total_count

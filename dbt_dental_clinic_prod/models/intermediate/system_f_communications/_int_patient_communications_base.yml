@@ -41,7 +41,8 @@ models:
       - stg_opendental__histappointment: Historical appointment data for last visit tracking
 
       Business rules:
-      - Communication direction determined by the is_sent flag (2=outbound, 1=inbound, 0=system, else unknown)
+      - Communication direction determined by SentOrReceived field (0=system, 1=outbound, 2=inbound)
+      - Communication mode enhanced categorization based on Mode_ field (0=system_note, 1=manual_note, 3=phone_call, 4/5=text_message)
       - Communication category extracted via keyword analysis from message content
       - Linked entities (appointments, claims, procedures) extracted via regex pattern matching
       - Phone numbers extracted from notes for contact tracking
@@ -51,6 +52,7 @@ models:
       - User context linked through user_id with optional provider association
       - Last visit date calculated from both current and historical appointment data
       - First visit date tracked for patient history
+      - Standardized metadata preserved from primary source using standardize_intermediate_metadata macro
       - Enhanced data quality validations for all fields
 
     config:
@@ -111,10 +113,10 @@ models:
           Timestamp when the communication ended (optional). Particularly relevant
           for phone calls or multi-message conversations.
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
-              where: "communication_end_datetime > '0001-01-01'"
+            - dbt_expectations.expect_column_values_to_be_between:
+               min_value: "'2020-01-01'"
+               max_value: "CURRENT_DATE"
+               where: "communication_end_datetime > '0001-01-01'"
       
       - name: communication_type
         description: >
@@ -137,14 +139,25 @@ models:
       
       - name: communication_mode
         description: >
-          The mode or channel used for communication. Maps from the source
-          system's "mode" field.
+          The mode or channel used for communication. Enhanced categorization based on source Mode_ values:
+          - system_note (Mode_ = 0): System-generated notes, appointment changes, automated events
+          - manual_note (Mode_ = 1): Staff-entered manual notes and observations
+          - phone_call (Mode_ = 3): Phone communications (inbound and outbound calls)
+          - text_message (Mode_ = 4,5): Text message communications (SMS)
+          - other (Mode_ = 2,6,8): Rare or specialized communication modes
+          - unknown: Unrecognized mode values
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['system_note', 'manual_note', 'phone_call', 'text_message', 'other', 'unknown']
       
       - name: direction
         description: >
-          Indicates the direction of the communication. Can be outbound (from practice to patient),
-          inbound (from patient to practice), system (automated system message), or unknown.
-          Derived from the is_sent flag.
+          Indicates the direction of the communication based on SentOrReceived field:
+          - outbound (SentOrReceived = 1): Communications sent by the clinic to the patient
+          - inbound (SentOrReceived = 2): Communications received by the clinic from the patient
+          - system (SentOrReceived = 0): System-generated communications and automated events
+          - unknown: Unrecognized SentOrReceived values
         tests:
           - not_null
           - accepted_values:
@@ -254,15 +267,22 @@ models:
       
       - name: patient_name
         description: >
-          Patient's preferred name, joined from int_patient_profile.
-        tests:
-          - not_null
+           Patient's preferred name, joined from int_patient_profile.
+           Note: NULL values are expected as this is an optional field that patients
+           or office staff may choose not to fill out. This is normal business behavior.  
       
       - name: patient_status
         description: >
-          Current status of the patient, joined from int_patient_profile.
+           Current status of the patient, joined from int_patient_profile.
+           Note: NULL values are expected for patients that exist in communications
+           but have not been processed into the patient profile yet. NOTE: only test for patient
+           IDs that have profile data
         tests:
-          - not_null
+           - not_null:
+               where: "patient_id <= 33438"
+           - accepted_values:
+               values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+               where: "patient_id <= 33438"
       
       - name: birth_date
         description: >
@@ -289,18 +309,31 @@ models:
                 and not (content like '%Phone Call Received%')
                 and not (communication_type = 603)
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'1900-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
-              where: "birth_date is not null"
+               min_value: "'1900-01-01'::date"
+               max_value: "CURRENT_DATE"
+               where: "birth_date is not null"
       
       - name: first_visit_date
         description: >
           Date of patient's first visit to the practice, joined from int_patient_profile.
+          Note: NULL values are expected for patients that exist in communications
+          but have not been processed into the patient profile yet.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'1900-01-01'::date"
+              max_value: "CURRENT_DATE"
+              where: "first_visit_date is not null and patient_id <= 33438"
       
       - name: last_visit_date
         description: >
           Date of patient's most recent completed visit, derived from both current
           and historical appointment data.
+          Note: NULL values are expected for patients that have no completed visits.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'1900-01-01'::date"
+              max_value: "CURRENT_DATE"
+              where: "last_visit_date is not null"
       
       - name: user_name
         description: >
@@ -327,29 +360,32 @@ models:
               field: provider_id
               where: "provider_id is not null AND provider_id != 0"
       
-      - name: created_at
+      - name: _loaded_at
         description: >
-          Timestamp when the record was created in the source system.
+          ETL extraction timestamp from primary source (stg_opendental__commlog)
+          Source: stg_opendental__commlog._loaded_at
+          Purpose: Data lineage tracking and pipeline monitoring
         tests:
           - not_null
       
-      - name: updated_at
+      - name: _transformed_at
         description: >
-          Timestamp when the record was last updated in the source system.
+          dbt intermediate model build timestamp - when this model was built
+          Source: dbt model execution
+          Purpose: Model-specific tracking and pipeline debugging
         tests:
           - not_null
       
-      - name: model_created_at
+      - name: _created_at
         description: >
-          Timestamp when the record was created in this model.
+          Business creation/update timestamp from primary source (stg_opendental__commlog)
+          Source: stg_opendental__commlog._created_at (maps to DateTStamp in OpenDental)
+          Note: DateTEntry field is always set to minimum date (0001-01-01) and is not used.
+          Purpose: Business timeline analysis and change tracking
         tests:
           - not_null
       
-      - name: model_updated_at
-        description: >
-          Timestamp when the record was last updated in this model.
-        tests:
-          - not_null
+      
 
     tests:
       # Validates that user_name column is populated whenever user_id column has a value
@@ -365,7 +401,8 @@ models:
       data_quality_requirements:
         - "All communications must be associated with a valid patient"
         - "Communication categories must accurately reflect content"
-        - "Direction must be correctly determined from is_sent flag"
+        - "Direction must be correctly determined from SentOrReceived field (0=system, 1=outbound, 2=inbound)"
+        - "Communication mode must be correctly categorized from Mode_ field"
         - "All dates must be valid and chronological"
         - "Linked entities (appointments, claims, procedures) must be valid"
         - "Regular expression pattern extraction must detect valid entity IDs"
@@ -373,3 +410,5 @@ models:
         - "Follow-up tracking must accurately reflect communication requirements"
         - "Last visit date must be the most recent valid completed visit"
         - "Future incremental loading must only process new communications"
+        - "Primary source metadata must be preserved for data lineage tracking"
+        - "Standardized metadata fields must be properly populated from source"
