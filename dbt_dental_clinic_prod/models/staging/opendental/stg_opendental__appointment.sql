@@ -1,6 +1,13 @@
 {{ config(
     materialized='incremental',
-    unique_key='appointment_id' 
+    unique_key='appointment_id',
+    indexes=[
+        {'columns': ['patient_id']},
+        {'columns': ['appointment_datetime']},
+        {'columns': ['appointment_status']},
+        {'columns': ['patient_id', 'appointment_status']},
+        {'columns': ['patient_id', 'appointment_datetime']}
+    ]
 ) }}
 
 with source_data as (
