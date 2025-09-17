@@ -36,14 +36,12 @@ renamed_columns as (
         "CommSource" as communication_source,
         "CommReferralBehavior" as referral_behavior,
         
-        -- Boolean Fields
-        {{ convert_opendental_boolean('"SentOrReceived"') }} as is_sent,
+        -- Integer Fields (SentOrReceived is int2, not boolean)
+        "SentOrReceived"::smallint as is_sent,
         {{ convert_opendental_boolean('"SigIsTopaz"') }} as is_topaz_signature,
         
         -- Metadata columns
-        {{ standardize_metadata_columns(
-            created_at_column='"DateTEntry"'
-        ) }}
+        {{ standardize_metadata_columns(created_at_column='"DateTEntry"') }}
 
     from source_data
 )
