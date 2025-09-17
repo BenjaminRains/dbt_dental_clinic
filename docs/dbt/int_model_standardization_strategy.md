@@ -205,6 +205,7 @@ select * from final
 -- Use the standardized macro for intermediate models
 {{ standardize_intermediate_metadata() }}
 
+
 -- For staging models with different metadata configurations:
 -- Complete metadata (patient model):
 {{ standardize_intermediate_metadata() }}
