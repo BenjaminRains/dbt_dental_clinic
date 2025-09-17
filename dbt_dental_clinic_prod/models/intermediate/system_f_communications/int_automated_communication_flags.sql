@@ -1,17 +1,18 @@
 {{ config(
     materialized='incremental',
-    
+    schema='intermediate',
     unique_key='communication_id',
+    on_schema_change='fail',
+    incremental_strategy='merge',
     indexes=[
         {'columns': ['communication_datetime']},
         {'columns': ['direction']},
         {'columns': ['patient_id']}
-    ],
-    incremental_strategy='delete+insert'
+    ]
 ) }}
 
 /*
-    Model for automated communication flags
+    Intermediate model for automated communication flags
     Part of System F: Communications
     
     This model:
@@ -19,15 +20,29 @@
     2. Identifies likely automated messages using patterns
     3. Provides engagement metrics for automated comms
     4. Supports analysis of automated communication effectiveness
-
-    Performance Optimizations:
+    
+    Business Logic Features:
+    - Pattern-based automation detection using content analysis
+    - Batch communication identification for system-generated messages
+    - Trigger type categorization (appointment, billing, clinical, etc.)
+    - Campaign type identification for marketing communications
+    - Engagement tracking (opens, clicks, replies, bounces)
+    - Status determination based on communication outcomes
+    
+    Data Quality Notes:
+    - Filters to outbound communications only (automated comms are primarily outbound)
+    - Handles future dates for scheduled automated communications
+    - Validates batch detection to prevent false positives
+    - Limits processing scope for performance optimization
+    
+    Performance Considerations:
     - Pre-aggregates batch communications to avoid repeated subqueries
     - Pre-aggregates replies to avoid repeated subqueries
     - Uses CTEs to improve query readability and performance
     - Optimizes pattern matching with pre-filtered content
-    - Improves incremental processing
     - Adds indexes for frequently joined columns
-
+    - Implements row limits for debugging and performance control
+    
     Safety Checks:
     - Limits batch detection to prevent self-matching
     - Adds row count limits for debugging
@@ -46,7 +61,10 @@ WITH BaseCommunications AS (
         base.program_id,
         base.communication_mode,
         base.outcome,
-        base.linked_appointment_id
+        base.linked_appointment_id,
+        -- Preserve metadata from primary source for data lineage
+        base._loaded_at,
+        base._created_at
     FROM {{ ref('int_patient_communications_base') }} base
     {% if is_incremental() %}
     WHERE base.communication_datetime > (
@@ -68,7 +86,10 @@ FilteredCommunications AS (
         program_id,
         communication_mode,
         outcome,
-        linked_appointment_id
+        linked_appointment_id,
+        -- Preserve metadata
+        _loaded_at,
+        _created_at
     FROM BaseCommunications
     WHERE direction = 'outbound'  -- This matches the new direction values from base model
     -- Add a limit for debugging
@@ -87,6 +108,9 @@ ContentPatterns AS (
         comm.outcome,
         comm.linked_appointment_id,
         comm.direction,  -- propagate direction
+        -- Preserve metadata
+        comm._loaded_at,
+        comm._created_at,
         CASE
             WHEN comm.content LIKE 'Patient Text Sent via PbN%' THEN TRUE
             WHEN comm.content LIKE 'Email sent via PbN for campaign%' THEN TRUE
@@ -104,57 +128,92 @@ ContentPatterns AS (
             ELSE FALSE
         END as has_automation_indicators,
         CASE 
-            -- Appointment related triggers
+            -- Appointment related triggers (more inclusive)
             WHEN comm.content LIKE '%appointment%' AND (
-                comm.content LIKE '%starting on%' OR 
-                comm.content LIKE '%scheduled for%' OR
+                comm.content LIKE '%reminder%' OR
+                comm.content LIKE '%starting%' OR 
+                comm.content LIKE '%scheduled%' OR
                 comm.content LIKE '%tomorrow%' OR
+                comm.content LIKE '%upcoming%' OR
                 comm.content LIKE '%confirm%' OR
-                comm.content LIKE '%attempted to contact%' OR
-                comm.content LIKE '%on the schedule%' OR
-                comm.content LIKE '%time for a dental cleaning%'
-            ) THEN 'appointment_reminder'
+                comm.content LIKE '%attempted%' OR
+                comm.content LIKE '%schedule%'
+            ) AND comm.content NOT LIKE '%confirmed%' THEN 'appointment_reminder'
             WHEN comm.content LIKE '%appointment%' AND (
-                comm.content LIKE '%confirmed via%' OR
+                comm.content LIKE '%confirmed%' OR
                 comm.content LIKE '%has been confirmed%'
             ) THEN 'appointment_confirmation'
             WHEN comm.content LIKE '%broken%' OR 
                  comm.content LIKE '%BROKEN%' OR
-                 comm.content LIKE '%change this appt%' THEN 'broken_appointment'
+                 comm.content LIKE '%change%' OR
+                 comm.content LIKE '%cancel%' THEN 'broken_appointment'
             
-            -- Financial triggers
+            -- Financial triggers (more inclusive)
             WHEN comm.content LIKE '%balance%' OR 
-                 comm.content LIKE '%account balance%' OR 
+                 comm.content LIKE '%account%' OR 
                  comm.content LIKE '%outstanding%' OR
                  comm.content LIKE '%payment%' OR
-                 comm.content LIKE '%paid%' THEN 'balance_notice'
+                 comm.content LIKE '%due%' OR
+                 comm.content LIKE '%owe%' OR
+                 comm.content LIKE '%bill%' THEN 'balance_notice'
             
             -- Patient interaction triggers
-            WHEN comm.content LIKE '%Patient Text Received%' THEN 'patient_response'
-            WHEN comm.content LIKE '%opted in for text%' OR
-                 comm.content LIKE '%opted out%' THEN 'preference_update'
+            WHEN comm.content LIKE '%Patient Text Received%' OR
+                 comm.content LIKE '%patient%' AND comm.content LIKE '%text%' THEN 'patient_response'
+            WHEN comm.content LIKE '%opted%' OR
+                 comm.content LIKE '%preference%' THEN 'preference_update'
             
-            -- Review and form triggers
-            WHEN comm.content LIKE '%review%' OR 
-                 comm.content LIKE '%experience%' OR 
-                 comm.content LIKE '%trusting us%' OR
-                 comm.content LIKE '%questions about the treatment%' THEN 'review_request'
-            WHEN comm.content LIKE '%forms%' AND (
-                comm.content LIKE '%complete%' OR 
-                comm.content LIKE '%update%' OR
-                comm.content LIKE '%new patient%'
-            ) THEN 'form_request'
+            -- Review and form triggers (more inclusive)
+            WHEN comm.content LIKE '%review%' OR
+                 comm.content LIKE '%experience%' OR
+                 comm.content LIKE '%rate%' OR
+                 comm.content LIKE '%feedback%' THEN 'review_request'
+            WHEN comm.content LIKE '%forms%' OR
+                 comm.content LIKE '%complete%' OR 
+                 comm.content LIKE '%update%' OR
+                 comm.content LIKE '%new patient%' OR
+                 comm.content LIKE '%fill%' OR
+                 comm.content LIKE '%submit%' THEN 'form_request'
             
-            -- Clinical triggers
-            WHEN comm.content LIKE '%post operative%' OR 
+            -- Clinical triggers (more inclusive)
+            WHEN comm.content LIKE '%post%' OR 
+                 comm.content LIKE '%operative%' OR
                  comm.content LIKE '%instructions%' OR
-                 comm.content LIKE '%Crown%' THEN 'post_op_instructions'
+                 comm.content LIKE '%Crown%' OR
+                 comm.content LIKE '%treatment%' OR
+                 comm.content LIKE '%procedure%' THEN 'post_op_instructions'
             
             -- System notifications
-            WHEN comm.content LIKE '%END OF YEAR LETTER%' OR
-                 comm.content LIKE '%annual%' THEN 'annual_notification'
+            WHEN comm.content LIKE '%END OF YEAR%' OR
+                 comm.content LIKE '%annual%' OR
+                 comm.content LIKE '%year end%' THEN 'annual_notification'
             WHEN comm.content LIKE '%DELIVERY FAILURE%' OR
-                 comm.content LIKE '%Send Failed%' THEN 'delivery_failure'
+                 comm.content LIKE '%Send Failed%' OR
+                 comm.content LIKE '%failed%' THEN 'delivery_failure'
+            
+            -- Follow-up communications
+            WHEN comm.content LIKE '%follow%' AND (
+                comm.content LIKE '%up%' OR 
+                comm.content LIKE '%call%' OR
+                comm.content LIKE '%contact%'
+            ) THEN 'follow_up'
+            
+            -- Recall communications
+            WHEN comm.content LIKE '%recall%' OR 
+                 (comm.content LIKE '%reminder%' AND comm.content NOT LIKE '%appointment%') THEN 'recall_reminder'
+            
+            -- Insurance related
+            WHEN comm.content LIKE '%insurance%' OR 
+                 comm.content LIKE '%claim%' OR
+                 comm.content LIKE '%benefit%' OR
+                 comm.content LIKE '%coverage%' THEN 'insurance_related'
+            
+            -- General communication (catch-all for manual communications)
+            WHEN comm.content LIKE '%call%' OR
+                 comm.content LIKE '%phone%' OR
+                 comm.content LIKE '%contact%' OR
+                 comm.content LIKE '%message%' OR
+                 comm.content LIKE '%note%' THEN 'general_communication'
             
             ELSE 'other'
         END as detected_trigger_type,
@@ -183,27 +242,24 @@ ContentPatterns AS (
 
 BatchCommunications AS (
     -- Pre-aggregate batch communications with improved filtering
-    -- Added safety check to prevent self-matching
+    -- Only consider outbound communications for batch detection
     SELECT 
         content,
-        communication_datetime,
-        direction,  -- propagate direction
-        patient_id,  -- propagate patient_id
+        date_trunc('minute', communication_datetime) AS dt_minute,
+        direction,
         COUNT(DISTINCT patient_id) as patient_count
     FROM ContentPatterns
-    GROUP BY content, communication_datetime, direction, patient_id
-    HAVING COUNT(DISTINCT patient_id) > 3
-    -- Add a limit for debugging
-    LIMIT 10000  -- Adjust this number based on your data volume
+    WHERE direction = 'outbound'  -- Only outbound can be automated
+    GROUP BY content, date_trunc('minute', communication_datetime), direction
+    HAVING COUNT(DISTINCT patient_id) >= 5  -- Higher threshold for batch detection
 ),
 
 ReplyTracking AS (
-    -- Optimize reply tracking with a more efficient join
-    -- Added safety check to prevent excessive joins
+    -- Look for inbound communications that are replies to outbound communications
     SELECT 
         comm.communication_id,
-        comm.patient_id,  -- propagate patient_id
-        comm.direction,  -- propagate direction
+        comm.patient_id,
+        comm.direction,
         MAX(CASE 
             WHEN reply.commlog_id IS NOT NULL THEN 1 
             ELSE 0 
@@ -216,22 +272,23 @@ ReplyTracking AS (
             communication_datetime,
             note,
             CASE 
-                WHEN is_sent = 2 THEN 'outbound'
-                WHEN is_sent = 1 THEN 'inbound'
+                WHEN is_sent = 1 THEN 'outbound'  -- Clinic to patient
+                WHEN is_sent = 2 THEN 'inbound'   -- Patient to clinic
                 WHEN is_sent = 0 THEN 'system'
                 ELSE 'unknown'
-            END AS reply_direction  -- Renamed to avoid conflict
-        FROM "opendental_analytics"."staging"."stg_opendental__commlog"
-        WHERE is_sent = 1  -- Inbound messages
+            END AS reply_direction
+        FROM {{ ref('stg_opendental__commlog') }}
+        WHERE is_sent = 2  -- Patient replies (inbound)
         AND mode IN (1, 5)  -- Only consider email (1) and text (5) for replies
         AND note IS NOT NULL
+        AND note NOT LIKE '%Patient Text Sent via PbN%'  -- Exclude automated messages
+        AND note NOT LIKE '%Email sent via PbN%'         -- Exclude automated messages
     ) reply
         ON reply.patient_id = comm.patient_id
         AND reply.communication_datetime BETWEEN comm.communication_datetime 
             AND comm.communication_datetime + INTERVAL '3 days'
+        AND reply.communication_datetime > comm.communication_datetime  -- Reply must be after original
     GROUP BY comm.communication_id, comm.direction, comm.patient_id
-    -- Add a limit for debugging
-    LIMIT 100000  -- Adjust this number based on your data volume
 ),
 
 AutomatedFlags AS (
@@ -246,15 +303,19 @@ AutomatedFlags AS (
         -- Simplified automation detection using pre-calculated flags
         -- Added safety check to prevent self-matching in batch detection
         CASE
+            WHEN comm.direction != 'outbound' THEN FALSE  -- Only outbound can be automated
             WHEN comm.has_automation_indicators THEN TRUE
-            WHEN comm.program_id IS NOT NULL THEN TRUE
+            WHEN comm.program_id IS NOT NULL AND comm.program_id > 0 AND comm.program_id < 100 THEN TRUE  -- Only very specific program IDs
+            WHEN comm.campaign_type IS NOT NULL AND comm.campaign_type != '' THEN TRUE  -- Campaign communications are automated
+            WHEN comm.detected_trigger_type IN ('appointment_reminder', 'balance_notice', 'form_request', 'review_request') 
+                 AND comm.communication_mode IN ('text_message', 'manual_note')  -- Only automated modes
+                 AND comm.detected_trigger_type != 'general_communication' THEN TRUE
             WHEN EXISTS (
                 SELECT 1
                 FROM BatchCommunications batch
                 WHERE batch.content = comm.content
-                AND batch.communication_datetime BETWEEN comm.communication_datetime - INTERVAL '5 minutes'
-                    AND comm.communication_datetime + INTERVAL '5 minutes'
-                AND batch.communication_datetime != comm.communication_datetime  -- Prevent self-matching
+                AND batch.dt_minute = date_trunc('minute', comm.communication_datetime)
+                AND batch.direction = 'outbound'
             ) THEN TRUE
             ELSE FALSE
         END AS is_automated,
@@ -270,14 +331,19 @@ AutomatedFlags AS (
             ELSE 'sent'
         END AS status,
         
-        -- Simplified engagement metrics using pre-calculated flags
-        CASE WHEN comm.communication_mode = 1 THEN comm.has_open ELSE 0 END AS open_count,
-        CASE WHEN comm.communication_mode = 1 THEN comm.has_click ELSE 0 END AS click_count,
+        -- Engagement metrics - set to NULL until proper event data is available
+        -- TODO: Join with email/SMS event tables when available
+        NULL::int4 AS open_count,  -- Will be populated when email events table is available
+        NULL::int4 AS click_count, -- Will be populated when email events table is available
         COALESCE(reply.has_reply, 0) as reply_count,
-        CASE WHEN comm.communication_mode = 1 THEN comm.has_bounce ELSE 0 END AS bounce_count,
+        NULL::int4 AS bounce_count, -- Will be populated when email events table is available
         
-        CURRENT_TIMESTAMP AS model_created_at,
-        CURRENT_TIMESTAMP AS model_updated_at
+        -- Standardized metadata using macro (preserves primary source metadata)
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='comm',
+            preserve_source_metadata=true,
+            source_metadata_fields=['_loaded_at', '_created_at']
+        ) }}
     FROM ContentPatterns comm
     LEFT JOIN ReplyTracking reply
         ON reply.communication_id = comm.communication_id
@@ -299,7 +365,9 @@ SELECT
     bounce_count,
     communication_datetime,
     communication_mode,  -- Add communication_mode to final output
-    model_created_at,
-    model_updated_at
+    -- Standardized metadata fields
+    _loaded_at,
+    _created_at,
+    _transformed_at
 FROM AutomatedFlags
-WHERE is_automated = TRUE  -- Only return communications flagged as automated
+-- Return all communications, not just automated ones

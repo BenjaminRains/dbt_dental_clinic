@@ -1,7 +1,15 @@
 {{ config(
     materialized='incremental',
-    
-    unique_key='metric_id'
+    schema='intermediate',
+    unique_key='metric_id',
+    on_schema_change='fail',
+    incremental_strategy='merge',
+    indexes=[
+        {'columns': ['metric_id'], 'unique': true},
+        {'columns': ['date']},
+        {'columns': ['user_id']},
+        {'columns': ['_transformed_at']}
+    ]
 ) }}
 
 /*
@@ -13,6 +21,27 @@
     2. Generates metrics for reporting on communication activities
     3. Supports analysis of communication effectiveness
     4. Tracks performance by user, type, and category
+    
+    Business Logic Features:
+    - Daily aggregation by user, type, direction, and category
+    - Success/failure rate calculations based on communication outcomes
+    - Response rate tracking for outbound communications
+    - Conversion rate analysis for appointment-related communications
+    - Duration metrics for phone calls with data quality validation
+    - Multi-channel distribution analysis (email, phone, mail, text)
+    - Program-specific communication tracking
+    - Future communication scheduling analysis
+    
+    Data Quality Notes:
+    - Duration calculations exclude future scheduled communications
+    - Duration calculations require valid end times (not default '0001-01-01')
+    - Response rates only calculated for outbound communications
+    - Conversion rates focus on appointment-related communications
+    
+    Performance Considerations:
+    - Incremental processing based on communication date
+    - Aggregated metrics reduce downstream query complexity
+    - Indexed on key dimensions for efficient filtering
 */
 
 WITH DailyCommunications AS (
@@ -28,7 +57,7 @@ WITH DailyCommunications AS (
         -- Calculate average duration only for completed phone calls with valid timestamps
         AVG(
             CASE 
-                WHEN communication_mode = 2  -- Only phone calls
+                WHEN communication_mode = 'phone_call'  -- Only phone calls (mode 3)
                 AND communication_datetime <= CURRENT_TIMESTAMP  -- Not future scheduled
                 AND communication_end_datetime > '0001-01-01 00:00:00'  -- Has valid end time
                 AND communication_end_datetime > communication_datetime  -- End time after start time
@@ -44,7 +73,7 @@ WITH DailyCommunications AS (
         COUNT(CASE WHEN communication_end_datetime > '0001-01-01 00:00:00' THEN 1 END) as records_with_end_time,
         COUNT(*) as total_records,
         COUNT(CASE 
-            WHEN communication_mode = 2  -- Only phone calls
+            WHEN communication_mode = 'phone_call'  -- Only phone calls (mode 3)
             AND communication_datetime <= CURRENT_TIMESTAMP  -- Not future scheduled
             AND communication_end_datetime > '0001-01-01 00:00:00'  -- Has valid end time
             AND communication_end_datetime > communication_datetime  -- End time after start time
@@ -55,13 +84,16 @@ WITH DailyCommunications AS (
         MIN(CASE WHEN communication_datetime > CURRENT_TIMESTAMP THEN communication_datetime END) as earliest_future_date,
         MAX(CASE WHEN communication_datetime > CURRENT_TIMESTAMP THEN communication_datetime END) as latest_future_date,
         -- Add mode-specific counts
-        COUNT(CASE WHEN communication_mode = 1 THEN 1 END) as email_count,
-        COUNT(CASE WHEN communication_mode = 2 THEN 1 END) as phone_count,
-        COUNT(CASE WHEN communication_mode = 3 THEN 1 END) as mail_count,
-        COUNT(CASE WHEN communication_mode = 5 THEN 1 END) as text_count,
+        COUNT(CASE WHEN communication_mode = 'manual_note' THEN 1 END) as email_count,
+        COUNT(CASE WHEN communication_mode = 'phone_call' THEN 1 END) as phone_count,
+        COUNT(CASE WHEN communication_mode = 'other' THEN 1 END) as mail_count,
+        COUNT(CASE WHEN communication_mode = 'text_message' THEN 1 END) as text_count,
         -- Add program-specific counts
         COUNT(CASE WHEN program_id = 0 THEN 1 END) as system_default_count,
-        COUNT(CASE WHEN program_id = 95 THEN 1 END) as legacy_system_count
+        COUNT(CASE WHEN program_id = 95 THEN 1 END) as legacy_system_count,
+        -- Preserve business-relevant metadata from primary source
+        MIN(_loaded_at) as _loaded_at,
+        MIN(_created_at) as _created_at
     FROM {{ ref('int_patient_communications_base') }}
     
     {% if is_incremental() %}
@@ -147,8 +179,10 @@ SELECT
     -- Add program-specific counts
     dc.system_default_count,
     dc.legacy_system_count,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    -- Standardized metadata (business-relevant only)
+    dc._loaded_at,
+    dc._created_at,
+    current_timestamp as _transformed_at
 FROM DailyCommunications dc
 LEFT JOIN ResponseMetrics rm
     ON dc.date = rm.date
