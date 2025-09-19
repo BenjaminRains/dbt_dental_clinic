@@ -2,7 +2,7 @@
     materialized='incremental',
     schema='intermediate',
     unique_key='procedure_id',
-    on_schema_change='fail',
+    on_schema_change='append_new_columns',
     incremental_strategy='merge',
     indexes=[
         {'columns': ['procedure_id'], 'unique': true},
@@ -131,6 +131,7 @@ procedure_complete_integrated as (
         pl.provider_id,
         pl.clinic_id,
         pl.procedure_code_id,
+        pl.appointment_id,
         pl.procedure_date,
         pl.procedure_status,
         def_status.item_name as procedure_status_desc,
@@ -181,8 +182,6 @@ procedure_complete_integrated as (
         pn.last_note_timestamp,
         
         -- Metadata fields (standardized pattern)
-        pl._loaded_at,
-        pl._created_at,
         {{ standardize_intermediate_metadata(primary_source_alias='pl') }}
         
     from source_procedure_log pl
