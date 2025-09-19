@@ -54,7 +54,14 @@ renamed_columns as (
         
         -- Date fields using macro (includes age calculation)
         "Birthdate" as birth_date,
-        DATE_PART('year', AGE("Birthdate"))::integer as age,
+        CASE 
+            WHEN "Birthdate" IS NULL THEN NULL
+            WHEN "Birthdate" < '1900-01-01'::date THEN NULL  -- Invalid old dates
+            WHEN "Birthdate" > CURRENT_DATE THEN NULL  -- Future birth dates
+            WHEN DATE_PART('year', AGE("Birthdate")) > 120 THEN NULL  -- Ages over 120
+            WHEN DATE_PART('year', AGE("Birthdate")) < 0 THEN NULL  -- Negative ages
+            ELSE DATE_PART('year', AGE("Birthdate"))::integer
+        END as age,
         "DateFirstVisit" as first_visit_date,
         {{ clean_opendental_date('"DateTimeDeceased"') }} as deceased_datetime,
         "AdmitDate" as admit_date,
