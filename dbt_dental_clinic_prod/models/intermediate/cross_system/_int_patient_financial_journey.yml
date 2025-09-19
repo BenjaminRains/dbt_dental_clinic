@@ -1,0 +1,968 @@
+version: 2
+
+models:
+  - name: int_patient_financial_journey
+    description: >
+      Comprehensive patient financial journey analysis that provides a complete view of each patient's 
+      financial lifecycle across all systems. This cross-system model integrates data from Fee Processing, 
+      Insurance Processing, Payment Allocation, and AR Analysis to deliver a patient-centric financial 
+      summary for reporting and analytics.
+      
+      Key Features:
+      - Financial Journey Tracking: Complete view from procedures to payments to collections
+      - Cross-System Integration: Connects Fee Processing (System A), Insurance (System B), Payments (System C), and AR Analysis (System D)
+      - Patient-Centric Aggregation: All financial data aggregated at patient level for comprehensive analysis
+      - Aging Analysis: Leverages existing AR aging bucket calculations for consistent financial reporting
+      - Payment History: Comprehensive payment tracking across all sources (patient and insurance)
+      - Procedure Analysis: Detailed procedure tracking including completed and planned treatments
+      - Adjustment Tracking: Complete adjustment history including write-offs and discounts
+      
+      Data Sources:
+      - int_ar_analysis: Core AR balances, aging buckets, and financial metrics
+      - int_patient_profile: Patient demographics, status, and categorization
+      - int_procedure_complete: Procedure details, fees, and status information
+      - int_patient_payment_allocated: Patient payment allocations and history
+      - int_insurance_payment_allocated: Insurance payment allocations and history
+      - int_adjustments: Adjustment details, categories, and amounts
+      
+      Business Logic Features:
+      - Financial Balance Calculation: Combines procedures, payments, and adjustments for accurate balance
+      - Payment Source Tracking: Separates patient and insurance payments for detailed analysis
+      - Procedure Status Analysis: Tracks completed (status=2) vs planned (status=1) procedures
+      - Financial Journey Flags: Identifies patients with outstanding balances, overdue amounts, pending claims, and recent payment activity
+      - Cross-System Validation: Ensures data consistency across all financial systems
+      
+      Data Quality Notes:
+      - Builds on validated AR analysis infrastructure for data consistency
+      - Uses existing intermediate models to maintain referential integrity
+      - Handles null values appropriately with COALESCE for robust calculations
+      - Maintains one-to-one relationship with patients through patient_id
+      - Procedure status values are numeric (1=planned, 2=completed) based on OpenDental standards
+      
+      Performance Notes:
+      - Table materialization for complex cross-system joins and aggregations
+      - Leverages existing AR analysis infrastructure for optimal performance
+      - Indexed on key lookup fields (patient_id, patient_status, total_ar_balance) for efficient queries
+      - Weekly refresh cycle appropriate for financial journey data that doesn't require real-time updates
+      
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: patient_id
+    
+    meta:
+      owner: "Finance & Analytics Team"
+      contains_pii: true
+      business_process: "Patient Financial Journey Analysis"
+      refresh_frequency: "Weekly"
+      business_impact: "High"
+      system_integration: "Cross-System (A, B, C, D)"
+      data_quality_requirements:
+        - "Patient financial balances must be accurate and consistent with AR system"
+        - "Payment allocations must match source payment systems"
+        - "Procedure status values must follow OpenDental standards"
+        - "All financial calculations must use COALESCE for null handling"
+      performance_requirements:
+        - "Model must complete within 5 minutes for weekly refresh"
+        - "Queries against this model should return results within 30 seconds"
+        - "Indexes must support common filtering patterns (patient_status, balance ranges)"
+
+    columns:
+      - name: patient_id
+        description: >
+          Primary key - Unique identifier for each patient in the financial journey analysis.
+          
+          Business Rules:
+          - Must match patient_id in int_patient_profile
+          - One record per patient in this model
+          - Used as the primary key for all financial journey analysis
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              severity: error
+              config:
+                description: "Patient must exist in patient profile for financial journey analysis"
+
+      - name: first_name
+        description: >
+          Patient's preferred first name from patient profile.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.preferred_name
+          - Used for patient identification in reports and analysis
+        tests:
+          - not_null
+
+      - name: middle_initial
+        description: >
+          Patient's middle initial from patient profile.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.middle_initial
+          - May be null for patients without middle names
+        tests:
+          - not_null:
+              where: "middle_initial is not null"
+
+      - name: gender
+        description: >
+          Patient's gender from patient profile.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.gender
+          - Used for demographic analysis and reporting
+        tests:
+          - not_null
+
+      - name: birth_date
+        description: >
+          Patient's birth date from patient profile.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.birth_date
+          - Used for age calculations and demographic analysis
+          - Must be a valid date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              config:
+                description: "Birth date must be reasonable and not in the future"
+
+      - name: age
+        description: >
+          Patient's calculated age from patient profile.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.age
+          - Used for demographic analysis and age-based reporting
+          - Must be reasonable (0-120 years)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+              severity: warn
+              config:
+                description: "Age must be reasonable for human patients"
+
+      - name: patient_status
+        description: >
+          Patient's current status code from patient profile.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.patient_status
+          - 0=Active, 1=Archived, 2=Deceased, 3=Prospective
+          - Used for filtering active vs inactive patients
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3]
+              config:
+                description: "Patient status must be valid OpenDental status code"
+
+      - name: patient_status_description
+        description: >
+          Human-readable description of patient status.
+          
+          Business Rules:
+          - Derived from patient_status code
+          - Used for reporting and analysis
+          - Must match the corresponding status code
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Archived', 'Deceased', 'Prospective', 'Unknown']
+
+      - name: patient_category
+        description: >
+          Patient's category classification from patient profile.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.patient_category
+          - Used for patient segmentation and analysis
+          - Categories include Regular Patient, House Account, Staff Member, VIP Patient
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Regular Patient', 'House Account', 'Staff Member', 'VIP Patient', 'Other', 'Unknown']
+
+      - name: family_id
+        description: >
+          Family identifier linking related patients.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.family_id
+          - Used for family-based financial analysis
+          - May be null for patients without family relationships
+        tests:
+          - relationships:
+              to: ref('int_patient_profile')
+              field: family_id
+              severity: warn
+              where: "family_id is not null"
+              config:
+                description: "Family ID must reference valid family in patient profile"
+
+      - name: primary_provider_id
+        description: >
+          Primary provider identifier for the patient.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.primary_provider_id
+          - Used for provider-based financial analysis
+          - May be null for patients without assigned providers
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "primary_provider_id is not null"
+              config:
+                description: "Primary provider must exist in provider table"
+
+      - name: clinic_id
+        description: >
+          Clinic identifier where patient receives care.
+          
+          Business Rules:
+          - Sourced from int_patient_profile.clinic_id
+          - Used for clinic-based financial analysis
+          - Must reference valid clinic
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              severity: error
+              config:
+                description: "Clinic must exist in clinic table"
+
+      - name: total_ar_balance
+        description: >
+          Total accounts receivable balance for the patient from AR analysis.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.total_ar_balance
+          - Represents total outstanding balance across all procedures
+          - Used as primary financial metric for patient analysis
+          - Can be positive (patient owes) or negative (credit balance)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+              severity: warn
+              config:
+                description: "AR balance should be within reasonable range"
+
+      - name: balance_0_30_days
+        description: >
+          AR balance for charges 0-30 days old.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.balance_0_30_days
+          - Part of aging bucket analysis
+          - Should be >= 0 (aging buckets don't track credits)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "0-30 day balance should be non-negative and reasonable"
+
+      - name: balance_31_60_days
+        description: >
+          AR balance for charges 31-60 days old.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.balance_31_60_days
+          - Part of aging bucket analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "31-60 day balance should be non-negative and reasonable"
+
+      - name: balance_61_90_days
+        description: >
+          AR balance for charges 61-90 days old.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.balance_61_90_days
+          - Part of aging bucket analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "61-90 day balance should be non-negative and reasonable"
+
+      - name: balance_over_90_days
+        description: >
+          AR balance for charges over 90 days old.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.balance_over_90_days
+          - Part of aging bucket analysis
+          - Should be >= 0
+          - Critical for collections analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "Over 90 day balance should be non-negative and reasonable"
+
+      - name: estimated_insurance_ar
+        description: >
+          Estimated insurance accounts receivable amount.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.estimated_insurance_ar
+          - Represents expected insurance payments
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "Estimated insurance AR should be non-negative and reasonable"
+
+      - name: patient_responsibility
+        description: >
+          Total patient responsibility amount.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.patient_responsibility
+          - Represents amount patient is responsible for paying
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "Patient responsibility should be non-negative and reasonable"
+
+      - name: insurance_responsibility
+        description: >
+          Total insurance responsibility amount.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.insurance_responsibility
+          - Represents amount insurance is responsible for paying
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "Insurance responsibility should be non-negative and reasonable"
+
+      - name: last_payment_date
+        description: >
+          Date of the patient's most recent payment.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.last_payment_date
+          - Used for payment activity analysis
+          - May be null for patients with no payment history
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "last_payment_date is not null"
+              config:
+                description: "Last payment date must be reasonable and not in the future"
+
+      - name: last_visit_date
+        description: >
+          Date of the patient's most recent visit.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.last_visit_date
+          - Used for patient activity analysis
+          - May be null for patients with no visit history
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "last_visit_date is not null"
+              config:
+                description: "Last visit date must be reasonable and not in the future"
+
+      - name: open_procedures_count
+        description: >
+          Number of procedures with outstanding balances.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.open_procedures_count
+          - Used for procedure-level analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              config:
+                description: "Open procedures count should be reasonable"
+
+      - name: active_claims_count
+        description: >
+          Number of active insurance claims for the patient.
+          
+          Business Rules:
+          - Sourced from int_ar_analysis.active_claims_count
+          - Used for insurance analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+              config:
+                description: "Active claims count should be reasonable"
+
+      - name: total_completed_procedures
+        description: >
+          Total dollar amount of completed procedures (status=2).
+          
+          Business Rules:
+          - Calculated from int_procedure_complete where procedure_status = 2
+          - Represents total fees for completed procedures
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000000
+              severity: warn
+              config:
+                description: "Total completed procedures should be non-negative and reasonable"
+
+      - name: total_treatment_planned
+        description: >
+          Total dollar amount of treatment planned procedures (status=1).
+          
+          Business Rules:
+          - Calculated from int_procedure_complete where procedure_status = 1
+          - Represents total fees for planned procedures
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000000
+              severity: warn
+              config:
+                description: "Total treatment planned should be non-negative and reasonable"
+
+      - name: completed_procedure_count
+        description: >
+          Number of completed procedures (status=2).
+          
+          Business Rules:
+          - Count of procedures from int_procedure_complete where procedure_status = 2
+          - Used for procedure volume analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              config:
+                description: "Completed procedure count should be reasonable"
+
+      - name: planned_procedure_count
+        description: >
+          Number of treatment planned procedures (status=1).
+          
+          Business Rules:
+          - Count of procedures from int_procedure_complete where procedure_status = 1
+          - Used for treatment planning analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              config:
+                description: "Planned procedure count should be reasonable"
+
+      - name: first_procedure_date
+        description: >
+          Date of the patient's first completed procedure.
+          
+          Business Rules:
+          - Minimum procedure_date from int_procedure_complete where procedure_status = 2
+          - Used for patient history analysis
+          - May be null for patients with no completed procedures
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "first_procedure_date is not null"
+              config:
+                description: "First procedure date must be reasonable and not in the future"
+
+      - name: last_procedure_date
+        description: >
+          Date of the patient's most recent completed procedure.
+          
+          Business Rules:
+          - Maximum procedure_date from int_procedure_complete where procedure_status = 2
+          - Used for patient activity analysis
+          - May be null for patients with no completed procedures
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "last_procedure_date is not null"
+              config:
+                description: "Last procedure date must be reasonable and not in the future"
+
+      - name: unique_procedure_codes_completed
+        description: >
+          Number of unique procedure codes for completed procedures.
+          
+          Business Rules:
+          - Count of distinct procedure_code from int_procedure_complete where procedure_status = 2
+          - Used for procedure diversity analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+              severity: warn
+              config:
+                description: "Unique procedure codes count should be reasonable"
+
+      - name: unique_procedure_codes_planned
+        description: >
+          Number of unique procedure codes for planned procedures.
+          
+          Business Rules:
+          - Count of distinct procedure_code from int_procedure_complete where procedure_status = 1
+          - Used for treatment planning analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+              severity: warn
+              config:
+                description: "Unique planned procedure codes count should be reasonable"
+
+      - name: total_patient_payments
+        description: >
+          Total dollar amount of patient payments.
+          
+          Business Rules:
+          - Sum of split_amount from int_patient_payment_allocated where include_in_ar = true
+          - Represents total payments made by patients
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000000
+              severity: warn
+              config:
+                description: "Total patient payments should be non-negative and reasonable"
+
+      - name: total_insurance_payments
+        description: >
+          Total dollar amount of insurance payments.
+          
+          Business Rules:
+          - Sum of split_amount from int_insurance_payment_allocated where include_in_ar = true
+          - Represents total payments made by insurance
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000000
+              severity: warn
+              config:
+                description: "Total insurance payments should be non-negative and reasonable"
+
+      - name: patient_payment_count
+        description: >
+          Number of patient payments.
+          
+          Business Rules:
+          - Count of distinct payment_id from int_patient_payment_allocated where include_in_ar = true
+          - Used for payment frequency analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              config:
+                description: "Patient payment count should be reasonable"
+
+      - name: insurance_payment_count
+        description: >
+          Number of insurance payments.
+          
+          Business Rules:
+          - Count of distinct payment_id from int_insurance_payment_allocated where include_in_ar = true
+          - Used for insurance payment analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              config:
+                description: "Insurance payment count should be reasonable"
+
+      - name: first_patient_payment_date
+        description: >
+          Date of the patient's first payment.
+          
+          Business Rules:
+          - Minimum payment_date from int_patient_payment_allocated where include_in_ar = true
+          - Used for payment history analysis
+          - May be null for patients with no payment history
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "first_patient_payment_date is not null"
+              config:
+                description: "First patient payment date must be reasonable and not in the future"
+
+      - name: last_patient_payment_date
+        description: >
+          Date of the patient's most recent payment.
+          
+          Business Rules:
+          - Maximum payment_date from int_patient_payment_allocated where include_in_ar = true
+          - Used for payment activity analysis
+          - May be null for patients with no payment history
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "last_patient_payment_date is not null"
+              config:
+                description: "Last patient payment date must be reasonable and not in the future"
+
+      - name: first_insurance_payment_date
+        description: >
+          Date of the first insurance payment for the patient.
+          
+          Business Rules:
+          - Minimum payment_date from int_insurance_payment_allocated where include_in_ar = true
+          - Used for insurance payment history analysis
+          - May be null for patients with no insurance payments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "first_insurance_payment_date is not null"
+              config:
+                description: "First insurance payment date must be reasonable and not in the future"
+
+      - name: last_insurance_payment_date
+        description: >
+          Date of the most recent insurance payment for the patient.
+          
+          Business Rules:
+          - Maximum payment_date from int_insurance_payment_allocated where include_in_ar = true
+          - Used for insurance payment activity analysis
+          - May be null for patients with no insurance payments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "last_insurance_payment_date is not null"
+              config:
+                description: "Last insurance payment date must be reasonable and not in the future"
+
+      - name: total_positive_adjustments
+        description: >
+          Total dollar amount of positive adjustments.
+          
+          Business Rules:
+          - Sum of adjustment_amount from int_adjustments where adjustment_amount > 0
+          - Represents credits and positive adjustments to patient accounts
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              config:
+                description: "Total positive adjustments should be non-negative and reasonable"
+
+      - name: total_negative_adjustments
+        description: >
+          Total dollar amount of negative adjustments.
+          
+          Business Rules:
+          - Sum of adjustment_amount from int_adjustments where adjustment_amount < 0
+          - Represents debits and negative adjustments to patient accounts
+          - Should be <= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 0
+              severity: warn
+              config:
+                description: "Total negative adjustments should be non-positive and reasonable"
+
+      - name: adjustment_count
+        description: >
+          Total number of adjustments for the patient.
+          
+          Business Rules:
+          - Count of adjustment_id from int_adjustments
+          - Used for adjustment frequency analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              config:
+                description: "Adjustment count should be reasonable"
+
+      - name: writeoff_count
+        description: >
+          Number of insurance write-off adjustments.
+          
+          Business Rules:
+          - Count of adjustment_id from int_adjustments where adjustment_category = 'insurance_writeoff'
+          - Used for write-off analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+              config:
+                description: "Write-off count should be reasonable"
+
+      - name: discount_count
+        description: >
+          Number of discount adjustments.
+          
+          Business Rules:
+          - Count of adjustment_id from int_adjustments where adjustment_category like '%discount%'
+          - Used for discount analysis
+          - Should be >= 0
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+              config:
+                description: "Discount count should be reasonable"
+
+      - name: last_adjustment_date
+        description: >
+          Date of the most recent adjustment for the patient.
+          
+          Business Rules:
+          - Maximum adjustment_date from int_adjustments
+          - Used for adjustment activity analysis
+          - May be null for patients with no adjustments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ dbt.current_timestamp() }}'
+              severity: warn
+              where: "last_adjustment_date is not null"
+              config:
+                description: "Last adjustment date must be reasonable and not in the future"
+
+      - name: calculated_balance
+        description: >
+          Calculated balance based on procedures, payments, and adjustments.
+          
+          Calculation Logic:
+          - total_completed_procedures - total_patient_payments - total_insurance_payments + total_positive_adjustments + total_negative_adjustments
+          
+          Business Rules:
+          - Should closely match total_ar_balance from AR analysis
+          - Used for validation and cross-system consistency checks
+          - Can be positive (patient owes) or negative (credit balance)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+              severity: warn
+              config:
+                description: "Calculated balance should be within reasonable range"
+
+      - name: has_outstanding_balance
+        description: >
+          Flag indicating if patient has any outstanding balance.
+          
+          Logic:
+          - true when: total_ar_balance > 0
+          - false when: total_ar_balance <= 0
+          
+          Business Impact:
+          - Used for identifying patients who owe money
+          - Critical for collections and billing analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: has_overdue_balance
+        description: >
+          Flag indicating if patient has balance over 90 days old.
+          
+          Logic:
+          - true when: balance_over_90_days > 0
+          - false when: balance_over_90_days = 0
+          
+          Business Impact:
+          - Used for identifying patients requiring collections attention
+          - Critical for aging analysis and collection prioritization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: has_pending_claims
+        description: >
+          Flag indicating if patient has pending insurance claims.
+          
+          Logic:
+          - true when: active_claims_count > 0
+          - false when: active_claims_count = 0
+          
+          Business Impact:
+          - Used for identifying patients with insurance follow-up needed
+          - Critical for insurance management and cash flow analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      - name: has_recent_payment_activity
+        description: >
+          Flag indicating if patient has made payments in the last 90 days.
+          
+          Logic:
+          - true when: last_patient_payment_date is not null and last_patient_payment_date >= current_date - 90 days
+          - false when: no recent payment activity
+          
+          Business Impact:
+          - Used for identifying patients with recent payment activity
+          - Critical for payment behavior analysis and collection strategy
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+    tests:
+      # Data volume tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 50000
+          config:
+            severity: error
+            description: "Model should contain reasonable number of patient records"
+
+      # Business rule tests
+      - dbt_utils.expression_is_true:
+          expression: "total_ar_balance = balance_0_30_days + balance_31_60_days + balance_61_90_days + balance_over_90_days"
+          config:
+            severity: error
+            description: "AR balance must equal sum of aging buckets"
+
+      - dbt_utils.expression_is_true:
+          expression: "total_ar_balance = patient_responsibility + insurance_responsibility"
+          config:
+            severity: warn
+            description: "AR balance should equal sum of patient and insurance responsibility"
+
+      - dbt_utils.expression_is_true:
+          expression: "abs(calculated_balance - total_ar_balance) <= 0.01"
+          config:
+            severity: warn
+            description: "Calculated balance should closely match AR balance"
+
+      # Data quality tests
+      - dbt_utils.expression_is_true:
+          expression: "first_procedure_date <= last_procedure_date or first_procedure_date is null or last_procedure_date is null"
+          config:
+            severity: warn
+            description: "First procedure date should not be after last procedure date"
+
+      - dbt_utils.expression_is_true:
+          expression: "first_patient_payment_date <= last_patient_payment_date or first_patient_payment_date is null or last_patient_payment_date is null"
+          config:
+            severity: warn
+            description: "First payment date should not be after last payment date"
+
+      - dbt_utils.expression_is_true:
+          expression: "first_insurance_payment_date <= last_insurance_payment_date or first_insurance_payment_date is null or last_insurance_payment_date is null"
+          config:
+            severity: warn
+            description: "First insurance payment date should not be after last insurance payment date"
+
+      # Referential integrity tests
+      - dbt_utils.expression_is_true:
+          expression: "patient_id in (select patient_id from {{ ref('int_patient_profile') }})"
+          config:
+            severity: error
+            description: "All patients must exist in patient profile"
+
+      - dbt_utils.expression_is_true:
+          expression: "patient_id in (select patient_id from {{ ref('int_ar_analysis') }})"
+          config:
+            severity: error
+            description: "All patients must exist in AR analysis"

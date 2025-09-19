@@ -1,0 +1,1069 @@
+version: 2
+
+models:
+  - name: int_treatment_journey
+    description: >
+      Comprehensive patient treatment journey tracking from appointment through procedure, claim, and payment completion.
+      
+      This model provides end-to-end treatment flow analysis and financial status monitoring across multiple systems.
+      Part of Cross-System: Treatment Journey Analysis workflow.
+      
+      Key Features:
+      - Treatment Timeline: Tracks progression from appointment to payment completion with calculated time intervals
+      - Financial Status: Monitors insurance claims, payments, write-offs, and remaining balances
+      - Journey Status: Categorizes treatment completion status for operational workflow management
+      - Cross-System Integration: Connects Scheduling, Fee Processing, Insurance, and Payment systems
+      - Patient Experience: Provides complete patient journey visibility for care coordination
+      
+      Data Sources:
+      - int_procedure_complete: Core procedure data with completion status and fees
+      - int_patient_profile: Patient identification and preferred name information
+      - int_appointment_details: Appointment scheduling and status information
+      - int_claim_details: Insurance claim processing and payment data
+      - int_payment_split: Patient payment tracking and allocation details
+      
+      Business Logic Features:
+      - Treatment Timeline Calculation: Computes days between key journey milestones
+      - Financial Balance Calculation: Determines remaining patient responsibility after insurance and payments
+      - Journey Status Categorization: Classifies treatment completion status for workflow management
+      - Cross-System Data Integration: Handles missing data gracefully across multiple source systems
+      - Procedure Completion Filtering: Only includes completed procedures (status = 2) for accurate analysis
+      
+      Financial Calculations:
+      - Remaining Balance: procedure_fee - insurance_payment - write_off - patient_payment
+      - Insurance Coverage: Aggregated claim amounts and payment tracking
+      - Patient Responsibility: Direct payment tracking and allocation
+      - Write-off Tracking: Insurance and contractual adjustments
+      
+      Data Quality Notes:
+      - Only includes completed procedures (status = 2) to ensure accurate journey analysis
+      - Handles missing appointment, claim, or payment data gracefully with LEFT JOINs
+      - Validates financial calculations and remaining balances for data integrity
+      - Uses MAX() aggregation for claims and payments to handle multiple records per procedure
+      - Filters positive payment amounts only to exclude adjustments or reversals
+      
+      Business Rules:
+      - Journey Status Logic: Complete when remaining balance <= 0, otherwise categorized by payment status
+      - Timeline Calculations: Uses date differences to measure treatment efficiency
+      - Financial Integrity: Ensures all payments and adjustments are properly accounted for
+      - Cross-System Validation: Maintains referential integrity across multiple source systems
+    
+    config:
+      materialized: table
+      schema: intermediate
+      unique_key: procedure_id
+    
+    columns:
+      - name: treatment_journey_id
+        description: >
+          Surrogate key for unique treatment journey identification
+          
+          Generated using dbt_utils.generate_surrogate_key combining procedure_id, patient_id, 
+          procedure_date, and appointment_id to ensure uniqueness across the complete journey.
+          
+          Business Context:
+          - Enables unique identification of complete treatment journeys
+          - Supports journey-level analytics and reporting
+          - Facilitates cross-system data integration and tracking
+        tests:
+          - unique
+          - not_null
+      
+      - name: procedure_id
+        description: >
+          Primary key - Procedure identifier (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase)
+          - Transformed to: procedure_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Uniquely identifies each completed procedure in the treatment journey
+          - Links to procedure details, claims, and payments across systems
+          - Enables procedure-level financial and timeline analysis
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+              config:
+                severity: error
+                description: "Critical referential integrity for procedure data across treatment journey"
+      
+      - name: patient_id
+        description: >
+          Foreign key to patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links treatment journey to patient profile and demographics
+          - Enables patient-level journey analysis and care coordination
+          - Supports patient experience and outcome tracking
+          
+          Data Quality Considerations:
+          - Required for patient identification and journey tracking
+          - Enables patient-level aggregation and analysis
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+              config:
+                severity: error
+                description: "Essential patient identification for treatment journey tracking"
+      
+      - name: provider_id
+        description: >
+          Foreign key to provider (maps from "ProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProvNum" (CamelCase as stored)
+          - Transformed to: provider_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Identifies the provider who performed the procedure
+          - Enables provider-level performance and efficiency analysis
+          - Supports provider workload and outcome tracking
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_provider_profile')
+              field: provider_id
+              config:
+                severity: error
+                description: "Provider identification required for treatment attribution and analysis"
+      
+      - name: patient_first_name
+        description: >
+          Patient's preferred first name for identification and reporting
+          
+          Source: Derived from int_patient_profile.preferred_name
+          Purpose: Human-readable patient identification in journey reports
+          Usage: Patient communication and care coordination
+        tests:
+          - not_null
+      
+      - name: procedure_code
+        description: >
+          Dental procedure code (CDT code) identifying the treatment performed
+          
+          Business Context:
+          - Standardized dental procedure identification
+          - Enables procedure-level analysis and benchmarking
+          - Supports insurance claim processing and billing
+          
+          Data Quality:
+          - Required for procedure identification and billing
+          - Must conform to CDT code standards
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['D0120', 'D0150', 'D1110', 'D2140', 'D2150', 'D2391', 'D2392', 'D2393', 'D2394', 'D2750', 'D3310', 'D3320', 'D3330', 'D4341', 'D4342', 'D4910', 'D4920', 'D6010', 'D6011', 'D6012', 'D6013', 'D6014', 'D6240', 'D6241', 'D6242', 'D6245', 'D6750', 'D6780', 'D6781', 'D6782', 'D6783', 'D6790', 'D6791', 'D6792', 'D6793', 'D6794', 'D9210', 'D9211', 'D9220', 'D9221', 'D9230', 'D9241', 'D9242', 'D9243', 'D9248', 'D9310', 'D9311', 'D9430', 'D9944', 'D9945', 'D9946', 'D9947', 'D9948', 'D9949', 'D9950', 'D9951', 'D9952', 'D9953', 'D9954', 'D9955', 'D9956', 'D9957', 'D9958', 'D9959', 'D9960', 'D9961', 'D9962', 'D9963', 'D9964', 'D9965', 'D9966', 'D9967', 'D9968', 'D9969', 'D9970', 'D9971', 'D9972', 'D9973', 'D9974', 'D9975', 'D9976', 'D9977', 'D9978', 'D9979', 'D9980', 'D9981', 'D9982', 'D9983', 'D9984', 'D9985', 'D9986', 'D9987', 'D9988', 'D9989', 'D9990', 'D9991', 'D9992', 'D9993', 'D9994', 'D9995', 'D9996', 'D9997', 'D9998', 'D9999']
+              config:
+                description: "Standard CDT procedure codes for dental treatments"
+      
+      - name: procedure_description
+        description: >
+          Human-readable description of the dental procedure performed
+          
+          Business Context:
+          - Provides clear procedure identification for reporting
+          - Supports patient communication and care coordination
+          - Enables procedure categorization and analysis
+        tests:
+          - not_null
+      
+      - name: procedure_date
+        description: >
+          Date when the dental procedure was completed
+          
+          Business Context:
+          - Key milestone in treatment journey timeline
+          - Enables procedure scheduling and completion analysis
+          - Supports provider workload and efficiency tracking
+          
+          Data Quality:
+          - Required for timeline calculations
+          - Must be valid date within reasonable range
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "Procedure date must be within reasonable business range"
+      
+      - name: procedure_fee
+        description: >
+          Total fee charged for the dental procedure
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Base procedure fee from fee schedule
+          - Business Rules: Standard fee for procedure code and provider
+          
+          Accounting Impact:
+          - Primary revenue recognition amount
+          - Basis for insurance claim submission
+          - Foundation for patient responsibility calculation
+          
+          Common Values:
+          - Varies by procedure complexity and provider
+          - Typically ranges from $50-$3000 depending on procedure type
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                description: "Procedure fees must be positive and within reasonable business range"
+      
+      - name: appointment_id
+        description: >
+          Foreign key to appointment (maps from "AptNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "AptNum" (CamelCase as stored)
+          - Transformed to: appointment_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedure to original appointment scheduling
+          - Enables appointment-to-procedure timeline analysis
+          - Supports scheduling efficiency and patient flow optimization
+        tests:
+          - relationships:
+              to: ref('int_appointment_details')
+              field: appointment_id
+              config:
+                severity: warn
+                description: "Appointment linkage for scheduling analysis (may be null for walk-ins)"
+      
+      - name: appointment_datetime
+        description: >
+          Scheduled appointment date and time
+          
+          Business Context:
+          - Starting point of treatment journey timeline
+          - Enables scheduling efficiency analysis
+          - Supports patient flow and resource utilization tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+              config:
+                description: "Appointment datetime must be within reasonable business range"
+      
+      - name: appointment_status_desc
+        description: >
+          Human-readable appointment status description
+          
+          Valid Values:
+          - 'Scheduled': Appointment is confirmed and scheduled
+          - 'Completed': Appointment was completed successfully
+          - 'Cancelled': Appointment was cancelled
+          - 'No Show': Patient did not arrive for appointment
+          - 'Rescheduled': Appointment was moved to different time
+          
+          Business Rules:
+          - Status determines appointment outcome and journey progression
+          - Completed appointments should have associated procedures
+          - Cancelled/No Show appointments may not have procedures
+        tests:
+          - accepted_values:
+              values: ['Scheduled', 'Completed', 'Cancelled', 'No Show', 'Rescheduled']
+              config:
+                description: "Standard appointment status values for workflow management"
+      
+      - name: claim_id
+        description: >
+          Foreign key to insurance claim (maps from "ClaimNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimNum" (CamelCase as stored)
+          - Transformed to: claim_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedure to insurance claim processing
+          - Enables claim status and payment tracking
+          - Supports insurance workflow and reimbursement analysis
+        tests:
+          - relationships:
+              to: ref('int_claim_details')
+              field: claim_id
+              config:
+                severity: warn
+                description: "Insurance claim linkage for reimbursement tracking (may be null for self-pay)"
+      
+      - name: claimproc_id
+        description: >
+          Foreign key to claim procedure (maps from "ClaimProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimProcNum" (CamelCase as stored)
+          - Transformed to: claimproc_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links specific procedure to claim processing details
+          - Enables procedure-level claim status tracking
+          - Supports detailed insurance reimbursement analysis
+        tests:
+          - relationships:
+              to: ref('int_claim_details')
+              field: claim_procedure_id
+              config:
+                severity: warn
+                description: "Claim procedure linkage for detailed reimbursement tracking"
+      
+      - name: claim_date_sent
+        description: >
+          Date when insurance claim was submitted
+          
+          Business Context:
+          - Key milestone in insurance processing timeline
+          - Enables claim processing efficiency analysis
+          - Supports insurance workflow optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "Claim sent date must be within reasonable business range"
+      
+      - name: claim_date_received
+        description: >
+          Date when insurance payment was received
+          
+          Business Context:
+          - Completion milestone for insurance processing
+          - Enables payment cycle analysis
+          - Supports cash flow and revenue recognition tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "Claim received date must be within reasonable business range"
+      
+      - name: claim_status
+        description: >
+          Current status of insurance claim processing
+          
+          Valid Values:
+          - 'Received': Claim has been received by insurance
+          - 'Not Received': Claim has not been received
+          - 'Supplemental': Additional information requested
+          - 'Finalized': Claim processing completed
+          - 'Rejected': Claim was rejected by insurance
+          
+          Business Rules:
+          - Status determines claim processing workflow
+          - Finalized claims should have payment information
+          - Rejected claims may require resubmission
+        tests:
+          - accepted_values:
+              values: ['Received', 'Not Received', 'Supplemental', 'Finalized', 'Rejected']
+              config:
+                description: "Standard insurance claim status values for workflow management"
+      
+      - name: insurance_estimate
+        description: >
+          Estimated amount insurance will pay for the procedure
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Based on patient's insurance benefits and procedure code
+          - Business Rules: Estimated coverage amount before claim processing
+          
+          Accounting Impact:
+          - Expected insurance reimbursement
+          - Basis for patient responsibility calculation
+          - Supports cash flow planning and revenue forecasting
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                description: "Insurance estimates must be non-negative and within reasonable range"
+      
+      - name: insurance_payment
+        description: >
+          Actual amount paid by insurance for the procedure
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Actual payment received from insurance carrier
+          - Business Rules: Final insurance reimbursement amount
+          
+          Accounting Impact:
+          - Actual insurance revenue recognition
+          - Basis for remaining balance calculation
+          - Supports insurance performance analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                description: "Insurance payments must be non-negative and within reasonable range"
+      
+      - name: write_off
+        description: >
+          Amount written off due to insurance contractual adjustments
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Difference between billed amount and allowed amount
+          - Business Rules: Contractual adjustment per insurance agreement
+          
+          Accounting Impact:
+          - Reduces accounts receivable
+          - Represents contractual discount
+          - Supports insurance contract analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                description: "Write-offs must be non-negative and within reasonable range"
+      
+      - name: tracking_status
+        description: >
+          Current tracking status of insurance claim
+          
+          Valid Values:
+          - 'Received': Claim received and being processed
+          - 'Not Received': Claim not yet received by insurance
+          - 'Supplemental': Additional information requested
+          - 'Finalized': Processing completed
+          - 'Rejected': Claim rejected
+          
+          Business Rules:
+          - Tracks claim processing progress
+          - Determines follow-up actions required
+          - Supports insurance workflow management
+        tests:
+          - accepted_values:
+              values: ['Received', 'Not Received', 'Supplemental', 'Finalized', 'Rejected']
+              config:
+                description: "Standard claim tracking status values for workflow management"
+      
+      - name: payment_id
+        description: >
+          Foreign key to patient payment (maps from "PaymentNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PaymentNum" (CamelCase as stored)
+          - Transformed to: payment_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedure to patient payment
+          - Enables payment tracking and collection analysis
+          - Supports patient financial responsibility management
+        tests:
+          - relationships:
+              to: ref('int_payment_split')
+              field: payment_id
+              config:
+                severity: warn
+                description: "Patient payment linkage for collection tracking (may be null for insurance-only)"
+      
+      - name: paysplit_id
+        description: >
+          Foreign key to payment split (maps from "PaySplitNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PaySplitNum" (CamelCase as stored)
+          - Transformed to: paysplit_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links specific procedure to payment allocation
+          - Enables procedure-level payment tracking
+          - Supports detailed payment analysis and reconciliation
+        tests:
+          - relationships:
+              to: ref('int_payment_split')
+              field: paysplit_id
+              config:
+                severity: warn
+                description: "Payment split linkage for detailed payment tracking"
+      
+      - name: payment_date
+        description: >
+          Date when patient payment was received
+          
+          Business Context:
+          - Key milestone in payment collection timeline
+          - Enables payment cycle analysis
+          - Supports cash flow and collection efficiency tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "Payment date must be within reasonable business range"
+      
+      - name: patient_payment
+        description: >
+          Amount paid by patient for the procedure
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Patient's portion of procedure fee after insurance
+          - Business Rules: Patient responsibility after insurance coverage
+          
+          Accounting Impact:
+          - Patient revenue recognition
+          - Reduces accounts receivable
+          - Supports collection analysis and patient communication
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                description: "Patient payments must be non-negative and within reasonable range"
+      
+      - name: payment_type
+        description: >
+          Type of payment method used by patient
+          
+          Valid Values:
+          - 'Cash': Cash payment
+          - 'Check': Check payment
+          - 'Credit Card': Credit card payment
+          - 'Debit Card': Debit card payment
+          - 'Insurance': Insurance payment
+          - 'Other': Other payment method
+          
+          Business Rules:
+          - Determines payment processing workflow
+          - Affects collection efficiency and costs
+          - Supports payment method analysis
+        tests:
+          - accepted_values:
+              values: ['Cash', 'Check', 'Credit Card', 'Debit Card', 'Insurance', 'Other']
+              config:
+                description: "Standard payment type values for payment processing"
+      
+      - name: split_type_desc
+        description: >
+          Description of payment split type for allocation tracking
+          
+          Business Context:
+          - Describes how payment was allocated to procedure
+          - Enables payment allocation analysis
+          - Supports payment reconciliation and auditing
+        tests:
+          - not_null
+      
+      - name: days_appointment_to_procedure
+        description: >
+          Number of days between appointment scheduling and procedure completion
+          
+          Calculation Method:
+          - Numerator: procedure_date - appointment_datetime::date
+          - Denominator: 1 day
+          - Formula: Date difference in days
+          
+          Business Significance:
+          - Target Range: 0-30 days (same day to 1 month)
+          - Benchmark: Industry standard for appointment-to-treatment efficiency
+          - Decision Impact: Identifies scheduling and treatment efficiency opportunities
+          
+          Data Quality:
+          - Accuracy: Reliable for same-day and short-term procedures
+          - Timeliness: Real-time calculation based on actual dates
+          - Completeness: Available for all procedures with appointments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              config:
+                description: "Days between appointment and procedure should be reasonable for dental care"
+      
+      - name: days_procedure_to_claim
+        description: >
+          Number of days between procedure completion and insurance claim submission
+          
+          Calculation Method:
+          - Numerator: claim_date_sent - procedure_date
+          - Denominator: 1 day
+          - Formula: Date difference in days
+          
+          Business Significance:
+          - Target Range: 0-7 days (same day to 1 week)
+          - Benchmark: Industry standard for claim submission efficiency
+          - Decision Impact: Identifies billing efficiency and cash flow opportunities
+          
+          Data Quality:
+          - Accuracy: Reliable for procedures with insurance claims
+          - Timeliness: Real-time calculation based on actual dates
+          - Completeness: Available for procedures with submitted claims
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 90
+              config:
+                description: "Days between procedure and claim should be reasonable for billing efficiency"
+      
+      - name: days_claim_to_payment
+        description: >
+          Number of days between claim submission and insurance payment receipt
+          
+          Calculation Method:
+          - Numerator: claim_date_received - claim_date_sent
+          - Denominator: 1 day
+          - Formula: Date difference in days
+          
+          Business Significance:
+          - Target Range: 14-45 days (2-6 weeks)
+          - Benchmark: Industry standard for insurance payment cycles
+          - Decision Impact: Identifies insurance performance and cash flow planning
+          
+          Data Quality:
+          - Accuracy: Reliable for claims with received payments
+          - Timeliness: Real-time calculation based on actual dates
+          - Completeness: Available for claims with completed payments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 180
+              config:
+                description: "Days between claim and payment should be reasonable for insurance processing"
+      
+      - name: days_procedure_to_payment
+        description: >
+          Number of days between procedure completion and final payment receipt
+          
+          Calculation Method:
+          - Numerator: payment_date - procedure_date
+          - Denominator: 1 day
+          - Formula: Date difference in days
+          
+          Business Significance:
+          - Target Range: 0-60 days (immediate to 2 months)
+          - Benchmark: Industry standard for complete payment cycles
+          - Decision Impact: Identifies overall payment efficiency and cash flow
+          
+          Data Quality:
+          - Accuracy: Reliable for procedures with received payments
+          - Timeliness: Real-time calculation based on actual dates
+          - Completeness: Available for procedures with completed payments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              config:
+                description: "Days between procedure and payment should be reasonable for complete payment cycles"
+      
+      - name: has_insurance_claim
+        description: >
+          Flag indicating whether procedure has associated insurance claim
+          
+          Business Logic:
+          - true when: claim_id is not null (insurance claim exists)
+          - false when: claim_id is null (no insurance claim)
+          - Impact: Determines insurance processing workflow and patient responsibility
+          
+          Operational Usage:
+          - Workflow decisions for insurance vs self-pay procedures
+          - Reporting and filtering for insurance coverage analysis
+          - Business rule enforcement for claim processing
+          
+          Data Quality:
+          - Flag determination reliability: High (based on claim existence)
+          - Monitoring requirements: Track insurance coverage rates
+          - Business validation methods: Compare with patient insurance status
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Boolean validation for insurance claim existence"
+      
+      - name: has_insurance_payment
+        description: >
+          Flag indicating whether insurance has paid for the procedure
+          
+          Business Logic:
+          - true when: insurance_payment > 0 (insurance payment received)
+          - false when: insurance_payment is null or 0 (no insurance payment)
+          - Impact: Determines insurance payment status and remaining balance
+          
+          Operational Usage:
+          - Workflow decisions for insurance payment tracking
+          - Reporting and filtering for insurance payment analysis
+          - Business rule enforcement for payment reconciliation
+          
+          Data Quality:
+          - Flag determination reliability: High (based on payment amount)
+          - Monitoring requirements: Track insurance payment rates
+          - Business validation methods: Compare with claim status
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Boolean validation for insurance payment status"
+      
+      - name: has_patient_payment
+        description: >
+          Flag indicating whether patient has paid for the procedure
+          
+          Business Logic:
+          - true when: payment_id is not null (patient payment exists)
+          - false when: payment_id is null (no patient payment)
+          - Impact: Determines patient payment status and collection workflow
+          
+          Operational Usage:
+          - Workflow decisions for patient payment tracking
+          - Reporting and filtering for collection analysis
+          - Business rule enforcement for accounts receivable management
+          
+          Data Quality:
+          - Flag determination reliability: High (based on payment existence)
+          - Monitoring requirements: Track patient payment rates
+          - Business validation methods: Compare with remaining balance
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Boolean validation for patient payment status"
+      
+      - name: remaining_balance
+        description: >
+          Calculated remaining balance after insurance payments and patient payments
+          
+          Calculation Logic:
+          - Input: procedure_fee, insurance_payment, write_off, patient_payment
+          - Method: procedure_fee - insurance_payment - write_off - patient_payment
+          - Output: Remaining patient responsibility in USD
+          
+          Business Rules:
+          - Positive values indicate outstanding patient balance
+          - Zero or negative values indicate fully paid procedures
+          - Write-offs reduce patient responsibility
+          
+          Business Impact:
+          - Drives accounts receivable management
+          - Determines collection workflow and patient communication
+          - Supports financial reporting and cash flow analysis
+          
+          Data Quality Notes:
+          - Calculation accuracy depends on all payment components
+          - Negative values may indicate overpayments or adjustments
+          - Monitoring required for unusual balance patterns
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -1000
+              max_value: 10000
+              config:
+                description: "Remaining balance should be within reasonable financial range"
+          - dbt_utils.expression_is_true:
+              expression: "remaining_balance = procedure_fee - COALESCE(insurance_payment, 0) - COALESCE(write_off, 0) - COALESCE(patient_payment, 0)"
+              config:
+                severity: error
+                description: "Financial integrity requirement for balance calculation"
+      
+      - name: journey_start_date
+        description: >
+          Date when treatment journey began (appointment date)
+          
+          Business Context:
+          - Starting point for complete treatment timeline
+          - Enables journey duration analysis
+          - Supports patient experience and care coordination
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "Journey start date must be within reasonable business range"
+      
+      - name: claim_sent_date
+        description: >
+          Date when insurance claim was submitted
+          
+          Business Context:
+          - Key milestone in insurance processing timeline
+          - Enables claim processing efficiency analysis
+          - Supports insurance workflow optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "Claim sent date must be within reasonable business range"
+      
+      - name: claim_received_date
+        description: >
+          Date when insurance payment was received
+          
+          Business Context:
+          - Completion milestone for insurance processing
+          - Enables payment cycle analysis
+          - Supports cash flow and revenue recognition tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "Claim received date must be within reasonable business range"
+      
+      - name: journey_status
+        description: >
+          Categorization of treatment journey completion status
+          
+          Valid Values:
+          - 'Complete': All payments received, remaining balance <= 0
+          - 'Awaiting Insurance': Claim submitted but no insurance payment yet
+          - 'Awaiting Patient Payment': Insurance paid but patient payment pending
+          - 'Unbilled': No claim submitted and no patient payment
+          - 'In Progress': Other status requiring follow-up
+          
+          Business Rules:
+          - Status determines collection workflow and patient communication
+          - Complete status indicates fully resolved treatment
+          - Other statuses require specific follow-up actions
+          
+          Operational Impact:
+          - Drives accounts receivable management workflow
+          - Determines patient communication and collection strategies
+          - Supports financial reporting and cash flow analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Complete', 'Awaiting Insurance', 'Awaiting Patient Payment', 'Unbilled', 'In Progress']
+              config:
+                description: "Standard journey status values for workflow management"
+      
+      - name: _loaded_at
+        description: >
+          ETL pipeline extraction timestamp - when the record was extracted from the source system
+          
+          Source: ETL pipeline metadata (added during extraction process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+      
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+      
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+      
+      - name: _created_by
+        description: >
+          User who originally created the record in OpenDental
+          
+          Source: OpenDental user identification
+          Purpose: Audit trail and user attribution
+          Usage: User activity tracking and compliance
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this intermediate model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+    
+    tests:
+      - dbt_utils.expression_is_true:
+          expression: "procedure_fee >= 0"
+          config:
+            severity: error
+            description: >
+              Financial Integrity: Procedure fees must be non-negative
+              
+              Accounting Requirement: All procedure fees must be positive or zero
+              Audit Significance: Negative fees would indicate data quality issues
+              Business Impact: Ensures accurate financial reporting and patient billing
+      
+      - dbt_utils.expression_is_true:
+          expression: "COALESCE(insurance_payment, 0) >= 0"
+          config:
+            severity: error
+            description: >
+              Financial Integrity: Insurance payments must be non-negative
+              
+              Accounting Requirement: Insurance payments cannot be negative
+              Audit Significance: Negative payments would indicate data corruption
+              Business Impact: Ensures accurate insurance revenue recognition
+      
+      - dbt_utils.expression_is_true:
+          expression: "COALESCE(patient_payment, 0) >= 0"
+          config:
+            severity: error
+            description: >
+              Financial Integrity: Patient payments must be non-negative
+              
+              Accounting Requirement: Patient payments cannot be negative
+              Audit Significance: Negative payments would indicate data corruption
+              Business Impact: Ensures accurate patient revenue recognition
+      
+      - dbt_utils.expression_is_true:
+          expression: "COALESCE(write_off, 0) >= 0"
+          config:
+            severity: error
+            description: >
+              Financial Integrity: Write-offs must be non-negative
+              
+              Accounting Requirement: Write-offs cannot be negative
+              Audit Significance: Negative write-offs would indicate data corruption
+              Business Impact: Ensures accurate contractual adjustment tracking
+      
+      - dbt_utils.expression_is_true:
+          expression: "procedure_date >= journey_start_date"
+          config:
+            severity: error
+            description: >
+              Business Rule: Procedure date must be on or after journey start date
+              
+              Requirement: Procedures cannot be completed before appointments are scheduled
+              Impact: Violation would indicate data quality issues or system errors
+              Enforcement: Ensures logical treatment timeline integrity
+      
+      - dbt_utils.expression_is_true:
+          expression: "claim_date_sent IS NULL OR claim_date_sent >= procedure_date"
+          config:
+            severity: error
+            description: >
+              Business Rule: Claim sent date must be on or after procedure date
+              
+              Requirement: Claims cannot be submitted before procedures are completed
+              Impact: Violation would indicate data quality issues or system errors
+              Enforcement: Ensures logical claim processing timeline
+      
+      - dbt_utils.expression_is_true:
+          expression: "claim_date_received IS NULL OR claim_date_received >= claim_date_sent"
+          config:
+            severity: error
+            description: >
+              Business Rule: Claim received date must be on or after claim sent date
+              
+              Requirement: Payments cannot be received before claims are submitted
+              Impact: Violation would indicate data quality issues or system errors
+              Enforcement: Ensures logical insurance processing timeline
+      
+      - dbt_utils.expression_is_true:
+          expression: "payment_date IS NULL OR payment_date >= procedure_date"
+          config:
+            severity: error
+            description: >
+              Business Rule: Payment date must be on or after procedure date
+              
+              Requirement: Payments cannot be received before procedures are completed
+              Impact: Violation would indicate data quality issues or system errors
+              Enforcement: Ensures logical payment processing timeline
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1000000
+          config:
+            severity: warn
+            description: >
+              Performance Monitor: Treatment journey record count
+              
+              Baseline: Expected range of completed procedures in system
+              Alert Threshold: Significant deviation from normal operating range
+              Action Required: Investigate if count is outside expected range
+      
+      - dbt_utils.expression_is_true:
+          expression: "journey_status IN ('Complete', 'Awaiting Insurance', 'Awaiting Patient Payment', 'Unbilled', 'In Progress')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Journey status must be valid business status
+              
+              Requirement: All journey statuses must conform to business workflow
+              Impact: Invalid statuses would break downstream reporting and workflows
+              Enforcement: Ensures consistent status categorization across system
+      
+      - dbt_utils.expression_is_true:
+          expression: "has_insurance_claim = (claim_id IS NOT NULL)"
+          config:
+            severity: error
+            description: >
+              Data Quality: Insurance claim flag must match claim existence
+              
+              Requirement: Boolean flag must accurately reflect claim data presence
+              Impact: Inconsistent flags would break downstream logic and reporting
+              Enforcement: Ensures data integrity between flags and underlying data
+      
+      - dbt_utils.expression_is_true:
+          expression: "has_insurance_payment = (COALESCE(insurance_payment, 0) > 0)"
+          config:
+            severity: error
+            description: >
+              Data Quality: Insurance payment flag must match payment amount
+              
+              Requirement: Boolean flag must accurately reflect payment data presence
+              Impact: Inconsistent flags would break downstream logic and reporting
+              Enforcement: Ensures data integrity between flags and underlying data
+      
+      - dbt_utils.expression_is_true:
+          expression: "has_patient_payment = (payment_id IS NOT NULL)"
+          config:
+            severity: error
+            description: >
+              Data Quality: Patient payment flag must match payment existence
+              
+              Requirement: Boolean flag must accurately reflect payment data presence
+              Impact: Inconsistent flags would break downstream logic and reporting
+              Enforcement: Ensures data integrity between flags and underlying data
+    
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      business_process: "Treatment Journey Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      system_integration: "Cross-System: Treatment Journey Analysis"
+      data_quality_requirements:
+        - "All completed procedures must be included in journey analysis"
+        - "Financial calculations must be accurate and consistent"
+        - "Timeline calculations must reflect actual business processes"
+        - "Journey status must accurately reflect treatment completion state"
+        - "Cross-system data integration must maintain referential integrity"
+        - "Payment tracking must be complete and accurate"
+        - "Insurance claim processing must be properly tracked"
+        - "Patient payment collection must be accurately monitored"
