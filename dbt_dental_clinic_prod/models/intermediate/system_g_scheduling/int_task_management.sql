@@ -1,21 +1,90 @@
-{{ config(        materialized='incremental',
-        
-        unique_key='task_id') }}
+{{
+    config(
+        materialized='incremental',
+        schema='intermediate',
+        unique_key='task_id',
+        on_schema_change='fail',
+        incremental_strategy='merge',
+        indexes=[
+            {'columns': ['task_id'], 'unique': true},
+            {'columns': ['appointment_patient_id']},
+            {'columns': ['appointment_id']},
+            {'columns': ['assigned_user_id']},
+            {'columns': ['_updated_at']}
+        ]
+    )
+}}
 
 /*
     Intermediate model for task management.
-    Provides a comprehensive view of tasks, their history, and associated metadata.
+    Part of System G: Scheduling
+    
+    Systems Integration:
+    - System G: Scheduling - Task management and workflow coordination
+    - System F: Communications - Task-based communication triggers
+    - System A: Fee Processing - Task integration with billing workflows
     
     This model:
-    1. Joins task data with task lists and history
-    2. Tracks task status and changes
-    3. Manages task subscriptions and notifications
-    4. Integrates with appointment scheduling system
+    1. Provides comprehensive task management with history tracking
+    2. Integrates task data with appointment scheduling system
+    3. Manages task subscriptions and notification status
+    4. Tracks task completion and due date management
+    5. Supports task categorization and priority management
     
-    Part of System G: Scheduling
+    Business Logic Features:
+    - Task Type Classification: Categorizes tasks by object type (appointment, patient, lab, insurance, referral)
+    - Due Date Management: Identifies tasks due within 24 hours for priority handling
+    - Status Tracking: Maintains latest task status and history for audit trails
+    - Notification Management: Tracks unread status and subscriptions for user notifications
+    - Appointment Integration: Links tasks to specific appointments for scheduling context
+    
+    Data Quality Notes:
+    - Task history may have gaps for older tasks - latest status is preserved
+    - Some task notes may be missing for historical tasks
+    - Appointment links only available for object_type = 1 tasks
+    - Tasks with date_type = 0 may legitimately have null task_date and triage_category_id
+    
+    Performance Considerations:
+    - Uses incremental materialization with metadata-based filtering (_updated_at)
+    - Complex joins optimized with proper indexing on key fields
+    - Array aggregation for unread status to minimize row count
+    - Latest history/notes retrieved via window functions for efficiency
 */
 
-with task_base as (
+-- 1. Source CTEs (multiple sources)
+with source_task as (
+    select * from {{ ref('stg_opendental__task') }}
+    {% if is_incremental() %}
+    where _updated_at > (select max(_updated_at) from {{ this }})
+    {% endif %}
+),
+
+source_appointment as (
+    select * from {{ ref('stg_opendental__appointment') }}
+),
+
+source_tasklist as (
+    select * from {{ ref('stg_opendental__tasklist') }}
+),
+
+source_taskhist as (
+    select * from {{ ref('stg_opendental__taskhist') }}
+),
+
+source_tasknote as (
+    select * from {{ ref('stg_opendental__tasknote') }}
+),
+
+source_tasksubscription as (
+    select * from {{ ref('stg_opendental__tasksubscription') }}
+),
+
+source_taskunread as (
+    select * from {{ ref('stg_opendental__taskunread') }}
+),
+
+-- 2. Business Logic CTEs
+task_categorization as (
     select
         task_id,
         task_list_id,
@@ -29,29 +98,50 @@ with task_base as (
         finished_timestamp,
         original_timestamp,
         last_edit_timestamp,
-        -- Add task type based on object_type
-        CASE
-            WHEN object_type = 1 THEN 'Appointment'
-            WHEN object_type = 2 THEN 'Patient'
-            WHEN object_type = 3 THEN 'Lab Case'
-            WHEN object_type = 4 THEN 'Insurance'
-            WHEN object_type = 5 THEN 'Referral'
-            ELSE 'Other'
-        END as task_type,
-        -- Add due_soon flag (tasks due within 24 hours)
-        CASE
-            WHEN task_date <= CURRENT_TIMESTAMP + INTERVAL '24 hours'
-            AND finished_timestamp IS NULL
-            THEN true
-            ELSE false
-        END as is_due_soon
-    from {{ ref('stg_opendental__task') }}
-    {% if is_incremental() %}
-    where last_edit_timestamp > (select max(last_edit_timestamp) from {{ this }})
-    {% endif %}
+        -- Task type classification based on object_type
+        case
+            when object_type = 1 then 'Appointment'
+            when object_type = 2 then 'Patient'
+            when object_type = 3 then 'Lab Case'
+            when object_type = 4 then 'Insurance'
+            when object_type = 5 then 'Referral'
+            else 'Other'
+        end as task_type,
+        object_type,
+        -- Metadata columns from staging model
+        _loaded_at,
+        _created_at,
+        _updated_at,
+        _transformed_at
+    from source_task
 ),
 
--- Add appointment tasks CTE
+task_validation as (
+    select
+        *,
+        -- Due date management - tasks due within 24 hours
+        case
+            when task_date <= current_timestamp + interval '24 hours'
+            and finished_timestamp is null
+            then true
+            else false
+        end as is_due_soon,
+        -- Task completion status
+        case
+            when finished_timestamp is not null then true
+            else false
+        end as is_completed,
+        -- Overdue flag - tasks past due date and not completed
+        case
+            when task_date < current_timestamp
+            and finished_timestamp is null
+            then true
+            else false
+        end as is_overdue
+    from task_categorization
+),
+
+-- 3. Lookup/Reference CTEs
 appointment_tasks as (
     select
         t.task_id,
@@ -60,15 +150,15 @@ appointment_tasks as (
         a.appointment_status,
         a.provider_id,
         a.patient_id
-    from {{ ref('stg_opendental__task') }} t
-    inner join {{ ref('stg_opendental__appointment') }} a
+    from source_task t
+    inner join source_appointment a
         on t.key_id = a.appointment_id
     where t.object_type = 1  -- 1 represents appointment tasks
 ),
 
-task_list as (
+task_list_lookup as (
     select
-        task_id as task_list_id,
+        task_list_id,
         description as task_list_description,
         parent_id as parent_task_list_id,
         task_date as task_list_date,
@@ -79,157 +169,212 @@ task_list as (
         entry_datetime as task_list_entry_datetime,
         global_task_filter_type,
         task_status as task_list_status
-    from {{ ref('stg_opendental__tasklist') }}
+    from source_tasklist
 ),
 
-task_history as (
+-- 4. Aggregation CTEs
+latest_task_history as (
     select
-        task_hist_id,
         task_id,
-        task_list_id as hist_task_list_id,
-        user_hist_id,
-        key_id as hist_key_id,
-        from_id as hist_from_id,
-        user_id as hist_user_id,
-        priority_def_id as hist_priority_def_id,
-        triage_category_id as hist_triage_category_id,
-        timestamp as history_timestamp,
-        is_note_change,
-        task_date as hist_task_date,
-        description as hist_description,
-        task_status as hist_task_status,
-        is_repeating as hist_is_repeating,
-        date_type as hist_date_type,
-        object_type as hist_object_type,
-        entry_datetime as hist_entry_datetime,
-        finished_datetime as hist_finished_datetime,
-        reminder_group_id,
-        reminder_type,
-        reminder_frequency,
-        original_datetime as hist_original_datetime,
-        description_override,
-        is_read_only
-    from {{ ref('stg_opendental__taskhist') }}
+        max(timestamp) as latest_history_timestamp
+    from source_taskhist
+    group by task_id
 ),
 
-task_notes as (
+latest_task_notes as (
     select
-        task_note_id,
         task_id,
-        user_id as note_user_id,
-        note_datetime,
-        note
-    from {{ ref('stg_opendental__tasknote') }}
+        max(note_datetime) as latest_note_datetime
+    from source_tasknote
+    group by task_id
 ),
 
-task_subscriptions as (
-    select
-        task_subscription_id,
-        user_id as subscriber_user_id,
-        task_list_id as subscription_task_list_id,
-        task_id as subscription_task_id
-    from {{ ref('stg_opendental__tasksubscription') }}
-),
-
-task_unread as (
+task_unread_aggregated as (
     select
         task_id as unread_task_id,
         array_agg(user_id) as unread_user_ids,
         array_agg(task_unread_id) as task_unread_ids
-    from {{ ref('stg_opendental__taskunread') }}
+    from source_taskunread
     group by task_id
+),
+
+-- 5. Integration CTE (joins everything together)
+task_integrated as (
+    select
+        -- Core task fields
+        tv.task_id,
+        tv.task_list_id,
+        tv.key_id,
+        tv.from_id,
+        tv.user_id as assigned_user_id,
+        tv.priority_def_id,
+        tv.triage_category_id,
+        tv.task_date,
+        tv.entry_timestamp,
+        tv.finished_timestamp,
+        tv.original_timestamp,
+        tv.last_edit_timestamp,
+        tv.task_type,
+        tv.is_due_soon,
+        tv.is_completed,
+        tv.is_overdue,
+        
+        -- Appointment task information (if applicable)
+        at.appointment_id,
+        at.appointment_datetime,
+        at.appointment_status,
+        at.provider_id as appointment_provider_id,
+        at.patient_id as appointment_patient_id,
+        
+        -- Task list information
+        tl.task_list_description,
+        tl.parent_task_list_id,
+        tl.task_list_date,
+        tl.is_repeating,
+        tl.date_type,
+        tl.task_list_from_id,
+        tl.object_type,
+        tl.task_list_entry_datetime,
+        tl.global_task_filter_type,
+        tl.task_list_status,
+        
+        -- Latest task history
+        th.task_hist_id as latest_history_id,
+        th.timestamp as latest_history_timestamp,
+        th.task_status as latest_task_status,
+        th.description as latest_description,
+        th.is_repeating as latest_is_repeating,
+        th.date_type as latest_date_type,
+        th.object_type as latest_object_type,
+        th.entry_datetime as latest_entry_datetime,
+        th.finished_datetime as latest_finished_datetime,
+        th.reminder_group_id,
+        th.reminder_type,
+        th.reminder_frequency,
+        th.original_datetime as latest_original_datetime,
+        th.description_override as latest_description_override,
+        th.is_read_only as latest_is_read_only,
+        
+        -- Latest task note
+        tn.task_note_id as latest_note_id,
+        tn.note_datetime as latest_note_datetime,
+        tn.note as latest_note,
+        tn.user_id as latest_note_user_id,
+        
+        -- Subscription information
+        ts.task_subscription_id,
+        ts.user_id as subscriber_user_id,
+        
+        -- Unread status (as arrays)
+        tu.task_unread_ids,
+        tu.unread_user_ids,
+        
+        -- Standardized metadata (manually added from staging model)
+        tv._loaded_at,
+        tv._created_at,
+        tv._updated_at,
+        current_timestamp as _transformed_at
+        
+    from task_validation tv
+    left join appointment_tasks at
+        on tv.task_id = at.task_id
+    left join task_list_lookup tl
+        on tv.task_list_id = tl.task_list_id
+    left join latest_task_history lth
+        on tv.task_id = lth.task_id
+    left join source_taskhist th
+        on tv.task_id = th.task_id
+        and th.timestamp = lth.latest_history_timestamp
+    left join latest_task_notes ltn
+        on tv.task_id = ltn.task_id
+    left join source_tasknote tn
+        on tv.task_id = tn.task_id
+        and tn.note_datetime = ltn.latest_note_datetime
+    left join source_tasksubscription ts
+        on tv.task_id = ts.task_id
+    left join task_unread_aggregated tu
+        on tv.task_id = tu.unread_task_id
+),
+
+-- 6. Final filtering/validation
+final as (
+    select * from task_integrated
+    where task_id is not null  -- Ensure we have valid task records
 )
 
 select
-    -- Task Base Information
-    t.task_id,
-    t.task_list_id,
-    t.key_id,
-    t.from_id,
-    t.user_id as assigned_user_id,
-    t.priority_def_id,
-    t.triage_category_id,
-    t.task_date,
-    t.entry_timestamp,
-    t.finished_timestamp,
-    t.original_timestamp,
-    t.last_edit_timestamp,
-    t.task_type,
-    t.is_due_soon,
+    -- Core task fields
+    task_id,
+    task_list_id,
+    key_id,
+    from_id,
+    assigned_user_id,
+    priority_def_id,
+    triage_category_id,
+    task_date,
+    entry_timestamp,
+    finished_timestamp,
+    original_timestamp,
+    last_edit_timestamp,
+    task_type,
+    is_due_soon,
+    is_completed,
+    is_overdue,
     
-    -- Appointment Task Information (if applicable)
-    at.appointment_id,
-    at.appointment_datetime,
-    at.appointment_status,
-    at.provider_id as appointment_provider_id,
-    at.patient_id as appointment_patient_id,
+    -- Appointment task information (if applicable)
+    appointment_id,
+    appointment_datetime,
+    appointment_status,
+    appointment_provider_id,
+    appointment_patient_id,
     
-    -- Task List Information
-    tl.task_list_description,
-    tl.parent_task_list_id,
-    tl.task_list_date,
-    tl.is_repeating,
-    tl.date_type,
-    tl.task_list_from_id,
-    tl.object_type,
-    tl.task_list_entry_datetime,
-    tl.global_task_filter_type,
-    tl.task_list_status,
+    -- Task list information
+    task_list_description,
+    parent_task_list_id,
+    task_list_date,
+    is_repeating,
+    date_type,
+    task_list_from_id,
+    object_type,
+    task_list_entry_datetime,
+    global_task_filter_type,
+    task_list_status,
     
-    -- Latest Task History
-    th.task_hist_id as latest_history_id,
-    th.history_timestamp as latest_history_timestamp,
-    th.hist_task_status as latest_task_status,
-    th.hist_description as latest_description,
-    th.hist_is_repeating as latest_is_repeating,
-    th.hist_date_type as latest_date_type,
-    th.hist_object_type as latest_object_type,
-    th.hist_entry_datetime as latest_entry_datetime,
-    th.hist_finished_datetime as latest_finished_datetime,
-    th.reminder_group_id,
-    th.reminder_type,
-    th.reminder_frequency,
-    th.hist_original_datetime as latest_original_datetime,
-    th.description_override as latest_description_override,
-    th.is_read_only as latest_is_read_only,
+    -- Latest task history
+    latest_history_id,
+    latest_history_timestamp,
+    latest_task_status,
+    latest_description,
+    latest_is_repeating,
+    latest_date_type,
+    latest_object_type,
+    latest_entry_datetime,
+    latest_finished_datetime,
+    reminder_group_id,
+    reminder_type,
+    reminder_frequency,
+    latest_original_datetime,
+    latest_description_override,
+    latest_is_read_only,
     
-    -- Latest Task Note
-    tn.task_note_id as latest_note_id,
-    tn.note_datetime as latest_note_datetime,
-    tn.note as latest_note,
+    -- Latest task note
+    latest_note_id,
+    latest_note_datetime,
+    latest_note,
+    latest_note_user_id,
     
-    -- Subscription Information
-    ts.task_subscription_id,
-    ts.subscriber_user_id,
+    -- Subscription information
+    task_subscription_id,
+    subscriber_user_id,
     
-    -- Unread Status (now as arrays)
-    tu.task_unread_ids,
-    tu.unread_user_ids,
+    -- Unread status (as arrays)
+    task_unread_ids,
+    unread_user_ids,
     
-    -- Metadata
-    CURRENT_TIMESTAMP as model_created_at,
-    CURRENT_TIMESTAMP as model_updated_at
+    -- Standardized metadata (passed through from task_integrated CTE)
+    _loaded_at,
+    _created_at,
+    _updated_at,
+    _transformed_at
 
-from task_base t
-left join appointment_tasks at
-    on t.task_id = at.task_id
-left join task_list tl
-    on t.task_list_id = tl.task_list_id
-left join task_history th
-    on t.task_id = th.task_id
-    and th.history_timestamp = (
-        select max(history_timestamp)
-        from task_history th2
-        where th2.task_id = t.task_id
-    )
-left join task_notes tn
-    on t.task_id = tn.task_id
-    and tn.note_datetime = (
-        select max(note_datetime)
-        from task_notes tn2
-        where tn2.task_id = t.task_id
-    )
-left join task_subscriptions ts
-    on t.task_id = ts.subscription_task_id
-left join task_unread tu
-    on t.task_id = tu.unread_task_id 
+from final 

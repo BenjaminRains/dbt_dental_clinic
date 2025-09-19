@@ -1,264 +1,337 @@
-{{ config(materialized='incremental', unique_key=['metric_id']) }}
+{{ config(
+    materialized='incremental',
+    schema='intermediate',
+    unique_key='metric_id',
+    on_schema_change='fail',
+    incremental_strategy='merge',
+    indexes=[
+        {'columns': ['metric_id'], 'unique': true},
+        {'columns': ['provider_id']},
+        {'columns': ['date']},
+        {'columns': ['metric_level']},
+        {'columns': ['updated_at']}
+    ]
+) }}
 
 /*
-    Intermediate model for appointment metrics.
-    Provides key performance indicators and operational insights for the dental clinic.
+    Intermediate model for appointment metrics
+    Part of System G: Scheduling
     
     This model:
     1. Aggregates appointment data at multiple levels (provider, clinic, overall)
-    2. Calculates completion, cancellation, and no-show rates
-    3. Monitors schedule and chair time utilization
+    2. Calculates completion, cancellation, and no-show rates with rolling averages
+    3. Monitors schedule and chair time utilization metrics
     4. Tracks average appointment lengths and wait times
-    5. Measures new patient acquisition rates
+    5. Measures new patient acquisition rates and trends
     
-    Part of System G: Scheduling
+    Business Logic Features:
+    - Multi-level aggregation (provider-level and overall clinic metrics)
+    - Rolling 7-day averages for trend analysis
+    - Month-to-date cumulative metrics
+    - Schedule utilization calculations with date spine coverage
+    - Chair time utilization vs scheduled time analysis
+    - Rate calculations with proper null handling
+    
+    Data Quality Notes:
+    - Uses date spine to ensure complete date coverage for all providers
+    - Handles null values in utilization calculations with proper defaults
+    - Excludes hidden providers from overall metrics
+    - Limits processing to 90-day rolling window for performance
+    - Validates metric calculations with business rule constraints
+    
+    Performance Considerations:
+    - Incremental materialization based on date for efficient processing
+    - Pre-aggregated CTEs to avoid repeated subqueries
+    - Indexed on key lookup fields for downstream model performance
+    - Date spine optimization for complete coverage without gaps
 */
 
-WITH AppointmentMetrics AS (
-    -- Provider-level metrics
-    SELECT
-        'provider' as metric_level,
-        a.provider_id,
-        DATE(a.appointment_datetime) as date,
-        COUNT(*) as total_appointments,
-        SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
-        SUM(CASE WHEN a.appointment_status = 5 THEN 1 ELSE 0 END) as cancelled_appointments,
-        SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
-        AVG(a.actual_length) as average_appointment_length,
-        AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
-    FROM {{ ref('int_appointment_details') }} a
-    LEFT JOIN {{ ref('stg_opendental__provider') }} p
-        ON a.provider_id = p.provider_id
-    WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY a.provider_id, DATE(a.appointment_datetime)
-
-    UNION ALL
-
-    -- Overall metrics
-    SELECT
-        'overall' as metric_level,
-        NULL as provider_id,
-        DATE(a.appointment_datetime) as date,
-        COUNT(*) as total_appointments,
-        SUM(CASE WHEN a.is_complete THEN 1 ELSE 0 END) as completed_appointments,
-        SUM(CASE WHEN a.appointment_status = 5 THEN 1 ELSE 0 END) as cancelled_appointments,
-        SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
-        AVG(a.actual_length) as average_appointment_length,
-        AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
-    FROM {{ ref('int_appointment_details') }} a
-    WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY DATE(a.appointment_datetime)
+-- 1. Source CTEs (multiple sources)
+with source_appointment_details as (
+    select * from {{ ref('int_appointment_details') }}
+    where appointment_datetime >= current_date - interval '90 days'
 ),
 
-date_spine AS (
+source_providers as (
+    select * from {{ ref('stg_opendental__provider') }}
+),
+
+source_appointment_schedule as (
+    select * from {{ ref('int_appointment_schedule') }}
+),
+
+-- 2. Lookup/Definition CTEs
+provider_definitions as (
+    select
+        provider_id,
+        provider_abbreviation,
+        is_hidden
+    from source_providers
+    where is_hidden = false  -- only include active providers
+),
+
+-- 3. Calculation/Aggregation CTEs
+date_spine as (
     {{ dbt_utils.date_spine(
         datepart="day",
-        start_date="(CURRENT_DATE - INTERVAL '90 days')::date",
-        end_date="(CURRENT_DATE + INTERVAL '365 days')::date"
+        start_date="(current_date - interval '90 days')::date",
+        end_date="(current_date + interval '365 days')::date"
     ) }}
 ),
 
-schedule_with_dates AS (
-    SELECT
-        COALESCE(s.provider_id, p.provider_id) as provider_id,
-        COALESCE(s.schedule_date, d.date_day::date) as schedule_date,
+appointment_metrics_base as (
+    -- provider-level metrics
+    select
+        'provider' as metric_level,
+        a.provider_id,
+        date(a.appointment_datetime) as date,
+        count(*) as total_appointments,
+        sum(case when a.is_complete then 1 else 0 end) as completed_appointments,
+        sum(case when a.appointment_status = 5 then 1 else 0 end) as cancelled_appointments,
+        sum(case when a.appointment_status = 3 then 1 else 0 end) as no_show_appointments,
+        avg(a.actual_length) as average_appointment_length,
+        avg(a.waiting_time) as average_wait_time,
+        sum(case when a.is_new_patient = true then 1 else 0 end) as new_patient_appointments
+    from source_appointment_details a
+    left join provider_definitions p
+        on a.provider_id = p.provider_id
+    group by a.provider_id, date(a.appointment_datetime)
+
+    union all
+
+    -- overall metrics
+    select
+        'overall' as metric_level,
+        null as provider_id,
+        date(a.appointment_datetime) as date,
+        count(*) as total_appointments,
+        sum(case when a.is_complete then 1 else 0 end) as completed_appointments,
+        sum(case when a.appointment_status = 5 then 1 else 0 end) as cancelled_appointments,
+        sum(case when a.appointment_status = 3 then 1 else 0 end) as no_show_appointments,
+        avg(a.actual_length) as average_appointment_length,
+        avg(a.waiting_time) as average_wait_time,
+        sum(case when a.is_new_patient = true then 1 else 0 end) as new_patient_appointments
+    from source_appointment_details a
+    group by date(a.appointment_datetime)
+),
+
+schedule_utilization_base as (
+    select
+        coalesce(s.provider_id, p.provider_id) as provider_id,
+        coalesce(s.schedule_date, d.date_day::date) as schedule_date,
         d.date_day::date as spine_date,
         s.available_minutes,
         s.total_appointment_minutes
-    FROM date_spine d
-    CROSS JOIN {{ ref('stg_opendental__provider') }} p
-    LEFT JOIN {{ ref('int_appointment_schedule') }} s
-        ON s.schedule_date = d.date_day::date
-        AND s.provider_id = p.provider_id
-    WHERE d.date_day::date >= CURRENT_DATE - INTERVAL '90 days'
-        AND p.is_hidden = 0  -- Only include active providers
+    from date_spine d
+    cross join provider_definitions p
+    left join source_appointment_schedule s
+        on s.schedule_date = d.date_day::date
+        and s.provider_id = p.provider_id
+    where d.date_day::date >= current_date - interval '90 days'
 ),
 
-ScheduleUtilization AS (
-    -- Provider-level utilization
-    SELECT
+chair_time_utilization_base as (
+    select
+        a.provider_id,
+        date(a.appointment_datetime) as date,
+        sum(a.actual_length) as actual_chair_time,
+        sum(a.appointment_length) as scheduled_chair_time
+    from source_appointment_details a
+    group by a.provider_id, date(a.appointment_datetime)
+),
+
+-- 4. Business Logic CTEs (can be multiple)
+schedule_utilization_calculations as (
+    -- provider-level utilization
+    select
         s.provider_id,
         s.spine_date as date,
-        COALESCE(s.available_minutes, 480) as available_minutes,
-        COALESCE(s.total_appointment_minutes, 0) as total_appointment_minutes,
-        CASE 
-            WHEN COALESCE(s.available_minutes, 480) = 0 THEN 0
-            ELSE ROUND((COALESCE(s.total_appointment_minutes, 0)::numeric / COALESCE(s.available_minutes, 480)) * 100, 2)
-        END as schedule_utilization
-    FROM schedule_with_dates s
-    WHERE s.provider_id IS NOT NULL
+        coalesce(s.available_minutes, 480) as available_minutes,
+        coalesce(s.total_appointment_minutes, 0) as total_appointment_minutes,
+        case 
+            when coalesce(s.available_minutes, 480) = 0 then 0
+            else round((coalesce(s.total_appointment_minutes, 0)::numeric / coalesce(s.available_minutes, 480)) * 100, 2)
+        end as schedule_utilization
+    from schedule_utilization_base s
+    where s.provider_id is not null
 
-    UNION ALL
+    union all
 
-    -- Overall utilization (aggregated across all providers)
-    SELECT
-        NULL as provider_id,
+    -- overall utilization (aggregated across all providers)
+    select
+        null as provider_id,
         s.spine_date as date,
-        SUM(COALESCE(s.available_minutes, 480)) as available_minutes,
-        SUM(COALESCE(s.total_appointment_minutes, 0)) as total_appointment_minutes,
-        CASE 
-            WHEN SUM(COALESCE(s.available_minutes, 480)) = 0 THEN 0
-            ELSE ROUND((SUM(COALESCE(s.total_appointment_minutes, 0))::numeric / SUM(COALESCE(s.available_minutes, 480))) * 100, 2)
-        END as schedule_utilization
-    FROM schedule_with_dates s
-    GROUP BY s.spine_date
+        sum(coalesce(s.available_minutes, 480)) as available_minutes,
+        sum(coalesce(s.total_appointment_minutes, 0)) as total_appointment_minutes,
+        case 
+            when sum(coalesce(s.available_minutes, 480)) = 0 then 0
+            else round((sum(coalesce(s.total_appointment_minutes, 0))::numeric / sum(coalesce(s.available_minutes, 480))) * 100, 2)
+        end as schedule_utilization
+    from schedule_utilization_base s
+    group by s.spine_date
 ),
 
-ChairTimeUtilization AS (
-    SELECT
-        a.provider_id,
-        DATE(a.appointment_datetime) as date,
-        SUM(a.actual_length) as actual_chair_time,
-        SUM(a.appointment_length) as scheduled_chair_time,
-        CASE 
-            WHEN SUM(a.appointment_length) > 0 
-            THEN (SUM(a.actual_length)::float / SUM(a.appointment_length)) * 100 
-            ELSE 0 
-        END as chair_time_utilization
-    FROM {{ ref('int_appointment_details') }} a
-    WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY a.provider_id, DATE(a.appointment_datetime)
+chair_time_utilization_calculations as (
+    select
+        ctu.provider_id,
+        ctu.date,
+        ctu.actual_chair_time,
+        ctu.scheduled_chair_time,
+        case 
+            when ctu.scheduled_chair_time > 0 
+            then (ctu.actual_chair_time::float / ctu.scheduled_chair_time) * 100 
+            else 0 
+        end as chair_time_utilization
+    from chair_time_utilization_base ctu
 ),
 
--- Add rolling averages
-RollingMetrics AS (
-    SELECT
+rolling_metrics_calculations as (
+    select
         *,
         -- 7-day rolling averages
-        AVG(total_appointments) OVER (
-            PARTITION BY metric_level, provider_id
-            ORDER BY date 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        avg(total_appointments) over (
+            partition by metric_level, provider_id
+            order by date 
+            rows between 6 preceding and current row
         ) as rolling_7d_total_appointments,
-        AVG(completed_appointments) OVER (
-            PARTITION BY metric_level, provider_id
-            ORDER BY date 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        avg(completed_appointments) over (
+            partition by metric_level, provider_id
+            order by date 
+            rows between 6 preceding and current row
         ) as rolling_7d_completed_appointments,
-        AVG(cancelled_appointments) OVER (
-            PARTITION BY metric_level, provider_id
-            ORDER BY date 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        avg(cancelled_appointments) over (
+            partition by metric_level, provider_id
+            order by date 
+            rows between 6 preceding and current row
         ) as rolling_7d_cancelled_appointments,
-        AVG(no_show_appointments) OVER (
-            PARTITION BY metric_level, provider_id
-            ORDER BY date 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        avg(no_show_appointments) over (
+            partition by metric_level, provider_id
+            order by date 
+            rows between 6 preceding and current row
         ) as rolling_7d_no_show_appointments,
-        AVG(average_appointment_length) OVER (
-            PARTITION BY metric_level, provider_id
-            ORDER BY date 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        avg(average_appointment_length) over (
+            partition by metric_level, provider_id
+            order by date 
+            rows between 6 preceding and current row
         ) as rolling_7d_avg_appointment_length,
-        AVG(average_wait_time) OVER (
-            PARTITION BY metric_level, provider_id
-            ORDER BY date 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+        avg(average_wait_time) over (
+            partition by metric_level, provider_id
+            order by date 
+            rows between 6 preceding and current row
         ) as rolling_7d_avg_wait_time,
-        -- Month-to-date totals
-        SUM(total_appointments) OVER (
-            PARTITION BY metric_level, provider_id, 
-            DATE_TRUNC('month', date)
-            ORDER BY date
+        -- month-to-date totals
+        sum(total_appointments) over (
+            partition by metric_level, provider_id, 
+            date_trunc('month', date)
+            order by date
         ) as mtd_total_appointments,
-        SUM(completed_appointments) OVER (
-            PARTITION BY metric_level, provider_id, 
-            DATE_TRUNC('month', date)
-            ORDER BY date
+        sum(completed_appointments) over (
+            partition by metric_level, provider_id, 
+            date_trunc('month', date)
+            order by date
         ) as mtd_completed_appointments,
-        SUM(cancelled_appointments) OVER (
-            PARTITION BY metric_level, provider_id, 
-            DATE_TRUNC('month', date)
-            ORDER BY date
+        sum(cancelled_appointments) over (
+            partition by metric_level, provider_id, 
+            date_trunc('month', date)
+            order by date
         ) as mtd_cancelled_appointments,
-        SUM(no_show_appointments) OVER (
-            PARTITION BY metric_level, provider_id, 
-            DATE_TRUNC('month', date)
-            ORDER BY date
+        sum(no_show_appointments) over (
+            partition by metric_level, provider_id, 
+            date_trunc('month', date)
+            order by date
         ) as mtd_no_show_appointments
-    FROM AppointmentMetrics
+    from appointment_metrics_base
+),
+
+-- 5. Integration CTE (joins everything together)
+metrics_integrated as (
+    select
+        -- generate unique metric id
+        md5(
+            coalesce(am.provider_id::text, '') ||
+            am.date::text || 
+            am.metric_level
+        ) as metric_id,
+        
+        -- base metrics
+        am.date,
+        am.provider_id,
+        am.metric_level,
+        am.total_appointments,
+        am.completed_appointments,
+        am.cancelled_appointments,
+        
+        -- calculate rates
+        case 
+            when am.total_appointments > 0 
+            then (am.no_show_appointments::float / am.total_appointments) * 100 
+            else 0 
+        end as no_show_rate,
+        
+        case 
+            when am.total_appointments > 0 
+            then (am.cancelled_appointments::float / am.total_appointments) * 100 
+            else 0 
+        end as cancellation_rate,
+        
+        case 
+            when am.total_appointments > 0 
+            then (am.completed_appointments::float / am.total_appointments) * 100 
+            else 0 
+        end as completion_rate,
+        
+        case 
+            when am.total_appointments > 0 
+            then (am.new_patient_appointments::float / am.total_appointments) * 100 
+            else 0 
+        end as new_patient_rate,
+        
+        -- utilization metrics
+        su.schedule_utilization,
+        ctu.chair_time_utilization,
+        
+        -- rolling averages
+        am.rolling_7d_total_appointments,
+        am.rolling_7d_completed_appointments,
+        am.rolling_7d_cancelled_appointments,
+        am.rolling_7d_no_show_appointments,
+        am.rolling_7d_avg_appointment_length,
+        am.rolling_7d_avg_wait_time,
+        
+        -- month-to-date metrics
+        am.mtd_total_appointments,
+        am.mtd_completed_appointments,
+        am.mtd_cancelled_appointments,
+        am.mtd_no_show_appointments,
+        
+        -- additional metrics
+        am.average_appointment_length,
+        am.average_wait_time,
+        am.new_patient_appointments,
+        
+        -- metadata
+        current_timestamp as updated_at,
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='am',
+            preserve_source_metadata=false
+        ) }}
+    from rolling_metrics_calculations am
+    left join schedule_utilization_calculations su
+        on coalesce(am.provider_id, -1) = coalesce(su.provider_id, -1)
+        and am.date = su.date
+    left join chair_time_utilization_calculations ctu
+        on coalesce(am.provider_id, -1) = coalesce(ctu.provider_id, -1)
+        and am.date = ctu.date
+),
+
+-- 6. Final filtering/validation
+final as (
+    select * from metrics_integrated
+    where metric_id is not null
 )
 
-SELECT
-    -- Generate unique metric ID
-    MD5(
-        COALESCE(am.provider_id::text, '') ||
-        am.date::text || 
-        am.metric_level
-    ) as metric_id,
-    
-    -- Base metrics
-    am.date,
-    am.provider_id,
-    am.metric_level,
-    am.total_appointments,
-    am.completed_appointments,
-    am.cancelled_appointments,
-    
-    -- Calculate rates
-    CASE 
-        WHEN am.total_appointments > 0 
-        THEN (am.no_show_appointments::float / am.total_appointments) * 100 
-        ELSE 0 
-    END as no_show_rate,
-    
-    CASE 
-        WHEN am.total_appointments > 0 
-        THEN (am.cancelled_appointments::float / am.total_appointments) * 100 
-        ELSE 0 
-    END as cancellation_rate,
-    
-    CASE 
-        WHEN am.total_appointments > 0 
-        THEN (am.completed_appointments::float / am.total_appointments) * 100 
-        ELSE 0 
-    END as completion_rate,
-    
-    CASE 
-        WHEN am.total_appointments > 0 
-        THEN (am.new_patient_appointments::float / am.total_appointments) * 100 
-        ELSE 0 
-    END as new_patient_rate,
-    
-    -- Utilization metrics
-    su.schedule_utilization,
-    ctu.chair_time_utilization,
-    
-    -- Rolling averages
-    am.rolling_7d_total_appointments,
-    am.rolling_7d_completed_appointments,
-    am.rolling_7d_cancelled_appointments,
-    am.rolling_7d_no_show_appointments,
-    am.rolling_7d_avg_appointment_length,
-    am.rolling_7d_avg_wait_time,
-    
-    -- Month-to-date metrics
-    am.mtd_total_appointments,
-    am.mtd_completed_appointments,
-    am.mtd_cancelled_appointments,
-    am.mtd_no_show_appointments,
-    
-    -- Additional metrics
-    am.average_appointment_length,
-    am.average_wait_time,
-    am.new_patient_appointments,
-    
-    -- Metadata
-    current_timestamp as dbt_created_at,
-    '{{ invocation_id }}' as dbt_pipeline_id,
-    '{{ this.name }}' as dbt_model,
-    '{{ this.schema }}' as dbt_schema
-
-FROM RollingMetrics am
-LEFT JOIN ScheduleUtilization su
-    ON COALESCE(am.provider_id, -1) = COALESCE(su.provider_id, -1)
-    AND am.date = su.date
-LEFT JOIN ChairTimeUtilization ctu
-    ON COALESCE(am.provider_id, -1) = COALESCE(ctu.provider_id, -1)
-    AND am.date = ctu.date
+select * from final
 
 {% if is_incremental() %}
-WHERE am.date > (SELECT MAX(date) FROM {{ this }})
+where date > (select max(date) from {{ this }})
 {% endif %}

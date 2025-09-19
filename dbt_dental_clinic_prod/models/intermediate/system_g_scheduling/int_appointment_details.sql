@@ -1,7 +1,16 @@
 {{ config(
     materialized='incremental',
-    
-    unique_key='appointment_id'
+    schema='intermediate',
+    unique_key='appointment_id',
+    on_schema_change='fail',
+    incremental_strategy='merge',
+    indexes=[
+        {'columns': ['appointment_id'], 'unique': true},
+        {'columns': ['patient_id']},
+        {'columns': ['provider_id']},
+        {'columns': ['appointment_datetime']},
+        {'columns': ['_updated_at']}
+    ]
 ) }}
 
 /*
@@ -9,230 +18,310 @@
     Part of System G: Scheduling
     
     This model:
-    1. Joins appointment data with appointment types
-    2. Enriches with provider information
-    3. Calculates appointment metrics
-    4. Standardizes status descriptions
+    1. Provides comprehensive appointment data with patient and provider information
+    2. Calculates appointment timing metrics and business logic
+    3. Tracks appointment status and confirmation details
+    4. Integrates historical appointment data for complete context
+    
+    Business Logic Features:
+    - Appointment duration calculations using OpenDental pattern format
+    - Actual length calculation based on check-in/check-out times
+    - Waiting time calculation for patient experience tracking
+    - Status standardization and business rule validation
+    - Historical appointment tracking for rescheduling and cancellations
+    
+    Data Quality Notes:
+    - Handles placeholder times (00:00:00) in check-in/check-out data
+    - Validates appointment end time is after start time
+    - Ensures actual length calculations account for business hours only
+    - Manages missing or invalid appointment type data (type_id = 0)
+    
+    Performance Considerations:
+    - Incremental materialization based on appointment_datetime
+    - Complex business hours calculation optimized with recursive CTE
+    - Indexed on key lookup fields for downstream model performance
 */
 
-WITH AppointmentBase AS (
-    SELECT
-        apt.appointment_id,
-        apt.patient_id,
-        apt.provider_id,
-        apt.appointment_datetime,
-        apt.appointment_datetime + 
-            INTERVAL '1 minute' * (
-                {{ calculate_pattern_length('apt.pattern') }}
-            ) AS appointment_end_datetime,
-        apt.appointment_type_id,
-        apt.appointment_status,
-        apt.confirmation_status as confirmed,
-        apt.operatory_id as operatory,
-        apt.pattern,
-        {{ calculate_pattern_length('apt.pattern') }} as pattern_length,
-        apt.note,
-        apt.is_hygiene,
-        apt.is_new_patient,
-        apt.arrival_datetime as check_in_time,
-        apt.dismissed_datetime as check_out_time,
-        CASE
-            WHEN apt.arrival_datetime IS NOT NULL 
-            AND apt.dismissed_datetime IS NOT NULL
-            AND apt.dismissed_datetime > apt.arrival_datetime
-            AND apt.dismissed_datetime::time != '00:00:00'::time  -- Exclude placeholder times
-            AND apt.arrival_datetime::time != '00:00:00'::time    -- Exclude placeholder times
-            THEN (
-                -- Count business hours between check-in and check-out
-                WITH RECURSIVE dates AS (
-                    SELECT 
-                        apt.arrival_datetime as dt,
-                        LEAST(
-                            apt.dismissed_datetime,
-                            DATE(apt.arrival_datetime) + INTERVAL '1 day' - INTERVAL '1 second'
-                        ) as end_dt
-                    UNION ALL
-                    SELECT 
-                        dt + INTERVAL '1 day',
-                        LEAST(
-                            apt.dismissed_datetime,
-                            dt + INTERVAL '2 days' - INTERVAL '1 second'
-                        )
-                    FROM dates
-                    WHERE dt + INTERVAL '1 day' < apt.dismissed_datetime
-                )
-                SELECT 
-                    CASE 
-                        WHEN SUM(
-                            CASE 
-                                -- Skip Sundays
-                                WHEN EXTRACT(DOW FROM dt) = 0 THEN 0
-                                -- Business hours only (9:00-17:00)
-                                ELSE LEAST(
-                                    EXTRACT(EPOCH FROM (
-                                        LEAST(end_dt, dt + INTERVAL '17:00:00') - 
-                                        GREATEST(dt, dt + INTERVAL '09:00:00')
-                                    ))/60,
-                                    480  -- 8 hours in minutes
-                                )
-                            END
-                        ) > 0 THEN ROUND(SUM(
-                            CASE 
-                                -- Skip Sundays
-                                WHEN EXTRACT(DOW FROM dt) = 0 THEN 0
-                                -- Business hours only (9:00-17:00)
-                                ELSE LEAST(
-                                    EXTRACT(EPOCH FROM (
-                                        LEAST(end_dt, dt + INTERVAL '17:00:00') - 
-                                        GREATEST(dt, dt + INTERVAL '09:00:00')
-                                    ))/60,
-                                    480  -- 8 hours in minutes
-                                )
-                            END
-                        ))::integer
-                        ELSE NULL
-                    END
-                FROM dates
-            )
-            ELSE NULL
-        END AS actual_length,
-        apt.entry_datetime as created_at
-    FROM {{ ref('stg_opendental__appointment') }} apt
-    
+-- 1. Source CTEs (multiple sources)
+with source_appointments as (
+    select * from {{ ref('stg_opendental__appointment') }}
     {% if is_incremental() %}
-    WHERE apt.appointment_datetime > (SELECT MAX(appointment_datetime) FROM {{ this }})
+    where appointment_datetime > (select max(appointment_datetime) from {{ this }})
     {% endif %}
 ),
 
-AppointmentTypes AS (
-    SELECT
-        at.appointment_type_id,
-        at.appointment_type_name,
-        {{ calculate_pattern_length('at.pattern') }} as appointment_length,
-        at.appointment_type_color as color
-    FROM {{ ref('stg_opendental__appointmenttype') }} at
+source_appointment_types as (
+    select * from {{ ref('stg_opendental__appointmenttype') }}
 ),
 
-ProviderInfo AS (
-    SELECT
-        p.provider_id,
-        p.provider_abbreviation as provider_abbr,
-        p.provider_color,
-        p.is_hidden,
-        p.specialty_id as specialty
-    FROM {{ ref('stg_opendental__provider') }} p
+source_providers as (
+    select * from {{ ref('stg_opendental__provider') }}
 ),
 
-PatientInfo AS (
-    SELECT
-        pt.patient_id,
-        pt.preferred_name,
-        pt.patient_status,
-        pt.first_visit_date
-    FROM {{ ref('stg_opendental__patient') }} pt
+source_patients as (
+    select * from {{ ref('stg_opendental__patient') }}
 ),
 
-HistoricalAppointments AS (
-    SELECT
+source_historical_appointments as (
+    select * from {{ ref('stg_opendental__histappointment') }}
+),
+
+-- 2. Lookup/Definition CTEs
+appointment_type_definitions as (
+    select
+        appointment_type_id,
+        appointment_type_name,
+        {{ calculate_pattern_length('pattern') }} as appointment_length,
+        appointment_type_color as color
+    from source_appointment_types
+),
+
+provider_definitions as (
+    select
+        provider_id,
+        provider_abbreviation as provider_abbr,
+        provider_color,
+        is_hidden,
+        specialty_id as specialty
+    from source_providers
+),
+
+patient_definitions as (
+    select
+        patient_id,
+        preferred_name,
+        patient_status,
+        first_visit_date
+    from source_patients
+),
+
+-- 3. Calculation/Aggregation CTEs
+appointment_timing_calculations as (
+    select
+        appointment_id,
+        patient_id,
+        provider_id,
+        appointment_datetime,
+        appointment_datetime + 
+            interval '1 minute' * (
+                {{ calculate_pattern_length('pattern') }}
+            ) as appointment_end_datetime,
+        appointment_type_id,
+        appointment_status,
+        confirmation_status as confirmed,
+        operatory_id as operatory,
+        pattern,
+        {{ calculate_pattern_length('pattern') }} as pattern_length,
+        note,
+        is_hygiene,
+        is_new_patient,
+        arrival_datetime as check_in_time,
+        dismissed_datetime as check_out_time,
+        sec_date_t_entry as created_at,
+        -- Preserve metadata from primary source
+        _loaded_at,
+        _created_at,
+        _updated_at
+    from source_appointments
+),
+
+-- 4. Business Logic CTEs (can be multiple)
+appointment_actual_length_calculation as (
+    select
+        *,
+        case
+            when check_in_time is not null 
+            and check_out_time is not null
+            and check_out_time > check_in_time
+            and check_out_time::time != '00:00:00'::time  -- exclude placeholder times
+            and check_in_time::time != '00:00:00'::time    -- exclude placeholder times
+            then (
+                -- count business hours between check-in and check-out
+                with recursive dates as (
+                    select 
+                        check_in_time as dt,
+                        least(
+                            check_out_time,
+                            date(check_in_time) + interval '1 day' - interval '1 second'
+                        ) as end_dt
+                    union all
+                    select 
+                        dt + interval '1 day',
+                        least(
+                            check_out_time,
+                            dt + interval '2 days' - interval '1 second'
+                        )
+                    from dates
+                    where dt + interval '1 day' < check_out_time
+                )
+                select 
+                    case 
+                        when sum(
+                            case 
+                                -- skip sundays
+                                when extract(dow from dt) = 0 then 0
+                                -- business hours only (9:00-17:00)
+                                else least(
+                                    extract(epoch from (
+                                        least(end_dt, dt + interval '17:00:00') - 
+                                        greatest(dt, dt + interval '09:00:00')
+                                    ))/60,
+                                    480  -- 8 hours in minutes
+                                )
+                            end
+                        ) > 0 then round(sum(
+                            case 
+                                -- skip sundays
+                                when extract(dow from dt) = 0 then 0
+                                -- business hours only (9:00-17:00)
+                                else least(
+                                    extract(epoch from (
+                                        least(end_dt, dt + interval '17:00:00') - 
+                                        greatest(dt, dt + interval '09:00:00')
+                                    ))/60,
+                                    480  -- 8 hours in minutes
+                                )
+                            end
+                        ))::integer
+                        else null
+                    end
+                from dates
+            )
+            else null
+        end as actual_length
+    from appointment_timing_calculations
+),
+
+appointment_status_standardization as (
+    select
+        *,
+        case
+            when appointment_status = 1 then 'Scheduled'
+            when appointment_status = 2 then 'Complete'
+            when appointment_status = 3 then 'UnschedList'
+            when appointment_status = 4 then 'ASAP'
+            when appointment_status = 5 then 'Broken'
+            when appointment_status = 6 then 'Planned'
+            when appointment_status = 7 then 'PtNote'
+            when appointment_status = 8 then 'PtNoteCompleted'
+            else 'Unknown'
+        end as appointment_status_desc,
+        case when appointment_status = 2 then true else false end as is_complete,
+        case
+            when check_in_time is not null 
+            and appointment_datetime is not null
+            and check_in_time::time != '00:00:00'::time  -- exclude placeholder times
+            and check_in_time >= appointment_datetime
+            then round(extract(epoch from (check_in_time - appointment_datetime))/60)::integer
+            else 0  -- default to 0 for waiting time when no valid check-in time
+        end as waiting_time
+    from appointment_actual_length_calculation
+),
+
+historical_appointment_processing as (
+    select
         patient_id,
         appointment_id,
         appointment_status,
         history_action as action_type,
-        CASE
-            WHEN history_action = 1 THEN 'Rescheduled'
-            WHEN history_action = 2 THEN 'Confirmed'
-            WHEN history_action = 3 THEN 'Failed Appointment'
-            WHEN history_action = 4 THEN 'Cancelled'
-            WHEN history_action = 5 THEN 'ASAP'
-            WHEN history_action = 6 THEN 'Complete'
-            ELSE 'Unknown'
-        END AS action_description,
+        case
+            when history_action = 1 then 'Rescheduled'
+            when history_action = 2 then 'Confirmed'
+            when history_action = 3 then 'Failed Appointment'
+            when history_action = 4 then 'Cancelled'
+            when history_action = 5 then 'ASAP'
+            when history_action = 6 then 'Complete'
+            else 'Unknown'
+        end as action_description,
         note as action_note,
-        CASE
-            WHEN history_action = 4 AND note IS NOT NULL
-            THEN note
-            ELSE NULL
-        END AS cancellation_reason,
-        CASE
-            WHEN history_action = 1 AND note LIKE '%new appt:#%'
-            THEN REGEXP_REPLACE(
-                SUBSTRING(note FROM 'new appt:#([0-9]+)'),
+        case
+            when history_action = 4 and note is not null
+            then note
+            else null
+        end as cancellation_reason,
+        case
+            when history_action = 1 and note like '%new appt:#%'
+            then regexp_replace(
+                substring(note from 'new appt:#([0-9]+)'),
                 '[^0-9]', '', 'g'
             )::integer
-            ELSE NULL
-        END AS rescheduled_appointment_id,
-        ROW_NUMBER() OVER (
-            PARTITION BY appointment_id 
-            ORDER BY history_timestamp DESC
+            else null
+        end as rescheduled_appointment_id,
+        row_number() over (
+            partition by appointment_id 
+            order by history_timestamp desc
         ) as history_rank
-    FROM {{ ref('stg_opendental__histappointment') }}
+    from source_historical_appointments
+),
+
+-- 5. Integration CTE (joins everything together)
+appointment_integrated as (
+    select
+        -- core appointment fields
+        a.appointment_id,
+        a.patient_id,
+        a.provider_id,
+        a.appointment_datetime,
+        a.appointment_end_datetime,
+        a.appointment_type_id,
+        a.appointment_status,
+        a.appointment_status_desc,
+        a.confirmed as is_confirmed,
+        a.is_complete,
+        a.is_hygiene,
+        a.is_new_patient,
+        a.note,
+        a.operatory,
+        a.check_in_time,
+        a.check_out_time,
+        a.actual_length,
+        a.waiting_time,
+        
+        -- appointment type information
+        atd.appointment_type_name,
+        atd.appointment_length,
+        
+        -- provider information
+        pd.provider_abbr as provider_name,
+        pd.specialty as provider_specialty,
+        pd.provider_color,
+        
+        -- patient information
+        patd.preferred_name as patient_name,
+        patd.patient_status,
+        patd.first_visit_date,
+        
+        -- historical appointment information
+        ha.cancellation_reason,
+        ha.rescheduled_appointment_id,
+        
+        -- metadata
+        a.created_at,
+        current_timestamp as updated_at,
+        
+        -- Standardized metadata using macro (preserves primary source metadata)
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='a',
+            preserve_source_metadata=true,
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+        ) }}
+    from appointment_status_standardization a
+    left join appointment_type_definitions atd
+        on a.appointment_type_id = atd.appointment_type_id
+    left join provider_definitions pd
+        on a.provider_id = pd.provider_id
+    left join patient_definitions patd
+        on a.patient_id = patd.patient_id
+    left join historical_appointment_processing ha
+        on a.appointment_id = ha.appointment_id
+        and ha.history_rank = 1  -- only get the latest history record
+        and ha.action_type in (1, 4) -- rescheduled or cancelled
+),
+
+-- 6. Final filtering/validation
+final as (
+    select * from appointment_integrated
+    where appointment_id is not null
 )
 
--- Final selection
-SELECT
-    ab.appointment_id,
-    ab.patient_id,
-    ab.provider_id,
-    ab.appointment_datetime,
-    ab.appointment_end_datetime,
-    ab.appointment_type_id,
-    at.appointment_type_name,
-    at.appointment_length,
-    ab.appointment_status,
-    CASE
-        WHEN ab.appointment_status = 1 THEN 'Scheduled'
-        WHEN ab.appointment_status = 2 THEN 'Complete'
-        WHEN ab.appointment_status = 3 THEN 'UnschedList'
-        WHEN ab.appointment_status = 4 THEN 'ASAP'
-        WHEN ab.appointment_status = 5 THEN 'Broken'
-        WHEN ab.appointment_status = 6 THEN 'Planned'
-        WHEN ab.appointment_status = 7 THEN 'PtNote'
-        WHEN ab.appointment_status = 8 THEN 'PtNoteCompleted'
-        ELSE 'Unknown'
-    END AS appointment_status_desc,
-    ab.confirmed AS is_confirmed,
-    CASE WHEN ab.appointment_status = 2 THEN TRUE ELSE FALSE END AS is_complete,
-    ab.is_hygiene,
-    ab.is_new_patient,
-    ab.note,
-    ab.operatory,
-    ab.check_in_time,
-    ab.check_out_time,
-    ab.actual_length,
-    CASE
-        WHEN ab.check_in_time IS NOT NULL 
-        AND ab.appointment_datetime IS NOT NULL
-        AND ab.check_in_time::time != '00:00:00'::time  -- Exclude placeholder times
-        AND ab.check_in_time >= ab.appointment_datetime
-        THEN ROUND(EXTRACT(EPOCH FROM (ab.check_in_time - ab.appointment_datetime))/60)::integer
-        ELSE 0  -- Default to 0 for waiting time when no valid check-in time
-    END AS waiting_time,
-    ha.cancellation_reason,
-    ha.rescheduled_appointment_id,
-    
-    -- Provider information
-    pi.provider_abbr AS provider_name,
-    pi.specialty AS provider_specialty,
-    pi.provider_color,
-    
-    -- Patient information
-    pat.preferred_name AS patient_name,
-    pat.patient_status,
-    pat.first_visit_date,
-    
-    -- Metadata
-    ab.created_at,
-    CURRENT_TIMESTAMP AS updated_at,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
-FROM AppointmentBase ab
-LEFT JOIN AppointmentTypes at
-    ON ab.appointment_type_id = at.appointment_type_id
-LEFT JOIN ProviderInfo pi
-    ON ab.provider_id = pi.provider_id
-LEFT JOIN PatientInfo pat
-    ON ab.patient_id = pat.patient_id
-LEFT JOIN HistoricalAppointments ha
-    ON ab.appointment_id = ha.appointment_id
-    AND ha.history_rank = 1  -- Only get the latest history record
-    AND ha.action_type IN (1, 4) -- Rescheduled or Cancelled
+select * from final
