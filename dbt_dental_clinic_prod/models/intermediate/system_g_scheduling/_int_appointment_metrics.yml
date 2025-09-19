@@ -7,51 +7,70 @@ models:
       indicators and operational insights for the dental clinic. This model serves as the
       foundation for scheduling analytics and performance reporting.
       
-      Key features:
-      - Aggregates appointment metrics at multiple levels (provider, clinic, overall)
-      - Tracks appointment completion and cancellation rates
-      - Monitors schedule and chair time utilization
-      - Calculates average appointment lengths and wait times
-      - Measures new patient acquisition rates
-      - Provides daily metrics for trend analysis
-      - Supports provider performance evaluation
-      - Enables clinic efficiency monitoring
+      Key Features:
+      - Multi-level aggregation (provider-level and overall clinic metrics)
+      - Rolling 7-day averages for trend analysis and performance tracking
+      - Month-to-date cumulative metrics for period-based reporting
+      - Schedule utilization calculations with complete date spine coverage
+      - Chair time utilization vs scheduled time analysis for efficiency monitoring
+      - Rate calculations with proper null handling and business rule validation
       
       Data Sources:
-      - int_appointment_details: Base appointment data with status and timing
-      - int_provider_availability: Provider schedule and availability
-      - int_appointment_schedule: Schedule patterns and blocks
-      - stg_opendental__provider: Provider information
+      - int_appointment_details: Base appointment data with status, timing, and completion information
+      - int_appointment_schedule: Schedule patterns, blocks, and utilization data
+      - stg_opendental__provider: Provider information including active status and specialties
       
-      Business rules:
-      - One record per date per metric level (provider/clinic/overall)
-      - Metrics are calculated for the last 90 days
-      - Completion rate = completed_appointments / total_appointments * 100
-      - Cancellation rate = cancelled_appointments / total_appointments * 100
-      - No-show rate = no_shows / total_appointments * 100
-      - Schedule utilization = scheduled_time / available_time * 100
-      - Chair time utilization = actual_chair_time / scheduled_chair_time * 100
-      - New patient rate = new_patient_appointments / total_appointments * 100
-      - All rates must be between 0 and 100
-      - Completed appointments cannot exceed total appointments
-      - Cancelled appointments cannot exceed total appointments
-      - Average wait time must be non-negative
-      - Average appointment length must be positive
-      - Metrics are calculated at end of day
+      Business Logic Features:
+      - Provider-level and overall clinic metric aggregation using UNION ALL patterns
+      - Rolling window calculations for trend analysis (7-day rolling averages)
+      - Month-to-date cumulative calculations for period-based reporting
+      - Schedule utilization with date spine to ensure complete coverage
+      - Chair time efficiency calculations comparing actual vs scheduled time
+      - Rate calculations with division-by-zero protection and business rule validation
       
-      Grain:
-      - One record per date per metric level
-      - Metric levels: provider, clinic, overall
-      - Daily aggregation of appointment data
+      Data Quality Notes:
+      - Uses date spine to ensure complete date coverage for all providers without gaps
+      - Handles null values in utilization calculations with proper default values (480 minutes)
+      - Excludes hidden providers from overall metrics to maintain data quality
+      - Limits processing to 90-day rolling window for optimal performance
+      - Validates metric calculations with business rule constraints and rate boundaries
+      
+      Performance Notes:
+      - Incremental materialization based on date for efficient daily processing
+      - Pre-aggregated CTEs to avoid repeated subqueries and improve performance
+      - Indexed on key lookup fields (metric_id, provider_id, date) for downstream model performance
+      - Date spine optimization ensures complete coverage without performance gaps
+      - Organized CTE structure following complex model patterns for maintainability
       
     config:
       materialized: incremental
       schema: intermediate
-      unique_key: ['metric_id']
+      unique_key: metric_id
+      
+    meta:
+      owner: "Scheduling Team"
+      contains_pii: false
+      business_process: "Appointment Performance Analytics"
+      refresh_frequency: "Daily"
+      business_impact: "High"
+      system_integration: "System G: Scheduling"
+      data_quality_requirements:
+        - "Metrics must be accurate for provider performance evaluation"
+        - "Rate calculations must handle edge cases and null values properly"
+        - "Date coverage must be complete for trend analysis and reporting"
+      performance_requirements:
+        - "Model must process incremental updates efficiently for daily operations"
+        - "Rolling calculations must complete within acceptable time limits"
 
     columns:
       - name: metric_id
-        description: Unique identifier for the metrics record
+        description: >
+          Primary key - Unique identifier for the metrics record
+          
+          Business Rules:
+          - Must be unique across all metric records
+          - Generated using MD5 hash of provider_id, date, and metric_level
+          - Cannot be null or empty
         tests:
           - unique
           - not_null
@@ -70,11 +89,21 @@ models:
               config:
                 severity: warn
       - name: metric_level
-        description: Level of the metric (provider, clinic, overall)
+        description: >
+          Level of aggregation for the metrics
+          
+          Logic:
+          - 'provider': Metrics aggregated at individual provider level
+          - 'overall': Metrics aggregated across all providers for clinic-wide view
+          
+          Business Impact:
+          - Enables provider-specific performance analysis and comparison
+          - Supports clinic-wide operational reporting and trend analysis
+          - Critical for both individual provider evaluation and overall clinic efficiency monitoring
         tests:
           - not_null
           - accepted_values:
-              values: ['provider', 'clinic', 'overall']
+              values: ['provider', 'overall']
       - name: total_appointments
         description: Total number of appointments scheduled for the day
         tests:
@@ -114,7 +143,22 @@ models:
           - dbt_utils.expression_is_true:
               expression: "<= 100"
       - name: completion_rate
-        description: Percentage of appointments that were completed
+        description: >
+          Percentage of appointments that were completed
+          
+          Calculation Logic:
+          - completion_rate = (completed_appointments / total_appointments) * 100
+          - Returns 0 when total_appointments = 0 to avoid division by zero
+          - Calculated for both provider-level and overall metrics
+          
+          Business Rules:
+          - Must be between 0 and 100
+          - Cannot exceed 100% completion rate
+          - Used for provider performance evaluation and clinic efficiency monitoring
+          
+          Data Quality Notes:
+          - Handles division by zero with proper default value of 0
+          - Calculated consistently across all metric levels
         tests:
           - not_null
           - dbt_utils.expression_is_true:

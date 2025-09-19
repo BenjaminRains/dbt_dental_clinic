@@ -7,68 +7,93 @@ models:
       and their associated metadata. This model serves as the foundation for scheduling analysis
       and reporting, providing detailed information about appointments, patients, and providers.
       
-      Key features:
-      - Aggregates appointment data with patient and provider information
-      - Tracks appointment status and confirmation
-      - Monitors check-in and check-out times
-      - Calculates actual appointment duration
-      - Records appointment patterns and types
-      - Maintains one-to-one relationship with appointments
-      - Includes comprehensive provider information
-      - Tracks patient demographics and status
-      - Integrates with System G scheduling models
-      - Provides detailed appointment history
+      Key Features:
+      - Appointment duration calculations using OpenDental pattern format
+      - Actual length calculation based on check-in/check-out times with business hours logic
+      - Waiting time calculation for patient experience tracking
+      - Status standardization and business rule validation
+      - Historical appointment tracking for rescheduling and cancellations
+      - Comprehensive provider and patient information integration
       
       Data Sources:
-      - stg_opendental__appointment: Base appointment data
-      - stg_opendental__appointmenttype: Appointment type information
-      - stg_opendental__provider: Provider details
-      - stg_opendental__patient: Patient information
-      - stg_opendental__histappointment: Historical appointment data
+      - stg_opendental__appointment: Base appointment data with timing and status information
+      - stg_opendental__appointmenttype: Appointment type definitions and duration patterns
+      - stg_opendental__provider: Provider details including specialty and color coding
+      - stg_opendental__patient: Patient information including demographics and status
+      - stg_opendental__histappointment: Historical appointment data for tracking changes
       
-      Business rules:
-      - One record per appointment
-      - Appointment end time must be after start time
-      - Check-out time must be after check-in time
-      - Actual length must be positive when check-in/out times exist
-      - Waiting time must be non-negative
-      - Cancellation reason only present for cancelled appointments
-      - Rescheduled appointment ID must be different from current appointment
-      - Pattern length calculated based on OpenDental's pattern format:
-        * 'X' represents provider time
-        * '/' represents assistant time
-        * Each character represents a 10-minute increment
-      - Status codes must be valid (1-8)
-      - Status descriptions must match status codes
-      - Required fields must not be null
-      - Timestamps must be in chronological order
-      - History records are ranked by timestamp (history_rank = 1 means "latest relevant status change")
+      Business Logic Features:
+      - Pattern-based duration calculation using OpenDental's character-based system
+      - Business hours calculation excluding Sundays and non-business hours
+      - Status code standardization with descriptive text mappings
+      - Historical appointment processing with latest change tracking
+      - Data quality validation for placeholder times and invalid data
       
-      Grain:
-      - One record per appointment (appointment_id)
-      - Latest history record for each appointment (history_rank = 1)
-      - Only includes rescheduled or cancelled history actions (action_type IN (1, 4))
-      - Incremental updates based on appointment_datetime
+      Data Quality Notes:
+      - Handles placeholder times (00:00:00) in check-in/check-out data by excluding from calculations
+      - Validates appointment end time is after start time through business rules
+      - Ensures actual length calculations account for business hours only (9:00-17:00, Mon-Sat)
+      - Manages missing or invalid appointment type data (type_id = 0) gracefully
+      - Excludes invalid historical records and maintains referential integrity
+      
+      Performance Notes:
+      - Incremental materialization based on appointment_datetime for efficient processing
+      - Complex business hours calculation optimized with recursive CTE structure
+      - Indexed on key lookup fields (appointment_id, patient_id, provider_id) for downstream performance
+      - Organized CTE structure following complex model patterns for maintainability
       
     config:
       materialized: incremental
       schema: intermediate
       unique_key: appointment_id
+      
+    meta:
+      owner: "Scheduling Team"
+      contains_pii: true
+      business_process: "Appointment Management"
+      refresh_frequency: "Daily"
+      business_impact: "High"
+      system_integration: "System G: Scheduling"
+      data_quality_requirements:
+        - "Appointment timing data must be accurate for scheduling optimization"
+        - "Patient and provider information must be complete for operational reporting"
+        - "Historical appointment data must be preserved for audit and analysis"
+      performance_requirements:
+        - "Model must process incremental updates efficiently for daily operations"
+        - "Complex business hours calculations must complete within acceptable time limits"
 
     columns:
       - name: appointment_id
-        description: Unique identifier for the appointment
+        description: >
+          Primary key - Unique identifier for the appointment
+          
+          Business Rules:
+          - Must be unique across all appointments
+          - Cannot be null or zero
+          - Must correspond to a valid appointment in the source system
         tests:
+          - unique
+          - not_null
           - relationships:
               to: ref('stg_opendental__appointment')
               field: appointment_id
       - name: patient_id
-        description: Foreign key to stg_opendental__patient
+        description: >
+          Foreign key to stg_opendental__patient - Links appointment to patient record
+          
+          Business Rules:
+          - Must reference a valid patient in the system
+          - Cannot be null for scheduled appointments
+          
+          Data Quality Notes:
+          - Historical appointments may have invalid patient references
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              severity: warn
+              where: "patient_id != 0"
       - name: provider_id
         description: ID of the provider assigned to this appointment
         tests:
@@ -113,9 +138,21 @@ models:
         tests:
           - not_null
       - name: is_complete
-        description: Flag indicating if the appointment is complete
+        description: >
+          Flag indicating if the appointment is complete
+          
+          Logic:
+          - true when: appointment_status = 2 (Complete)
+          - false when: appointment_status is any other value
+          
+          Business Impact:
+          - Used for completion rate calculations in scheduling metrics
+          - Critical for operational reporting and provider performance tracking
+          - Determines whether appointment should be included in completed appointment counts
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
       - name: is_hygiene
         description: Flag indicating if the appointment is for hygiene
         tests:
@@ -133,7 +170,32 @@ models:
       - name: check_out_time
         description: Time when patient checked out
       - name: actual_length
-        description: Actual duration of the appointment in minutes
+        description: >
+          Actual duration of the appointment in minutes based on check-in/check-out times
+          
+          Calculation Logic:
+          - Calculated only when both check-in and check-out times are valid (not 00:00:00)
+          - Uses business hours calculation excluding Sundays and non-business hours (9:00-17:00)
+          - Accounts for multi-day appointments spanning multiple business days
+          - Returns null when timing data is invalid or missing
+          
+          Business Rules:
+          - Must be positive when calculated
+          - Cannot exceed 480 minutes (8 hours) per business day
+          - Only calculated for appointments with valid check-in/check-out data
+          
+          Data Quality Notes:
+          - May be null for appointments without valid timing data
+          - Excludes placeholder times (00:00:00) from calculations
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "actual_length IS NULL OR actual_length > 0"
+              config:
+                description: "Actual length must be positive when calculated"
+          - dbt_utils.expression_is_true:
+              expression: "actual_length IS NULL OR actual_length <= 480"
+              config:
+                description: "Actual length cannot exceed 8 hours per day"
       - name: waiting_time
         description: Time patient spent waiting (in minutes)
       - name: cancellation_reason
