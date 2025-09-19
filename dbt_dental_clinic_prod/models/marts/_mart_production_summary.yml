@@ -1,0 +1,773 @@
+version: 2
+
+models:
+  - name: mart_production_summary
+    description: >
+      Summary mart for comprehensive production analytics and performance tracking.
+      This mart provides aggregated metrics and KPIs to support financial performance
+      monitoring, operational reporting, and provider performance analysis at daily
+      granularity by provider and clinic.
+      
+      ## Business Context
+      The production summary mart is a critical component of our analytical framework, enabling:
+      - Daily production performance monitoring and alerting
+      - Provider efficiency analysis and benchmarking
+      - Financial performance tracking and goal achievement
+      - Operational decision making and resource optimization
+      - Executive reporting and dashboard analytics
+      - Collection rate analysis and payment timing insights
+      
+      ## Technical Specifications
+      - Grain: One row per date + provider + clinic combination
+      - Source: fact_appointment, fact_claim, fact_payment (primary sources)
+      - Refresh: Daily
+      - Dependencies: 
+        * fact_appointment (core scheduling and appointment data)
+        * fact_claim (billing and production amounts)
+        * fact_payment (payment and collection data)
+        * dim_date (date dimension for temporal analysis)
+        * dim_provider (provider information and categorization)
+        * dim_procedure (procedure categorization and analysis)
+        * stg_opendental__procedurelog (procedure details and fees)
+        * stg_opendental__payment (payment transactions)
+        * stg_opendental__paysplit (payment provider associations)
+        * int_adjustments (adjustment transactions)
+      
+      ## Business Logic
+      ### Production Aggregation Rules
+      - Scheduled vs Actual Production: Compares scheduled production amounts with actual procedure fees
+      - Completion Rate Calculation: Completed appointments divided by total appointments
+      - Collection Rate Analysis: Collected amounts divided by actual production
+      - Time Utilization: Productive minutes divided by scheduled minutes
+      
+      ### Performance Categorization
+      - Appointment Performance: Excellent (≥95%), Good (≥90%), Fair (≥80%), Poor (<80%)
+      - Collection Performance: Excellent (≥98%), Good (≥95%), Fair (≥90%), Poor (<90%)
+      - Provider Performance Tiers: Based on multiple KPIs including completion and collection rates
+      
+      ### Payment Processing
+      - Patient Payments: Payment type 69 (patient payments)
+      - Insurance Payments: Payment type 71 (insurance payments)
+      - Adjustments: Handled separately through int_adjustments model
+      - Provider Association: Through procedurelog or paysplit relationships
+      
+      ## Data Quality Notes
+      - Appointment-claim relationships may have data quality issues (assumed join logic)
+      - Production amounts may include estimates vs actuals requiring validation
+      - Payment timing may not align perfectly with appointment dates
+      - Clinic_id may be NULL in some payment records (defaulted to 0)
+      - Provider associations through paysplit may not capture all payment relationships
+      
+      ## Performance Considerations
+      - Large aggregation across multiple fact tables requires proper indexing
+      - Date-based partitioning recommended for historical analysis
+      - Provider and clinic dimensions should be pre-joined for efficiency
+      - Complex payment aggregation logic may impact refresh performance
+      - Consider materialized view for frequently accessed metrics
+      
+      ## Usage Notes
+      - Use for daily production monitoring and trend analysis
+      - Provider performance comparisons should account for specialty differences
+      - Collection rates may be delayed due to payment processing timing
+      - Appointment completion rates are key operational indicators
+      - Time utilization metrics help optimize scheduling efficiency
+      - Payment metrics provide insights into cash flow and collection patterns
+    
+    meta:
+      owner: "Operations Team"
+      contains_pii: false
+      business_process: "Production Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + provider + clinic combination"
+      primary_consumers: ["Operations Team", "Finance Team", "Executive Leadership", "Provider Management"]
+      data_quality_requirements:
+        - "Production amounts must be non-negative"
+        - "Completion rates must be between 0 and 100"
+        - "Collection rates must be between 0 and 100"
+        - "All date references must be valid"
+      performance_requirements:
+        - "Daily refresh must complete within 30 minutes"
+        - "Query response time under 5 seconds for standard reports"
+        - "Support concurrent access by multiple users"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 10000
+          config:
+            severity: error
+            description: "Expected daily production records should be reasonable for practice size"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "completion_rate >= 0 and completion_rate <= 100"
+          config:
+            severity: error
+            description: "Completion rates must be valid percentages"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "collection_rate >= 0 and collection_rate <= 100"
+          config:
+            severity: error
+            description: "Collection rates must be valid percentages"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis
+          
+          Business Rules:
+          - Must correspond to a valid date in the date dimension
+          - Used for time-based aggregations and trend analysis
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Provider dimension for performance analysis
+          
+          Business Rules:
+          - Must correspond to an active provider in the system
+          - Used for provider-level performance tracking and benchmarking
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+          - not_null
+      
+      - name: clinic_id
+        description: >
+          Foreign key to dim_clinic - Clinic dimension for location-based analysis
+          
+          Business Rules:
+          - May be 0 for records where clinic is not specified
+          - Used for multi-location practice analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 999
+              severity: warn
+      
+      # Date and Time Dimensions
+      - name: production_date
+        description: >
+          Date of the production activity - Primary date for analysis
+          
+          Business Rules:
+          - Must be a valid date
+          - Used for daily production tracking and trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+              severity: error
+      
+      - name: year
+        description: >
+          Year dimension from date table - Used for annual reporting and analysis
+          
+          Business Rules:
+          - Must be a valid year (typically current year or recent historical)
+          - Used for year-over-year comparisons
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+              severity: warn
+      
+      - name: month
+        description: >
+          Month dimension from date table - Used for monthly reporting and analysis
+          
+          Business Rules:
+          - Must be between 1 and 12
+          - Used for monthly trend analysis and seasonal patterns
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+              severity: error
+      
+      - name: quarter
+        description: >
+          Quarter dimension from date table - Used for quarterly reporting
+          
+          Business Rules:
+          - Must be between 1 and 4
+          - Used for quarterly performance reviews and planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      
+      - name: day_of_week
+        description: >
+          Day of week number (1=Monday, 7=Sunday) - Used for weekly pattern analysis
+          
+          Business Rules:
+          - Must be between 1 and 7
+          - Used for identifying weekly production patterns
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 7
+              severity: error
+      
+      - name: day_name
+        description: >
+          Day of week name - Used for reporting and analysis
+          
+          Business Rules:
+          - Must be a valid day name
+          - Used for human-readable reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+      
+      - name: is_weekend
+        description: >
+          Flag indicating if the date falls on a weekend
+          
+          Logic:
+          - true when: day_of_week is Saturday (6) or Sunday (7)
+          - false when: day_of_week is Monday through Friday (1-5)
+          
+          Business Impact:
+          - Used for weekend vs weekday production analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_holiday
+        description: >
+          Flag indicating if the date is a recognized holiday
+          
+          Logic:
+          - true when: date is in holiday calendar
+          - false when: date is a regular business day
+          
+          Business Impact:
+          - Used for holiday impact analysis on production
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Provider Information
+      - name: provider_first_name
+        description: >
+          Provider's first name - Used for reporting and identification
+          
+          Business Rules:
+          - Must be present for all active providers
+          - Used for human-readable reporting
+        tests:
+          - not_null
+      
+      - name: provider_last_name
+        description: >
+          Provider's last name - Used for reporting and identification
+          
+          Business Rules:
+          - Must be present for all active providers
+          - Used for human-readable reporting and sorting
+        tests:
+          - not_null
+      
+      - name: provider_preferred_name
+        description: >
+          Provider's preferred name for display - May be different from legal name
+          
+          Business Rules:
+          - May be null if not specified
+          - Used for patient-facing reporting
+        tests:
+          - not_null:
+              where: "provider_preferred_name is not null"
+      
+      - name: specialty_description
+        description: >
+          Provider's specialty or role description
+          
+          Business Rules:
+          - Must be present for all providers
+          - Used for specialty-based analysis and benchmarking
+        tests:
+          - not_null
+      
+      - name: provider_status_description
+        description: >
+          Current status of the provider (Active, Inactive, etc.)
+          
+          Business Rules:
+          - Must be present for all providers
+          - Used for filtering active vs inactive providers
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Active", "Inactive", "On Leave", "Terminated"]
+      
+      # Appointment Metrics
+      - name: total_appointments
+        description: >
+          Total number of appointments scheduled for the day
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Includes all appointment types and statuses
+          - Used for capacity utilization analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: completed_appointments
+        description: >
+          Number of appointments that were completed
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Cannot exceed total_appointments
+          - Used for completion rate calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: missed_appointments
+        description: >
+          Number of appointments that were missed or cancelled
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Should equal total_appointments - completed_appointments
+          - Used for no-show analysis and scheduling optimization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: hygiene_appointments
+        description: >
+          Number of hygiene appointments scheduled
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Cannot exceed total_appointments
+          - Used for hygiene service analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: completion_rate
+        description: >
+          Percentage of appointments completed (completed_appointments / total_appointments * 100)
+          
+          Calculation Logic:
+          - Step 1: Divide completed_appointments by total_appointments
+          - Step 2: Multiply by 100 to get percentage
+          - Step 3: Round to 2 decimal places
+          
+          Business Rules:
+          - Must be between 0 and 100
+          - Higher values indicate better operational efficiency
+          - Used for provider performance evaluation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      # Time Utilization Metrics
+      - name: total_scheduled_minutes
+        description: >
+          Total minutes scheduled across all appointments
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for capacity planning and utilization analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1440
+              severity: warn
+      
+      - name: productive_minutes
+        description: >
+          Total minutes of completed appointments (productive time)
+          
+          Business Rules:
+          - Must be non-negative
+          - Cannot exceed total_scheduled_minutes
+          - Used for efficiency calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1440
+              severity: warn
+      
+      - name: avg_appointment_length
+        description: >
+          Average length of appointments in minutes
+          
+          Business Rules:
+          - Must be positive for days with appointments
+          - Used for scheduling optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 480
+              severity: warn
+      
+      - name: time_utilization_rate
+        description: >
+          Percentage of scheduled time that was productive (productive_minutes / total_scheduled_minutes * 100)
+          
+          Calculation Logic:
+          - Step 1: Divide productive_minutes by total_scheduled_minutes
+          - Step 2: Multiply by 100 to get percentage
+          - Step 3: Round to 2 decimal places
+          
+          Business Rules:
+          - Must be between 0 and 100
+          - Higher values indicate better time utilization
+          - Used for operational efficiency analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: productive_hours
+        description: >
+          Productive time converted to hours (productive_minutes / 60)
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for daily productivity reporting
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 24
+              severity: warn
+      
+      # Production and Financial Metrics
+      - name: scheduled_production
+        description: >
+          Total production amount scheduled for the day
+          
+          Business Rules:
+          - Must be non-negative
+          - Based on scheduled appointment values
+          - Used for production planning and goal setting
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      
+      - name: actual_production
+        description: >
+          Total actual production amount from completed procedures
+          
+          Business Rules:
+          - Must be non-negative
+          - Based on actual procedure fees
+          - Used for performance measurement against goals
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      
+      - name: collections
+        description: >
+          Total amount collected for the day
+          
+          Business Rules:
+          - Must be non-negative
+          - Includes patient and insurance payments
+          - Used for cash flow analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      
+      - name: production_efficiency
+        description: >
+          Percentage of scheduled production achieved (actual_production / scheduled_production * 100)
+          
+          Calculation Logic:
+          - Step 1: Divide actual_production by scheduled_production
+          - Step 2: Multiply by 100 to get percentage
+          - Step 3: Round to 2 decimal places
+          
+          Business Rules:
+          - Must be between 0 and 100
+          - Higher values indicate better production efficiency
+          - Used for goal achievement tracking
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: collection_rate
+        description: >
+          Percentage of production collected (collections / actual_production * 100)
+          
+          Calculation Logic:
+          - Step 1: Divide collections by actual_production
+          - Step 2: Multiply by 100 to get percentage
+          - Step 3: Round to 2 decimal places
+          
+          Business Rules:
+          - Must be between 0 and 100
+          - Higher values indicate better collection performance
+          - Used for financial performance evaluation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      # Payment Information
+      - name: patient_payments
+        description: >
+          Total patient payments received for the day
+          
+          Business Rules:
+          - Must be non-negative
+          - Payment type 69 (patient payments)
+          - Used for patient payment analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: insurance_payments
+        description: >
+          Total insurance payments received for the day
+          
+          Business Rules:
+          - Must be non-negative
+          - Payment type 71 (insurance payments)
+          - Used for insurance payment analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: adjustments
+        description: >
+          Total adjustments made for the day
+          
+          Business Rules:
+          - Can be positive or negative
+          - Used for financial reconciliation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+              severity: warn
+      
+      - name: payment_transactions
+        description: >
+          Number of payment transactions processed
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Used for transaction volume analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Procedure Metrics
+      - name: total_procedures
+        description: >
+          Total number of different procedures performed
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Used for procedure mix analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: avg_fee_per_procedure
+        description: >
+          Average fee per procedure performed
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for procedure pricing analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+              severity: warn
+      
+      - name: unique_patients
+        description: >
+          Number of unique patients seen
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Used for patient volume analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: procedures_per_patient
+        description: >
+          Average number of procedures per patient
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for treatment complexity analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      # Performance Categories
+      - name: appointment_performance
+        description: >
+          Performance category based on appointment completion rate
+          
+          Categories:
+          - Excellent: ≥95% completion rate
+          - Good: ≥90% completion rate
+          - Fair: ≥80% completion rate
+          - Poor: <80% completion rate
+          
+          Business Rules:
+          - Used for provider performance evaluation
+          - Helps identify operational issues
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Excellent", "Good", "Fair", "Poor"]
+      
+      - name: collection_performance
+        description: >
+          Performance category based on collection rate
+          
+          Categories:
+          - Excellent: ≥98% collection rate
+          - Good: ≥95% collection rate
+          - Fair: ≥90% collection rate
+          - Poor: <90% collection rate
+          
+          Business Rules:
+          - Used for financial performance evaluation
+          - Helps identify collection issues
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Excellent", "Good", "Fair", "Poor"]
+      
+      # Goals and Targets
+      - name: production_goal
+        description: >
+          Production goal for the day (currently placeholder - actual production)
+          
+          Business Rules:
+          - Would be replaced with actual practice goals
+          - Used for goal achievement tracking
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      
+      - name: goal_achievement
+        description: >
+          Percentage of production goal achieved (currently placeholder)
+          
+          Business Rules:
+          - Would be calculated against actual goals
+          - Used for performance evaluation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 200
+              severity: warn
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Derived from appointment creation dates. May be null for some historical records."
+        tests:
+          - not_null:
+              where: "production_date >= '2020-01-01'"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Derived from appointment update dates."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

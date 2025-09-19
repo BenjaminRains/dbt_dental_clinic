@@ -1,8 +1,62 @@
-with Source as (
+{{
+    config(
+        materialized='table',
+        schema='marts',
+        unique_key='provider_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['provider_id'], 'unique': true},
+            {'columns': ['_updated_at']},
+            {'columns': ['provider_status']},
+            {'columns': ['specialty_id']},
+            {'columns': ['is_hidden']}
+        ]
+    )
+}}
+
+/*
+    Dimension model for provider data
+    Part of System G: Scheduling
+    
+    This model:
+    1. Provides comprehensive provider information for scheduling, billing, and clinical operations
+    2. Enhances provider data with availability metrics and business logic categorizations
+    3. Supports provider performance analysis and practice management reporting
+    
+    Business Logic Features:
+    - Provider Status Categorization: Active, Inactive, Terminated status classification
+    - Provider Type Classification: Primary, Secondary, Instructor, Non-Person categorization
+    - Availability Metrics: 90-day rolling availability calculations for scheduling optimization
+    - Professional Credentials: Comprehensive credential tracking for compliance and billing
+    
+    Key Metrics:
+    - Scheduled Days: Number of days provider was scheduled in last 90 days
+    - Availability Percentage: Percentage of scheduled days provider was available
+    - Average Daily Minutes: Average available minutes per scheduled day
+    
+    Data Quality Notes:
+    - Provider ID 0 represents system-generated communications, not actual providers
+    - Hidden providers are excluded from current UI but retained for historical data
+    - Availability metrics are calculated over 90-day rolling window for performance
+    
+    Performance Considerations:
+    - Uses table materialization for fast lookups across all mart models
+    - Indexed on key lookup fields (provider_id, status, specialty)
+    - Availability calculations limited to 90-day window for optimal performance
+    
+    Dependencies:
+    - stg_opendental__provider: Primary source for provider data
+    - stg_opendental__definition: Lookup tables for specialty and status descriptions
+    - int_provider_availability: Provider scheduling and availability metrics
+*/
+
+-- 1. Source data retrieval
+with source_provider as (
     select * from {{ ref('stg_opendental__provider') }}
 ),
 
-Definitions as (
+-- 2. Lookup/reference data
+provider_lookup as (
     select
         definition_id,
         category_id,
@@ -13,7 +67,8 @@ Definitions as (
     from {{ ref('stg_opendental__definition') }}
 ),
 
-ProviderAvailability as (
+-- 3. Provider availability metrics
+provider_availability as (
     select
         provider_id,
         count(distinct schedule_date) as scheduled_days,
@@ -25,19 +80,20 @@ ProviderAvailability as (
     group by provider_id
 ),
 
-Enhanced as (
+-- 4. Business logic enhancement
+provider_enhanced as (
     select
-        -- Primary key
+        -- Primary identification
         p.provider_id,
         
         -- Provider identifiers
         p.provider_abbreviation,
-        p.provider_last_name,
-        p.provider_first_name,
-        p.provider_middle_initial,
-        p.provider_suffix,
-        p.provider_preferred_name,
-        p.provider_custom_id,
+        p.last_name as provider_last_name,
+        p.first_name as provider_first_name,
+        p.middle_initial as provider_middle_initial,
+        p.name_suffix as provider_suffix,
+        p.preferred_name as provider_preferred_name,
+        p.custom_id as provider_custom_id,
         
         -- Provider classifications
         p.fee_schedule_id,
@@ -49,7 +105,7 @@ Enhanced as (
         def_anesth.item_name as anesthesia_provider_type_description,
         
         -- Provider credentials
-        p.state_license,
+        p.state_license_number as state_license,
         p.dea_number,
         p.blue_cross_id,
         p.medicaid_id,
@@ -58,16 +114,16 @@ Enhanced as (
         p.state_where_licensed,
         p.taxonomy_code_override,
         
-        -- Provider flags
-        case when p.is_secondary = 1 then true else false end as is_secondary,
-        case when p.is_hidden = 1 then true else false end as is_hidden,
-        case when p.using_tin = 1 then true else false end as is_using_tin,
-        case when p.sig_on_file = 1 then true else false end as has_signature_on_file,
-        case when p.is_cdanet = 1 then true else false end as is_cdanet,
-        case when p.is_not_person = 1 then true else false end as is_not_person,
-        case when p.is_instructor = 1 then true else false end as is_instructor,
-        case when p.is_hidden_report = 1 then true else false end as is_hidden_report,
-        case when p.is_erx_enabled = 1 then true else false end as is_erx_enabled,
+        -- Provider flags (already converted to boolean in staging)
+        p.is_secondary,
+        p.is_hidden,
+        p.is_using_tin,
+        p.has_signature_on_file,
+        p.is_cdanet,
+        p.is_not_person,
+        p.is_instructor,
+        p.is_hidden_report,
+        p.is_erx_enabled,
         
         -- Provider display properties
         p.provider_color,
@@ -108,28 +164,66 @@ Enhanced as (
         
         -- Provider type categorization
         case
-            when p.is_instructor = 1 then 'Instructor'
-            when p.is_secondary = 1 then 'Secondary'
-            when p.is_not_person = 1 then 'Non-Person'
+            when p.is_instructor then 'Instructor'
+            when p.is_secondary then 'Secondary'
+            when p.is_not_person then 'Non-Person'
             else 'Primary'
         end as provider_type_category,
         
+        -- Provider specialty categorization
+        case
+            when def_specialty.item_name = 'General' then 'General Practice'
+            when def_specialty.item_name in ('Orthodontics', 'Oral Surgery', 'Endodontics', 'Periodontics') then 'Specialist'
+            when def_specialty.item_name = 'Hygiene' then 'Hygiene'
+            else 'Other'
+        end as provider_specialty_category,
+        
+        -- Provider performance tier (based on availability)
+        case
+            when (case 
+                when pa.scheduled_days > 0 
+                then round((pa.scheduled_days - pa.days_off_count)::numeric / pa.scheduled_days * 100, 2)
+                else 0 
+            end) >= 95 then 'Excellent'
+            when (case 
+                when pa.scheduled_days > 0 
+                then round((pa.scheduled_days - pa.days_off_count)::numeric / pa.scheduled_days * 100, 2)
+                else 0 
+            end) >= 90 then 'Good'
+            when (case 
+                when pa.scheduled_days > 0 
+                then round((pa.scheduled_days - pa.days_off_count)::numeric / pa.scheduled_days * 100, 2)
+                else 0 
+            end) >= 80 then 'Fair'
+            when (case 
+                when pa.scheduled_days > 0 
+                then round((pa.scheduled_days - pa.days_off_count)::numeric / pa.scheduled_days * 100, 2)
+                else 0 
+            end) > 0 then 'Poor'
+            else 'No Data'
+        end as availability_performance_tier,
+        
         -- Metadata
-        p._created_at,
-        p._updated_at,
-        current_timestamp as _loaded_at
-    from Source p
-    left join ProviderAvailability pa
+        {{ standardize_mart_metadata() }}
+        
+    from source_provider p
+    left join provider_availability pa
         on p.provider_id = pa.provider_id
-    left join Definitions def_specialty
-        on def_specialty.category_id = 3  -- Assuming category_id 3 is for specialties
+    left join provider_lookup def_specialty
+        on def_specialty.category_id = 3  -- Specialty definitions
         and def_specialty.item_value = p.specialty_id::text
-    left join Definitions def_status
-        on def_status.category_id = 2  -- Assuming category_id 2 is for provider status
+    left join provider_lookup def_status
+        on def_status.category_id = 2  -- Provider status definitions
         and def_status.item_value = p.provider_status::text
-    left join Definitions def_anesth
-        on def_anesth.category_id = 7  -- Assuming category_id 7 is for anesthesia provider types
+    left join provider_lookup def_anesth
+        on def_anesth.category_id = 7  -- Anesthesia provider type definitions
         and def_anesth.item_value = p.anesthesia_provider_type::text
+),
+
+-- 5. Final validation and filtering
+final as (
+    select * from provider_enhanced
+    where provider_id is not null  -- Ensure valid provider IDs
 )
 
-select * from Enhanced
+select * from final

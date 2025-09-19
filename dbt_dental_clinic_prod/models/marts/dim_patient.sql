@@ -1,13 +1,66 @@
-{{ config(
-    materialized='table',
-    description='Dimension table containing standardized patient information'
-) }}
+{{
+    config(
+        materialized='table',
+        schema='marts',
+        unique_key='patient_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['patient_id'], 'unique': true},
+            {'columns': ['_updated_at']},
+            {'columns': ['primary_provider_id']},
+            {'columns': ['clinic_id']},
+            {'columns': ['patient_status']},
+            {'columns': ['birth_date']}
+        ]
+    )
+}}
 
-with Source as (
+/*
+    Dimension model for Patient
+    Part of System A: Core Data Foundation
+    
+    This model:
+    1. Provides comprehensive patient demographic and clinical information
+    2. Supports patient relationship management and family linkages
+    3. Enables financial analysis and balance tracking
+    4. Facilitates clinical workflow and care coordination
+    
+    Business Logic Features:
+    - Demographics: age, gender, language, contact preferences
+    - Clinical: disease tracking, document management, provider relationships
+    - Financial: balance aging, insurance status, payment preferences
+    - Relationships: family links, guarantor relationships, provider assignments
+    
+    Key Metrics:
+    - Patient demographics and segmentation
+    - Financial balance and aging analysis
+    - Clinical risk indicators and disease management
+    - Provider assignment and care coordination
+    
+    Data Quality Notes:
+    - Patient status codes mapped to business-friendly descriptions
+    - Age calculated from birth_date for consistency
+    - Balance fields aggregated from financial transactions
+    - Disease and document counts from related tables
+    
+    Performance Considerations:
+    - Indexed on patient_id for optimal join performance
+    - Provider and clinic indexes for common filtering patterns
+    - Status and date indexes for analytical queries
+    
+    Dependencies:
+    - stg_opendental__patient: Core patient data
+    - stg_opendental__patientnote: Patient notes and emergency contacts
+    - stg_opendental__patientlink: Family and relationship linkages
+    - stg_opendental__disease: Active disease conditions
+    - stg_opendental__document: Patient document management
+*/
+
+with source_patient as (
     select * from {{ ref('stg_opendental__patient') }}
 ),
 
-PatientNotes as (
+patient_notes as (
     select 
         patient_id,
         medical as medical_notes,
@@ -18,7 +71,7 @@ PatientNotes as (
     from {{ ref('stg_opendental__patientnote') }}
 ),
 
-PatientLinks as (
+patient_links as (
     select 
         patient_id_from as patient_id,
         array_agg(patient_id_to::text) as linked_patient_ids,
@@ -27,7 +80,7 @@ PatientLinks as (
     group by patient_id_from
 ),
 
-PatientDiseases as (
+patient_diseases as (
     select 
         patient_id,
         count(*) as disease_count,
@@ -38,7 +91,7 @@ PatientDiseases as (
     group by patient_id
 ),
 
-PatientDocuments as (
+patient_documents as (
     select 
         patient_id,
         count(*) as document_count,
@@ -47,9 +100,9 @@ PatientDocuments as (
     group by patient_id
 ),
 
-Final as (
+patient_enhanced as (
     select
-        -- Primary Key
+        -- Primary identification
         s.patient_id,  -- Unique identifier for each patient
         
         -- Demographics
@@ -64,6 +117,14 @@ Final as (
         s.language,  -- Patient's preferred language
         s.birth_date,  -- Patient's date of birth
         s.age,  -- Calculated age in years
+        
+        -- Age categories for business analysis
+        case 
+            when s.age < 18 then 'Minor'
+            when s.age between 18 and 64 then 'Adult'
+            when s.age >= 65 then 'Senior'
+            else 'Unknown'
+        end as age_category,
         
         -- Status and Classification
         case s.patient_status
@@ -85,8 +146,8 @@ Final as (
         end as position_code,  -- Position code description
         s.student_status,  -- Student status if applicable
         case s.urgency
-            when 0 then 'Normal'
-            when 1 then 'High'
+            when false then 'Normal'
+            when true then 'High'
             else 'Unknown'
         end as urgency,  -- Urgency level description
         s.premedication_required,  -- Boolean flag for premedication requirement
@@ -131,6 +192,13 @@ Final as (
         s.has_insurance_flag,  -- Boolean flag for insurance status
         s.billing_cycle_day,  -- Day of month for billing cycle (1-31)
         
+        -- Balance status for business analysis
+        case 
+            when s.estimated_balance = 0 then 'No Balance'
+            when s.estimated_balance > 0 then 'Outstanding Balance'
+            else 'Credit Balance'
+        end as balance_status,
+        
         -- Important Dates
         s.first_visit_date,  -- Date of patient's first visit
         s.deceased_datetime,  -- Date and time of death if applicable
@@ -166,17 +234,23 @@ Final as (
         -- Metadata
         s._loaded_at,  -- When ETL pipeline loaded the data
         s._created_at,  -- When record was created in source
-        s._updated_at  -- When record was last updated
+        s._updated_at,  -- When record was last updated
+        current_timestamp as _transformed_at,  -- dbt processing time
+        current_timestamp as _mart_refreshed_at  -- Mart refresh time
 
-    from Source s
-    left join PatientNotes pn
+    from source_patient s
+    left join patient_notes pn
         on s.patient_id = pn.patient_id
-    left join PatientLinks pl
+    left join patient_links pl
         on s.patient_id = pl.patient_id
-    left join PatientDiseases pd
+    left join patient_diseases pd
         on s.patient_id = pd.patient_id
-    left join PatientDocuments doc
+    left join patient_documents doc
         on s.patient_id = doc.patient_id
+),
+
+final as (
+    select * from patient_enhanced
 )
 
-select * from Final
+select * from final

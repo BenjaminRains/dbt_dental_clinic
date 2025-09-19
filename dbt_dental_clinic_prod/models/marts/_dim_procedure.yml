@@ -3,98 +3,219 @@ version: 2
 models:
   - name: dim_procedure
     description: >
-      Procedure dimension table providing comprehensive dental procedure attributes and categorizations.
-      This model serves as the foundation for procedure-based analysis in the dental practice,
-      supporting clinical, operational, and financial reporting needs.
-
+      Dimension table containing comprehensive procedure information for analytical reporting.
+      This model serves as the primary reference for procedure-related analytics and
+      reporting, providing standardized attributes and business logic for consistent
+      analysis across all fact tables and summary marts.
+      
       ## Business Context
       The procedure dimension is a critical component of our dimensional model, enabling:
-      - Procedure-based analysis across all business processes
+      - Procedure-based analysis and reporting
       - Clinical categorization and complexity assessment
       - Revenue tier analysis and financial planning
       - Treatment planning and scheduling optimization
       - Insurance billing and claim processing
       - Fee schedule management and standard fee analysis
-
+      - Historical tracking and trend analysis
+      - Cross-system integration and data consistency
+      
       ## Technical Specifications
-      - Grain: One row per unique procedure code
-      - Source: stg_opendental__procedurecode
-      - Refresh: Incremental (based on source updates)
+      - Grain: One row per procedure (one row per procedure_code_id)
+      - Source: stg_opendental__procedurecode (primary source)
+      - Refresh: Daily
       - Dependencies: 
-        * stg_opendental__feesched
-        * stg_opendental__fee
-        * stg_opendental__definition
-
+        * stg_opendental__procedurecode (core procedure data)
+        * stg_opendental__feesched (fee schedule information)
+        * stg_opendental__fee (fee amounts and statistics)
+        * stg_opendental__definition (lookup values for coded fields)
+      
       ## Business Logic
-      ### Procedure Categories
-      - Based on CDT code prefixes (D1-D8)
-      - Enhanced with clinical flags (hygiene, prosthetic, radiology)
-      - Supports both standard and custom procedure types
-
-      ### Complexity Levels
-      - Simple: Single visit, low base units
-      - Moderate: Multiple visits or medium base units
-      - Complex: Multi-visit procedures or high base units
-
-      ### Revenue Tiers
-      - High: Major procedures (prosthodontics, surgery, orthodontics)
-      - Medium: Specialty procedures (endodontics, periodontics)
-      - Low: Basic procedures (preventive, restorative, diagnostic)
-
-      ### Clinical Attributes
-      - Treatment area specifications
-      - Base unit calculations
-      - Default provider assignments
-      - Documentation requirements
-
-      ### Fee Schedule Management
-      - Standard fee tracking per procedure
-      - Fee schedule type categorization
-      - Fee statistics and validation
-      - Historical fee tracking
+      ### Procedure Status Management
+      - Active procedures: Available for scheduling and billing
+      - Inactive procedures: Historical or deprecated procedures
+      - Hidden procedures: Internal procedures not shown to patients
+      
+      ### Procedure Categorization
+      - CDT-based categorization: Uses D1-D8 prefixes for standard classification
+      - Clinical flag enhancement: Hygiene, prosthetic, and radiology flags override CDT categories
+      - Custom procedure support: Handles non-standard procedures with appropriate categorization
+      
+      ### Data Quality Handling
+      - Missing fees: Procedures without standard fees are flagged but not excluded
+      - Definition lookups: Uses hardcoded category IDs for treatment areas and fee types
+      - Fee statistics: Calculated from available fee data, may be incomplete for new procedures
+      
+      ## Data Quality Notes
+      - Some procedures may not have standard fees (handled with null checks and has_standard_fee flag)
+      - Definition lookups use hardcoded category IDs (category_id 5 for treatment areas, 6 for fee types)
+      - Fee statistics are calculated from available fee data and may be incomplete for new procedures
+      - Treatment area descriptions may be null if not found in definition table
+      
+      ## Performance Considerations
+      - Indexed on procedure_code_id for fast lookups to fact tables
+      - Indexed on procedure_code for code-based queries
+      - Indexed on procedure_category for specialty filtering
+      - Indexed on clinical flags for procedure type filtering
+      - Pre-calculated categorizations reduce runtime computation
+      
+      ## Usage Notes
+      - Use procedure_code_id for joins to fact tables for optimal performance
+      - Leverage pre-calculated categorizations (procedure_category, complexity_level, revenue_tier)
+      - Utilize complexity levels for resource planning and scheduling
+      - Apply revenue tiers for financial analysis and reporting
+      - Use fee statistics for pricing analysis and fee schedule management
 
     columns:
+      # Primary Key
       - name: procedure_code_id
-        description: Primary key for the procedure dimension
+        description: >
+          Primary key - Unique identifier for each dental procedure
+          
+          Business Rules:
+          - Must be unique across all procedures
+          - Used for joins to fact tables and other dimensions
+          - Source: procedurecode.ProcedureCodeNum
         tests:
           - unique
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999
+              config:
+                severity: error
+                description: "Procedure code ID should be a positive integer"
+      
+      # Business Attributes
       - name: procedure_code
-        description: Standard dental procedure code (e.g., D0120)
+        description: >
+          Standard dental procedure code following CDT (Code on Dental Procedures and Nomenclature) format
+          
+          Business Rules:
+          - Follows CDT format (e.g., D0120, D1110, D2740)
+          - Used for insurance billing and claim processing
+          - Must be unique within the practice
+          
+          Data Quality Notes:
+          - Some custom procedures may not follow standard CDT format
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 4
+              max_value: 10
+              config:
+                severity: warn
+                description: "Procedure codes should be between 4-10 characters"
+      
       - name: description
-        description: Full description of the procedure
+        description: >
+          Full descriptive name of the dental procedure
+          
+          Business Rules:
+          - Must be descriptive enough for clinical staff to understand
+          - Used in treatment planning and patient communication
+          - Should match official CDT descriptions when applicable
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 5
+              max_value: 200
+              config:
+                severity: warn
+                description: "Procedure descriptions should be between 5-200 characters"
+      
       - name: abbreviated_description
-        description: Short form of the procedure description
+        description: >
+          Short form of the procedure description for display in limited space
+          
+          Business Rules:
+          - Used in appointment scheduling and quick reference
+          - Should be concise but still meaningful
+          - Typically 20-50 characters
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 3
+              max_value: 100
+              config:
+                severity: warn
+                description: "Abbreviated descriptions should be between 3-100 characters"
+      
       - name: procedure_category_id
-        description: Foreign key to procedure category
+        description: >
+          Foreign key to procedure category in OpenDental system
+          
+          Business Rules:
+          - Links to OpenDental's internal procedure categorization
+          - Used for system-level procedure grouping
+          - May not align with clinical CDT categories
+          
+          Data Quality Notes:
+          - Some procedures may have null category IDs
         tests:
-          - not_null
-
+          - not_null:
+              where: "procedure_category_id is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999
+              config:
+                severity: warn
+                description: "Procedure category ID should be a positive integer when present"
+      
       - name: treatment_area
-        description: Area of the mouth where procedure is performed
+        description: >
+          Numeric code indicating the area of the mouth where procedure is performed
+          
+          Business Rules:
+          - 0 = Not applicable (system procedures, etc.)
+          - 1-32 = Specific tooth numbers (1-16 upper, 17-32 lower)
+          - 51-54 = Quadrants (51=UR, 52=UL, 53=LL, 54=LR)
+          - 61-66 = Sextants
+          - 71-74 = Arch areas
+          
+          Data Quality Notes:
+          - Some procedures may have treatment_area = 0
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 99
+              config:
+                severity: warn
+                description: "Treatment area codes should be between 0-99"
+      
       - name: treatment_area_desc
-        description: Human-readable description of the treatment area
+        description: >
+          Human-readable description of the treatment area
+          
+          Business Rules:
+          - Looked up from definition table (category_id = 5)
+          - Provides patient-friendly area descriptions
+          - May be null if treatment_area not found in definitions
+          
+          Data Quality Notes:
+          - May be null for some treatment areas not in definition table
         tests:
-          - not_null
+          - not_null:
+              where: "treatment_area > 0"
 
+      # Status/Enum Columns
       - name: procedure_category
         description: >
-          Enhanced categorization for BI analysis.
-          Values: Preventive, Restorative, Endodontics, Periodontics,
-          Prosthodontics, Oral Surgery, Orthodontics, Diagnostic, Other
+          Enhanced categorization for BI analysis based on CDT codes and clinical flags:
+          Preventive = D1xxx codes or hygiene flag
+          Restorative = D2xxx codes
+          Endodontics = D3xxx codes
+          Periodontics = D4xxx codes
+          Prosthodontics = D5xxx codes or prosthetic flag
+          Oral Surgery = D6xxx codes
+          Orthodontics = D7xxx codes
+          Diagnostic = D8xxx codes or radiology flag
+          Other = Custom or unclassified procedures
+          
+          Business Rules:
+          - Primary categorization for clinical analysis
+          - Used for procedure mix analysis and reporting
+          - Overrides CDT categories when clinical flags are present
         tests:
           - not_null
           - accepted_values:
@@ -103,8 +224,15 @@ models:
 
       - name: complexity_level
         description: >
-          Procedure complexity assessment.
-          Values: Simple, Moderate, Complex
+          Procedure complexity assessment based on visit requirements and base units:
+          Simple = Single visit, base_units < 2
+          Moderate = Multiple visits or base_units 2-3
+          Complex = Multi-visit procedures or base_units >= 3
+          
+          Business Rules:
+          - Used for resource planning and scheduling
+          - Affects appointment duration and provider assignment
+          - Influences treatment planning and patient communication
         tests:
           - not_null
           - accepted_values:
@@ -112,8 +240,15 @@ models:
 
       - name: revenue_tier
         description: >
-          Revenue categorization of the procedure.
-          Values: High, Medium, Low
+          Revenue categorization based on procedure type and financial impact:
+          High = Major procedures (Prosthodontics, Oral Surgery, Orthodontics)
+          Medium = Specialty procedures (Endodontics, Periodontics)
+          Low = Basic procedures (Preventive, Restorative, Diagnostic)
+          
+          Business Rules:
+          - Used for financial analysis and revenue planning
+          - Affects insurance billing complexity
+          - Influences fee schedule management
         tests:
           - not_null
           - accepted_values:
@@ -121,8 +256,15 @@ models:
 
       - name: clinical_urgency
         description: >
-          Clinical urgency level of the procedure.
-          Values: High, Medium, Low
+          Clinical urgency level based on procedure type and patient impact:
+          High = Urgent procedures (Oral Surgery, Endodontics)
+          Medium = Important procedures (Periodontics, Restorative)
+          Low = Routine procedures (Preventive, Diagnostic)
+          
+          Business Rules:
+          - Used for treatment prioritization
+          - Affects scheduling and patient communication
+          - Influences clinical workflow planning
         tests:
           - not_null
           - accepted_values:
@@ -130,8 +272,15 @@ models:
 
       - name: insurance_complexity
         description: >
-          Complexity level for insurance billing.
-          Values: High, Medium, Low
+          Complexity level for insurance billing and claim processing:
+          High = Multi-visit procedures or high base units
+          Medium = Procedures with medical codes or diagnostic codes
+          Low = Standard single-visit procedures
+          
+          Business Rules:
+          - Used for billing workflow planning
+          - Affects claim submission requirements
+          - Influences insurance verification processes
         tests:
           - not_null
           - accepted_values:
@@ -139,196 +288,483 @@ models:
 
       - name: treatment_planning_category
         description: >
-          Expected duration of treatment.
-          Values: Long-term, Medium-term, Short-term
+          Expected duration of treatment based on procedure type:
+          Long-term = Extended treatment (Prosthodontics, Orthodontics)
+          Medium-term = Multi-visit treatment (Endodontics, Periodontics)
+          Short-term = Single or few visits (Preventive, Restorative, Diagnostic)
+          
+          Business Rules:
+          - Used for treatment planning and patient communication
+          - Affects appointment scheduling and follow-up planning
+          - Influences patient expectations and consent processes
         tests:
           - not_null
           - accepted_values:
               values: ['Long-term', 'Medium-term', 'Short-term']
 
-      - name: is_hygiene_flag
-        description: Boolean flag indicating if procedure is a hygiene service
+      # Boolean Columns
+      - name: is_hygiene
+        description: >
+          Flag indicating if procedure is a hygiene service
+          
+          Logic:
+          - true when: Procedure is classified as a hygiene service (cleanings, exams, etc.)
+          - false when: Procedure is not a hygiene service
+          
+          Business Impact:
+          - Used for hygiene appointment scheduling and provider assignment
+          - Affects insurance coverage and billing codes
+          - Influences patient recall and maintenance scheduling
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
-      - name: is_prosthetic_flag
-        description: Boolean flag indicating if procedure is prosthetic
+      - name: is_prosthetic
+        description: >
+          Flag indicating if procedure is prosthetic (crowns, bridges, dentures, etc.)
+          
+          Logic:
+          - true when: Procedure involves prosthetic restoration or replacement
+          - false when: Procedure is not prosthetic
+          
+          Business Impact:
+          - Used for treatment planning and patient communication
+          - Affects insurance coverage and pre-authorization requirements
+          - Influences lab coordination and appointment scheduling
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
-      - name: is_radiology_flag
-        description: Boolean flag indicating if procedure is radiological
+      - name: is_radiology
+        description: >
+          Flag indicating if procedure is radiological (X-rays, imaging, etc.)
+          
+          Logic:
+          - true when: Procedure involves radiographic imaging or diagnostic imaging
+          - false when: Procedure is not radiological
+          
+          Business Impact:
+          - Used for radiation safety and compliance tracking
+          - Affects appointment scheduling and room assignment
+          - Influences insurance billing and coverage verification
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
-      - name: is_multi_visit_flag
-        description: Boolean flag indicating if procedure requires multiple visits
+      - name: is_multi_visit
+        description: >
+          Flag indicating if procedure requires multiple visits to complete
+          
+          Logic:
+          - true when: Procedure cannot be completed in a single appointment
+          - false when: Procedure can be completed in one visit
+          
+          Business Impact:
+          - Used for treatment planning and patient scheduling
+          - Affects appointment booking and follow-up planning
+          - Influences patient communication and expectations
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
+      # Clinical Metrics
       - name: base_units
-        description: Standard time units allocated for the procedure
+        description: >
+          Standard time units allocated for the procedure
+          
+          Business Rules:
+          - Used for appointment scheduling and resource planning
+          - Affects provider productivity calculations
+          - Influences chair time utilization metrics
+          
+          Data Quality Notes:
+          - May be 0 for some procedures
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              config:
+                severity: warn
+                description: "Base units should be between 0-10"
+      
       - name: default_provider_id
-        description: Default provider type for this procedure
+        description: >
+          Default provider type for this procedure
+          
+          Business Rules:
+          - Used for appointment scheduling and provider assignment
+          - May be overridden based on provider availability
+          - Influences provider productivity tracking
+          
+          Data Quality Notes:
+          - May be null for some procedures
         tests:
-          - not_null
-
+          - not_null:
+              where: "default_provider_id is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999
+              config:
+                severity: warn
+                description: "Default provider ID should be a positive integer when present"
+      
       - name: default_revenue_code
-        description: Default revenue code for billing
+        description: >
+          Default revenue code for billing and financial reporting
+          
+          Business Rules:
+          - Used for revenue categorization and reporting
+          - May be overridden based on specific billing requirements
+          - Influences financial analysis and reporting
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 20
+              config:
+                severity: warn
+                description: "Revenue codes should be between 1-20 characters"
+      
+      # Fee Information
       - name: standard_fee_id
-        description: ID of the most recent standard fee for this procedure
+        description: >
+          ID of the most recent standard fee for this procedure
+          
+          Business Rules:
+          - Links to the most current fee for this procedure
+          - Used for pricing analysis and fee management
+          - May be null if no standard fee exists
+          
+          Data Quality Notes:
+          - May be null for procedures without standard fees
         tests:
-          - not_null
-
+          - not_null:
+              where: "standard_fee_id is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999
+              config:
+                severity: warn
+                description: "Standard fee ID should be a positive integer when present"
+      
       - name: fee_schedule_id
-        description: ID of the associated fee schedule
+        description: >
+          ID of the associated fee schedule
+          
+          Business Rules:
+          - Links to the fee schedule containing this procedure's fees
+          - Used for fee management and pricing analysis
+          - May be null if no fee schedule is associated
+          
+          Data Quality Notes:
+          - May be null for procedures without fee schedules
         tests:
-          - not_null
-
+          - not_null:
+              where: "fee_schedule_id is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999
+              config:
+                severity: warn
+                description: "Fee schedule ID should be a positive integer when present"
+      
       - name: standard_fee
-        description: Most recent standard fee amount for this procedure
+        description: >
+          Most recent standard fee amount for this procedure
+          
+          Business Rules:
+          - Used for pricing analysis and financial reporting
+          - May be null if no standard fee exists
+          - Influences revenue projections and fee management
+          
+          Data Quality Notes:
+          - May be null for procedures without standard fees
         tests:
-          - not_null
-
+          - not_null:
+              where: "standard_fee is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Standard fees should be between $0-$10,000"
+      
       - name: fee_schedule_description
-        description: Description of the associated fee schedule
+        description: >
+          Description of the associated fee schedule
+          
+          Business Rules:
+          - Provides human-readable fee schedule information
+          - Used for fee management and reporting
+          - May be null if no fee schedule is associated
+          
+          Data Quality Notes:
+          - May be null for procedures without fee schedules
         tests:
-          - not_null
-
+          - not_null:
+              where: "fee_schedule_description is not null"
+      
       - name: fee_schedule_type_id
-        description: ID of the fee schedule type
+        description: >
+          ID of the fee schedule type
+          
+          Business Rules:
+          - Links to fee schedule type classification
+          - Used for fee analysis and reporting
+          - May be null if no fee schedule type is defined
+          
+          Data Quality Notes:
+          - May be null for procedures without fee schedule types
         tests:
-          - not_null
-
+          - not_null:
+              where: "fee_schedule_type_id is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999
+              config:
+                severity: warn
+                description: "Fee schedule type ID should be a positive integer when present"
+      
       - name: fee_schedule_type_desc
-        description: Description of the fee schedule type
+        description: >
+          Description of the fee schedule type
+          
+          Business Rules:
+          - Provides human-readable fee schedule type information
+          - Used for fee analysis and reporting
+          - May be null if no fee schedule type is defined
+          
+          Data Quality Notes:
+          - May be null for procedures without fee schedule types
         tests:
-          - not_null
-
+          - not_null:
+              where: "fee_schedule_type_desc is not null"
+      
+      # Fee Statistics
       - name: available_fee_options
-        description: Number of different fee options available for this procedure
+        description: >
+          Number of different fee options available for this procedure
+          
+          Business Rules:
+          - Used for fee analysis and pricing flexibility assessment
+          - Indicates how many different fee amounts exist for this procedure
+          - May be 0 if no fees are available
+          
+          Data Quality Notes:
+          - May be 0 for procedures without any fees
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: warn
+                description: "Available fee options should be between 0-100"
+      
       - name: min_available_fee
-        description: Minimum fee amount available for this procedure
+        description: >
+          Minimum fee amount available for this procedure
+          
+          Business Rules:
+          - Used for pricing analysis and fee range assessment
+          - May be null if no fees are available
+          - Influences pricing strategy and competitive analysis
+          
+          Data Quality Notes:
+          - May be null for procedures without any fees
         tests:
-          - not_null
-
+          - not_null:
+              where: "min_available_fee is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Minimum fees should be between $0-$10,000"
+      
       - name: max_available_fee
-        description: Maximum fee amount available for this procedure
+        description: >
+          Maximum fee amount available for this procedure
+          
+          Business Rules:
+          - Used for pricing analysis and fee range assessment
+          - May be null if no fees are available
+          - Influences pricing strategy and competitive analysis
+          
+          Data Quality Notes:
+          - May be null for procedures without any fees
         tests:
-          - not_null
-
+          - not_null:
+              where: "max_available_fee is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Maximum fees should be between $0-$10,000"
+      
       - name: avg_fee_amount
-        description: Average fee amount across all fee options
+        description: >
+          Average fee amount across all fee options
+          
+          Business Rules:
+          - Used for pricing analysis and fee trend assessment
+          - May be null if no fees are available
+          - Influences pricing strategy and competitive analysis
+          
+          Data Quality Notes:
+          - May be null for procedures without any fees
         tests:
-          - not_null
-
+          - not_null:
+              where: "avg_fee_amount is not null"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Average fees should be between $0-$10,000"
+      
       - name: has_standard_fee
-        description: Boolean flag indicating if a standard fee exists
+        description: >
+          Flag indicating if a standard fee exists for this procedure
+          
+          Logic:
+          - true when: Procedure has at least one standard fee defined
+          - false when: Procedure has no standard fees
+          
+          Business Impact:
+          - Used for fee management and pricing analysis
+          - Affects billing and revenue projections
+          - Influences fee schedule maintenance
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
+      # Documentation
       - name: default_claim_note
-        description: Standard note for insurance claims
+        description: >
+          Standard note for insurance claims
+          
+          Business Rules:
+          - Used for automated claim submission
+          - May be overridden for specific cases
+          - Influences insurance processing efficiency
         tests:
           - not_null
 
       - name: default_treatment_plan_note
-        description: Standard note for treatment plans
+        description: >
+          Standard note for treatment plans
+          
+          Business Rules:
+          - Used for treatment plan documentation
+          - May be customized for specific patients
+          - Influences patient communication and consent
         tests:
           - not_null
 
       - name: layman_term
-        description: Patient-friendly description of the procedure
+        description: >
+          Patient-friendly description of the procedure
+          
+          Business Rules:
+          - Used for patient communication and education
+          - Should be understandable to non-dental professionals
+          - Influences informed consent processes
         tests:
           - not_null
 
       - name: medical_code
-        description: Associated medical procedure code
+        description: >
+          Associated medical procedure code
+          
+          Business Rules:
+          - Used for medical billing and cross-referencing
+          - May be null for dental-only procedures
+          - Influences insurance processing and billing
+          
+          Data Quality Notes:
+          - May be null for procedures without medical equivalents
         tests:
-          - not_null
+          - not_null:
+              where: "medical_code is not null"
 
       - name: diagnostic_codes
-        description: Associated diagnostic codes
+        description: >
+          Associated diagnostic codes
+          
+          Business Rules:
+          - Used for diagnostic coding and billing
+          - May be null for procedures without specific diagnoses
+          - Influences insurance processing and clinical documentation
+          
+          Data Quality Notes:
+          - May be null for procedures without diagnostic requirements
+        tests:
+          - not_null:
+              where: "diagnostic_codes is not null"
+
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Source: procedurecode.DateTStamp. May be null for legacy procedures."
+        tests:
+          - not_null:
+              where: "_created_at is not null"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Source: procedurecode.DateTStamp."
         tests:
           - not_null
 
     tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100
+          max_value: 10000
+          config:
+            severity: error
+            description: "Expected procedure count should be between 100-10,000 based on typical dental practice size"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "procedure_code_id is not null and procedure_code is not null"
+          config:
+            severity: error
+            description: "All procedures must have both procedure_code_id and procedure_code"
+      
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - procedure_code_id
             - procedure_code
-
-      - relationships:
-          to: ref('dim_procedure')
-          field: procedure_code_id
           config:
             severity: error
+            description: "Combination of procedure_code_id and procedure_code must be unique"
 
     meta:
-      owner: "Data Team"
+      owner: "Clinical Operations Team"
       contains_pii: false
       contains_phi: false
-      refresh_frequency: "Daily"
-      business_owner: "Clinical Operations Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This dimension table is used for all procedure-based analysis and reporting.
-        
-        ## Key Use Cases
-        - Clinical procedure analysis
-          * Procedure mix and volume
-          * Complexity distribution
-          * Treatment planning
-          * Clinical outcomes
-        
-        - Financial analysis
-          * Revenue by procedure type
-          * Procedure profitability
-          * Insurance reimbursement
-          * Fee schedule analysis
-          * Standard fee tracking
-          * Fee variation analysis
-        
-        - Operational metrics
-          * Procedure scheduling
-          * Provider productivity
-          * Chair time utilization
-          * Resource allocation
-        
-        - Insurance processing
-          * Claim submission
-          * Coverage verification
-          * Reimbursement tracking
-          * Denial analysis
-        
-        - Fee management
-          * Standard fee maintenance
-          * Fee schedule updates
-          * Fee variation tracking
-          * Historical fee analysis
-        
-        ## Common Analysis Patterns
-        - Procedure category distribution
-        - Complexity level analysis
-        - Revenue tier performance
-        - Treatment planning optimization
-        - Insurance billing efficiency
-        - Clinical outcome tracking
-        - Fee schedule analysis
-        - Standard fee compliance
-        
-        ## Performance Optimization
-        - Use procedure_code_id for joins to fact tables
-        - Leverage pre-calculated categorizations
-        - Utilize complexity levels for resource planning
-        - Apply revenue tiers for financial analysis
-        - Use fee statistics for pricing analysis 
+      business_process: "Procedure Management and Fee Processing"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per procedure"
+      primary_consumers: ["Clinical Staff", "Billing Team", "Management", "Analytics Team"]
+      data_quality_requirements:
+        - "All procedures must have valid procedure codes"
+        - "Fee information must be accurate and up-to-date"
+        - "Clinical categorizations must be consistent"
+      performance_requirements:
+        - "Fast lookups for appointment scheduling"
+        - "Efficient joins to fact tables"
+        - "Quick filtering by procedure category" 

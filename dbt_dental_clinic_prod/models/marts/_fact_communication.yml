@@ -1,0 +1,710 @@
+version: 2
+
+models:
+  - name: fact_communication
+    description: >
+      Fact table containing individual patient communication transactions and events.
+      This model serves as the foundation for communication-level analysis and reporting,
+      providing detailed information about each communication interaction and its associated
+      measures, dimensions, and business context.
+      
+      ## Business Context
+      The communication fact table is a critical component of our dimensional model, enabling:
+      - Individual communication transaction analysis
+      - Multi-channel communication effectiveness tracking (Email, SMS, Phone, In-Person, Letter)
+      - Patient engagement and response time measurement
+      - Communication timing analysis and optimization
+      - Appointment workflow and confirmation tracking
+      - Performance metrics and KPIs for communication strategies
+      - Trend analysis and forecasting for patient communication patterns
+      
+      ## Technical Specifications
+      - Grain: One row per communication (one row per communication_id)
+      - Source: stg_opendental__commlog (primary source)
+      - Refresh: Daily
+      - Dependencies: 
+        * stg_opendental__commlog (core communication data)
+        * dim_patient (patient dimension lookups)
+        * dim_user (user dimension lookups)
+      
+      ## Business Logic
+      ### Communication Processing
+      - Communication direction classification: Inbound (is_sent=2), Outbound (is_sent=1), System (is_sent=0)
+      - Multi-channel method mapping: Email (mode=0), SMS (mode=1), Phone (mode=2), Letter (mode=3), In-Person (mode=4), System (mode=5)
+      - Communication category classification based on type codes (Appointment, Financial, Insurance, Clinical, Referral, Treatment Plan, General)
+      - Engagement level determination: Received, Completed, Sent, System Generated
+      
+      ### Measure Calculations
+      - Temporal analysis: Year, month, quarter, day of week, hour extraction for timing analysis
+      - Business hours flagging: Weekend detection and business hours identification (9 AM - 5 PM)
+      - Time period categorization: Morning (6-11 AM), Afternoon (12-5 PM), Evening (6-9 PM), Night (10 PM-5 AM)
+      - Communication effectiveness indicators based on direction and method
+      
+      ### Status and Flag Logic
+      - Appointment-related flagging: Identifies communications tied to appointment workflows (types 224, 228)
+      - Financial-related flagging: Identifies billing and payment communications (type 226)
+      - Patient-initiated flagging: Identifies communications started by patients (is_sent=2)
+      - System-generated flagging: Identifies automated communications (user_id is null or 0)
+      
+      ## Data Quality Notes
+      - Email and SMS message integration temporarily disabled due to missing staging models (stg_opendental__emailmessage, stg_opendental__smsmessage)
+      - Confirmation requests not tracked as clinic doesn't use appointment confirmation functionality
+      - Communication datetime filtering ensures only valid communications are included (communication_datetime is not null)
+      - System-generated communications (user_id is null) represent 43.22% of records - this is expected for automated appointment notifications
+      - Entry datetime is null for 90.50% of records, primarily for system-generated communications - this is expected business behavior
+      - Program ID is null for 51.74% of records representing communications not associated with specific external programs
+      
+      ## Performance Considerations
+      - Indexed on communication_datetime for time-based queries and temporal analysis
+      - Indexed on patient_id and user_id for relationship queries and user performance analysis
+      - Communication direction and engagement level calculations optimized for reporting performance
+      - Materialized as table for consistent query performance across communication analytics
+      
+      ## Usage Notes
+      - Use for communication audit trails and patient engagement analysis
+      - When analyzing user performance, exclude system-generated communications (user_id is null)
+      - For appointment-related communications, focus on types 224 (primary notifications) and 228 (secondary notifications)
+      - Communication source field may be null for 42.23% of records (types 224 and 228) which is expected behavior
+      - In-person communications (mode=4) represent 37.31% of all communications and indicate direct patient interactions
+      - SMS communications (mode=5) represent 22.07% and are primarily used for appointment notifications and clinical communications
+    
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      business_process: "Patient Communication Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per communication"
+      primary_consumers: ["clinical_operations", "patient_engagement_team", "appointment_scheduling", "billing_team"]
+      data_quality_requirements:
+        - "Communication datetime must be valid and not null"
+        - "Patient ID must exist and be valid"
+        - "Communication direction must be properly classified"
+        - "System-generated communications must be properly flagged"
+      performance_requirements:
+        - "Daily refresh completes within 30 minutes"
+        - "Communication timing queries return results within 5 seconds"
+        - "Patient communication history queries return results within 10 seconds"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100000
+          max_value: 150000
+          config:
+            severity: error
+            description: "Communication volume should be within expected range based on practice size and communication patterns"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_datetime is not null"
+          config:
+            severity: error
+            description: "All communications must have a valid datetime for temporal analysis and audit trails"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_id is not null"
+          config:
+            severity: error
+            description: "All communications must have a valid ID for fact table integrity"
+    
+    columns:
+      # Primary Key
+      - name: communication_id
+        description: >
+          Primary key - Unique identifier for each communication transaction
+          
+          Business Rules:
+          - Must be unique across all communications
+          - Maps to commlog_id from stg_opendental__commlog
+          - Used for communication audit trails and individual transaction analysis
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Foreign Keys
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Identifies the patient involved in the communication
+          
+          Business Rules:
+          - Every communication must be associated with a patient
+          - Used for patient communication history and engagement analysis
+          - Links to patient dimension for demographic and status analysis
+          
+          Data Quality Notes:
+          - Must exist in patient dimension table
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+          - not_null
+      
+      - name: user_id
+        description: >
+          Foreign key to dim_user - Identifies the user who created/handled the communication
+          
+          Business Rules:
+          - Null for system-generated communications (43.22% of records)
+          - Used for user performance analysis and communication attribution
+          - Links to user dimension for provider and staff analysis
+          
+          Data Quality Notes:
+          - Null values are expected for system-generated communications
+          - Some historical users may be inactive but preserved for audit trails
+        tests:
+          - relationships:
+              to: ref('dim_user')
+              field: user_id
+              where: "user_id is not null"
+              severity: warn
+      
+      - name: program_id
+        description: >
+          Foreign key to program dimension - Identifies the program/system used for communication
+          
+          Business Rules:
+          - Null for communications not associated with specific external programs (51.74% of records)
+          - Used for program-specific communication analysis and tracking
+          - Links to program dimension for external system integration analysis
+          
+          Data Quality Notes:
+          - Null values are expected for internal system communications
+          - Legacy program_id = 95 may not exist in program dimension
+        tests:
+          - relationships:
+              to: ref('dim_program')
+              field: program_id
+              where: "program_id is not null and program_id != 95"
+              severity: warn
+      
+      - name: referral_id
+        description: >
+          Foreign key to referral dimension - Identifies the referral when communication is referral-related
+          
+          Business Rules:
+          - Null for communications not related to specific referrals
+          - Used for referral workflow tracking and specialist communication analysis
+          - Links to referral dimension for referral management reporting
+          
+          Data Quality Notes:
+          - Null values are expected for non-referral communications
+        tests:
+          - relationships:
+              to: ref('dim_referral')
+              field: referral_id
+              where: "referral_id is not null and referral_id != 0"
+              severity: warn
+      
+      # Date and Time Measures
+      - name: communication_datetime
+        description: >
+          Date and time when the communication occurred
+          
+          Business Rules:
+          - Must be not null for all communications
+          - Used for temporal analysis and communication timing optimization
+          - Primary timestamp for communication sequencing and audit trails
+          
+          Data Quality Notes:
+          - Filtered to exclude null values in fact table
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "current_date + interval '1 year'"
+              severity: error
+      
+      - name: communication_end_datetime
+        description: >
+          Date and time when the communication ended, primarily used for phone calls and appointments
+          
+          Business Rules:
+          - May be null for communications without defined end times
+          - Used for duration analysis and communication efficiency measurement
+          - Important for phone call and appointment communication tracking
+          
+          Data Quality Notes:
+          - Null values are expected for most communication types
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "current_date + interval '1 year'"
+              severity: warn
+              where: "communication_end_datetime is not null"
+      
+      - name: entry_datetime
+        description: >
+          Date and time when the communication record was entered into the system
+          
+          Business Rules:
+          - Null for 90.50% of records, primarily system-generated communications
+          - Used for data entry tracking and manual vs automated communication analysis
+          - Important for understanding communication workflow timing
+          
+          Data Quality Notes:
+          - Null values are expected for system-generated communications
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2023-01-01'"
+              max_value: "current_date + interval '1 year'"
+              severity: warn
+              where: "entry_datetime is not null"
+      
+      - name: communication_year
+        description: >
+          Year extracted from communication_datetime for temporal analysis
+          
+          Business Rules:
+          - Used for year-over-year communication trend analysis
+          - Enables annual reporting and performance comparison
+          - Supports communication volume and effectiveness tracking by year
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2023
+              max_value: 2030
+              severity: error
+      
+      - name: communication_month
+        description: >
+          Month extracted from communication_datetime for temporal analysis
+          
+          Business Rules:
+          - Used for monthly communication pattern analysis
+          - Enables seasonal communication trend identification
+          - Supports monthly reporting and performance tracking
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+              severity: error
+      
+      - name: communication_quarter
+        description: >
+          Quarter extracted from communication_datetime for temporal analysis
+          
+          Business Rules:
+          - Used for quarterly communication performance analysis
+          - Enables quarterly business review and planning
+          - Supports quarterly KPI tracking and reporting
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+              severity: error
+      
+      - name: communication_day_of_week
+        description: >
+          Day of week (0=Sunday, 6=Saturday) extracted from communication_datetime
+          
+          Business Rules:
+          - Used for day-of-week communication pattern analysis
+          - Enables business day vs weekend communication tracking
+          - Supports operational planning and staffing optimization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 6
+              severity: error
+      
+      - name: communication_hour
+        description: >
+          Hour (0-23) extracted from communication_datetime for timing analysis
+          
+          Business Rules:
+          - Used for hourly communication pattern analysis
+          - Enables business hours vs after-hours communication tracking
+          - Supports operational efficiency and staffing optimization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+              severity: error
+      
+      # Communication Details
+      - name: communication_type
+        description: >
+          The type of communication in the system
+          
+          Main Types:
+          - 0: Legacy system communications - General automated communications
+          - 224: Primary appointment notification system - Appointment-related communications
+          - 228: Secondary automated communication system - General patient communications
+          - 603: Tertiary communication system - Clinical communications
+          - 226: Billing and financial communications
+          - 225: Insurance and claims communications
+          - 571: Insurance narratives and documentation
+          - 432: Medical clearances and prescriptions
+          - 509/510: Surgical procedures and clearances
+          - 614/615: Referrals and specialist communications
+          - 636: Treatment plans and financial arrangements
+          
+          Business Rules:
+          - Used for communication categorization and workflow analysis
+          - Enables type-specific communication effectiveness tracking
+          - Supports business process optimization by communication type
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
+      
+      - name: communication_note
+        description: >
+          Free text content of the communication, contains the actual message or note
+          
+          Business Rules:
+          - Contains the actual communication content for audit and analysis
+          - Used for communication content analysis and quality assessment
+          - Important for understanding communication context and effectiveness
+          
+          Data Quality Notes:
+          - May be null for some system-generated communications
+        tests:
+          - not_null:
+              where: "communication_type not in (0, 224, 228)"
+      
+      - name: communication_mode
+        description: >
+          The mode or channel used for communication
+          
+          Communication Modes:
+          - 0: Email communications (20.09% of records)
+          - 1: SMS/text message communications (22.07% of records)
+          - 2: Phone call communications (0.20% of records)
+          - 3: Letter communications (16.78% of records)
+          - 4: In-person communications (37.31% of records)
+          - 5: System communications (3.54% of records)
+          - 6: Clinical communication mode (rare)
+          - 8: Additional communication mode (rare)
+          
+          Business Rules:
+          - Used for multi-channel communication analysis
+          - Enables channel effectiveness comparison and optimization
+          - Supports communication preference analysis and patient engagement strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5, 6, 8]
+      
+      - name: communication_source
+        description: >
+          Source of the communication system or platform
+          
+          Source Values:
+          - 0: Default/System source (8.98% of records)
+          - 1: Legacy source (0.01% of records)
+          - 2: Standard communication source (48.26% of records)
+          - 3: Failed communication source (0.01% of records)
+          - 4: SMS-specific source (0.51% of records)
+          - 6: Error state (0.00% of records)
+          - 9: Unknown state (0.00% of records)
+          - NULL: Unspecified source (42.23% of records)
+          
+          Business Rules:
+          - Used for system integration analysis and communication platform tracking
+          - Enables source-specific communication effectiveness analysis
+          - Supports communication system optimization and vendor evaluation
+          
+          Data Quality Notes:
+          - NULL values are expected for types 224 and 228 (42.23% of records)
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 6, 9]
+              where: "communication_source is not null"
+      
+      - name: referral_behavior
+        description: >
+          Behavior setting for referral-related communications
+          
+          Business Rules:
+          - Used for referral communication workflow tracking
+          - Enables referral-specific communication analysis
+          - Supports referral management and specialist communication optimization
+          
+          Data Quality Notes:
+          - May be null for non-referral communications
+      
+      # Response Metrics
+      - name: is_sent
+        description: >
+          Communication direction indicator
+          
+          Values and Meanings:
+          - 0: System-generated communications (3.64% of records)
+          - 1: Outbound communications (48.90% of records) - Sent by clinic to patient
+          - 2: Inbound communications (47.46% of records) - Received by clinic from patient
+          
+          Business Rules:
+          - Used for communication flow analysis and response tracking
+          - Enables inbound vs outbound communication effectiveness analysis
+          - Supports communication direction optimization and patient engagement strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2]
+      
+      - name: is_topaz_signature
+        description: >
+          Indicates if the signature was created using Topaz signature pad
+          
+          Business Rules:
+          - Used for signature method analysis and compliance tracking
+          - Enables digital signature effectiveness analysis
+          - Supports signature workflow optimization and compliance reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Derived Analysis Fields
+      - name: communication_day_name
+        description: >
+          Human-readable day of week name extracted from communication_datetime
+          
+          Values: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
+          
+          Business Rules:
+          - Used for day-of-week communication pattern analysis
+          - Enables business day vs weekend communication tracking
+          - Supports operational planning and staffing optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      
+      - name: communication_time_period
+        description: >
+          Time period classification based on communication hour
+          
+          Time Periods:
+          - Morning: 6 AM - 11 AM
+          - Afternoon: 12 PM - 5 PM
+          - Evening: 6 PM - 9 PM
+          - Night: 10 PM - 5 AM
+          
+          Business Rules:
+          - Used for time-of-day communication pattern analysis
+          - Enables business hours vs after-hours communication tracking
+          - Supports operational efficiency and patient communication preference analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Morning', 'Afternoon', 'Evening', 'Night']
+      
+      - name: communication_direction
+        description: >
+          Human-readable communication direction classification
+          
+          Values:
+          - Inbound: Communications received from patients (is_sent = 2)
+          - Outbound: Communications sent to patients (is_sent = 1)
+          - System: System-generated communications (is_sent = 0)
+          
+          Business Rules:
+          - Used for communication flow analysis and response tracking
+          - Enables communication direction effectiveness analysis
+          - Supports patient engagement strategy optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Inbound', 'Outbound', 'System']
+      
+      - name: communication_method
+        description: >
+          Human-readable communication method based on mode
+          
+          Methods:
+          - Email: Electronic mail communications (mode = 0)
+          - SMS: Text message communications (mode = 1)
+          - Phone: Voice call communications (mode = 2)
+          - Letter: Postal mail communications (mode = 3)
+          - In-Person: Face-to-face communications (mode = 4)
+          - System: System-generated communications (mode = 5)
+          - Unknown: Unrecognized communication mode
+          
+          Business Rules:
+          - Used for multi-channel communication analysis
+          - Enables channel effectiveness comparison and optimization
+          - Supports communication preference analysis and patient engagement strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Email', 'SMS', 'Phone', 'Letter', 'In-Person', 'System', 'Unknown']
+      
+      - name: communication_category
+        description: >
+          Business category classification based on communication type
+          
+          Categories:
+          - Appointment: Appointment-related communications (types 224, 228)
+          - Financial: Billing and payment communications (type 226)
+          - Insurance: Insurance and claims communications (types 225, 571)
+          - Clinical: Clinical and medical communications (types 432, 509, 510)
+          - Referral: Referral and specialist communications (types 614, 615)
+          - Treatment Plan: Treatment plan communications (type 636)
+          - General: All other communication types
+          
+          Business Rules:
+          - Used for business process analysis and communication categorization
+          - Enables category-specific communication effectiveness tracking
+          - Supports business process optimization by communication category
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Appointment', 'Financial', 'Insurance', 'Clinical', 'Referral', 'Treatment Plan', 'General']
+      
+      - name: engagement_level
+        description: >
+          Communication effectiveness and engagement classification
+          
+          Levels:
+          - Received: Communications received from patients (is_sent = 2)
+          - Completed: In-person communications that were completed (is_sent = 1 and mode = 4)
+          - Sent: Communications sent to patients (is_sent = 1)
+          - System Generated: System-generated communications (all other cases)
+          
+          Business Rules:
+          - Used for communication effectiveness analysis and engagement tracking
+          - Enables engagement level comparison and optimization
+          - Supports patient engagement strategy development and measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Received', 'Completed', 'Sent', 'System Generated']
+      
+      # Boolean Flags
+      - name: sent_on_weekend
+        description: >
+          Flag indicating if communication was sent on a weekend (Saturday or Sunday)
+          
+          Logic:
+          - true when: communication_datetime is on Saturday (dow = 6) or Sunday (dow = 0)
+          - false when: communication_datetime is on Monday through Friday
+          
+          Business Impact:
+          - Used for weekend communication pattern analysis
+          - Enables after-hours communication tracking and optimization
+          - Supports operational planning and patient communication preference analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: sent_during_business_hours
+        description: >
+          Flag indicating if communication was sent during business hours (9 AM - 5 PM)
+          
+          Logic:
+          - true when: communication_hour is between 9 and 17 (9 AM - 5 PM)
+          - false when: communication_hour is outside business hours
+          
+          Business Impact:
+          - Used for business hours communication pattern analysis
+          - Enables operational efficiency measurement and optimization
+          - Supports staffing planning and patient communication preference analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_appointment_related
+        description: >
+          Flag indicating if communication is related to appointments
+          
+          Logic:
+          - true when: communication_type is 224 or 228 (appointment notification types)
+          - false when: communication_type is any other value
+          
+          Business Impact:
+          - Used for appointment workflow analysis and optimization
+          - Enables appointment-specific communication effectiveness tracking
+          - Supports appointment scheduling process improvement and patient experience enhancement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_financial_related
+        description: >
+          Flag indicating if communication is related to financial matters
+          
+          Logic:
+          - true when: communication_type is 226 (billing and financial communications)
+          - false when: communication_type is any other value
+          
+          Business Impact:
+          - Used for financial communication analysis and optimization
+          - Enables billing and payment communication effectiveness tracking
+          - Supports financial process improvement and patient financial experience enhancement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_patient_initiated
+        description: >
+          Flag indicating if communication was initiated by the patient
+          
+          Logic:
+          - true when: is_sent = 2 (inbound communications from patients)
+          - false when: is_sent is any other value (outbound or system-generated)
+          
+          Business Impact:
+          - Used for patient engagement analysis and response tracking
+          - Enables patient-initiated communication pattern analysis
+          - Supports patient engagement strategy development and measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_system_generated
+        description: >
+          Flag indicating if communication was generated by the system
+          
+          Logic:
+          - true when: user_id is null or user_id = 0 (system-generated communications)
+          - false when: user_id is a valid user ID (manual communications)
+          
+          Business Impact:
+          - Used for automated vs manual communication analysis
+          - Enables system communication effectiveness tracking
+          - Supports automation strategy development and manual process optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry from commlog table. May be null for system-generated communications."
+        tests:
+          - not_null:
+              where: "user_id is not null"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp from commlog table."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

@@ -1,0 +1,886 @@
+version: 2
+
+models:
+  - name: fact_appointment
+    description: >
+      Fact table containing individual appointment transactions and events.
+      This model serves as the foundation for appointment-level analysis and reporting,
+      providing detailed information about each appointment and its associated
+      measures, dimensions, and business context.
+      
+      ## Business Context
+      The appointment fact table is a critical component of our dimensional model, enabling:
+      - Individual appointment transaction analysis
+      - Scheduling efficiency and patient flow analytics
+      - Provider performance and utilization tracking
+      - Practice management and operational optimization
+      - Revenue and time utilization analysis through appointment lifecycle tracking
+      - Performance metrics and KPIs for practice management
+      
+      ## Technical Specifications
+      - Grain: One row per appointment (one row per appointment_id)
+      - Source: stg_opendental__appointment (primary source)
+      - Refresh: Daily
+      - Dependencies: 
+        * stg_opendental__appointment (core appointment data)
+        * dim_patient (patient dimension lookups)
+        * dim_provider (provider dimension lookups)
+        * dim_date (date dimension for temporal analysis)
+      
+      ## Business Logic
+      ### Appointment Processing
+      - Complete appointment lifecycle tracking from scheduling to completion
+      - Provider and patient relationship management with timing metrics
+      - Scheduling efficiency metrics including wait times and treatment duration
+      - Appointment outcome categorization (completed, no-show, cancelled, etc.)
+      
+      ### Measure Calculations
+      - Arrival delay minutes: Time difference between scheduled and actual arrival
+      - Wait time minutes: Time from arrival to being seated for treatment
+      - Treatment time minutes: Duration of actual treatment session
+      - Appointment length minutes: Total time from scheduled start to dismissal
+      
+      ### Status and Flag Logic
+      - Appointment status categorization with business rule logic
+      - Outcome status determination based on appointment lifecycle
+      - Duration categorization for appointment length analysis
+      - Boolean flags for quick filtering and analysis
+      
+      ## Data Quality Notes
+      - Appointment confirmation functionality is not currently used by the clinic (confirmation fields set to defaults)
+      - Procedure details are not available at appointment level (set to null/zero values)
+      - Some appointment types may have legacy or non-standard status codes
+      - Time calculations include data quality validation to handle illogical time sequences
+      - Negative time values are converted to NULL to prevent calculation errors in downstream models
+      - Appointment duration calculations require dismissed_datetime >= appointment_datetime for validity
+      
+      ## Performance Considerations
+      - Indexed on appointment_id (unique), patient_id, provider_id, and appointment_date for query optimization
+      - Date-based partitioning considerations for large appointment volumes
+      - Complex CASE statements for status categorization may impact query performance
+      - Time calculation logic includes validation to prevent performance issues from invalid data
+      
+      ## Usage Notes
+      - Use appointment_outcome_status for high-level appointment categorization
+      - Time metrics (arrival_delay_minutes, wait_time_minutes, treatment_time_minutes) may be null for incomplete appointments
+      - Financial fields are set to zero as procedure-level financial data is not available at appointment level
+      - Confirmation-related fields are not used by the clinic and should be ignored in analysis
+      - Use appointment_duration_category for appointment length analysis and scheduling optimization
+    
+    meta:
+      owner: "Practice Management Team"
+      contains_pii: true
+      business_process: "Appointment Scheduling and Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per appointment"
+      primary_consumers: ["Practice Managers", "Providers", "Scheduling Staff", "Analytics Team"]
+      data_quality_requirements:
+        - "Appointment timing data must be logically consistent"
+        - "Status codes must map to valid business states"
+        - "Foreign key relationships must be maintained"
+      performance_requirements:
+        - "Query response time under 5 seconds for typical appointment queries"
+        - "Support for date-range filtering without full table scans"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1000000
+          config:
+            severity: error
+            description: "Appointment volume should be within expected range for dental practice"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "appointment_datetime is not null"
+          config:
+            severity: error
+            description: "All appointments must have a scheduled datetime"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "appointment_id > 0"
+          config:
+            severity: error
+            description: "Appointment IDs must be positive integers"
+    
+    columns:
+      # Primary Key
+      - name: appointment_id
+        description: >
+          Primary key - Unique identifier for each appointment in the system
+          
+          Business Rules:
+          - Must be unique across all appointments
+          - Positive integer value
+          - Links to OpenDental appointment table
+        tests:
+          - unique
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999999
+              severity: error
+      
+      # Foreign Keys
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Links appointment to patient record
+          
+          Business Rules:
+          - Must reference valid patient in the system
+          - Required for all appointments
+          
+          Data Quality Notes:
+          - May be null for system appointments or administrative entries
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: warn
+              where: "patient_id is not null"
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Links appointment to provider (dentist/hygienist)
+          
+          Business Rules:
+          - Must reference valid provider in the system
+          - Required for clinical appointments
+          
+          Data Quality Notes:
+          - May be null for administrative or system appointments
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: warn
+              where: "provider_id is not null"
+      
+      - name: operatory_id
+        description: >
+          Foreign key to operatory - Links appointment to specific operatory/room
+          
+          Business Rules:
+          - References valid operatory in the system
+          - Used for room scheduling and resource management
+        tests:
+          - not_null:
+              where: "appointment_status not in ('Broken', 'None')"
+      
+      - name: appointment_type_id
+        description: >
+          Foreign key to appointment type - Categorizes the type of appointment
+          
+          Business Rules:
+          - Maps to standardized appointment types
+          - Used for scheduling and billing purposes
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 9
+              severity: error
+      
+      - name: clinic_id
+        description: >
+          Foreign key to clinic - Identifies which clinic location the appointment is at
+          
+          Business Rules:
+          - Required for multi-location practices
+          - Used for location-based reporting
+        tests:
+          - not_null
+      
+      - name: hygienist_id
+        description: >
+          Foreign key to provider - Links appointment to assigned hygienist
+          
+          Business Rules:
+          - Used for hygiene appointments
+          - May be different from primary provider_id
+          
+          Data Quality Notes:
+          - May be null for non-hygiene appointments
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: warn
+              where: "hygienist_id is not null"
+      
+      # Date and Time Details
+      - name: appointment_date
+        description: >
+          Date portion of the appointment datetime - Used for date-based analysis and reporting
+          
+          Business Rules:
+          - Extracted from appointment_datetime
+          - Used for daily scheduling and reporting
+          - Must be valid date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "1900-01-01"
+              max_value: "2100-12-31"
+              severity: error
+      
+      - name: appointment_datetime
+        description: >
+          Full datetime when the appointment is scheduled to begin
+          
+          Business Rules:
+          - Required for all appointments
+          - Used for scheduling and timing calculations
+          - Must be valid timestamp
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "1900-01-01 00:00:00"
+              max_value: "2100-12-31 23:59:59"
+              severity: error
+      
+      - name: time_pattern
+        description: >
+          Time pattern identifier from OpenDental - Used for recurring appointment scheduling
+          
+          Business Rules:
+          - Links to appointment pattern definitions
+          - Used for recurring appointment management
+        tests:
+          - not_null:
+              where: "appointment_status = 'Scheduled'"
+      
+      - name: appointment_length_minutes
+        description: >
+          Total duration of the appointment in minutes from scheduled start to dismissal
+          
+          Calculation Logic:
+          - Calculated as dismissed_datetime - appointment_datetime
+          - Only calculated when both times are available and logical
+          - Converted to minutes for analysis
+          
+          Business Rules:
+          - Must be positive when calculated
+          - Null for incomplete appointments
+          
+          Data Quality Notes:
+          - Set to null if dismissed_datetime < appointment_datetime (illogical sequence)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 480
+              severity: warn
+              where: "appointment_length_minutes is not null"
+      
+      - name: appointment_hour
+        description: >
+          Hour of day when appointment is scheduled (0-23)
+          
+          Business Rules:
+          - Extracted from appointment_datetime
+          - Used for scheduling pattern analysis
+          - Valid range 0-23
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+              severity: error
+      
+      - name: day_of_week
+        description: >
+          Day of week number (0=Sunday, 1=Monday, ..., 6=Saturday)
+          
+          Business Rules:
+          - Extracted from appointment_date
+          - Used for weekly scheduling patterns
+          - Valid range 0-6
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 6
+              severity: error
+      
+      - name: day_of_week_name
+        description: >
+          Day of week name (Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)
+          
+          Business Rules:
+          - Derived from day_of_week number
+          - Used for human-readable reporting
+          - Must match day_of_week value
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      
+      # Appointment Status and Type
+      - name: appointment_status
+        description: >
+          Current status of the appointment with standardized values:
+          Scheduled = 1 (Appointment is scheduled)
+          Complete = 2 (Appointment completed successfully)
+          ASAP = 3 (ASAP/urgent appointment)
+          UnschedList = 4 (Unscheduled list appointment)
+          Planned = 5 (Planned appointment)
+          PtNote = 6 (Patient note appointment)
+          PtNoteCompleted = 7 (Patient note completed)
+          Broken = 8 (Cancelled/broken appointment)
+          None = 9 (No status/placeholder)
+          Unknown = Other (Unmapped status codes)
+          
+          Business Rules:
+          - Maps OpenDental status codes to business-friendly names
+          - Used for appointment outcome analysis
+          - Critical for practice management reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Scheduled', 'Complete', 'ASAP', 'UnschedList', 'Planned', 'PtNote', 'PtNoteCompleted', 'Broken', 'None', 'Unknown']
+      
+      - name: appointment_type
+        description: >
+          Type of appointment with standardized values:
+          Patient = 0 (General patient appointment)
+          NewPatient = 1 (New patient appointment)
+          Hygiene = 2 (Hygiene appointment)
+          Prophy = 3 (Prophylaxis/cleaning)
+          Perio = 4 (Periodontal treatment)
+          Restorative = 5 (Restorative work)
+          Crown = 6 (Crown work)
+          SRP = 7 (Scaling and root planing)
+          Denture = 8 (Denture work)
+          Other = 9 (Other appointment type)
+          Unknown = Other (Unmapped type codes)
+          
+          Business Rules:
+          - Maps OpenDental type codes to business-friendly names
+          - Used for appointment categorization and scheduling
+          - Critical for treatment planning and resource allocation
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Patient', 'NewPatient', 'Hygiene', 'Prophy', 'Perio', 'Restorative', 'Crown', 'SRP', 'Denture', 'Other', 'Unknown']
+      
+      - name: priority
+        description: >
+          Appointment priority level from OpenDental system
+          
+          Business Rules:
+          - Used for scheduling prioritization
+          - May affect scheduling order and resource allocation
+        tests:
+          - not_null:
+              where: "appointment_status = 'Scheduled'"
+      
+      - name: confirmation_status
+        description: >
+          Confirmation status of the appointment
+          
+          Business Rules:
+          - Tracks appointment confirmation process
+          - Used for patient communication management
+          
+          Data Quality Notes:
+          - Confirmation functionality not currently used by clinic
+        tests:
+          - not_null
+      
+      - name: is_hygiene_appointment
+        description: >
+          Flag indicating if this is a hygiene appointment
+          
+          Logic:
+          - true when: appointment involves hygiene services
+          - false when: appointment is for other services
+          
+          Business Impact:
+          - Used for hygiene scheduling and resource planning
+          - Affects provider assignment and room allocation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_new_patient
+        description: >
+          Flag indicating if this appointment is for a new patient
+          
+          Logic:
+          - true when: patient is new to the practice
+          - false when: patient is existing
+          
+          Business Impact:
+          - Used for new patient tracking and reporting
+          - Affects appointment duration and provider assignment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Scheduling Details
+      - name: date_scheduled
+        description: >
+          Date when the appointment was originally scheduled
+          
+          Business Rules:
+          - Tracks when appointment was booked
+          - Used for scheduling pattern analysis
+          - May be different from appointment_date
+        tests:
+          - not_null:
+              where: "appointment_status not in ('Broken', 'None')"
+      
+      - name: date_time_arrived
+        description: >
+          Timestamp when patient actually arrived for appointment
+          
+          Business Rules:
+          - Used for arrival tracking and wait time calculations
+          - May be null for no-shows or incomplete appointments
+          
+          Data Quality Notes:
+          - Used to calculate arrival_delay_minutes
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "1900-01-01 00:00:00"
+              max_value: "2100-12-31 23:59:59"
+              severity: warn
+              where: "date_time_arrived is not null"
+      
+      - name: date_time_seated
+        description: >
+          Timestamp when patient was seated in operatory
+          
+          Business Rules:
+          - Used for wait time and treatment time calculations
+          - May be null for incomplete appointments
+          
+          Data Quality Notes:
+          - Used to calculate wait_time_minutes and treatment_time_minutes
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "1900-01-01 00:00:00"
+              max_value: "2100-12-31 23:59:59"
+              severity: warn
+              where: "date_time_seated is not null"
+      
+      - name: date_time_dismissed
+        description: >
+          Timestamp when patient was dismissed from appointment
+          
+          Business Rules:
+          - Used for appointment completion tracking
+          - Required for appointment_length_minutes calculation
+          - May be null for incomplete appointments
+          
+          Data Quality Notes:
+          - Used to calculate appointment_length_minutes and treatment_time_minutes
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "1900-01-01 00:00:00"
+              max_value: "2100-12-31 23:59:59"
+              severity: warn
+              where: "date_time_dismissed is not null"
+      
+      - name: date_time_in_operatory
+        description: >
+          Timestamp when patient entered operatory (same as date_time_seated)
+          
+          Business Rules:
+          - Duplicate of date_time_seated for backward compatibility
+          - Used for operatory utilization tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "1900-01-01 00:00:00"
+              max_value: "2100-12-31 23:59:59"
+              severity: warn
+              where: "date_time_in_operatory is not null"
+      
+      # Timing Metrics
+      - name: arrival_delay_minutes
+        description: >
+          Minutes between scheduled appointment time and actual arrival time
+          
+          Calculation Logic:
+          - Calculated as date_time_arrived - appointment_datetime
+          - Positive values indicate late arrival
+          - Negative values indicate early arrival
+          - Null when arrival time not recorded
+          
+          Business Rules:
+          - Used for punctuality analysis
+          - Critical for scheduling optimization
+          
+          Data Quality Notes:
+          - May be null for no-shows or incomplete appointments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -60
+              max_value: 120
+              severity: warn
+              where: "arrival_delay_minutes is not null"
+      
+      - name: wait_time_minutes
+        description: >
+          Minutes between patient arrival and being seated in operatory
+          
+          Calculation Logic:
+          - Calculated as date_time_seated - date_time_arrived
+          - Only calculated when both times are available and logical
+          - Must be positive or null
+          
+          Business Rules:
+          - Used for patient experience analysis
+          - Critical for operational efficiency metrics
+          
+          Data Quality Notes:
+          - Set to null if seated_datetime < arrival_datetime (illogical sequence)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+              severity: warn
+              where: "wait_time_minutes is not null"
+      
+      - name: treatment_time_minutes
+        description: >
+          Minutes of actual treatment time from seated to dismissed
+          
+          Calculation Logic:
+          - Calculated as date_time_dismissed - date_time_seated
+          - Only calculated when both times are available and logical
+          - Must be positive or null
+          
+          Business Rules:
+          - Used for treatment efficiency analysis
+          - Critical for provider productivity metrics
+          
+          Data Quality Notes:
+          - Set to null if dismissed_datetime < seated_datetime (illogical sequence)
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 480
+              severity: warn
+              where: "treatment_time_minutes is not null"
+      
+      # Financial Information (Placeholder - Not Available at Appointment Level)
+      - name: production_goal
+        description: >
+          Production goal for this appointment (currently not available)
+          
+          Business Rules:
+          - Set to 0.00 as procedure-level financial data not available at appointment level
+          - Future enhancement may link to procedure-level production data
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.00
+              max_value: 0.00
+              severity: error
+      
+      - name: total_scheduled_production
+        description: >
+          Total scheduled production amount for this appointment (currently not available)
+          
+          Business Rules:
+          - Set to 0.00 as procedure-level financial data not available at appointment level
+          - Future enhancement may link to procedure-level production data
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.00
+              max_value: 0.00
+              severity: error
+      
+      - name: scheduled_production_amount
+        description: >
+          Scheduled production amount for this appointment (currently not available)
+          
+          Business Rules:
+          - Set to 0.00 as procedure-level financial data not available at appointment level
+          - Future enhancement may link to procedure-level production data
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.00
+              max_value: 0.00
+              severity: error
+      
+      # Procedure Details (Placeholder - Not Available at Appointment Level)
+      - name: procedure_count
+        description: >
+          Number of procedures associated with this appointment (currently not available)
+          
+          Business Rules:
+          - Set to 0 as procedure data not available at appointment level
+          - Future enhancement may link to procedure-level data
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 0
+              severity: error
+      
+      - name: procedure_codes
+        description: >
+          Array of procedure codes for this appointment (currently not available)
+          
+          Business Rules:
+          - Set to null as procedure data not available at appointment level
+          - Future enhancement may link to procedure-level data
+        tests:
+          - dbt_expectations.expect_column_values_to_be_null:
+              severity: error
+      
+      - name: procedure_ids
+        description: >
+          Array of procedure IDs for this appointment (currently not available)
+          
+          Business Rules:
+          - Set to null as procedure data not available at appointment level
+          - Future enhancement may link to procedure-level data
+        tests:
+          - dbt_expectations.expect_column_values_to_be_null:
+              severity: error
+      
+      # Confirmation Details (Not Used by Clinic)
+      - name: confirmation_count
+        description: >
+          Number of confirmations sent for this appointment (not used by clinic)
+          
+          Business Rules:
+          - Set to 0 as confirmation functionality not used by clinic
+          - May be implemented in future
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 0
+              severity: error
+      
+      - name: last_confirmation_date
+        description: >
+          Date of last confirmation sent (not used by clinic)
+          
+          Business Rules:
+          - Set to null as confirmation functionality not used by clinic
+          - May be implemented in future
+        tests:
+          - dbt_expectations.expect_column_values_to_be_null:
+              severity: error
+      
+      - name: confirmation_statuses
+        description: >
+          Array of confirmation statuses (not used by clinic)
+          
+          Business Rules:
+          - Set to null as confirmation functionality not used by clinic
+          - May be implemented in future
+        tests:
+          - dbt_expectations.expect_column_values_to_be_null:
+              severity: error
+      
+      - name: has_confirmations
+        description: >
+          Flag indicating if appointment has confirmations (not used by clinic)
+          
+          Logic:
+          - false: Confirmation functionality not used by clinic
+          - true: Not applicable in current implementation
+          
+          Business Impact:
+          - Currently not used for business analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [false]
+      
+      # Appointment Outcome Flags
+      - name: is_completed
+        description: >
+          Flag indicating if appointment was completed successfully
+          
+          Logic:
+          - true when: appointment_status in ('Complete', 'PtNoteCompleted')
+          - false when: appointment_status in other values
+          
+          Business Impact:
+          - Used for completion rate analysis
+          - Critical for provider performance metrics
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_broken
+        description: >
+          Flag indicating if appointment was cancelled or broken
+          
+          Logic:
+          - true when: appointment_status = 'Broken'
+          - false when: appointment_status in other values
+          
+          Business Impact:
+          - Used for cancellation rate analysis
+          - Critical for scheduling efficiency metrics
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_asap
+        description: >
+          Flag indicating if appointment is ASAP/urgent
+          
+          Logic:
+          - true when: appointment_status = 'ASAP'
+          - false when: appointment_status in other values
+          
+          Business Impact:
+          - Used for urgent appointment tracking
+          - Affects scheduling prioritization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_no_show
+        description: >
+          Flag indicating if appointment was a no-show
+          
+          Logic:
+          - true when: arrival_datetime is null AND appointment_date < current_date
+          - false when: patient arrived or appointment is in future
+          
+          Business Impact:
+          - Used for no-show rate analysis
+          - Critical for patient behavior analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_future_appointment
+        description: >
+          Flag indicating if appointment is scheduled for future
+          
+          Logic:
+          - true when: appointment_date > current_date
+          - false when: appointment_date <= current_date
+          
+          Business Impact:
+          - Used for future scheduling analysis
+          - Critical for capacity planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Business Logic Enhancement
+      - name: appointment_outcome_status
+        description: >
+          High-level appointment outcome categorization:
+          Completed = Appointment completed successfully
+          Cancelled = Appointment was cancelled/broken
+          ASAP = Urgent appointment
+          No Show = Patient did not arrive
+          Scheduled = Appointment is scheduled for future
+          
+          Business Rules:
+          - Derived from appointment_status and timing data
+          - Used for high-level outcome analysis
+          - Critical for practice management reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Completed', 'Cancelled', 'ASAP', 'No Show', 'Scheduled']
+      
+      - name: appointment_duration_category
+        description: >
+          Appointment duration categorization:
+          Short = 30 minutes or less
+          Standard = 31-60 minutes
+          Long = 61-120 minutes
+          Extended = More than 120 minutes
+          Unknown = Duration cannot be determined
+          
+          Business Rules:
+          - Based on appointment_length_minutes calculation
+          - Used for scheduling optimization
+          - Critical for capacity planning
+          
+          Data Quality Notes:
+          - Set to 'Unknown' when duration cannot be calculated
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Short', 'Standard', 'Long', 'Extended', 'Unknown']
+      
+      # Notes and Communication
+      - name: appointment_note
+        description: >
+          Notes associated with the appointment
+          
+          Business Rules:
+          - Free text field for appointment-specific notes
+          - May contain important clinical or scheduling information
+          
+          Data Quality Notes:
+          - May be null for appointments without notes
+        tests:
+          - not_null:
+              where: "appointment_status in ('Complete', 'PtNoteCompleted')"
+      
+      - name: pattern_secondary
+        description: >
+          Secondary pattern identifier for recurring appointments
+          
+          Business Rules:
+          - Used for complex recurring appointment patterns
+          - May be null for single appointments
+        tests:
+          - not_null:
+              where: "appointment_status = 'Scheduled'"
+      
+      - name: color_override
+        description: >
+          Color override for appointment display in scheduling system
+          
+          Business Rules:
+          - Used for visual scheduling interface
+          - May be null for default coloring
+        tests:
+          - not_null:
+              where: "appointment_status = 'Scheduled'"
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to sec_date_t_entry. May be null for system-generated appointments."
+        tests:
+          - not_null:
+              where: "appointment_status not in ('Broken', 'None')"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to sec_date_t_entry."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

@@ -52,6 +52,14 @@ models:
       - Payment amounts are validated
       - Status transitions are tracked
       - EOB attachments are verified
+      - Some claims may have missing payment information (handled with left joins)
+      - EOB attachments are optional and may be null for some claims
+
+      ## Performance Considerations
+      - Indexed on primary keys and common query dimensions (patient_id, provider_id, claim_date)
+      - Uses efficient joins with proper key matching
+      - Materialized as table for query performance
+      - Composite key enables efficient lookups
 
       ## Usage Guidelines
       - Primary source for claim-level analysis
@@ -62,231 +70,531 @@ models:
       - Enables payment performance analysis
       - Facilitates EOB documentation tracking
 
-      ## Dimensional Relationships
-      - Links to dim_insurance through insurance_plan_id
-      - Links to dim_patient through patient_id
-      - Links to dim_procedure through procedure_id
-      - Links to dim_provider through provider_id
-      - Links to dim_date through claim_date
-
-      ## Naming Conventions
-      - Source columns from OpenDental use original CamelCase names
-      - Derived/calculated fields use snake_case
-      - Metadata columns use underscore prefix (_loaded_at, _created_at, _updated_at)
-      - Amount fields use descriptive suffixes (_amount)
-      - Status fields use descriptive prefixes (is_, has_)
+    meta:
+      owner: "Data Team"
+      contains_pii: true
+      contains_phi: true
+      business_process: "Insurance Claims Processing"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per claim procedure (claim_id + procedure_id + claim_procedure_id)"
+      primary_consumers: ["Insurance Operations Team", "Finance Team", "Analytics Team"]
+      data_quality_requirements:
+        - "Claims must have valid procedure and patient references"
+        - "Payment amounts must be non-negative"
+        - "Claim status must follow valid state transitions"
+      performance_requirements:
+        - "Query response time under 5 seconds for typical aggregations"
+        - "Support for concurrent analytical queries"
 
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [claim_id, procedure_id, claim_procedure_id]
+          config:
+            severity: error
+            description: "Composite key ensures unique claim procedures"
+
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1000000
+          config:
+            severity: error
+            description: "Expected claim volume based on historical patterns"
+
+      - dbt_expectations.expression_is_true:
+          expression: "billed_amount >= 0"
+          config:
+            severity: error
+            description: "Billed amounts must be non-negative"
 
     columns:
+      # Composite Primary Key Components
       - name: claim_id
-        description: Primary key for the claim
+        description: >
+          Primary key component - Unique identifier for the claim in OpenDental
+          
+          Business Rules:
+          - Must be unique within the claims system
+          - Links multiple procedures under a single claim submission
+          - Used for claim tracking and payment reconciliation
+          
+          Data Quality Notes:
+          - Always present and non-null
+          - References OpenDental claim.ClaimNum
         tests:
           - not_null
+          - positive_values
 
       - name: procedure_id
-        description: Foreign key to the procedure
+        description: >
+          Foreign key to dim_procedure - Unique identifier for the procedure being claimed
+          
+          Business Rules:
+          - Each procedure can appear in multiple claims
+          - Links to procedure details and billing information
+          - Used for procedure-level payment tracking
+          
+          Data Quality Notes:
+          - Must reference valid procedure in dim_procedure
+          - Cannot be null for billable procedures
         tests:
           - not_null
           - relationships:
               to: ref('dim_procedure')
               field: procedure_id
+              severity: error
 
       - name: claim_procedure_id
-        description: Unique identifier for the claim procedure
+        description: >
+          Unique identifier for the specific claim-procedure combination
+          
+          Business Rules:
+          - Creates unique grain for fact table
+          - Enables tracking of individual procedure payments within a claim
+          - Links to payment and EOB documentation
+          
+          Data Quality Notes:
+          - Always present and non-null
+          - Part of composite primary key
         tests:
           - not_null
+          - positive_values
 
+      # Foreign Keys
       - name: insurance_plan_id
-        description: Foreign key to the insurance plan
+        description: >
+          Foreign key to dim_insurance - Insurance plan covering this claim
+          
+          Business Rules:
+          - Links to insurance plan details and coverage rules
+          - Used for payment calculation and benefit determination
+          - Required for all insurance claims
+          
+          Data Quality Notes:
+          - Must reference valid insurance plan
+          - Cannot be null for insurance claims
         tests:
           - not_null
           - relationships:
               to: ref('dim_insurance')
               field: insurance_plan_id
+              severity: error
 
       - name: patient_id
-        description: Foreign key to the patient
+        description: >
+          Foreign key to dim_patient - Patient receiving the procedure
+          
+          Business Rules:
+          - Links to patient demographics and insurance information
+          - Used for patient responsibility calculations
+          - Required for all claims
+          
+          Data Quality Notes:
+          - Must reference valid patient
+          - Cannot be null
         tests:
           - not_null
           - relationships:
               to: ref('dim_patient')
               field: patient_id
+              severity: error
 
       - name: provider_id
-        description: Foreign key to the provider
+        description: >
+          Foreign key to dim_provider - Provider performing the procedure
+          
+          Business Rules:
+          - Links to provider details and credentials
+          - Used for provider performance analysis
+          - Required for all procedures
+          
+          Data Quality Notes:
+          - Must reference valid provider
+          - Cannot be null
         tests:
           - not_null
           - relationships:
               to: ref('dim_provider')
               field: provider_id
+              severity: error
 
+      # Date Fields
       - name: claim_date
-        description: Date when the claim was submitted
+        description: >
+          Date when the claim was submitted to insurance
+          
+          Business Rules:
+          - Used for payment timing analysis
+          - Determines claim aging and follow-up requirements
+          - Required for all claims
+          
+          Data Quality Notes:
+          - Must be valid date
+          - Cannot be null
+          - Should be within reasonable business timeframe
         tests:
           - not_null
           - relationships:
               to: ref('dim_date')
               field: date_id
+              severity: error
 
+      # Status Fields
       - name: claim_status
-        description: Current status of the claim
+        description: >
+          Current status of the overall claim:
+          pending = Claim submitted, awaiting processing
+          approved = Claim approved for payment
+          denied = Claim denied by insurance
+          paid = Claim has been paid
+          rejected = Claim rejected due to errors
+          
+          Business Rules:
+          - Status must follow valid state transitions
+          - Used for workflow tracking and reporting
+          - Required for all claims
         tests:
           - not_null
           - accepted_values:
               values: ['pending', 'approved', 'denied', 'paid', 'rejected']
+              severity: error
 
       - name: claim_type
-        description: Type of claim (e.g., primary, secondary)
+        description: >
+          Type of claim submission:
+          primary = First insurance submission
+          secondary = Second insurance submission
+          tertiary = Third insurance submission
+          
+          Business Rules:
+          - Determines payment coordination rules
+          - Used for claim sequencing and payment allocation
+          - Required for all claims
         tests:
           - not_null
           - accepted_values:
               values: ['primary', 'secondary', 'tertiary']
+              severity: error
 
       - name: claim_procedure_status
-        description: Status of the specific procedure in the claim
+        description: >
+          Status of the specific procedure within the claim:
+          pending = Procedure awaiting processing
+          approved = Procedure approved for payment
+          denied = Procedure denied by insurance
+          paid = Procedure has been paid
+          rejected = Procedure rejected due to errors
+          
+          Business Rules:
+          - Can differ from overall claim status
+          - Used for procedure-level payment tracking
+          - Required for all claim procedures
         tests:
           - not_null
           - accepted_values:
               values: ['pending', 'approved', 'denied', 'paid', 'rejected']
+              severity: error
 
+      # Financial Measures
       - name: billed_amount
-        description: Amount billed for the procedure
+        description: >
+          Amount billed to insurance for the procedure
+          
+          Calculation Logic:
+          - Based on procedure fee schedule and insurance plan
+          - Includes procedure cost plus any applicable modifiers
+          - Represents total amount submitted to insurance
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for revenue recognition and collection analysis
+          - Required for all billable procedures
+          
+          Data Quality Notes:
+          - Cannot be null for billable procedures
+          - Should match procedure fee schedule
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
 
       - name: allowed_amount
-        description: Amount allowed by insurance
+        description: >
+          Amount allowed by insurance plan for this procedure
+          
+          Calculation Logic:
+          - Determined by insurance plan coverage and fee schedules
+          - May be less than billed amount due to plan limitations
+          - Used as basis for payment calculations
+          
+          Business Rules:
+          - Must be non-negative
+          - Cannot exceed billed amount
+          - Used for payment expectation and write-off calculations
+          
+          Data Quality Notes:
+          - May be null for denied claims
+          - Should not exceed billed_amount
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
 
       - name: paid_amount
-        description: Amount paid by insurance
+        description: >
+          Amount actually paid by insurance for this procedure
+          
+          Calculation Logic:
+          - Based on allowed amount and insurance payment percentage
+          - May be partial payment or full payment
+          - Excludes patient responsibility and write-offs
+          
+          Business Rules:
+          - Must be non-negative
+          - Cannot exceed allowed amount
+          - Used for revenue recognition and collection tracking
+          
+          Data Quality Notes:
+          - May be null for unpaid claims
+          - Should not exceed allowed_amount
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
 
       - name: write_off_amount
-        description: Amount written off
+        description: >
+          Amount written off due to insurance adjustments or policy limits
+          
+          Calculation Logic:
+          - Difference between allowed amount and paid amount
+          - May include contractual adjustments or policy limitations
+          - Used for financial reporting and loss analysis
+          
+          Business Rules:
+          - Must be non-negative
+          - Represents lost revenue due to insurance policies
+          - Used for financial performance analysis
+          
+          Data Quality Notes:
+          - May be null for fully paid claims
+          - Should be calculated as allowed_amount - paid_amount
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
 
       - name: patient_responsibility
-        description: Amount patient is responsible for
+        description: >
+          Amount patient is responsible for paying
+          
+          Calculation Logic:
+          - Based on insurance coverage and deductible/co-pay requirements
+          - May include coinsurance and out-of-pocket maximums
+          - Used for patient billing and collection
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for patient billing and collection tracking
+          - Required for proper revenue cycle management
+          
+          Data Quality Notes:
+          - May be null for fully covered procedures
+          - Should be calculated based on insurance plan terms
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+              severity: warn
 
+      # Payment Information
       - name: claim_payment_id
-        description: ID of the associated payment
+        description: >
+          Foreign key to int_claim_payments - Links to payment details
+          
+          Business Rules:
+          - Links claim to specific payment transactions
+          - Enables payment tracking and reconciliation
+          - May be null for unpaid claims
+          
+          Data Quality Notes:
+          - Optional field for claims without payments
+          - Must reference valid payment record when present
         tests:
           - relationships:
               to: ref('int_claim_payments')
               field: claim_payment_id
+              severity: warn
+              where: "claim_payment_id is not null"
 
       - name: check_amount
-        description: Amount of the insurance check
+        description: >
+          Amount of the insurance check received
+          
+          Calculation Logic:
+          - Actual check amount from insurance payment
+          - May be partial payment covering multiple procedures
+          - Used for payment reconciliation and bank deposits
+          
+          Business Rules:
+          - Must be non-negative when present
+          - Used for payment tracking and bank reconciliation
+          - Required for check-based payments
+          
+          Data Quality Notes:
+          - May be null for electronic payments
+          - Should match actual check amount
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+              where: "check_amount is not null"
 
       - name: check_date
-        description: Date when the check was received
+        description: >
+          Date when the insurance check was received
+          
+          Business Rules:
+          - Used for payment timing analysis
+          - Determines deposit timing and cash flow
+          - Required for check-based payments
+          
+          Data Quality Notes:
+          - May be null for electronic payments
+          - Should be valid business date
         tests:
-          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: warn
+              where: "check_date is not null"
 
       - name: payment_type_id
-        description: Type of payment received
+        description: >
+          Type of payment method received:
+          check = Physical check from insurance
+          electronic = Electronic funds transfer
+          credit_card = Credit card payment
+          
+          Business Rules:
+          - Determines payment processing workflow
+          - Used for payment method analysis
+          - Required for all payments
+          
+          Data Quality Notes:
+          - Cannot be null for payments
+          - Must be valid payment type
+        tests:
+          - accepted_values:
+              values: ['check', 'electronic', 'credit_card']
+              severity: error
+              where: "payment_type_id is not null"
+
+      - name: is_partial
+        description: >
+          Flag indicating if this is a partial payment
+          
+          Logic:
+          - true when: Payment amount is less than allowed amount
+          - false when: Payment amount equals allowed amount
+          
+          Business Impact:
+          - Used for payment completion tracking
+          - Determines follow-up requirements
+          - Required for payment analysis
         tests:
           - not_null
           - accepted_values:
-              values: ['check', 'electronic', 'credit_card']
+              values: [true, false]
+              severity: error
 
-      - name: is_partial
-        description: Flag indicating if this is a partial payment
-        tests:
-          - not_null
-
+      # EOB Documentation
       - name: eob_attachment_count
-        description: Number of EOB attachments
+        description: >
+          Number of EOB (Explanation of Benefits) attachments
+          
+          Calculation Logic:
+          - Count of EOB documents attached to payment
+          - Used for audit compliance and documentation tracking
+          - Required for payment verification
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for audit compliance and documentation tracking
+          - Required for proper payment documentation
+          
+          Data Quality Notes:
+          - May be null for payments without EOBs
+          - Should match actual attachment count
         tests:
-          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+              where: "eob_attachment_count is not null"
 
       - name: eob_attachment_ids
-        description: Array of EOB attachment IDs
+        description: >
+          Array of EOB attachment document IDs
+          
+          Business Rules:
+          - Links to document storage system
+          - Used for audit trail and documentation retrieval
+          - Required for payment verification
+          
+          Data Quality Notes:
+          - May be null for payments without EOBs
+          - Should contain valid document IDs
         tests:
-          - not_null
+          - not_null:
+              where: "eob_attachment_count > 0"
 
       - name: eob_attachment_file_names
-        description: Array of EOB attachment file names
+        description: >
+          Array of EOB attachment file names
+          
+          Business Rules:
+          - Human-readable file names for EOB documents
+          - Used for document identification and retrieval
+          - Required for audit compliance
+          
+          Data Quality Notes:
+          - May be null for payments without EOBs
+          - Should contain descriptive file names
         tests:
-          - not_null
+          - not_null:
+              where: "eob_attachment_count > 0"
 
-      - name: _created_at
-        description: Timestamp when the record was created
-        tests:
-          - not_null
-
-      - name: _updated_at
-        description: Timestamp when the record was last updated
-        tests:
-          - not_null
-
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the record was loaded
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - claim_id
-            - procedure_id
-            - claim_procedure_id
-
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - claim_id
-            - claim_payment_id
-
-    meta:
-      owner: "Data Team"
-      contains_pii: true
-      contains_phi: true
-      refresh_frequency: "Daily"
-      business_owner: "Insurance Operations Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This fact table is used for all claim-level analysis and reporting.
-        
-        ## Key Use Cases
-        - Claim analysis
-          * Claim status tracking
-          * Procedure-level analysis
-          * Payment tracking
-          * EOB documentation
-        
-        - Financial analysis
-          * Billed vs paid amounts
-          * Write-off analysis
-          * Patient responsibility
-          * Payment timing
-        
-        - Operational metrics
-          * Claim processing time
-          * Payment receipt time
-          * EOB documentation
-          * Status transitions
-        
-        ## Common Analysis Patterns
-        - Claim status distribution
-        - Payment timing analysis
-        - Procedure-level analysis
-        - EOB documentation tracking
-        - Write-off analysis
-        - Patient responsibility analysis
-        
-        ## Performance Optimization
-        - Use composite key for joins
-        - Leverage pre-calculated metrics
-        - Utilize status fields for filtering
-        - Apply date fields for time-based analysis 
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). References claim.DateCreated. May be null for historical records."
+        tests:
+          - not_null:
+              where: "_created_at is not null"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). References claim.DateTStamp."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null 

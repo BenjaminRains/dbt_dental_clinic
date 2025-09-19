@@ -1,35 +1,64 @@
-{{ config(        materialized='table',
-        
-        unique_key='appointment_id') }}
+{{
+    config(
+        materialized='table',
+        schema='marts',
+        unique_key='appointment_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['appointment_id'], 'unique': true},
+            {'columns': ['patient_id']},
+            {'columns': ['provider_id']},
+            {'columns': ['appointment_date']},
+            {'columns': ['_updated_at']}
+        ]
+    )
+}}
 
 /*
-Fact table for appointment scheduling and tracking.
-This model captures all appointment-related activities including scheduling,
-confirmations, cancellations, and no-shows for comprehensive practice analytics.
-
-Key features:
-- Complete appointment lifecycle tracking
-- Provider and patient relationships
-- Scheduling efficiency metrics
-- Confirmation and reminder tracking
-- Revenue and time utilization analysis
-
-TODO - APPOINTMENT CONFIRMATION ENHANCEMENT:
-When stg_opendental__confirmrequest staging model is created, add back:
-1. AppointmentConfirmations CTE to aggregate confirmation data
-2. Left join to AppointmentConfirmations in Final CTE
-3. Replace default confirmation columns with actual data:
-   - confirmation_count (currently defaults to 0)
-   - last_confirmation_date (currently null)
-   - confirmation_statuses (currently null array)
-   - has_confirmations (currently false)
+    Fact model for appointment scheduling and tracking
+    Part of System G: Scheduling and Appointment Management
+    
+    This model:
+    1. Captures all appointment-related activities including scheduling, confirmations, cancellations, and no-shows
+    2. Provides comprehensive practice analytics for scheduling efficiency and patient flow
+    3. Enables revenue and time utilization analysis through appointment lifecycle tracking
+    
+    Business Logic Features:
+    - Complete appointment lifecycle tracking from scheduling to completion
+    - Provider and patient relationship management with timing metrics
+    - Scheduling efficiency metrics including wait times and treatment duration
+    - Appointment outcome categorization (completed, no-show, cancelled, etc.)
+    
+    Key Metrics:
+    - Arrival delay minutes: Time difference between scheduled and actual arrival
+    - Wait time minutes: Time from arrival to being seated for treatment
+    - Treatment time minutes: Duration of actual treatment session
+    - Appointment status categorization with business rule logic
+    
+    Data Quality Notes:
+    - Appointment confirmation functionality is not currently used by the clinic (confirmation fields set to defaults)
+    - Procedure details are not available at appointment level (set to null/zero values)
+    - Some appointment types may have legacy or non-standard status codes
+    - Time calculations include data quality validation to handle illogical time sequences
+    - Negative time values are converted to NULL to prevent calculation errors in downstream models
+    - Appointment duration calculations require dismissed_datetime >= appointment_datetime for validity
+    
+    Performance Considerations:
+    - Indexed on appointment_id (unique), patient_id, provider_id, and appointment_date for query optimization
+    - Date-based partitioning considerations for large appointment volumes
+    - Complex CASE statements for status categorization may impact query performance
+    
+    Dependencies:
+    - stg_opendental__appointment: Primary source data for appointment details
 */
 
-with AppointmentBase as (
+-- 1. Source data retrieval
+with source_appointment as (
     select * from {{ ref('stg_opendental__appointment') }}
 ),
 
-Final as (
+-- 2. Business logic and calculations
+appointment_calculated as (
     select
         -- Primary Key
         ab.appointment_id,
@@ -43,13 +72,18 @@ Final as (
         ab.hygienist_id,
 
         -- Date and Time Details
-        ab.appointment_date,
+        date(ab.appointment_datetime) as appointment_date,
         ab.appointment_datetime,
-        ab.time_pattern,
-        ab.appointment_length_minutes,
+        ab.pattern as time_pattern,
+        case 
+            when ab.dismissed_datetime is not null and ab.appointment_datetime is not null
+            and ab.dismissed_datetime >= ab.appointment_datetime  -- Ensure logical sequence
+            then extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60
+            else null
+        end as appointment_length_minutes,
         extract(hour from ab.appointment_datetime) as appointment_hour,
-        extract(dow from ab.appointment_date) as day_of_week,
-        case extract(dow from ab.appointment_date)
+        extract(dow from date(ab.appointment_datetime)) as day_of_week,
+        case extract(dow from date(ab.appointment_datetime))
             when 0 then 'Sunday'
             when 1 then 'Monday'
             when 2 then 'Tuesday'
@@ -73,7 +107,7 @@ Final as (
             else 'Unknown'
         end as appointment_status,
         
-        case ab.appointment_type
+        case ab.appointment_type_id
             when 0 then 'Patient'
             when 1 then 'NewPatient'
             when 2 then 'Hygiene'
@@ -88,35 +122,40 @@ Final as (
         end as appointment_type,
 
         ab.priority,
-        ab.confirmed_status,
-        ab.is_hygiene_appointment,
+        ab.confirmation_status,
+        ab.is_hygiene as is_hygiene_appointment,
         ab.is_new_patient,
 
-        -- Scheduling Details
-        ab.date_scheduled,
-        ab.date_time_arrived,
-        ab.date_time_seated,
-        ab.date_time_dismissed,
-        ab.date_time_in_operatory,
+        -- Scheduling Details (using actual staging column names)
+        ab.sec_date_t_entry as date_scheduled,
+        ab.arrival_datetime as date_time_arrived,
+        ab.seated_datetime as date_time_seated,
+        ab.dismissed_datetime as date_time_dismissed,
+        ab.seated_datetime as date_time_in_operatory,
         
-        -- Calculate timing metrics
+        -- Calculate timing metrics with data quality validation
         case 
-            when ab.date_time_arrived is not null and ab.appointment_datetime is not null
-            then extract(epoch from (ab.date_time_arrived - ab.appointment_datetime))/60
+            when ab.arrival_datetime is not null and ab.appointment_datetime is not null
+            then extract(epoch from (ab.arrival_datetime - ab.appointment_datetime))/60
+            else null
         end as arrival_delay_minutes,
         
         case 
-            when ab.date_time_seated is not null and ab.date_time_arrived is not null
-            then extract(epoch from (ab.date_time_seated - ab.date_time_arrived))/60
+            when ab.seated_datetime is not null and ab.arrival_datetime is not null
+            and ab.seated_datetime >= ab.arrival_datetime  -- Ensure logical sequence
+            then extract(epoch from (ab.seated_datetime - ab.arrival_datetime))/60
+            else null
         end as wait_time_minutes,
         
         case 
-            when ab.date_time_dismissed is not null and ab.date_time_seated is not null
-            then extract(epoch from (ab.date_time_dismissed - ab.date_time_seated))/60
+            when ab.dismissed_datetime is not null and ab.seated_datetime is not null
+            and ab.dismissed_datetime >= ab.seated_datetime  -- Ensure logical sequence
+            then extract(epoch from (ab.dismissed_datetime - ab.seated_datetime))/60
+            else null
         end as treatment_time_minutes,
 
-        -- Financial Information
-        ab.production_goal,
+        -- Financial Information (not available at appointment level)
+        0.00 as production_goal,
         0.00 as total_scheduled_production,
         0.00 as scheduled_production_amount,
         
@@ -125,30 +164,55 @@ Final as (
         null::text[] as procedure_codes,
         null::text[] as procedure_ids,
 
-        -- Confirmation Details (TODO: restore when stg_opendental__confirmrequest is available)
-        0 as confirmation_count,                    -- TODO: Replace with ac.confirmation_count
-        null::timestamp as last_confirmation_date,  -- TODO: Replace with ac.last_confirmation_date
-        null::text[] as confirmation_statuses,      -- TODO: Replace with ac.confirmation_statuses
-        false as has_confirmations,                 -- TODO: Replace with case when ac.confirmation_count > 0
+        -- Confirmation Details (not used by clinic)
+        0 as confirmation_count,
+        null::timestamp as last_confirmation_date,
+        null::text[] as confirmation_statuses,
+        false as has_confirmations,
 
         -- Appointment Outcome Flags
         case when ab.appointment_status in (2, 7) then true else false end as is_completed,
         case when ab.appointment_status = 8 then true else false end as is_broken,
         case when ab.appointment_status = 3 then true else false end as is_asap,
-        case when ab.date_time_arrived is null and ab.appointment_date < current_date then true else false end as is_no_show,
-        case when ab.appointment_date > current_date then true else false end as is_future_appointment,
+        case when ab.arrival_datetime is null and date(ab.appointment_datetime) < current_date then true else false end as is_no_show,
+        case when date(ab.appointment_datetime) > current_date then true else false end as is_future_appointment,
+
+        -- Business Logic Enhancement - Appointment Categorization
+        case 
+            when ab.appointment_status in (2, 7) then 'Completed'
+            when ab.appointment_status = 8 then 'Cancelled'
+            when ab.appointment_status = 3 then 'ASAP'
+            when ab.arrival_datetime is null and date(ab.appointment_datetime) < current_date then 'No Show'
+            else 'Scheduled'
+        end as appointment_outcome_status,
+        
+        case 
+            when ab.dismissed_datetime is not null and ab.appointment_datetime is not null
+            and ab.dismissed_datetime >= ab.appointment_datetime then
+                case 
+                    when extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60 <= 30 then 'Short'
+                    when extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60 <= 60 then 'Standard'
+                    when extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60 <= 120 then 'Long'
+                    else 'Extended'
+                end
+            else 'Unknown'
+        end as appointment_duration_category,
 
         -- Notes and Communication
-        ab.appointment_note,
+        ab.note as appointment_note,
         ab.pattern_secondary,
-        ab.color_override,
+        ab.color_override
 
+    from source_appointment ab
+),
+
+-- 3. Final validation and metadata
+final as (
+    select
+        *,
         -- Metadata
-        ab._created_at,
-        ab._updated_at,
-        current_timestamp as _loaded_at
-
-    from AppointmentBase ab
+        {{ standardize_mart_metadata() }}
+    from appointment_calculated
 )
 
-select * from Final
+select * from final

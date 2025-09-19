@@ -1,130 +1,207 @@
-{{ config(        materialized='table',
-        
-        unique_key=['claim_id', 'procedure_id', 'claim_procedure_id']) }}
+{{
+    config(
+        materialized='table',
+        schema='marts',
+        unique_key=['claim_id', 'procedure_id', 'claim_procedure_id'],
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['claim_id', 'procedure_id', 'claim_procedure_id'], 'unique': true},
+            {'columns': ['patient_id']},
+            {'columns': ['claim_date']},
+            {'columns': ['insurance_plan_id']},
+            {'columns': ['_updated_at']}
+        ]
+    )
+}}
 
 /*
-Fact table for claim transactions and procedures.
-This model combines data from multiple sources to create a comprehensive
-claim fact table that supports both current and historical analysis.
-
-Key features:
-- Individual claim transaction tracking
-- Procedure-level payment details
-- Claim status monitoring
-- EOB documentation tracking
-- Payment timing analysis
-- Revenue cycle metrics
+    Fact table for claim transactions and procedures.
+    Part of System A: Financial Management
+    
+    This model:
+    1. Provides comprehensive claim-level transaction tracking for insurance billing
+    2. Enables revenue cycle management and payment analysis
+    3. Supports procedure-level financial reporting and reconciliation
+    
+    Business Logic Features:
+    - Individual claim transaction tracking with procedure-level granularity
+    - Payment processing and EOB documentation integration
+    - Claim status monitoring across multiple states (submitted, paid, denied, etc.)
+    - Financial reconciliation with billing amounts, payments, and write-offs
+    
+    Key Metrics:
+    - Billed amounts vs. paid amounts for collection analysis
+    - Payment timing analysis for revenue cycle optimization
+    - Write-off tracking for financial performance monitoring
+    - EOB documentation completeness for audit compliance
+    
+    Data Quality Notes:
+    - Some claims may have missing payment information (handled with left joins)
+    - EOB attachments are optional and may be null for some claims
+    - Claim status fields may have different granularity across source systems
+    
+    Performance Considerations:
+    - Indexed on primary keys and common query dimensions (patient_id, provider_id, claim_date)
+    - Uses efficient joins with proper key matching
+    - Materialized as table for query performance
+    
+    Dependencies:
+    - int_claim_details: Primary claim transaction data
+    - int_claim_payments: Payment processing information
+    - int_claim_snapshot: Historical claim status snapshots
+    - int_claim_tracking: Claim processing workflow tracking
+    - int_insurance_eob_attachments: EOB documentation metadata
 */
 
-with ClaimDetails as (
+-- 1. Source data retrieval
+with source_claims as (
     select * from {{ ref('int_claim_details') }}
 ),
 
-ClaimPayments as (
+-- 2. Related dimension lookups
+claim_payments as (
     select * from {{ ref('int_claim_payments') }}
 ),
 
-ClaimSnapshot as (
+claim_snapshots as (
     select * from {{ ref('int_claim_snapshot') }}
 ),
 
-ClaimTracking as (
+claim_tracking as (
     select * from {{ ref('int_claim_tracking') }}
 ),
 
-EobAttachments as (
-    select * from {{ ref('int_insurance_eob_attachments') }}
-),
-
-Final as (
+-- 3. Business logic and calculations
+claims_calculated as (
     select
+        row_number() over (
+            partition by sc.claim_id, sc.procedure_id, sc.claim_procedure_id
+            order by sc.claim_date desc, cp.check_date desc, cs.entry_timestamp desc
+        ) as rn,
         -- Primary Key
-        cd.claim_id,
-        cd.procedure_id,
-        cd.claim_procedure_id,
+        sc.claim_id,
+        sc.procedure_id,
+        sc.claim_procedure_id,
 
         -- Foreign Keys
-        cd.patient_id,
-        cd.insurance_plan_id,
-        cd.carrier_id,
-        cd.subscriber_id,
-        cd.provider_id,
+        sc.patient_id,
+        sc.insurance_plan_id,
+        sc.carrier_id,
+        sc.subscriber_id,
 
         -- Date Fields
-        cd.claim_date,
+        sc.claim_date,
         cp.check_date,
-        cs.snapshot_date,
-        ct.tracking_date,
+        cs.entry_timestamp as snapshot_date,
+        ct.entry_timestamp as tracking_date,
 
         -- Claim Status and Type
-        cd.claim_status,
-        cd.claim_type,
-        cd.claim_procedure_status,
-        cs.snapshot_status,
-        ct.tracking_status,
+        sc.claim_status,
+        sc.claim_type,
+        sc.claim_procedure_status,
+        cs.claim_status as snapshot_status,
+        ct.tracking_type as tracking_status,
 
         -- Procedure Details
-        cd.procedure_code,
-        cd.code_prefix,
-        cd.procedure_description,
-        cd.abbreviated_description,
-        cd.procedure_time,
-        cd.procedure_category_id,
-        cd.treatment_area,
-        cd.is_prosthetic_flag,
-        cd.is_hygiene_flag,
-        cd.base_units,
-        cd.is_radiology_flag,
-        cd.no_bill_insurance_flag,
-        cd.default_claim_note,
-        cd.medical_code,
-        cd.diagnostic_codes,
+        sc.procedure_code,
+        sc.code_prefix,
+        sc.procedure_description,
+        sc.abbreviated_description,
+        sc.procedure_time,
+        sc.procedure_category_id,
+        sc.treatment_area,
+        sc.is_prosthetic,
+        sc.is_hygiene,
+        sc.base_units,
+        sc.is_radiology,
+        sc.no_bill_insurance,
+        sc.default_claim_note,
+        sc.medical_code,
+        sc.diagnostic_codes,
 
         -- Financial Information
-        cd.billed_amount,
-        cd.allowed_amount,
-        cd.paid_amount,
-        cd.write_off_amount,
-        cd.patient_responsibility,
+        sc.billed_amount,
+        sc.allowed_amount,
+        sc.paid_amount,
+        sc.write_off_amount,
+        sc.patient_responsibility,
         cp.check_amount,
         cp.payment_type_id,
         cp.is_partial,
 
         -- EOB Documentation
-        eob.eob_attachment_count,
-        eob.eob_attachment_ids,
-        eob.eob_attachment_file_names,
+        cp.eob_attachment_count,
+        cp.eob_attachment_ids,
+        cp.eob_attachment_file_names,
 
         -- Insurance Plan Details
-        cd.plan_type,
-        cd.group_number,
-        cd.group_name,
-        cd.verification_date,
-        cd.benefit_details,
-        cd.verification_status,
-        cd.effective_date,
-        cd.termination_date,
+        sc.plan_type,
+        sc.group_number,
+        sc.group_name,
+        sc.verification_date,
+        sc.benefit_details,
+        sc.verification_status,
+        sc.effective_date,
+        sc.termination_date,
 
-        -- Meta Fields
-        cd.created_at as _created_at,
-        cd.updated_at as _updated_at,
-        current_timestamp as _loaded_at
+        -- Calculated Fields and Business Logic
+        case 
+            when sc.paid_amount > 0 then 'Paid'
+            when sc.claim_status = 'Denied' then 'Denied'
+            when sc.claim_status = 'Submitted' then 'Pending'
+            when sc.claim_status = 'Rejected' then 'Rejected'
+            else 'Unknown'
+        end as payment_status_category,
 
-    from ClaimDetails cd
-    left join ClaimPayments cp
-        on cd.claim_id = cp.claim_id
-        and cd.procedure_id = cp.procedure_id
-        and cd.claim_procedure_id = cp.claim_procedure_id
-    left join ClaimSnapshot cs
-        on cd.claim_id = cs.claim_id
-        and cd.procedure_id = cs.procedure_id
-        and cd.claim_procedure_id = cs.claim_procedure_id
-    left join ClaimTracking ct
-        on cd.claim_id = ct.claim_id
-        and cd.procedure_id = ct.procedure_id
-        and cd.claim_procedure_id = ct.claim_procedure_id
-    left join EobAttachments eob
-        on cp.claim_payment_id = eob.claim_payment_id
+        case 
+            when sc.billed_amount > 0 then 'Billable'
+            when sc.no_bill_insurance = true then 'Non-Billable'
+            else 'Unknown'
+        end as billing_status_category,
+
+        case 
+            when cp.check_date is not null and sc.claim_date is not null 
+                then cp.check_date - sc.claim_date
+            else null
+        end as payment_days_from_claim,
+
+        case 
+            when sc.write_off_amount > 0 then 'Write-off'
+            when sc.patient_responsibility > 0 then 'Patient Balance'
+            when sc.paid_amount = sc.billed_amount then 'Fully Paid'
+            else 'Partial Payment'
+        end as payment_completion_status,
+
+        case 
+            when cp.eob_attachment_count > 0 then 'Documented'
+            when cp.check_amount > 0 then 'Payment Without EOB'
+            else 'No Documentation'
+        end as eob_documentation_status,
+
+        -- Metadata
+        {{ standardize_mart_metadata() }}
+
+    from source_claims sc
+    left join claim_payments cp
+        on sc.claim_id = cp.claim_id
+        and sc.procedure_id = cp.procedure_id
+        and sc.claim_procedure_id = cp.claim_procedure_id
+    left join claim_snapshots cs
+        on sc.claim_id = cs.claim_id
+        and sc.procedure_id = cs.procedure_id
+        and sc.claim_procedure_id = cs.claim_procedure_id
+    left join claim_tracking ct
+        on sc.claim_id = ct.claim_id
+    -- EOB attachment data is now included in claim_payments CTE
+),
+
+-- 4. Final validation and deduplication
+final as (
+    select * from claims_calculated
+    where rn = 1  -- Keep only the first record for each unique combination
+      and claim_id is not null
+      and procedure_id is not null
+      and claim_procedure_id is not null
 )
 
-select * from Final
+select * from final

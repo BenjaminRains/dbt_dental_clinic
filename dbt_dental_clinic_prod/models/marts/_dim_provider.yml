@@ -3,173 +3,742 @@ version: 2
 models:
   - name: dim_provider
     description: >
-      Dimension table containing comprehensive provider information including demographics,
-      credentials, availability metrics, and status information. This table serves as the
-      primary lookup for provider-related analytics and reporting.
+      Comprehensive provider dimension table providing detailed provider information for scheduling, 
+      billing, and clinical operations. This model serves as the foundation for all provider-related 
+      analysis and reporting across the dental practice management system.
+      
+      ## Business Context
+      This model supports critical business processes including:
+      - Provider scheduling and availability management
+      - Clinical workflow coordination and provider assignment
+      - Billing and insurance claim processing with proper provider attribution
+      - Provider performance analysis and productivity reporting
+      - Compliance tracking for professional credentials and licensing
+      - Practice management reporting and operational analytics
+      
+      Key stakeholders and consumers:
+      - Practice administrators for scheduling and capacity planning
+      - Billing staff for insurance claim processing and provider attribution
+      - Clinical staff for provider assignment and workflow coordination
+      - Management for provider performance analysis and productivity reporting
+      - Compliance officers for credential tracking and regulatory reporting
+      
+      ## Technical Specifications
+      - Grain: One row per provider
+      - Source: stg_opendental__provider (primary), stg_opendental__definition (lookups), int_provider_availability (metrics)
+      - Refresh: Daily with incremental updates
+      - Dependencies: stg_opendental__provider, stg_opendental__definition, int_provider_availability
+      
+      ## Business Logic
+      ### Provider Status Categorization
+      - Active: provider_status = 0 and no termination_date
+      - Inactive: provider_status = 1 and no termination_date
+      - Terminated: termination_date is not null (regardless of status)
+      - Unknown: any other status combination
+      
+      ### Provider Type Classification
+      - Primary: Default provider type for active clinical providers
+      - Secondary: Providers used for billing/insurance purposes (is_secondary = true)
+      - Instructor: Educational providers (is_instructor = true)
+      - Non-Person: Organizational entities (is_not_person = true)
+      
+      ### Provider Specialty Categorization
+      - General Practice: General dentistry providers
+      - Specialist: Orthodontics, Oral Surgery, Endodontics, Periodontics
+      - Hygiene: Dental hygiene providers
+      - Other: All other specialty types
+      
+      ### Availability Performance Tiers
+      - Excellent: 95%+ availability over 90-day period
+      - Good: 90-94% availability over 90-day period
+      - Fair: 80-89% availability over 90-day period
+      - Poor: 1-79% availability over 90-day period
+      - No Data: No availability data in 90-day period
+      
+      ## Data Quality Notes
+      - Provider ID 0 represents system-generated communications, not actual providers
+      - Hidden providers (is_hidden = true) are excluded from current UI but retained for historical data
+      - Availability metrics are calculated over 90-day rolling window for optimal performance
+      - Some historical providers may have incomplete professional identifier fields
+      - Provider colors may not be unique, potentially causing schedule display issues
+      
+      ## Performance Considerations
+      - Uses table materialization for fast lookups across all mart models
+      - Indexed on key lookup fields (provider_id, status, specialty, is_hidden)
+      - Availability calculations limited to 90-day window for optimal performance
+      - Boolean flags are pre-converted in staging layer for efficiency
+      
+      ## Usage Notes
+      - Always exclude provider_id = 0 when analyzing actual provider performance
+      - Check is_hidden flag when creating current provider lists for UI display
+      - Provider specialty affects fee schedules and billing codes
+      - Termination dates indicate when providers left the practice
+      - Availability metrics provide insights for scheduling optimization
     
     config:
-      tags: ['dimension', 'provider', 'operational']
+      materialized: table
+      schema: marts
+      unique_key: provider_id
     
     meta:
-      owner: "Dental Analytics Team"
-      grain: "One row per provider"
-      business_logic: >
-        - Provider status is determined by termination_date and provider_status
-        - Provider type is determined by instructor, secondary, and not_person flags
-        - Availability metrics are calculated over a 90-day rolling window
-        - Boolean flags are converted from smallint (0/1) to true/false
-        - Specialty and status descriptions are joined from the definitions table
-      business_context: >
-        This dimension is used for:
-        - Provider scheduling and availability analysis
-        - Provider productivity and performance tracking
-        - Provider credentialing and compliance reporting
-        - Provider revenue and production analysis
-        - Provider type and status reporting
+      owner: "Practice Management Team"
+      contains_pii: true
+      business_process: "Provider Management"
       refresh_frequency: "Daily"
-      primary_use_cases:
-        - "Provider scheduling and availability dashboards"
-        - "Provider productivity reports"
-        - "Provider credentialing reports"
-        - "Provider revenue analysis"
-        - "Provider status tracking"
-      related_models:
-        - "fact_procedure"
-        - "fact_appointment"
-        - "fact_claim"
-        - "mart_provider_performance"
-        - "mart_daily_schedule_performance"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per provider"
+      primary_consumers: ["Practice Administrators", "Billing Staff", "Clinical Staff", "Management"]
+      data_quality_requirements:
+        - "Provider ID must be unique and not null"
+        - "Provider status must be valid (0=Active, 1=Inactive)"
+        - "Availability metrics must be calculated over consistent 90-day window"
+        - "Professional credentials must be validated for compliance"
+      performance_requirements:
+        - "Model must support fast lookups for scheduling operations"
+        - "Availability calculations must complete within 30 seconds"
+        - "Indexes must support common query patterns"
+    
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000
+          config:
+            severity: error
+            description: "Provider count should be reasonable for dental practice size"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "provider_id IS NOT NULL"
+          config:
+            severity: error
+            description: "All providers must have valid provider IDs"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "provider_status IN (0, 1)"
+          config:
+            severity: error
+            description: "Provider status must be valid (0=Active, 1=Inactive)"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "availability_percentage >= 0 AND availability_percentage <= 100"
+          config:
+            severity: warn
+            description: "Availability percentage should be between 0 and 100"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "scheduled_days >= 0"
+          config:
+            severity: warn
+            description: "Scheduled days should be non-negative"
     
     columns:
+      # Primary Key
       - name: provider_id
-        description: Primary key for the provider dimension
+        description: >
+          Primary key - Unique identifier for the provider (maps to ProvNum in OpenDental).
+          
+          Business Rules:
+          - Must be unique across all providers
+          - Provider ID 0 represents system-generated communications, not actual providers
+          - Used for all provider-related lookups and relationships
         tests:
           - unique
           - not_null
-          - relationships:
-              to: ref('stg_opendental__provider')
-              field: provider_id
-
-      # Provider identifiers
+          - positive_values
+      
+      # Provider Identifiers
       - name: provider_abbreviation
-        description: Short form identifier for the provider, used in scheduling and reporting
+        description: >
+          Provider abbreviation used in UI displays and schedule views.
+          
+          Business Rules:
+          - Used for compact display in scheduling interfaces
+          - Should be unique for easy provider identification
+          - Maps to Abbr field in OpenDental
+        tests:
+          - not_null
+      
       - name: provider_last_name
-        description: Provider's last name, used for official documentation and reporting
+        description: >
+          Provider's last name - primary identifier for sorting and display.
+          
+          Business Rules:
+          - Required for all providers
+          - Used for alphabetical sorting and display
+          - Maps to LName field in OpenDental
+        tests:
+          - not_null
+      
       - name: provider_first_name
-        description: Provider's first name, used for official documentation and reporting
+        description: >
+          Provider's first name for complete identification.
+          
+          Business Rules:
+          - Used in conjunction with last name for full provider identification
+          - Maps to FName field in OpenDental
+      
       - name: provider_middle_initial
-        description: Provider's middle initial, used for official documentation
+        description: >
+          Provider's middle initial for complete name identification.
+          
+          Business Rules:
+          - Optional field for providers with middle names
+          - Maps to MI field in OpenDental
+      
       - name: provider_suffix
-        description: Provider's name suffix (e.g., Jr., Sr., III), used for official documentation
+        description: >
+          Provider's name suffix (Jr., Sr., III, etc.).
+          
+          Business Rules:
+          - Optional field for providers with name suffixes
+          - Maps to Suffix field in OpenDental
+      
       - name: provider_preferred_name
-        description: Provider's preferred name for display in patient-facing systems
+        description: >
+          Provider's preferred display name for patient communications.
+          
+          Business Rules:
+          - Used in patient-facing communications
+          - May differ from legal name for patient comfort
+          - Maps to PreferredName field in OpenDental
+      
       - name: provider_custom_id
-        description: Custom identifier for the provider, used for external system integration
-
-      # Provider classifications
+        description: >
+          Custom identifier for provider - practice-defined identifier.
+          
+          Business Rules:
+          - Practice-specific identifier for internal use
+          - May be used for external system integration
+          - Maps to CustomID field in OpenDental
+      
+      # Provider Classifications
       - name: fee_schedule_id
-        description: Foreign key to the provider's fee schedule, determines standard procedure fees
+        description: >
+          Foreign key to fee schedule - determines pricing structure for this provider.
+          
+          Business Rules:
+          - Determines procedure pricing for this provider
+          - Affects billing and insurance claim processing
+          - Maps to FeeSched field in OpenDental
         tests:
           - relationships:
-              to: ref('stg_opendental__feesched')
+              to: ref('stg_opendental__feeschedule')
               field: fee_schedule_id
+              severity: warn
+              where: "fee_schedule_id IS NOT NULL"
+      
       - name: specialty_id
-        description: Provider's specialty identifier, used for procedure assignment and reporting
-      - name: specialty_description
-        description: Descriptive name of the provider's specialty, used for reporting and filtering
-      - name: provider_status
-        description: Numeric code indicating provider's status (0=Active, 1=Inactive)
-      - name: provider_status_description
-        description: Descriptive name of the provider's status, used for reporting and filtering
-      - name: anesthesia_provider_type
-        description: Type of anesthesia provider, used for procedure assignment and compliance
-      - name: anesthesia_provider_type_description
-        description: Descriptive name of the anesthesia provider type, used for reporting
-
-      # Provider credentials
-      - name: state_license
-        description: Provider's state license number, required for practice and insurance billing
-      - name: dea_number
-        description: Drug Enforcement Administration number, required for controlled substance prescriptions
-      - name: blue_cross_id
-        description: Blue Cross provider identifier, used for insurance claims
-      - name: medicaid_id
-        description: Medicaid provider identifier, used for Medicaid claims
-      - name: national_provider_id
-        description: National Provider Identifier (NPI), required for insurance claims
-      - name: state_rx_id
-        description: State prescription identifier, required for electronic prescribing
-      - name: state_where_licensed
-        description: State(s) where provider is licensed, used for compliance reporting
-      - name: taxonomy_code_override
-        description: Override for standard taxonomy code, used for insurance claims
-
-      # Provider flags
-      - name: is_secondary
-        description: Indicates if provider is a secondary provider, affects procedure assignment
-      - name: is_hidden
-        description: Indicates if provider should be hidden from displays, used for system configuration
-      - name: is_using_tin
-        description: Indicates if provider uses Tax Identification Number, affects billing
-      - name: has_signature_on_file
-        description: Indicates if provider's signature is on file, required for certain procedures
-      - name: is_cdanet
-        description: Indicates if provider is CDANet enabled, affects insurance claims
-      - name: is_not_person
-        description: Indicates if provider is not an individual person (e.g., corporation)
-      - name: is_instructor
-        description: Indicates if provider is an instructor, affects scheduling and billing
-      - name: is_hidden_report
-        description: Indicates if provider should be hidden from reports, used for system configuration
-      - name: is_erx_enabled
-        description: Indicates if provider is enabled for electronic prescribing
-
-      # Provider display properties
-      - name: provider_color
-        description: Color code for provider display in scheduling interface
-      - name: outline_color
-        description: Outline color for provider display in scheduling interface
-      - name: schedule_note
-        description: Notes about provider's schedule, displayed in scheduling interface
-      - name: web_schedule_description
-        description: Description for web scheduling, used in patient portal
-      - name: web_schedule_image_location
-        description: Location of provider's web schedule image, used in patient portal
-
-      # Financial and goals
-      - name: hourly_production_goal_amount
-        description: Provider's hourly production goal, used for performance tracking
-
-      # Availability metrics
-      - name: scheduled_days
-        description: Number of days provider is scheduled in the last 90 days, used for availability analysis
-      - name: total_available_minutes
-        description: Total available minutes in the last 90 days, used for capacity planning
-      - name: avg_daily_available_minutes
-        description: Average available minutes per scheduled day, used for scheduling optimization
-      - name: days_off_count
-        description: Number of days off in the last 90 days, used for availability analysis
-      - name: avg_minutes_per_scheduled_day
-        description: Average minutes per scheduled day, used for scheduling optimization
-      - name: availability_percentage
-        description: Percentage of scheduled days that provider is available, used for capacity planning
-
-      # Provider categorizations
-      - name: provider_status_category
-        description: Categorized provider status (Active, Inactive, Terminated, Unknown), used for reporting and filtering
+        description: >
+          Foreign key to provider specialty - defines clinical specialty and affects procedure coding.
+          
+          Business Rules:
+          - Determines clinical specialty and procedure capabilities
+          - Affects procedure coding and billing
+          - Maps to Specialty field in OpenDental
         tests:
+          - relationships:
+              to: ref('stg_opendental__deflink')
+              field: def_link_id
+              severity: warn
+              where: "specialty_id IS NOT NULL"
+      
+      - name: specialty_description
+        description: >
+          Human-readable description of provider specialty from definition lookup.
+          
+          Business Rules:
+          - Derived from specialty_id lookup to definition table
+          - Used for reporting and display purposes
+          - Category ID 3 in definition table
+      
+      - name: provider_status
+        description: >
+          Provider status in the system (0=Active, 1=Inactive).
+          
+          Business Rules:
+          - 0 = Active provider available for scheduling
+          - 1 = Inactive provider not available for new appointments
+          - Maps to ProvStatus field in OpenDental
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: provider_status_description
+        description: >
+          Human-readable description of provider status from definition lookup.
+          
+          Business Rules:
+          - Derived from provider_status lookup to definition table
+          - Used for reporting and display purposes
+          - Category ID 2 in definition table
+      
+      - name: anesthesia_provider_type
+        description: >
+          Anesthesia provider classification (0=Not Anesthesia Provider, 1=Anesthesia Provider).
+          
+          Business Rules:
+          - Determines if provider can administer anesthesia
+          - Affects procedure coding and billing
+          - Maps to AnesthProvType field in OpenDental
+        tests:
+          - accepted_values:
+              values: [0, 1]
+      
+      - name: anesthesia_provider_type_description
+        description: >
+          Human-readable description of anesthesia provider type from definition lookup.
+          
+          Business Rules:
+          - Derived from anesthesia_provider_type lookup to definition table
+          - Used for reporting and display purposes
+          - Category ID 7 in definition table
+      
+      # Provider Credentials
+      - name: state_license
+        description: >
+          State professional license number - required for clinical providers.
+          
+          Business Rules:
+          - Required for all clinical providers
+          - Used for compliance and regulatory reporting
+          - Maps to StateLicense field in OpenDental
+      
+      - name: dea_number
+        description: >
+          Drug Enforcement Administration number - required for providers prescribing controlled substances.
+          
+          Business Rules:
+          - Required for providers prescribing controlled substances
+          - Used for compliance and regulatory reporting
+          - Maps to DEANum field in OpenDental
+      
+      - name: blue_cross_id
+        description: >
+          Blue Cross Blue Shield provider identifier for insurance billing.
+          
+          Business Rules:
+          - Used for Blue Cross Blue Shield insurance claims
+          - Required for in-network billing
+          - Maps to BlueCrossID field in OpenDental
+      
+      - name: medicaid_id
+        description: >
+          Medicaid provider identifier for government insurance billing.
+          
+          Business Rules:
+          - Used for Medicaid insurance claims
+          - Required for government insurance billing
+          - Maps to MedicaidID field in OpenDental
+      
+      - name: national_provider_id
+        description: >
+          National Provider Identifier (NPI) - standardized healthcare provider identifier.
+          
+          Business Rules:
+          - Standardized identifier for healthcare providers
+          - Required for most insurance billing
+          - Maps to NationalProvID field in OpenDental
+      
+      - name: state_rx_id
+        description: >
+          State prescription identifier for electronic prescribing.
+          
+          Business Rules:
+          - Used for electronic prescription systems
+          - Required for e-prescribing functionality
+          - Maps to StateRxID field in OpenDental
+      
+      - name: state_where_licensed
+        description: >
+          State abbreviation where provider holds professional license.
+          
+          Business Rules:
+          - Indicates state of professional licensure
+          - Used for compliance and regulatory reporting
+          - Maps to StateWhereLicensed field in OpenDental
+      
+      - name: taxonomy_code_override
+        description: >
+          Override for provider taxonomy code - healthcare provider classification.
+          
+          Business Rules:
+          - Used for healthcare provider classification
+          - May override default taxonomy code
+          - Maps to TaxonomyCodeOverride field in OpenDental
+      
+      # Provider Flags
+      - name: is_secondary
+        description: >
+          Flag indicating if provider is considered secondary for billing purposes.
+          
+          Logic:
+          - true when: Provider is used for secondary billing/insurance purposes
+          - false when: Provider is primary for billing purposes
+          
+          Business Impact:
+          - Affects billing and insurance claim processing
+          - Determines provider attribution in billing
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_hidden
+        description: >
+          Flag indicating if provider is hidden in current UI but retained in historical data.
+          
+          Logic:
+          - true when: Provider is hidden from current UI display
+          - false when: Provider is visible in current UI
+          
+          Business Impact:
+          - Hidden providers don't appear in scheduling interfaces
+          - Historical data may still reference hidden providers
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_using_tin
+        description: >
+          Flag indicating if provider uses Tax Identification Number for billing.
+          
+          Logic:
+          - true when: Provider uses TIN for billing purposes
+          - false when: Provider uses SSN for billing purposes
+          
+          Business Impact:
+          - Affects tax reporting and billing processes
+          - Determines tax identification method
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: has_signature_on_file
+        description: >
+          Flag indicating if electronic signature is on file for provider.
+          
+          Logic:
+          - true when: Electronic signature is available for provider
+          - false when: Electronic signature is not available
+          
+          Business Impact:
+          - Required for electronic document signing
+          - Affects document workflow processes
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_cdanet
+        description: >
+          Flag indicating if provider uses Canadian Dental Association Network for claims.
+          
+          Logic:
+          - true when: Provider uses CDANet for claims processing
+          - false when: Provider uses standard claims processing
+          
+          Business Impact:
+          - Affects claims processing for Canadian providers
+          - Determines claims submission method
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_not_person
+        description: >
+          Flag indicating if provider entity is not an individual person (e.g., clinic, organization).
+          
+          Logic:
+          - true when: Provider is an organization or clinic
+          - false when: Provider is an individual person
+          
+          Business Impact:
+          - Affects billing and legal entity handling
+          - Determines entity type for compliance
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_instructor
+        description: >
+          Flag indicating if provider serves as instructor in educational settings.
+          
+          Logic:
+          - true when: Provider serves as instructor
+          - false when: Provider is not an instructor
+          
+          Business Impact:
+          - Affects provider type categorization
+          - May affect billing and scheduling rules
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_hidden_report
+        description: >
+          Flag indicating if provider is hidden from standard reports while remaining in system.
+          
+          Logic:
+          - true when: Provider is hidden from standard reports
+          - false when: Provider appears in standard reports
+          
+          Business Impact:
+          - Affects report generation and data visibility
+          - Provider data excluded from standard reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_erx_enabled
+        description: >
+          Flag indicating if electronic prescription functionality is enabled for provider.
+          
+          Logic:
+          - true when: Electronic prescribing is enabled
+          - false when: Electronic prescribing is not enabled
+          
+          Business Impact:
+          - Affects prescription workflow capabilities
+          - Determines e-prescribing availability
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Provider Display Properties
+      - name: provider_color
+        description: >
+          Color code (integer) for provider display in schedule and UI.
+          
+          Business Rules:
+          - Used for visual identification in scheduling interfaces
+          - Should be unique for easy provider identification
+          - Maps to ProvColor field in OpenDental
+      
+      - name: outline_color
+        description: >
+          Outline color code (integer) for provider display in schedule.
+          
+          Business Rules:
+          - Used for visual identification in scheduling interfaces
+          - Complements provider_color for enhanced visibility
+          - Maps to OutlineColor field in OpenDental
+      
+      - name: schedule_note
+        description: >
+          Notes related to provider scheduling and availability.
+          
+          Business Rules:
+          - Used for scheduling coordination and communication
+          - May contain special instructions or constraints
+          - Maps to SchedNote field in OpenDental
+      
+      - name: web_schedule_description
+        description: >
+          Provider description displayed in web-based scheduling interface.
+          
+          Business Rules:
+          - Used in patient-facing web scheduling
+          - Should be patient-friendly and informative
+          - Maps to WebSchedDescript field in OpenDental
+      
+      - name: web_schedule_image_location
+        description: >
+          File path or URL to provider image for web scheduling display.
+          
+          Business Rules:
+          - Used in patient-facing web scheduling
+          - Should be accessible and properly formatted
+          - Maps to WebSchedImageLocation field in OpenDental
+      
+      # Financial and Goals
+      - name: hourly_production_goal_amount
+        description: >
+          Target hourly production amount for provider performance tracking.
+          
+          Business Rules:
+          - Used for provider performance evaluation
+          - Should be realistic and achievable
+          - Maps to HourlyProdGoalAmt field in OpenDental
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+      
+      # Availability Metrics
+      - name: scheduled_days
+        description: >
+          Number of days provider was scheduled in the last 90 days.
+          
+          Calculation Logic:
+          - Count of distinct schedule_date from int_provider_availability
+          - Limited to 90-day rolling window for performance
+          - Used for availability percentage calculations
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 90
+              severity: warn
+      
+      - name: total_available_minutes
+        description: >
+          Total available minutes for provider in the last 90 days.
+          
+          Calculation Logic:
+          - Sum of available_minutes from int_provider_availability
+          - Limited to 90-day rolling window for performance
+          - Used for average daily calculations
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 43200
+              severity: warn
+      
+      - name: avg_daily_available_minutes
+        description: >
+          Average available minutes per day for provider in the last 90 days.
+          
+          Calculation Logic:
+          - Average of available_minutes from int_provider_availability
+          - Limited to 90-day rolling window for performance
+          - Used for capacity planning and scheduling optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1440
+              severity: warn
+      
+      - name: days_off_count
+        description: >
+          Number of days provider was off in the last 90 days.
+          
+          Calculation Logic:
+          - Count of distinct schedule_date where is_day_off = true
+          - Limited to 90-day rolling window for performance
+          - Used for availability percentage calculations
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 90
+              severity: warn
+      
+      - name: avg_minutes_per_scheduled_day
+        description: >
+          Average available minutes per scheduled day for provider.
+          
+          Calculation Logic:
+          - total_available_minutes / scheduled_days (when scheduled_days > 0)
+          - 0 when scheduled_days = 0
+          - Used for capacity planning and scheduling optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1440
+              severity: warn
+      
+      - name: availability_percentage
+        description: >
+          Percentage of scheduled days provider was available.
+          
+          Calculation Logic:
+          - (scheduled_days - days_off_count) / scheduled_days * 100 (when scheduled_days > 0)
+          - 0 when scheduled_days = 0
+          - Used for provider performance evaluation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Business Logic Categorizations
+      - name: provider_status_category
+        description: >
+          Business categorization of provider status (Active, Inactive, Terminated, Unknown).
+          
+          Business Rules:
+          - Terminated: termination_date is not null
+          - Active: provider_status = 0 and no termination_date
+          - Inactive: provider_status = 1 and no termination_date
+          - Unknown: any other status combination
+        tests:
+          - not_null
           - accepted_values:
               values: ['Active', 'Inactive', 'Terminated', 'Unknown']
+      
       - name: provider_type_category
-        description: Categorized provider type (Primary, Secondary, Instructor, Non-Person), used for reporting and filtering
+        description: >
+          Business categorization of provider type (Primary, Secondary, Instructor, Non-Person).
+          
+          Business Rules:
+          - Primary: Default provider type for active clinical providers
+          - Secondary: Providers used for billing/insurance purposes
+          - Instructor: Educational providers
+          - Non-Person: Organizational entities
         tests:
+          - not_null
           - accepted_values:
               values: ['Primary', 'Secondary', 'Instructor', 'Non-Person']
-
-      # Metadata columns
-      - name: _created_at
-        description: Timestamp when the record was created in the source system
-      - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+      
+      - name: provider_specialty_category
+        description: >
+          Business categorization of provider specialty (General Practice, Specialist, Hygiene, Other).
+          
+          Business Rules:
+          - General Practice: General dentistry providers
+          - Specialist: Orthodontics, Oral Surgery, Endodontics, Periodontics
+          - Hygiene: Dental hygiene providers
+          - Other: All other specialty types
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['General Practice', 'Specialist', 'Hygiene', 'Other']
+      
+      - name: availability_performance_tier
+        description: >
+          Performance tier based on availability percentage (Excellent, Good, Fair, Poor, No Data).
+          
+          Business Rules:
+          - Excellent: 95%+ availability over 90-day period
+          - Good: 90-94% availability over 90-day period
+          - Fair: 80-89% availability over 90-day period
+          - Poor: 1-79% availability over 90-day period
+          - No Data: No availability data in 90-day period
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Excellent', 'Good', 'Fair', 'Poor', 'No Data']
+      
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the record was loaded into the data warehouse
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTStamp field. May be null for system-generated records."
+        tests:
+          - not_null:
+              where: "provider_id != 0"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp field."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

@@ -1,0 +1,1055 @@
+version: 2
+
+models:
+  - name: mart_ar_summary
+    description: >
+      Summary mart for comprehensive accounts receivable analytics and collection performance tracking.
+      This mart provides aggregated metrics and KPIs to support AR management, collection prioritization,
+      and financial performance analysis at the daily level by patient and provider.
+      
+      ## Business Context
+      The AR summary mart is a critical component of our analytical framework, enabling:
+      - Accounts receivable aging analysis and risk assessment
+      - Collection rate monitoring and performance optimization
+      - Payment plan tracking and recovery prioritization
+      - Financial health monitoring and cash flow analysis
+      - Collection workflow optimization and resource allocation
+      - Executive reporting and financial dashboards
+      
+      ## Technical Specifications
+      - Grain: One row per date + patient + provider combination
+      - Source: dim_patient, fact_claim, fact_payment (primary sources)
+      - Refresh: Daily
+      - Dependencies: 
+        * dim_patient (patient balance and demographic information)
+        * fact_claim (insurance billing and payment data)
+        * fact_payment (payment transaction details)
+        * dim_provider (provider information and relationships)
+        * dim_date (date dimension for temporal analysis)
+      
+      ## Business Logic
+      ### Aggregation Rules
+      - Daily aggregation by snapshot_date, patient_id, and provider_id
+      - AR aging buckets calculated from patient balance fields (0-30, 31-60, 61-90, 90+ days)
+      - Collection rates calculated using safe division with nullif() to prevent division by zero
+      - Payment activity aggregated over 365-day rolling window for recent performance analysis
+      
+      ### Metric Calculations
+      - AR aging percentages: balance_bucket / total_balance * 100
+      - Collection rates: payments_received / amounts_billed * 100
+      - Risk categorization based on aging patterns and payment history
+      - Collection priority scoring using weighted factors (balance, aging, payment recency, insurance status)
+      
+      ### Status and Risk Management
+      - Aging risk categories: No Balance, Credit Balance, Low Risk, Moderate Risk, Medium Risk, High Risk
+      - Payment recency classification: Recent (0-30 days), Moderate (31-90 days), Old (91-180 days), Very Old (180+ days)
+      - Balance categories: No Balance, Credit Balance, Small (<$100), Medium ($100-500), Large ($500-2000), Very Large ($2000+)
+      
+      ## Data Quality Notes
+      - Payment plan functionality not used by clinic (fields set to defaults)
+      - Balances may include estimates and pending insurance amounts
+      - Historical data limited to 365 days for recent activity calculations
+      - Some claims may have missing payment information (handled with left joins)
+      
+      ## Performance Considerations
+      - Indexed on date_id, patient_id, provider_id, clinic_id for query performance
+      - Aggregations performed at patient-provider level to optimize data volume
+      - Date dimension join required for temporal analysis
+      - Large volume model due to comprehensive AR tracking across all patients
+      
+      ## Usage Notes
+      - Use for AR aging analysis and collection prioritization workflows
+      - Collection priority scores range from 0-100 (higher = more urgent)
+      - Risk categories help identify patients requiring immediate attention
+      - Payment recency flags help identify patients with recent activity
+      - Boolean flags provide quick filtering for common AR management scenarios
+      
+      ## Business Impact
+      - Critical for cash flow management and financial planning
+      - Enables proactive collection efforts and reduces bad debt
+      - Supports compliance with financial reporting requirements
+      - Drives operational efficiency in collection processes
+    
+    meta:
+      owner: "Finance Team"
+      contains_pii: true
+      business_process: "Accounts Receivable Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + patient + provider combination"
+      primary_consumers: ["Finance Team", "Billing Staff", "Practice Management", "Executive Leadership"]
+      data_quality_requirements:
+        - "AR aging percentages must be between 0-100%"
+        - "Collection rates must be between 0-100%"
+        - "Financial balances must be non-negative (except credit balances)"
+        - "Risk categories must follow defined thresholds"
+        - "Collection priority scores must be between 0-100"
+      performance_requirements:
+        - "Query response time under 10 seconds for date range filters"
+        - "Support concurrent access by multiple users"
+        - "Daily refresh completion within 45 minutes"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 100000
+          config:
+            severity: error
+            description: "Expected daily AR summary records should be reasonable for patient volume"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "pct_current >= 0 and pct_current <= 100"
+          config:
+            severity: error
+            description: "Current AR aging percentages must be valid percentages"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "pct_31_60 >= 0 and pct_31_60 <= 100"
+          config:
+            severity: error
+            description: "31-60 day AR aging percentages must be valid percentages"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "pct_61_90 >= 0 and pct_61_90 <= 100"
+          config:
+            severity: error
+            description: "61-90 day AR aging percentages must be valid percentages"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "pct_over_90 >= 0 and pct_over_90 <= 100"
+          config:
+            severity: error
+            description: "Over 90 day AR aging percentages must be valid percentages"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "collection_rate_last_year >= 0 and collection_rate_last_year <= 100"
+          config:
+            severity: error
+            description: "Collection rates must be valid percentages"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "collection_priority_score >= 0 and collection_priority_score <= 100"
+          config:
+            severity: error
+            description: "Collection priority scores must be between 0-100"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis
+          
+          Business Rules:
+          - Links to dim_date for consistent date handling across all marts
+          - Represents the snapshot date for AR analysis
+          - Enables time-based analysis and trend reporting
+          - Supports calendar-based filtering and grouping
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Patient dimension for patient-specific AR analysis
+          
+          Business Rules:
+          - Links to dim_patient for patient information and attributes
+          - Enables patient-level AR analysis and collection tracking
+          - Supports patient-specific reporting and filtering
+          - Must match active or inactive patients only
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Provider dimension for provider-specific AR analysis
+          
+          Business Rules:
+          - Links to dim_provider for provider information and attributes
+          - Enables provider-level AR analysis and performance tracking
+          - Supports provider-specific reporting and filtering
+          - Represents the primary provider for the patient
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+          - not_null
+      
+      - name: clinic_id
+        description: >
+          Clinic identifier for multi-location AR analysis
+          
+          Business Rules:
+          - Identifies the clinic location for the AR summary
+          - Enables clinic-level AR performance comparison
+          - Supports multi-location financial reporting
+          - Must be a positive integer
+        tests:
+          - not_null
+          - positive_values
+      
+      # Date and Provider Information
+      - name: snapshot_date
+        description: >
+          Actual date of the AR snapshot being analyzed
+          
+          Business Rules:
+          - Date when AR analysis was performed (typically current date)
+          - Used for temporal analysis and trend reporting
+          - Must match the date_id for consistency
+          - Represents the point-in-time for AR calculations
+        tests:
+          - not_null
+      
+      - name: provider_first_name
+        description: >
+          Provider's first name from dim_provider
+          
+          Business Rules:
+          - Standardized provider identification
+          - Used for display and reporting purposes
+          - Sourced from dim_provider for consistency
+        tests:
+          - not_null
+      
+      - name: provider_last_name
+        description: >
+          Provider's last name from dim_provider
+          
+          Business Rules:
+          - Standardized provider identification
+          - Used for display and reporting purposes
+          - Sourced from dim_provider for consistency
+        tests:
+          - not_null
+      
+      - name: provider_type_category
+        description: >
+          Categorized provider type for analysis grouping
+          
+          Business Rules:
+          - Provider type classification for analytical grouping
+          - Enables provider-type specific AR analysis
+          - Sourced from dim_provider for consistency
+        tests:
+          - not_null
+      
+      - name: specialty_description
+        description: >
+          Provider specialty description for clinical context
+          
+          Business Rules:
+          - Clinical specialty for provider classification
+          - Enables specialty-specific AR analysis
+          - May be null for non-clinical providers
+        tests:
+          - not_null:
+              where: "provider_type_category = 'Clinical'"
+      
+      # Patient Information
+      - name: patient_status
+        description: >
+          Current patient status for AR analysis context
+          
+          Business Rules:
+          - Patient = Active patient with current AR balance
+          - Inactive = Patient with historical AR data but no current activity
+          - Only includes patients with AR balances or recent activity
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Patient', 'Inactive']
+      
+      - name: age
+        description: >
+          Patient age calculated from birth date
+          
+          Business Rules:
+          - Age calculated from dim_patient for consistency
+          - Used for demographic analysis and risk assessment
+          - May be null for patients with missing birth dates
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 150
+              severity: warn
+              where: "age is not null"
+      
+      - name: gender
+        description: >
+          Patient gender for demographic analysis
+          
+          Business Rules:
+          - Standardized gender values for reporting
+          - Used for demographic AR analysis
+          - May be null for patients with missing demographic data
+        tests:
+          - accepted_values:
+              values: ['Male', 'Female', 'Other', 'Unknown']
+              where: "gender is not null"
+      
+      - name: has_insurance_flag
+        description: >
+          Flag indicating if patient has active insurance coverage
+          
+          Business Rules:
+          - true = Patient has active insurance coverage
+          - false = Patient is self-pay or insurance inactive
+          - Used for collection strategy and risk assessment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Date Information
+      - name: year
+        description: >
+          Year from date dimension for temporal grouping
+          
+          Business Rules:
+          - Calendar year for AR analysis grouping
+          - Enables year-over-year trend analysis
+          - Sourced from dim_date for consistency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+      
+      - name: month
+        description: >
+          Month from date dimension for temporal grouping
+          
+          Business Rules:
+          - Calendar month (1-12) for AR analysis grouping
+          - Enables monthly trend analysis and seasonality
+          - Sourced from dim_date for consistency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+      
+      - name: quarter
+        description: >
+          Quarter from date dimension for temporal grouping
+          
+          Business Rules:
+          - Calendar quarter (1-4) for AR analysis grouping
+          - Enables quarterly trend analysis and reporting
+          - Sourced from dim_date for consistency
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      
+      - name: day_name
+        description: >
+          Day of week name for temporal analysis
+          
+          Business Rules:
+          - Day name for weekly pattern analysis
+          - Enables day-of-week trend analysis
+          - Sourced from dim_date for consistency
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+      
+      # Current AR Balances
+      - name: total_balance
+        description: >
+          Total outstanding balance for the patient
+          
+          Business Rules:
+          - Sum of all outstanding balances across aging buckets
+          - Includes both patient responsibility and insurance estimates
+          - Negative values represent credit balances
+          - Zero indicates no outstanding balance
+          
+          Data Quality Notes:
+          - May include estimates and pending insurance amounts
+          - Balances calculated from OpenDental financial system
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 50000
+              severity: warn
+      
+      - name: balance_0_30_days
+        description: >
+          Outstanding balance aged 0-30 days
+          
+          Business Rules:
+          - Current and recent balances requiring immediate attention
+          - Typically highest collection priority
+          - Used for cash flow analysis and collection planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: balance_31_60_days
+        description: >
+          Outstanding balance aged 31-60 days
+          
+          Business Rules:
+          - Moderately aged balances requiring follow-up
+          - Indicates potential payment delays
+          - Used for collection prioritization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: balance_61_90_days
+        description: >
+          Outstanding balance aged 61-90 days
+          
+          Business Rules:
+          - Aged balances requiring aggressive collection
+          - Indicates potential payment problems
+          - Used for risk assessment and collection strategy
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: balance_over_90_days
+        description: >
+          Outstanding balance aged over 90 days
+          
+          Business Rules:
+          - Highly aged balances with highest collection risk
+          - May require special collection procedures
+          - Primary factor in risk categorization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: insurance_estimate
+        description: >
+          Estimated amount expected from insurance
+          
+          Business Rules:
+          - Expected insurance payment amount
+          - Used for collection prioritization
+          - May be null for self-pay patients
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+              where: "insurance_estimate is not null"
+      
+      - name: payment_plan_due
+        description: >
+          Amount due under payment plan (currently unused)
+          
+          Business Rules:
+          - Payment plan functionality not used by clinic
+          - Set to 0 for all records
+          - Reserved for future payment plan implementation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0]
+      
+      - name: patient_responsibility
+        description: >
+          Calculated patient responsibility amount
+          
+          Business Rules:
+          - Calculated as total_balance - insurance_estimate
+          - Minimum value of 0 (no negative patient responsibility)
+          - Used for collection prioritization and patient communication
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      # AR Aging Percentages
+      - name: pct_current
+        description: >
+          Percentage of total balance aged 0-30 days
+          
+          Business Rules:
+          - Calculated as balance_0_30_days / total_balance * 100
+          - 0% when total_balance is 0
+          - Used for aging analysis and collection strategy
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: pct_31_60
+        description: >
+          Percentage of total balance aged 31-60 days
+          
+          Business Rules:
+          - Calculated as balance_31_60_days / total_balance * 100
+          - 0% when total_balance is 0
+          - Used for aging analysis and collection strategy
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: pct_61_90
+        description: >
+          Percentage of total balance aged 61-90 days
+          
+          Business Rules:
+          - Calculated as balance_61_90_days / total_balance * 100
+          - 0% when total_balance is 0
+          - Used for aging analysis and collection strategy
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: pct_over_90
+        description: >
+          Percentage of total balance aged over 90 days
+          
+          Business Rules:
+          - Calculated as balance_over_90_days / total_balance * 100
+          - 0% when total_balance is 0
+          - Primary factor in risk categorization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: aging_risk_category
+        description: >
+          Risk category based on AR aging patterns
+          
+          Business Rules:
+          - No Balance: total_balance = 0
+          - Credit Balance: total_balance < 0
+          - High Risk: >=50% of balance over 90 days
+          - Medium Risk: >=25% of balance over 90 days
+          - Moderate Risk: >=50% of balance 61-90 days
+          - Low Risk: All other cases
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['No Balance', 'Credit Balance', 'High Risk', 'Medium Risk', 'Moderate Risk', 'Low Risk']
+      
+      # Recent Activity Metrics (Last 365 Days)
+      - name: billed_last_year
+        description: >
+          Total amount billed in last 365 days
+          
+          Business Rules:
+          - Sum of all billed amounts from fact_claim
+          - Used for collection rate calculations
+          - May be null if no claims in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              where: "billed_last_year is not null"
+      
+      - name: paid_last_year
+        description: >
+          Total amount paid in last 365 days
+          
+          Business Rules:
+          - Sum of all paid amounts from fact_claim
+          - Used for collection rate calculations
+          - May be null if no payments in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              where: "paid_last_year is not null"
+      
+      - name: write_offs_last_year
+        description: >
+          Total write-offs in last 365 days
+          
+          Business Rules:
+          - Sum of all write-off amounts from fact_claim
+          - Used for financial performance analysis
+          - May be null if no write-offs in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              where: "write_offs_last_year is not null"
+      
+      - name: outstanding_claims_amount
+        description: >
+          Total outstanding claims amount
+          
+          Business Rules:
+          - Calculated as billed_amount - paid_amount - write_off_amount
+          - Represents unresolved insurance claims
+          - Used for collection prioritization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              where: "outstanding_claims_amount is not null"
+      
+      - name: claim_days_last_year
+        description: >
+          Number of distinct days with claims in last 365 days
+          
+          Business Rules:
+          - Count of distinct claim dates
+          - Indicates patient activity level
+          - Used for patient engagement analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              severity: warn
+              where: "claim_days_last_year is not null"
+      
+      - name: last_claim_date
+        description: >
+          Date of most recent claim
+          
+          Business Rules:
+          - Maximum claim_date from fact_claim
+          - Used for recency analysis
+          - May be null if no claims
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "2020-01-01"
+              max_value: "2030-12-31"
+              severity: warn
+              where: "last_claim_date is not null"
+      
+      # Payment Activity Metrics (Last 365 Days)
+      - name: patient_payments_last_year
+        description: >
+          Total patient payments in last 365 days
+          
+          Business Rules:
+          - Sum of patient payment amounts from fact_payment
+          - Used for collection rate calculations
+          - May be null if no patient payments in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              where: "patient_payments_last_year is not null"
+      
+      - name: insurance_payments_last_year
+        description: >
+          Total insurance payments in last 365 days
+          
+          Business Rules:
+          - Sum of insurance payment amounts from fact_payment
+          - Used for collection rate calculations
+          - May be null if no insurance payments in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              where: "insurance_payments_last_year is not null"
+      
+      - name: adjustments_last_year
+        description: >
+          Total adjustments in last 365 days
+          
+          Business Rules:
+          - Sum of adjustment amounts from fact_payment
+          - Used for financial performance analysis
+          - May be null if no adjustments in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -100000
+              max_value: 100000
+              severity: warn
+              where: "adjustments_last_year is not null"
+      
+      - name: total_payments_last_year
+        description: >
+          Total payments (all types) in last 365 days
+          
+          Business Rules:
+          - Sum of all payment amounts from fact_payment
+          - Used for overall collection rate calculations
+          - May be null if no payments in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+              where: "total_payments_last_year is not null"
+      
+      - name: payment_days_last_year
+        description: >
+          Number of distinct days with payments in last 365 days
+          
+          Business Rules:
+          - Count of distinct payment dates
+          - Indicates payment activity level
+          - Used for patient payment behavior analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              severity: warn
+              where: "payment_days_last_year is not null"
+      
+      - name: last_payment_date
+        description: >
+          Date of most recent payment
+          
+          Business Rules:
+          - Maximum payment_date from fact_payment
+          - Used for recency analysis and collection strategy
+          - May be null if no payments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "2020-01-01"
+              max_value: "2030-12-31"
+              severity: warn
+              where: "last_payment_date is not null"
+      
+      - name: avg_payment_amount
+        description: >
+          Average payment amount in last 365 days
+          
+          Business Rules:
+          - Average of payment amounts from fact_payment
+          - Used for payment behavior analysis
+          - May be null if no payments in last year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+              where: "avg_payment_amount is not null"
+      
+      # Collection Rates
+      - name: collection_rate_last_year
+        description: >
+          Overall collection rate for last 365 days
+          
+          Business Rules:
+          - Calculated as total_payments_last_year / billed_last_year * 100
+          - 0% when billed_last_year is 0
+          - Used for collection performance analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: patient_collection_rate
+        description: >
+          Patient collection rate for last 365 days
+          
+          Business Rules:
+          - Calculated as patient_payments_last_year / patient_responsibility * 100
+          - 0% when patient_responsibility is 0
+          - Used for patient payment performance analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: insurance_collection_rate
+        description: >
+          Insurance collection rate for last 365 days
+          
+          Business Rules:
+          - Calculated as insurance_payments_last_year / insurance_estimate * 100
+          - 0% when insurance_estimate is 0
+          - Used for insurance payment performance analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      # Payment Plan Information (Currently Unused)
+      - name: active_payment_plans
+        description: >
+          Number of active payment plans (currently unused)
+          
+          Business Rules:
+          - Payment plan functionality not used by clinic
+          - Set to 0 for all records
+          - Reserved for future payment plan implementation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0]
+      
+      - name: payment_plan_amount
+        description: >
+          Total payment plan amount (currently unused)
+          
+          Business Rules:
+          - Payment plan functionality not used by clinic
+          - Set to 0 for all records
+          - Reserved for future payment plan implementation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0]
+      
+      - name: payment_plan_balance
+        description: >
+          Outstanding payment plan balance (currently unused)
+          
+          Business Rules:
+          - Payment plan functionality not used by clinic
+          - Set to 0 for all records
+          - Reserved for future payment plan implementation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0]
+      
+      - name: has_payment_plan
+        description: >
+          Flag indicating active payment plan (currently unused)
+          
+          Business Rules:
+          - Payment plan functionality not used by clinic
+          - Set to false for all records
+          - Reserved for future payment plan implementation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [false]
+      
+      # Activity Timing
+      - name: payment_recency
+        description: >
+          Classification of payment activity recency
+          
+          Business Rules:
+          - Recent: Last payment within 30 days
+          - Moderate: Last payment 31-90 days ago
+          - Old: Last payment 91-180 days ago
+          - Very Old: Last payment over 180 days ago
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Recent', 'Moderate', 'Old', 'Very Old']
+      
+      - name: claim_recency
+        description: >
+          Classification of claim activity recency
+          
+          Business Rules:
+          - Recent: Last claim within 30 days
+          - Moderate: Last claim 31-90 days ago
+          - Old: Last claim 91-180 days ago
+          - Very Old: Last claim over 180 days ago
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Recent', 'Moderate', 'Old', 'Very Old']
+      
+      # Collection Priority Scoring
+      - name: collection_priority_score
+        description: >
+          Collection priority score (0-100 scale)
+          
+          Business Rules:
+          - Calculated using weighted factors:
+            * Balance amount (up to 25 points)
+            * Over 90 day aging percentage (up to 25 points)
+            * Payment recency (up to 25 points)
+            * Insurance status (up to 25 points)
+          - Higher scores indicate higher collection priority
+          - Used for collection workflow prioritization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      # Balance Categories
+      - name: balance_category
+        description: >
+          Balance size category for analysis grouping
+          
+          Business Rules:
+          - No Balance: total_balance = 0
+          - Credit Balance: total_balance < 0
+          - Small: $0 - $99
+          - Medium: $100 - $499
+          - Large: $500 - $1,999
+          - Very Large: $2,000+
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['No Balance', 'Credit Balance', 'Small', 'Medium', 'Large', 'Very Large']
+      
+      # Boolean Flags
+      - name: has_outstanding_balance
+        description: >
+          Flag indicating if patient has any outstanding balance
+          
+          Business Rules:
+          - true when total_balance > 0
+          - false when total_balance <= 0
+          - Used for quick filtering of patients with balances
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: has_aged_balance
+        description: >
+          Flag indicating if patient has balances over 90 days
+          
+          Business Rules:
+          - true when balance_over_90_days > 0
+          - false when balance_over_90_days = 0
+          - Used for identifying high-risk accounts
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: has_insurance_pending
+        description: >
+          Flag indicating if patient has pending insurance amounts
+          
+          Business Rules:
+          - true when insurance_estimate > 0
+          - false when insurance_estimate = 0
+          - Used for insurance collection prioritization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: has_outstanding_claims
+        description: >
+          Flag indicating if patient has outstanding claims
+          
+          Business Rules:
+          - true when outstanding_claims_amount > 0
+          - false when outstanding_claims_amount = 0
+          - Used for claim follow-up prioritization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: recent_payment_activity
+        description: >
+          Flag indicating if patient has recent payment activity
+          
+          Business Rules:
+          - true when last_payment_date within 30 days
+          - false when last_payment_date over 30 days or null
+          - Used for identifying active payment patterns
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Days Since Last Activity
+      - name: days_since_last_payment
+        description: >
+          Number of days since last payment
+          
+          Business Rules:
+          - Calculated as current_date - last_payment_date
+          - Null when no payment history
+          - Used for collection timing analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 3650
+              severity: warn
+              where: "days_since_last_payment is not null"
+      
+      - name: days_since_last_claim
+        description: >
+          Number of days since last claim
+          
+          Business Rules:
+          - Calculated as current_date - last_claim_date
+          - Null when no claim history
+          - Used for patient activity analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 3650
+              severity: warn
+              where: "days_since_last_claim is not null"
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Not applicable for summary mart - set to null."
+        tests:
+          - accepted_values:
+              values: [null]
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Not applicable for summary mart - set to null."
+        tests:
+          - accepted_values:
+              values: [null]
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

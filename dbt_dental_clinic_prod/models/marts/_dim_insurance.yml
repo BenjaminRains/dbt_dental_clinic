@@ -3,22 +3,23 @@ version: 2
 models:
   - name: dim_insurance
     description: >
-      Dimension table containing comprehensive insurance plan and carrier information.
+      Dimension table containing comprehensive insurance plan and carrier information for analytical reporting.
       This model serves as the primary reference for insurance-related analytics and
-      reporting, combining data from multiple sources to provide a complete view of
-      insurance plans, carriers, and their performance metrics.
-
+      reporting, providing standardized attributes and business logic for consistent
+      analysis across all fact tables and summary marts.
+      
       ## Business Context
       The insurance dimension is a critical component of our dimensional model, enabling:
-      - Insurance plan and carrier analysis
-      - Benefit coverage and verification tracking
-      - Claim performance and payment analysis
-      - Network status monitoring
-      - Employer-based insurance tracking
-      - Historical plan changes and coverage evolution
-
+      - Insurance plan and carrier performance analysis
+      - Benefit coverage verification and compliance tracking
+      - Claim processing efficiency and payment analysis
+      - Network status monitoring and verification management
+      - Employer-based insurance tracking and group plan analysis
+      - Historical plan changes and coverage evolution tracking
+      - Cross-system integration and data consistency
+      
       ## Technical Specifications
-      - Grain: One row per insurance plan (insurance_plan_id)
+      - Grain: One row per insurance plan (one row per insurance_plan_id)
       - Source: int_insurance_coverage (primary source)
       - Refresh: Daily
       - Dependencies: 
@@ -26,101 +27,123 @@ models:
         * int_insurance_employer (employer information)
         * int_claim_details (claim performance metrics)
         * int_claim_payments (payment tracking)
-        * int_claim_snapshot (historical claim states)
-        * int_claim_tracking (claim status updates)
-        * int_insurance_eob_attachments (EOB documentation)
-
+      
       ## Business Logic
       ### Plan Status Management
-      - Active status based on verification date and pending flags
-      - Incomplete records preserved with carrier_id = -1
-      - Historical tracking through effective and termination dates
-      - Template benefits (patient_plan_id = 0) preserved for reference
-
+      - Active status based on verification date and pending flags: Ensures accurate active plan identification
+      - Incomplete records preserved with carrier_id = -1: Maintains data integrity for partial records
+      - Historical tracking through effective and termination dates: Enables temporal analysis
+      - Template benefits (patient_plan_id = 0) preserved for reference: Supports benefit template analysis
+      
       ### Benefit Management
-      - Benefit details stored as JSON for flexibility
-      - Coverage rules maintained at plan level
-      - Procedure-specific benefits tracked
-      - Time period and quantity limits enforced
-
+      - Benefit details stored as JSON for flexibility: Enables complex benefit structure analysis
+      - Coverage rules maintained at plan level: Ensures consistent benefit application
+      - Procedure-specific benefits tracked: Supports procedure-level coverage analysis
+      - Time period and quantity limits enforced: Maintains benefit constraint compliance
+      
       ### Claim Performance
-      - Metrics aggregated at plan level
-      - Payment velocity categorized (excellent/good/average/poor)
-      - Approval rates and reimbursement rates calculated
-      - Historical performance tracked
-
+      - Metrics aggregated at plan level: Provides plan-level performance insights
+      - Payment velocity categorized (excellent/good/average/poor): Enables carrier performance ranking
+      - Approval rates and reimbursement rates calculated: Supports financial analysis
+      - Historical performance tracked: Enables trend analysis and forecasting
+      
       ### Network Status
-      - Based on verification date and active status
-      - Categories: unverified/expired/active/inactive
-      - 90-day verification window
-      - Hidden status tracking
-
+      - Based on verification date and active status: Ensures current network status accuracy
+      - Categories: unverified/expired/active/inactive: Provides clear status classification
+      - 90-day verification window: Enforces verification compliance standards
+      - Hidden status tracking: Supports administrative plan management
+      
       ## Data Quality Notes
-      - Incomplete records preserved with carrier_id = -1
-      - Missing carrier names handled with empty strings
-      - Subscriber information validated
-      - Benefit details normalized
-      - Historical changes tracked through timestamps
-
-      ## Usage Guidelines
-      - Primary source for insurance-related analysis
+      - Incomplete records preserved with carrier_id = -1: Maintains referential integrity
+      - Missing carrier names handled with empty strings: Prevents null propagation
+      - Subscriber information validated: Ensures data completeness
+      - Benefit details normalized: Maintains consistent JSON structure
+      - Historical changes tracked through timestamps: Enables audit trail
+      
+      ## Performance Considerations
+      - Indexed on insurance_plan_id for fast lookups to fact tables
+      - Indexed on patient_id for patient-centric queries
+      - Indexed on carrier_id for carrier performance analysis
+      - Indexed on is_active for filtering active plans
+      - Pre-calculated metrics reduce query complexity
+      
+      ## Usage Notes
+      - Primary source for insurance-related analysis and reporting
       - Supports daily, monthly, and rolling period aggregations
       - Enables breakdowns by provider, location, and patient type
-      - Integrates with fact_procedure and fact_claim
-      - Supports benefit analysis and coverage verification
-      - Enables payment performance analysis
-      - Facilitates network status monitoring
-
-      ## Dimensional Relationships
-      - Links to dim_patient through patient_id
-      - Links to dim_employer through employer_id
-      - Links to fact_procedure through insurance_plan_id
-      - Links to fact_claim through insurance_plan_id
-      - Links to dim_procedure through benefit_details
-
-      ## SCD Type
-      Type 2 - Tracks historical changes through:
-      - created_at and updated_at timestamps
-      - effective_date and termination_date
-      - verification_date
-      - benefit_details changes
-
-      ## Naming Conventions
-      - Source columns from OpenDental use original CamelCase names
-      - Derived/calculated fields use snake_case
-      - Metadata columns use underscore prefix (_loaded_at, _created_at, _updated_at)
-      - JSON fields use descriptive names (benefit_details)
-      - Status fields use descriptive prefixes (is_, has_)
+      - Integrates with fact_procedure and fact_claim for comprehensive analysis
+      - Supports benefit analysis and coverage verification workflows
+      - Enables payment performance analysis and carrier ranking
+      - Facilitates network status monitoring and compliance tracking
+      - Use insurance_plan_id for joins to fact tables for optimal performance
+      - Leverage pre-calculated metrics for faster analysis
+      - Apply network status filters for current plan analysis
 
     columns:
+      # Primary Key
       - name: insurance_plan_id
-        description: Primary key for the insurance plan
+        description: >
+          Primary key - Unique identifier for each insurance plan
+          
+          Business Rules:
+          - Must be unique across all insurance plans
+          - Cannot be null
+          - Must be positive integer
         tests:
           - unique
           - not_null
-          - relationships:
-              to: ref('int_insurance_coverage')
-              field: insurance_plan_id
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 999999999
+      
+      # Foreign Keys
       - name: carrier_id
-        description: Foreign key to the insurance carrier
+        description: >
+          Foreign key to insurance carrier - Links to the insurance company providing coverage
+          
+          Business Rules:
+          - Must reference valid carrier in stg_opendental__carrier
+          - Cannot be null for complete records
+          - May be -1 for incomplete records
+          
+          Data Quality Notes:
+          - Incomplete records use carrier_id = -1
         tests:
-          - not_null
+          - not_null:
+              where: "carrier_id != -1"
           - relationships:
               to: ref('stg_opendental__carrier')
               field: carrier_id
-
+              where: "carrier_id != -1"
+      
       - name: employer_id
-        description: Foreign key to the employer (if applicable)
+        description: >
+          Foreign key to employer - Links to employer for group insurance plans
+          
+          Business Rules:
+          - May be null for individual plans
+          - Must reference valid employer when not null
+          
+          Data Quality Notes:
+          - Null for individual insurance plans
         tests:
           - relationships:
               to: ref('dim_employer')
               field: employer_id
               config:
                 severity: warn
-
+              where: "employer_id is not null"
+      
       - name: subscriber_id
-        description: Foreign key to the insurance subscriber
+        description: >
+          Foreign key to insurance subscriber - Links to the primary policy holder
+          
+          Business Rules:
+          - Must reference valid subscriber in stg_opendental__inssub
+          - Cannot be null
+          
+          Data Quality Notes:
+          - May have referential integrity issues in source data
         tests:
           - not_null
           - relationships:
@@ -128,202 +151,407 @@ models:
               field: inssub_id
               config:
                 severity: warn
-
+      
       - name: patient_id
-        description: Foreign key to the patient
+        description: >
+          Foreign key to patient - Links to the patient covered by this insurance plan
+          
+          Business Rules:
+          - Must reference valid patient in dim_patient
+          - May be null for template plans
+          
+          Data Quality Notes:
+          - May be null for benefit templates
         tests:
           - relationships:
               to: ref('dim_patient')
               field: patient_id
               config:
                 severity: warn
-
+              where: "patient_id is not null"
+      
+      # Business Attributes
       - name: plan_type
-        description: Type of insurance plan (e.g., PPO, HMO, Indemnity)
+        description: >
+          Type of insurance plan - Categorizes the insurance plan structure
+          
+          Business Rules:
+          - Must be one of the accepted plan types
+          - Cannot be null
+          
+          Plan Types:
+          - PPO = Preferred Provider Organization
+          - HMO = Health Maintenance Organization
+          - Indemnity = Traditional fee-for-service
+          - DHMO = Dental Health Maintenance Organization
+          - EPO = Exclusive Provider Organization
         tests:
           - not_null
           - accepted_values:
               values: ['PPO', 'HMO', 'Indemnity', 'DHMO', 'EPO']
-
+      
       - name: group_number
-        description: Insurance group number
+        description: >
+          Insurance group number - Unique identifier for the insurance group
+          
+          Business Rules:
+          - Cannot be null
+          - Must be unique within carrier
         tests:
           - not_null
-
+      
       - name: group_name
-        description: Name of the insurance group
+        description: >
+          Name of the insurance group - Human-readable group identifier
+          
+          Business Rules:
+          - Cannot be null
+          - Should be descriptive and meaningful
         tests:
           - not_null
-
+      
       - name: carrier_name
-        description: Name of the insurance carrier
+        description: >
+          Name of the insurance carrier - The insurance company name
+          
+          Business Rules:
+          - Cannot be null
+          - Should match carrier table name
         tests:
           - not_null
-
+      
       - name: employer_name
-        description: Name of the employer (if applicable)
-
+        description: >
+          Name of the employer - Company name for group plans
+          
+          Business Rules:
+          - May be null for individual plans
+          - Should match employer table name when not null
+      
       - name: employer_city
-        description: City of the employer (if applicable)
-
+        description: >
+          City of the employer - Geographic location for group plans
+          
+          Business Rules:
+          - May be null for individual plans
+          - Should be valid city name when not null
+      
       - name: employer_state
-        description: State of the employer (if applicable)
-
+        description: >
+          State of the employer - Geographic location for group plans
+          
+          Business Rules:
+          - May be null for individual plans
+          - Should be valid state abbreviation when not null
+      
       - name: benefit_details
         description: >
-          JSON array containing detailed benefit information for the plan.
-          Includes coverage rules, procedure-specific benefits, and limitations.
+          JSON array containing detailed benefit information for the plan
+          
+          Business Rules:
+          - Must be valid JSON structure
+          - Cannot be null
+          - Contains coverage rules, procedure-specific benefits, and limitations
+          
+          Data Quality Notes:
+          - JSON structure must be parseable
         tests:
           - not_null
-
+      
+      # Status Flags
       - name: is_active
-        description: Flag indicating if the insurance plan is currently active
+        description: >
+          Flag indicating if the insurance plan is currently active
+          
+          Logic:
+          - true when: Plan is currently active and in use
+          - false when: Plan is inactive, terminated, or suspended
+          
+          Business Impact:
+          - Critical for filtering active plans in analysis
         tests:
           - not_null
-
+          - accepted_values:
+              values: [true, false]
+      
       - name: is_incomplete_record
-        description: Flag indicating if the insurance plan record is incomplete
+        description: >
+          Flag indicating if the insurance plan record is incomplete
+          
+          Logic:
+          - true when: Record has missing critical information
+          - false when: Record has all required information
+          
+          Business Impact:
+          - Identifies records that may need data cleanup
         tests:
           - not_null
-
+          - accepted_values:
+              values: [true, false]
+      
       - name: hide_from_verify_list
-        description: Flag indicating if the plan should be hidden from verification list
+        description: >
+          Flag indicating if the plan should be hidden from verification list
+          
+          Logic:
+          - true when: Plan should not appear in verification workflows
+          - false when: Plan should appear in verification workflows
+          
+          Business Impact:
+          - Controls which plans appear in operational workflows
         tests:
           - not_null
-
+          - accepted_values:
+              values: [true, false]
+      
       - name: verification_date
-        description: Date when the insurance plan was last verified
-
+        description: >
+          Date when the insurance plan was last verified
+          
+          Business Rules:
+          - May be null for unverified plans
+          - Should be within 90 days for active plans
+          
+          Data Quality Notes:
+          - Null indicates unverified status
+      
       - name: network_status_current
-        description: Current network status based on verification date and active status
+        description: >
+          Current network status based on verification date and active status
+          
+          Status Values:
+          - unverified = No verification date recorded
+          - expired = Verification date is older than 90 days
+          - active = Currently active and verified
+          - inactive = Not currently active
+          
+          Business Rules:
+          - Must be one of the accepted status values
+          - Cannot be null
         tests:
           - not_null
           - accepted_values:
               values: ['unverified', 'expired', 'active', 'inactive']
-
+      
+      # Performance Metrics
       - name: total_claims
-        description: Total number of claims submitted for this plan
+        description: >
+          Total number of claims submitted for this plan
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Cannot be null
+          - Aggregated from claim details
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 999999
+      
       - name: approved_claims
-        description: Number of approved claims for this plan
+        description: >
+          Number of approved claims for this plan
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Cannot be null
+          - Cannot exceed total_claims
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 999999
+      
       - name: denied_claims
-        description: Number of denied claims for this plan
+        description: >
+          Number of denied claims for this plan
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Cannot be null
+          - Cannot exceed total_claims
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 999999
+      
       - name: pending_claims
-        description: Number of pending claims for this plan
+        description: >
+          Number of pending claims for this plan
+          
+          Business Rules:
+          - Must be non-negative integer
+          - Cannot be null
+          - Cannot exceed total_claims
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 999999
+      
       - name: total_billed_amount
-        description: Total amount billed to this insurance plan
+        description: >
+          Total amount billed to this insurance plan
+          
+          Business Rules:
+          - Must be non-negative decimal
+          - Cannot be null
+          - Aggregated from claim details
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 999999999.99
+      
       - name: total_paid_amount
-        description: Total amount paid by the insurance carrier
+        description: >
+          Total amount paid by the insurance carrier
+          
+          Business Rules:
+          - Must be non-negative decimal
+          - Cannot be null
+          - Cannot exceed total_billed_amount
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 999999999.99
+      
       - name: average_payment_time_days
-        description: Average number of days for the carrier to process payments
+        description: >
+          Average number of days for the carrier to process payments
+          
+          Business Rules:
+          - Must be non-negative decimal
+          - Cannot be null
+          - Calculated from payment timing data
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+      
       - name: claim_approval_rate
-        description: Percentage of claims approved
+        description: >
+          Percentage of claims approved
+          
+          Business Rules:
+          - Must be between 0 and 100
+          - Cannot be null
+          - Calculated as (approved_claims / total_claims) * 100
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
       - name: average_reimbursement_rate
-        description: Percentage of billed amount reimbursed
+        description: >
+          Percentage of billed amount reimbursed
+          
+          Business Rules:
+          - Must be between 0 and 100
+          - Cannot be null
+          - Calculated as (total_paid_amount / total_billed_amount) * 100
         tests:
           - not_null
-
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
       - name: payment_velocity_score
-        description: Categorized payment speed rating
+        description: >
+          Categorized payment speed rating
+          
+          Categories:
+          - excellent = Payment within 15 days
+          - good = Payment within 30 days
+          - average = Payment within 45 days
+          - poor = Payment over 45 days
+          - unknown = Insufficient data for categorization
+          
+          Business Rules:
+          - Must be one of the accepted categories
+          - Cannot be null
         tests:
           - not_null
           - accepted_values:
               values: ['excellent', 'good', 'average', 'poor', 'unknown']
-
-      - name: _created_at
-        description: Timestamp when the record was created in the source system
-        tests:
-          - not_null
-
-      - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
-        tests:
-          - not_null
-
+      
+      # Required Metadata Columns
       - name: _loaded_at
-        description: Timestamp when the record was loaded into the data warehouse
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
-
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - insurance_plan_id
-            - carrier_id
-
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - insurance_plan_id
-            - patient_id
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to source created_at. May be null for template plans."
+        tests:
+          - not_null:
+              where: "is_incomplete_record = false"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to source updated_at."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null
 
     meta:
       owner: "Data Team"
       contains_pii: true
       contains_phi: true
-      refresh_frequency: "Daily"
-      business_owner: "Insurance Operations Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This dimension table is used for all insurance-related analysis and reporting.
-        
-        ## Key Use Cases
-        - Insurance plan analysis
-          * Plan mix and distribution
-          * Network status tracking
-          * Benefit coverage analysis
-          * Verification compliance
-        
-        - Claim performance
-          * Approval rates
-          * Payment velocity
-          * Reimbursement rates
-          * Denial analysis
-        
-        - Financial analysis
-          * Billed vs paid amounts
-          * Payment timing
-          * Write-off analysis
-          * Revenue cycle metrics
-        
-        - Operational metrics
-          * Verification status
-          * Network participation
-          * Plan maintenance
-          * Coverage updates
-        
-        ## Common Analysis Patterns
-        - Plan type distribution
-        - Network status analysis
-        - Payment performance
-        - Benefit coverage analysis
-        - Claim approval rates
-        - Reimbursement analysis
-        
-        ## Performance Optimization
-        - Use insurance_plan_id for joins to fact tables
-        - Leverage pre-calculated metrics
-        - Utilize benefit_details for coverage analysis
-        - Apply network status for verification tracking 
+      business_process: "Insurance Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per insurance plan"
+      primary_consumers: ["Insurance Operations Team", "Finance Team", "Clinical Operations Team"]
+      data_quality_requirements:
+        - "All insurance plans must have valid carrier_id"
+        - "Active plans must have verification dates within 90 days"
+        - "Benefit details must be valid JSON structure"
+      performance_requirements:
+        - "Sub-second response for insurance_plan_id lookups"
+        - "Efficient filtering on is_active flag"
+        - "Fast joins to fact tables via insurance_plan_id"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100
+          max_value: 100000
+          config:
+            severity: error
+            description: "Insurance plan count should be within expected business range"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "claim_approval_rate >= 0 and claim_approval_rate <= 100"
+          config:
+            severity: error
+            description: "Claim approval rate must be a valid percentage"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "average_reimbursement_rate >= 0 and average_reimbursement_rate <= 100"
+          config:
+            severity: error
+            description: "Average reimbursement rate must be a valid percentage"
+      
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - insurance_plan_id
+            - carrier_id
+      
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - insurance_plan_id
+            - patient_id 

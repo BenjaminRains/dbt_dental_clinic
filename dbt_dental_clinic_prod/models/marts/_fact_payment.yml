@@ -1,0 +1,905 @@
+version: 2
+
+models:
+  - name: fact_payment
+    description: >
+      Fact table containing individual payment transactions and financial activity.
+      This model serves as the foundation for payment-level analysis and reporting,
+      providing detailed information about each payment transaction and its associated
+      measures, dimensions, and business context.
+      
+      ## Business Context
+      The payment fact table is a critical component of our dimensional model, enabling:
+      - Individual payment transaction analysis
+      - Revenue cycle management and cash flow tracking
+      - Payment method and source analysis for operational insights
+      - Financial categorization and timing analysis
+      - Split payment allocation and validation tracking
+      - Performance metrics and KPIs for revenue cycle management
+      
+      ## Technical Specifications
+      - Grain: One row per payment (one row per payment_id)
+      - Source: stg_opendental__payment (primary source)
+      - Refresh: Daily
+      - Dependencies: 
+        * stg_opendental__payment (core payment data)
+        * stg_opendental__paysplit (payment allocation information)
+        * dim_patient (patient dimension lookups)
+        * dim_provider (provider dimension lookups)
+      
+      ## Business Logic
+      ### Payment Processing
+      - Complete payment transaction tracking with comprehensive financial categorization
+      - Payment method and source classification for operational analysis
+      - Split payment allocation and validation with mismatch detection
+      - Financial direction classification (Income/Refund/Zero) and size categorization
+      
+      ### Measure Calculations
+      - Payment amount validation and categorization by size ranges
+      - Timing analysis for payment processing efficiency (Same Day, Backdated, Future Dated)
+      - Split payment aggregation and validation against total payment amounts
+      - Boolean flag generation for payment type identification
+      
+      ### Status and Flag Logic
+      - Payment type classification with business-friendly descriptions
+      - Insurance vs patient payment identification
+      - Adjustment and refund flag generation
+      - Recurring payment and zero payment detection
+      
+      ## Data Quality Notes
+      - Payment plan functionality not used by clinic (payment_plan_id set to null)
+      - Split amounts validated against payment amounts with mismatch flagging
+      - Zero payments identified and flagged for analysis
+      - Provider not directly associated with payment (provider_id set to null)
+      - Some fields not available in source (receipt_date, receipt_number, external_reference, payment_software)
+      
+      ## Performance Considerations
+      - Indexed on payment_id (unique), patient_id, provider_id, payment_date, _updated_at
+      - Payment splits aggregated to avoid N+1 query patterns
+      - Date extractions performed at mart level for analytical queries
+      - Large payment amounts (>$5K) flagged but expected in dental practice
+      
+      ## Usage Notes
+      - Use payment_date for time-based analysis to ensure consistency
+      - Filter by payment_direction for income vs refund analysis
+      - Check splits_match_payment flag for data quality validation
+      - Use payment_size_category for financial analysis segmentation
+      - Consider payment_timing for operational efficiency analysis
+    
+    meta:
+      owner: "revenue_cycle_management_team"
+      contains_pii: true
+      business_process: "Revenue Cycle Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per payment transaction"
+      primary_consumers: ["finance_team", "operations_team", "executive_team"]
+      data_quality_requirements:
+        - "Payment amounts must be validated against split allocations"
+        - "Payment types must be properly categorized for financial reporting"
+        - "Timing analysis must be accurate for operational metrics"
+      performance_requirements:
+        - "Query response time < 5 seconds for standard payment reports"
+        - "Support for date range filtering without performance degradation"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 10000
+          max_value: 20000
+          config:
+            severity: error
+            description: "Expected payment volume based on clinic size and historical patterns"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "payment_amount = total_split_amount OR total_split_amount IS NULL"
+          config:
+            severity: warn
+            description: "Payment amounts should match split allocations when splits exist"
+    
+    columns:
+      # Primary Key
+      - name: payment_id
+        description: >
+          Primary key - Unique identifier for each payment transaction
+          
+          Business Rules:
+          - Must be unique across all payment records
+          - Links to payment splits for allocation tracking
+          - Used for payment reconciliation and audit trails
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Foreign Keys
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Links payment to the patient who made or received the payment
+          
+          Business Rules:
+          - Required for all payment transactions
+          - Enables patient-level financial analysis
+          - Used for account balance calculations
+          
+          Data Quality Notes:
+          - Must reference valid patient record
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Provider associated with payment (currently null)
+          
+          Business Rules:
+          - Currently set to null as provider not directly associated with payment
+          - Provider information available through payment splits
+          - May be populated in future iterations
+          
+          Data Quality Notes:
+          - Always null in current implementation
+        tests:
+          - accepted_values:
+              values: [null]
+              severity: warn
+      
+      - name: clinic_id
+        description: >
+          Foreign key to clinic - Identifies which clinic location processed the payment
+          
+          Business Rules:
+          - Required for multi-location practice management
+          - Used for clinic-level financial reporting
+          - May be null for older payments before clinic tracking
+          
+          Data Quality Notes:
+          - May be null for historical payments
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              severity: warn
+              where: "clinic_id IS NOT NULL"
+      
+      - name: payment_type_id
+        description: >
+          Foreign key to payment type - Identifies the type of payment transaction
+          
+          Business Rules:
+          - Required for payment categorization
+          - Used for financial reporting and analysis
+          - Maps to business-friendly payment_type description
+          
+          Data Quality Notes:
+          - Must be valid payment type ID
+        tests:
+          - not_null
+          - positive_values
+      
+      - name: deposit_id
+        description: >
+          Foreign key to deposit - Links payment to bank deposit batch
+          
+          Business Rules:
+          - Used for bank reconciliation and deposit tracking
+          - May be null for payments not yet deposited
+          - Required for cash flow analysis
+          
+          Data Quality Notes:
+          - May be null for pending deposits
+        tests:
+          - relationships:
+              to: ref('stg_opendental__deposit')
+              field: deposit_id
+              severity: warn
+              where: "deposit_id IS NOT NULL"
+      
+      - name: payment_plan_id
+        description: >
+          Foreign key to payment plan - Currently not used by clinic
+          
+          Business Rules:
+          - Set to null as payment plan functionality not implemented
+          - Reserved for future payment plan features
+          - No current business impact
+          
+          Data Quality Notes:
+          - Always null in current implementation
+        tests:
+          - accepted_values:
+              values: [null]
+              severity: warn
+      
+      # Date and Time
+      - name: payment_date
+        description: >
+          Date when the payment was made by the patient or processed by the system
+          
+          Business Rules:
+          - Used for financial reporting and aging analysis
+          - Determines payment timing categorization
+          - Required for cash flow analysis
+          
+          Data Quality Notes:
+          - Must be valid business date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '2023-01-01'
+              max_value: 'current_date'
+              severity: error
+      
+      - name: entry_date
+        description: >
+          Date when the payment was entered into the OpenDental system by staff
+          
+          Business Rules:
+          - Used for audit tracking and workflow analysis
+          - Determines payment timing categorization
+          - Required for operational metrics
+          
+          Data Quality Notes:
+          - Must be valid business date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '2023-01-01'
+              max_value: 'current_date'
+              severity: error
+      
+      - name: receipt_date
+        description: >
+          Date when payment receipt was generated (currently null)
+          
+          Business Rules:
+          - Not available in current source system
+          - Reserved for future receipt tracking
+          - No current business impact
+          
+          Data Quality Notes:
+          - Always null in current implementation
+        tests:
+          - accepted_values:
+              values: [null]
+              severity: warn
+      
+      - name: payment_year
+        description: >
+          Year extracted from payment_date for temporal analysis
+          
+          Business Rules:
+          - Used for year-over-year financial analysis
+          - Enables trend analysis and forecasting
+          - Required for annual reporting
+          
+          Data Quality Notes:
+          - Derived from payment_date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2023
+              max_value: 2030
+              severity: error
+      
+      - name: payment_month
+        description: >
+          Month extracted from payment_date for temporal analysis
+          
+          Business Rules:
+          - Used for monthly financial analysis
+          - Enables seasonal trend analysis
+          - Required for monthly reporting
+          
+          Data Quality Notes:
+          - Derived from payment_date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+              severity: error
+      
+      - name: payment_quarter
+        description: >
+          Quarter extracted from payment_date for temporal analysis
+          
+          Business Rules:
+          - Used for quarterly financial analysis
+          - Enables quarterly trend analysis
+          - Required for quarterly reporting
+          
+          Data Quality Notes:
+          - Derived from payment_date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+              severity: error
+      
+      - name: payment_day_of_week
+        description: >
+          Day of week extracted from payment_date for temporal analysis
+          
+          Business Rules:
+          - Used for weekly pattern analysis
+          - Enables operational efficiency analysis
+          - Required for workflow optimization
+          
+          Data Quality Notes:
+          - Derived from payment_date (0=Sunday, 6=Saturday)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 6
+              severity: error
+      
+      # Payment Details
+      - name: payment_type
+        description: >
+          Business-friendly description of payment type:
+          Patient = Direct patient payment
+          Insurance = Insurance company payment
+          Partial = Partial payment
+          PrePayment = Prepayment for future services
+          Adjustment = Financial adjustment
+          Refund = Payment refund to patient
+          Unknown = Unrecognized payment type
+          
+          Business Rules:
+          - Used for payment categorization and reporting
+          - Determines payment processing workflow
+          - Required for financial analysis
+          
+          Data Quality Notes:
+          - Derived from payment_type_id
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Patient', 'Insurance', 'Partial', 'PrePayment', 'Adjustment', 'Refund', 'Unknown']
+              severity: error
+      
+      - name: payment_method
+        description: >
+          Payment method used for transaction (currently 'Unknown')
+          
+          Business Rules:
+          - Not available in current source system
+          - Reserved for future payment method tracking
+          - No current business impact
+          
+          Data Quality Notes:
+          - Always 'Unknown' in current implementation
+        tests:
+          - accepted_values:
+              values: ['Unknown']
+              severity: warn
+      
+      - name: payment_amount
+        description: >
+          Dollar amount of the payment transaction
+          
+          Calculation Logic:
+          - Positive amounts represent income received
+          - Negative amounts represent refunds issued
+          - Zero amounts represent administrative entries
+          
+          Business Rules:
+          - Used for financial reporting and analysis
+          - Must be validated against split allocations
+          - Required for revenue calculations
+          
+          Data Quality Notes:
+          - High-value payments (>$5K) are flagged but expected
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -50000
+              max_value: 50000
+              severity: warn
+      
+      - name: payment_note
+        description: >
+          Additional notes about the payment entered by staff
+          
+          Business Rules:
+          - Contains important context about payment circumstances
+          - Used for payment reconciliation and audit trails
+          - May contain special instructions or processing notes
+          
+          Data Quality Notes:
+          - May be null for payments without notes
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 1000
+              row_condition: "payment_note IS NOT NULL"
+              severity: warn
+      
+      - name: check_number
+        description: >
+          Check number for check payments
+          
+          Business Rules:
+          - Used for check payment tracking and reconciliation
+          - Required for bank deposit processing
+          - May be null for non-check payments
+          
+          Data Quality Notes:
+          - May be null for electronic payments
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 25
+              row_condition: "check_number IS NOT NULL"
+              severity: warn
+      
+      - name: bank_branch
+        description: >
+          Bank branch information for check payments
+          
+          Business Rules:
+          - Used for check processing and bank reconciliation
+          - Required for multi-branch bank processing
+          - May be null for non-check payments
+          
+          Data Quality Notes:
+          - May be null for electronic payments
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 25
+              row_condition: "bank_branch IS NOT NULL"
+              severity: warn
+      
+      - name: is_recurring
+        description: >
+          Flag indicating if this is a recurring credit card payment
+          
+          Logic:
+          - true when: Payment is part of recurring credit card setup
+          - false when: Payment is one-time transaction
+          
+          Business Impact:
+          - Used for recurring payment analysis and forecasting
+          - Determines payment processing workflow
+          - Required for cash flow planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: external_id
+        description: >
+          External reference ID from third-party systems
+          
+          Business Rules:
+          - Used for payment reconciliation with external systems
+          - Links to payment processor or insurance system records
+          - May be null for internal payments
+          
+          Data Quality Notes:
+          - May be null for payments without external references
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 255
+              row_condition: "external_id IS NOT NULL"
+              severity: warn
+      
+      # Payment Source Information
+      - name: payment_source
+        description: >
+          Source system or method that generated the payment record
+          
+          Categories:
+          - Practice = Generated within the practice management system
+          - External = Generated by external system or third party
+          
+          Business Rules:
+          - Used for payment source analysis
+          - Determines payment processing workflow
+          - Required for operational metrics
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Practice', 'External']
+              severity: error
+      
+      # Processing Information
+      - name: processing_status
+        description: >
+          Processing status indicating where the payment is in the workflow
+          
+          Business Rules:
+          - Used for payment workflow tracking
+          - Determines payment completion status
+          - Required for operational metrics
+          
+          Data Quality Notes:
+          - Boolean field from source system
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: receipt_number
+        description: >
+          Receipt number for payment (currently null)
+          
+          Business Rules:
+          - Not available in current source system
+          - Reserved for future receipt tracking
+          - No current business impact
+          
+          Data Quality Notes:
+          - Always null in current implementation
+        tests:
+          - accepted_values:
+              values: [null]
+              severity: warn
+      
+      - name: external_reference
+        description: >
+          External reference for payment (currently null)
+          
+          Business Rules:
+          - Not available in current source system
+          - Reserved for future external reference tracking
+          - No current business impact
+          
+          Data Quality Notes:
+          - Always null in current implementation
+        tests:
+          - accepted_values:
+              values: [null]
+              severity: warn
+      
+      - name: payment_software
+        description: >
+          Payment software used (currently null)
+          
+          Business Rules:
+          - Not available in current source system
+          - Reserved for future payment software tracking
+          - No current business impact
+          
+          Data Quality Notes:
+          - Always null in current implementation
+        tests:
+          - accepted_values:
+              values: [null]
+              severity: warn
+      
+      # Split Information
+      - name: split_count
+        description: >
+          Number of payment splits associated with this payment
+          
+          Business Rules:
+          - Used for split payment analysis
+          - Indicates payment complexity
+          - Required for payment validation
+          
+          Data Quality Notes:
+          - May be null for payments without splits
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              where: "split_count IS NOT NULL"
+      
+      - name: total_split_amount
+        description: >
+          Total amount allocated across all payment splits
+          
+          Business Rules:
+          - Must match payment_amount for data integrity
+          - Used for payment validation and reconciliation
+          - Required for split payment analysis
+          
+          Data Quality Notes:
+          - May be null for payments without splits
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -50000
+              max_value: 50000
+              severity: warn
+              where: "total_split_amount IS NOT NULL"
+      
+      - name: split_provider_ids
+        description: >
+          Array of provider IDs associated with payment splits
+          
+          Business Rules:
+          - Used for provider-level payment analysis
+          - Indicates multi-provider payment allocations
+          - Required for provider performance metrics
+          
+          Data Quality Notes:
+          - May be null for payments without splits
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 100
+              row_condition: "split_provider_ids IS NOT NULL"
+              severity: warn
+      
+      - name: split_procedure_ids
+        description: >
+          Array of procedure IDs associated with payment splits
+          
+          Business Rules:
+          - Used for procedure-level payment analysis
+          - Indicates multi-procedure payment allocations
+          - Required for procedure revenue analysis
+          
+          Data Quality Notes:
+          - May be null for payments without splits
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 100
+              row_condition: "split_procedure_ids IS NOT NULL"
+              severity: warn
+      
+      - name: split_patient_ids
+        description: >
+          Array of patient IDs associated with payment splits
+          
+          Business Rules:
+          - Used for patient-level payment analysis
+          - Indicates multi-patient payment allocations
+          - Required for patient account analysis
+          
+          Data Quality Notes:
+          - May be null for payments without splits
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+              max_value: 100
+              row_condition: "split_patient_ids IS NOT NULL"
+              severity: warn
+      
+      # Validation Flags
+      - name: splits_match_payment
+        description: >
+          Flag indicating if payment amount matches total split amount
+          
+          Logic:
+          - true when: payment_amount equals total_split_amount
+          - false when: payment_amount does not equal total_split_amount
+          
+          Business Impact:
+          - Used for data quality validation
+          - Indicates payment reconciliation issues
+          - Required for financial accuracy
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: has_multiple_splits
+        description: >
+          Flag indicating if payment has multiple splits
+          
+          Logic:
+          - true when: split_count > 1
+          - false when: split_count <= 1
+          
+          Business Impact:
+          - Used for payment complexity analysis
+          - Indicates multi-allocation payments
+          - Required for operational metrics
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      # Financial Categorization
+      - name: payment_direction
+        description: >
+          Financial direction of the payment transaction
+          
+          Categories:
+          - Income = Positive payment amount (money received)
+          - Refund = Negative payment amount (money returned)
+          - Zero = Zero payment amount (administrative entry)
+          
+          Business Rules:
+          - Used for financial reporting and analysis
+          - Determines cash flow impact
+          - Required for revenue calculations
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Income', 'Refund', 'Zero']
+              severity: error
+      
+      - name: payment_size_category
+        description: >
+          Size categorization of the payment amount
+          
+          Categories:
+          - Small = $0 to $50
+          - Medium = $50 to $200
+          - Large = $200 to $1,000
+          - Very Large = Over $1,000
+          - Negative = Negative amounts (refunds)
+          
+          Business Rules:
+          - Used for payment analysis and segmentation
+          - Determines payment processing requirements
+          - Required for financial reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Small', 'Medium', 'Large', 'Very Large', 'Negative']
+              severity: error
+      
+      # Timing Analysis
+      - name: payment_timing
+        description: >
+          Timing classification of the payment relative to entry date
+          
+          Categories:
+          - Same Day = Payment date equals entry date
+          - Backdated = Payment date before entry date
+          - Future Dated = Payment date after entry date
+          
+          Business Rules:
+          - Used for operational efficiency analysis
+          - Indicates payment processing workflow
+          - Required for timing metrics
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Same Day', 'Backdated', 'Future Dated']
+              severity: error
+      
+      # Boolean Flags
+      - name: is_insurance_payment
+        description: >
+          Flag indicating if this is an insurance payment
+          
+          Logic:
+          - true when: payment_type_id = 1
+          - false when: payment_type_id != 1
+          
+          Business Impact:
+          - Used for insurance payment analysis
+          - Determines payment processing workflow
+          - Required for revenue cycle metrics
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: is_patient_payment
+        description: >
+          Flag indicating if this is a patient payment
+          
+          Logic:
+          - true when: payment_type_id = 0
+          - false when: payment_type_id != 0
+          
+          Business Impact:
+          - Used for patient payment analysis
+          - Determines payment processing workflow
+          - Required for revenue cycle metrics
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: is_adjustment
+        description: >
+          Flag indicating if this is a financial adjustment
+          
+          Logic:
+          - true when: payment_type_id = 4
+          - false when: payment_type_id != 4
+          
+          Business Impact:
+          - Used for adjustment analysis
+          - Determines payment processing workflow
+          - Required for financial reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: is_refund
+        description: >
+          Flag indicating if this is a refund payment
+          
+          Logic:
+          - true when: payment_type_id = 5
+          - false when: payment_type_id != 5
+          
+          Business Impact:
+          - Used for refund analysis
+          - Determines payment processing workflow
+          - Required for financial reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: is_zero_payment
+        description: >
+          Flag indicating if this is a zero amount payment
+          
+          Logic:
+          - true when: payment_amount = 0
+          - false when: payment_amount != 0
+          
+          Business Impact:
+          - Used for administrative payment analysis
+          - Indicates system adjustments or corrections
+          - Required for data quality monitoring
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      - name: is_recurring_payment
+        description: >
+          Flag indicating if this is a recurring payment
+          
+          Logic:
+          - true when: is_recurring_cc = true
+          - false when: is_recurring_cc = false
+          
+          Business Impact:
+          - Used for recurring payment analysis
+          - Determines payment processing workflow
+          - Required for cash flow planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              severity: error
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to entry_date. May be null for system-generated payments."
+        tests:
+          - not_null:
+              where: "_created_at IS NOT NULL"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to date_updated."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

@@ -6,7 +6,7 @@ models:
       Date dimension table providing comprehensive time intelligence and calendar attributes.
       This model serves as the foundation for all time-based analysis in the dental practice,
       supporting both operational and financial reporting needs.
-
+      
       ## Business Context
       The date dimension is a critical component of our dimensional model, enabling:
       - Time-based analysis across all business processes
@@ -14,61 +14,77 @@ models:
       - Business day calculations for operational metrics
       - Holiday-adjusted performance analysis
       - Rolling period comparisons
-
+      - Historical tracking and trend analysis
+      - Cross-system integration and data consistency
+      
       ## Technical Specifications
-      - Grain: One row per calendar day
-      - Date Range: 2020-01-01 through 2030-12-31
+      - Grain: One row per calendar day (one row per date_id)
+      - Source: Self-contained date generation using PostgreSQL generate_series
+      - Date Range: 2020-01-01 through 2030-12-31 (11 years)
       - Refresh: Daily (static data, no incremental processing needed)
       - Dependencies: None (self-contained date generation)
-
+      
       ## Business Logic
       ### Calendar Attributes
       - Standard calendar year, quarter, month, and day attributes
       - Day of week (0-6, where 0 is Sunday, 6 is Saturday)
-      - Month and day names for reporting
-
+      - Month and day names for reporting and visualization
+      
       ### Fiscal Periods
       - Fiscal year starts in October (Q1: Oct-Dec)
       - Fiscal quarters aligned with business planning cycles
       - Fiscal year calculation: Current year + 1 if month >= 10
-
+      
       ### Business Days
       - Weekdays (Monday-Friday) excluding holidays
       - Sequential business day numbering within each month
       - Holiday calendar includes major US federal holidays
       - Business day flags for operational metrics
-
+      
       ### Time Intelligence
       - Rolling 12-month window for trend analysis
       - Prior year period comparison support
       - Holiday-adjusted performance indicators
       - Weekend vs. weekday differentiation
-
-      ## Usage Guidelines
-      ### Common Time Periods
-      - Current Month: WHERE is_rolling_12_months = true
-      - Prior Year: WHERE is_same_period_prior_year = true
-      - Business Days: WHERE is_business_day = true
-      - Fiscal Periods: GROUP BY fiscal_year, fiscal_quarter
-
-      ### Performance Considerations
+      
+      ## Data Quality Notes
+      - Date range: 2020-01-01 through 2030-12-31 (11 years)
+      - Holiday calendar includes major US federal holidays
+      - Business day logic excludes weekends and holidays
+      - Rolling period flags are calculated relative to current_date
+      
+      ## Performance Considerations
       - Pre-calculated flags minimize runtime calculations
       - Indexed on date_id for optimal join performance
-      - Static nature allows for materialized views
-
-      ### Common Joins
-      - Fact tables: ON fact.date_id = dim_date.date_id
-      - Appointment tables: ON apt.appointment_date = dim_date.date_day
-      - Financial tables: ON fin.transaction_date = dim_date.date_day
+      - Static nature allows for materialized table optimization
+      - Optimized for date range filtering and fact table joins
+      
+      ## Usage Notes
+      - Use date_id for joins to fact tables for optimal performance
+      - Leverage pre-calculated flags for filtering instead of runtime calculations
+      - Utilize business day calculations for operational metrics
+      - Apply holiday adjustments for accurate comparisons
+      - Rolling period flags automatically update based on current_date
 
     columns:
       - name: date_id
         description: >
           Primary key for the date dimension, in YYYY-MM-DD format.
           Used as the standard join key for all fact tables and time-based analysis.
+          
+          Business Rules:
+          - Must be unique across all dates
+          - Format must be YYYY-MM-DD for consistency
+          - Used as primary join key for all fact tables
         tests:
           - unique
           - not_null
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 10
+              max_value: 10
+              config:
+                severity: error
+                description: "Date ID must be exactly 10 characters in YYYY-MM-DD format"
 
       - name: date_day
         description: >
@@ -136,31 +152,71 @@ models:
 
       - name: is_weekend
         description: >
-          Boolean flag indicating if the date falls on a weekend (Saturday or Sunday).
-          Used to filter out weekend days from operational metrics.
+          Flag indicating if the date falls on a weekend (Saturday or Sunday).
+          
+          Logic:
+          - true when: day_of_week is 0 (Sunday) or 6 (Saturday)
+          - false when: day_of_week is 1-5 (Monday through Friday)
+          
+          Business Impact:
+          - Used to filter out weekend days from operational metrics
+          - Critical for business day calculations and operational reporting
+          - Enables weekend vs. weekday performance analysis
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: is_weekday
         description: >
-          Boolean flag indicating if the date falls on a weekday (Monday through Friday).
-          Used to focus analysis on business operations.
+          Flag indicating if the date falls on a weekday (Monday through Friday).
+          
+          Logic:
+          - true when: day_of_week is 1-5 (Monday through Friday)
+          - false when: day_of_week is 0 (Sunday) or 6 (Saturday)
+          
+          Business Impact:
+          - Used to focus analysis on business operations
+          - Critical for operational metrics and business day calculations
+          - Enables weekday-specific performance analysis
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: is_holiday
         description: >
-          Boolean flag indicating if the date is a recognized US holiday.
-          Used to adjust operational metrics for holiday closures.
+          Flag indicating if the date is a recognized US federal holiday.
+          
+          Logic:
+          - true when: date matches US federal holiday calendar
+          - false when: date is not a federal holiday
+          
+          Business Impact:
+          - Used to adjust operational metrics for holiday closures
+          - Critical for business day calculations and holiday-adjusted reporting
+          - Enables accurate performance comparisons excluding holiday impacts
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: is_business_day
         description: >
-          Boolean flag indicating if the date is a business day (weekday and not a holiday).
-          Primary filter for operational metrics and business day calculations.
+          Flag indicating if the date is a business day (weekday and not a holiday).
+          
+          Logic:
+          - true when: is_weekday = true AND is_holiday = false
+          - false when: is_weekday = false OR is_holiday = true
+          
+          Business Impact:
+          - Primary filter for operational metrics and business day calculations
+          - Critical for operational reporting and business day averages
+          - Enables accurate operational performance analysis
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: business_day_of_month
         description: >
@@ -188,85 +244,126 @@ models:
 
       - name: is_rolling_12_months
         description: >
-          Boolean flag indicating if the date falls within the last 12 months from current date.
-          Used for rolling year analysis and trend calculations.
+          Flag indicating if the date falls within the last 12 months from current date.
+          
+          Logic:
+          - true when: date_day between (current_date - interval '12 months') and current_date
+          - false when: date_day is outside the 12-month rolling window
+          
+          Business Impact:
+          - Used for rolling year analysis and trend calculations
+          - Critical for rolling performance metrics and trend analysis
+          - Automatically updates as current_date changes
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: is_same_period_prior_year
         description: >
-          Boolean flag indicating if the date falls within the same period last year (12-24 months ago).
-          Used for year-over-year comparisons and growth analysis.
+          Flag indicating if the date falls within the same period last year (12-24 months ago).
+          
+          Logic:
+          - true when: date_day between (current_date - interval '24 months') and (current_date - interval '12 months')
+          - false when: date_day is outside the prior year period window
+          
+          Business Impact:
+          - Used for year-over-year comparisons and growth analysis
+          - Critical for performance trend analysis and growth calculations
+          - Automatically updates as current_date changes
         tests:
           - not_null
+          - accepted_values:
+              values: [true, false]
 
       - name: is_holiday_adjusted
         description: >
-          Boolean flag indicating if the date is either a holiday or weekend.
-          Used for holiday-adjusted performance metrics and comparisons.
+          Flag indicating if the date is either a holiday or weekend.
+          
+          Logic:
+          - true when: is_holiday = true OR is_weekend = true
+          - false when: is_holiday = false AND is_weekend = false
+          
+          Business Impact:
+          - Used for holiday-adjusted performance metrics and comparisons
+          - Critical for performance analysis excluding non-business periods
+          - Enables accurate operational comparisons across time periods
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+
+      # Required Metadata Columns (ALL models must have these)
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). For date dimension, this represents when the date record was generated (using current_timestamp)."
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). For date dimension, this represents when the date record was last updated (using current_timestamp)."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
         tests:
           - not_null
 
     tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - date_id
-            - date_day
-            - year
-            - month
-            - day
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 4000
+          max_value: 4100
+          config:
+            severity: error
+            description: "Date dimension should contain approximately 11 years of data (2020-2030)"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "date_id = date_day"
+          config:
+            severity: error
+            description: "date_id and date_day must always match for consistency"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "year >= 2020 and year <= 2030"
+          config:
+            severity: error
+            description: "All dates must fall within the defined date range (2020-2030)"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_business_day = (is_weekday and not is_holiday)"
+          config:
+            severity: error
+            description: "Business day logic must correctly combine weekday and holiday flags"
 
     meta:
       owner: "Data Team"
       contains_pii: false
       contains_phi: false
-      refresh_frequency: "Daily"
-      business_owner: "Finance Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This dimension table is used for all time-based analysis and reporting.
-        
-        ## Key Use Cases
-        - Financial reporting and analysis
-          * Monthly financial statements
-          * Quarterly performance reviews
-          * Annual budget comparisons
-          * Fiscal year reporting
-        
-        - Operational metrics and KPIs
-          * Daily production tracking
-          * Business day averages
-          * Holiday-adjusted performance
-          * Rolling period analysis
-        
-        - Patient appointment scheduling
-          * Business day availability
-          * Holiday calendar integration
-          * Weekend vs. weekday patterns
-          * Seasonal scheduling trends
-        
-        - Provider productivity analysis
-          * Business day productivity
-          * Holiday-adjusted metrics
-          * Rolling period comparisons
-          * Year-over-year growth
-        
-        - Revenue cycle management
-          * Daily collection tracking
-          * Business day collections
-          * Holiday-adjusted metrics
-          * Fiscal period reporting
-        
-        ## Common Analysis Patterns
-        - Month-to-date calculations
-        - Year-over-year comparisons
-        - Rolling 12-month trends
-        - Business day averages
-        - Holiday-adjusted metrics
-        - Fiscal period analysis
-        
-        ## Performance Optimization
-        - Use date_id for joins to fact tables
-        - Leverage pre-calculated flags for filtering
-        - Utilize business day calculations for operational metrics
-        - Apply holiday adjustments for accurate comparisons 
+      business_process: "Time Intelligence and Calendar Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per calendar day"
+      primary_consumers: ["Finance Team", "Operations Team", "Analytics Team"]
+      data_quality_requirements:
+        - "All dates must be unique and sequential"
+        - "Holiday calendar must be accurate and up-to-date"
+        - "Business day calculations must exclude weekends and holidays"
+        - "Fiscal periods must align with business planning cycles"
+        - "Rolling period flags must update correctly relative to current_date"
+      performance_requirements:
+        - "Query performance optimized for date range filtering"
+        - "Join performance optimized for fact table relationships"
+        - "Index strategy supports common analytical patterns"
+        - "Pre-calculated flags minimize runtime calculations" 

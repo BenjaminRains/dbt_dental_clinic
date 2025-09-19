@@ -3,19 +3,130 @@ version: 2
 models:
   - name: dim_patient
     description: >
-      Dimension table containing standardized patient information. This table serves as the central
-      reference for all patient-related data, including demographics, status, financial information,
-      and relationships with other entities in the system.
+      Dimension table containing comprehensive patient information for analytical reporting.
+      This model serves as the primary reference for patient-related analytics and
+      reporting, providing standardized attributes and business logic for consistent
+      analysis across all fact tables and summary marts.
+      
+      ## Business Context
+      The patient dimension is a critical component of our dimensional model, enabling:
+      - Patient demographics analysis and segmentation
+      - Financial balance tracking and aging analysis
+      - Clinical risk assessment and disease management
+      - Provider assignment and care coordination
+      - Family relationship and guarantor management
+      - Historical tracking and trend analysis
+      - Cross-system integration and data consistency
+      
+      ## Technical Specifications
+      - Grain: One row per patient (one row per patient_id)
+      - Source: stg_opendental__patient (primary source)
+      - Refresh: Daily
+      - Dependencies: 
+        * stg_opendental__patient (core patient data)
+        * stg_opendental__patientnote (patient notes and emergency contacts)
+        * stg_opendental__patientlink (family and relationship linkages)
+        * stg_opendental__disease (active disease conditions)
+        * stg_opendental__document (patient document management)
+      
+      ## Business Logic
+      ### Patient Status Management
+      - Patient status codes mapped to business-friendly descriptions (Patient, NonPatient, Inactive, Archived, Deceased, Deleted)
+      - Age categories automatically calculated for business analysis (Minor <18, Adult 18-64, Senior 65+)
+      - Balance status categorization for financial analysis (No Balance, Outstanding Balance, Credit Balance)
+      
+      ### Patient Categorization
+      - Gender standardization (M=Male, F=Female, O=Other, U=Unknown)
+      - Position code mapping (Default, House, Staff, VIP, Other)
+      - Urgency level classification (Normal, High)
+      
+      ### Data Quality Handling
+      - Age calculated from birth_date for consistency across all analyses
+      - Balance fields aggregated from financial transactions with credit/refund support
+      - Disease and document counts from related tables with active status filtering
+      - Array fields for linked patients, diseases, and documents for relationship analysis
+      
+      ## Data Quality Notes
+      - Patient status codes are mapped from numeric to descriptive values for business clarity
+      - Balance fields allow negative values to support credit balances and refunds (up to $25k)
+      - Age calculation handles edge cases and provides consistent business categorization
+      - Array fields may be null for patients without relationships, diseases, or documents
+      
+      ## Performance Considerations
+      - Indexed on patient_id for optimal join performance with fact tables
+      - Provider and clinic indexes for common filtering patterns in analytical queries
+      - Status and date indexes for efficient patient segmentation and trend analysis
+      - Array fields optimized for PostgreSQL array operations and GIN indexing
+      
+      ## Usage Notes
+      - Use age_category for demographic analysis instead of raw age values
+      - Balance fields support both positive (outstanding) and negative (credit) amounts
+      - Linked patient arrays enable family relationship analysis and guarantor identification
+      - Disease arrays track active conditions only (date_stop is null)
+      - Emergency contact information sourced from patient notes for HIPAA compliance
+      - All timestamps are in UTC for consistent temporal analysis across time zones
+    
+    meta:
+      owner: "Clinical Operations Team"
+      contains_pii: true
+      business_process: "Patient Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per patient"
+      primary_consumers: ["Clinical Operations", "Financial Analysis", "Provider Management", "Executive Reporting"]
+      data_quality_requirements:
+        - "Patient identifiers must be unique and not null"
+        - "Financial balances must be within reasonable ranges (-$25k to +$1M)"
+        - "Age calculations must be consistent and non-negative"
+        - "Status codes must map to valid business values"
+      performance_requirements:
+        - "Sub-second response time for patient lookups by ID"
+        - "Efficient joins with fact tables for analytical queries"
+        - "Optimized filtering on common business dimensions"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 100000
+          config:
+            severity: error
+            description: "Patient count should be within expected range for dental practice"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "age >= 0 and age <= 120"
+          config:
+            severity: error
+            description: "Patient age must be reasonable (0-120 years)"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "estimated_balance >= -25000 and estimated_balance <= 1000000"
+          config:
+            severity: error
+            description: "Estimated balance must be within reasonable range (-$25k to +$1M)"
     
     columns:
       - name: patient_id
-        description: Unique identifier for each patient
+        description: >
+          Primary key - Unique identifier for each patient in the system
+          
+          Business Rules:
+          - Must be unique across all patients
+          - Cannot be null or empty
+          - Links to OpenDental source system patient records
+          - Used as foreign key in all fact tables and related dimensions
+          
+          Data Quality Notes:
+          - Source: patient_id from stg_opendental__patient
+          - Used for patient lookups, joins, and data lineage tracking
         tests:
           - unique
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              severity: error
 
       - name: middle_initial
         description: Patient's middle initial
@@ -27,10 +138,26 @@ models:
         description: Patient's preferred name or nickname
 
       - name: gender
-        description: Patient's gender
+        description: >
+          Patient's gender standardized to business values:
+          M = Male
+          F = Female  
+          O = Other
+          U = Unknown
+          
+          Business Rules:
+          - Standardized from OpenDental numeric codes (0=M, 1=F, 2=O, default=U)
+          - Used for demographic analysis and reporting
+          - Required for HIPAA compliance and patient care coordination
+          
+          Data Quality Notes:
+          - Source: gender from stg_opendental__patient (numeric to text mapping)
+          - Unknown (U) used when source data is invalid or missing
         tests:
+          - not_null
           - accepted_values:
-              values: ['M', 'F', 'O', 'U']  # Male, Female, Other, Unknown
+              values: ['M', 'F', 'O', 'U']
+              severity: error
 
       - name: language
         description: Patient's preferred language
@@ -43,12 +170,66 @@ models:
               compare_column: '1900-01-01'
 
       - name: age
-        description: Patient's current age
+        description: >
+          Patient's current age in years
+          
+          Business Rules:
+          - Calculated from birth_date for consistency across all analyses
+          - Used for demographic analysis and age-based business rules
+          - Must be non-negative and reasonable (0-120 years)
+          
+          Data Quality Notes:
+          - Source: age from stg_opendental__patient (calculated field)
+          - Used in age_category calculation for business categorization
+        tests:
+          - not_null:
+              where: "birth_date is not null"
 
-      - name: patient_status
-        description: Current status of the patient (e.g., Active, Inactive)
+      - name: age_category
+        description: >
+          Business categorization of patient age for demographic analysis:
+          Minor = Age less than 18 years
+          Adult = Age between 18 and 64 years  
+          Senior = Age 65 years or older
+          Unknown = Age cannot be determined
+          
+          Business Rules:
+          - Automatically calculated from age field
+          - Used for demographic analysis and reporting
+          - Critical for pediatric vs adult care protocols
+          
+          Data Quality Notes:
+          - Source: Calculated from age field using case statement
+          - Used in business reporting and demographic segmentation
         tests:
           - not_null
+          - accepted_values:
+              values: ['Minor', 'Adult', 'Senior', 'Unknown']
+              severity: error
+
+      - name: patient_status
+        description: >
+          Patient status with standardized business descriptions:
+          Patient = Active patient
+          NonPatient = Non-patient contact
+          Inactive = Inactive patient
+          Archived = Archived patient record
+          Deceased = Deceased patient
+          Deleted = Soft-deleted patient
+          
+          Business Rules:
+          - Standardized from OpenDental numeric codes (0=Patient, 1=NonPatient, 2=Inactive, 3=Archived, 4=Deceased, 5=Deleted)
+          - Critical for patient care coordination and billing processes
+          - Used to filter active patients for clinical operations
+          
+          Data Quality Notes:
+          - Source: patient_status from stg_opendental__patient (numeric to text mapping)
+          - Only 'Patient' status indicates active clinical relationship
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Patient', 'NonPatient', 'Inactive', 'Archived', 'Deceased', 'Deleted']
+              severity: error
 
       - name: position_code
         description: Patient's position or role code
@@ -60,10 +241,26 @@ models:
         description: Patient's urgency level for treatment
 
       - name: premedication_required
-        description: Flag indicating if premedication is required for the patient
+        description: >
+          Flag indicating if premedication is required for the patient
+          
+          Logic:
+          - true when: Patient requires antibiotic premedication before dental procedures
+          - false when: Patient does not require premedication
+          
+          Business Impact:
+          - Critical for clinical safety and procedure planning
+          - Affects appointment scheduling and treatment protocols
+          - Required for compliance with medical guidelines
+          
+          Data Quality Notes:
+          - Source: premedication_required from stg_opendental__patient
+          - Boolean flag used in clinical workflow automation
         tests:
+          - not_null
           - accepted_values:
               values: [true, false]
+              severity: error
 
       # Contact Preferences
       - name: preferred_confirmation_method
@@ -139,6 +336,27 @@ models:
 
       - name: billing_cycle_day
         description: Day of the month for billing cycle
+
+      - name: balance_status
+        description: >
+          Business categorization of patient balance status for financial analysis:
+          No Balance = Estimated balance is zero
+          Outstanding Balance = Patient owes money (positive balance)
+          Credit Balance = Patient has credit or refund due (negative balance)
+          
+          Business Rules:
+          - Automatically calculated from estimated_balance field
+          - Used for financial reporting and collection management
+          - Critical for accounts receivable analysis
+          
+          Data Quality Notes:
+          - Source: Calculated from estimated_balance using case statement
+          - Used in financial reporting and collection prioritization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['No Balance', 'Outstanding Balance', 'Credit Balance']
+              severity: error
 
       # Important Dates
       - name: first_visit_date
@@ -235,17 +453,28 @@ models:
 
       # Metadata
       - name: _loaded_at
-        description: Timestamp when the record was loaded
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
         tests:
           - not_null
 
       - name: _created_at
-        description: Timestamp when the record was created
+        description: "Timestamp when the record was created in the source system (OpenDental). Source column: date_created. May be null for legacy records."
         tests:
-          - not_null
+          - not_null:
+              where: "date_created is not null"
 
       - name: _updated_at
-        description: Timestamp when the record was last updated
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Source column: date_updated."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
         tests:
           - not_null
 
@@ -256,49 +485,9 @@ models:
             - _loaded_at
 
       - dbt_utils.expression_is_true:
-          expression: "age >= 0"
+          expression: "age >= 0 and age <= 120"
           severity: error
-          name: check_age_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "estimated_balance >= 0"
-          severity: error
-          name: check_estimated_balance_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "total_balance >= 0"
-          severity: error
-          name: check_total_balance_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "balance_0_30_days >= 0"
-          severity: error
-          name: check_balance_0_30_days_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "balance_31_60_days >= 0"
-          severity: error
-          name: check_balance_31_60_days_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "balance_61_90_days >= 0"
-          severity: error
-          name: check_balance_61_90_days_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "balance_over_90_days >= 0"
-          severity: error
-          name: check_balance_over_90_days_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "insurance_estimate >= 0"
-          severity: error
-          name: check_insurance_estimate_not_negative
-
-      - dbt_utils.expression_is_true:
-          expression: "payment_plan_due >= 0"
-          severity: error
-          name: check_payment_plan_due_not_negative
+          name: check_age_reasonable_range
 
       - dbt_utils.expression_is_true:
           expression: "billing_cycle_day >= 1 and billing_cycle_day <= 31"

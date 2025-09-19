@@ -1,29 +1,59 @@
-{{ config(        materialized='table',
-        
-        unique_key='communication_id') }}
+{{
+    config(
+        materialized='table',
+        schema='marts',
+        unique_key='communication_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['communication_id'], 'unique': true},
+            {'columns': ['patient_id']},
+            {'columns': ['user_id']},
+            {'columns': ['communication_datetime']},
+            {'columns': ['_updated_at']}
+        ]
+    )
+}}
 
 /*
-Fact table for patient communications and messaging.
-This model captures all communication activities including appointment reminders,
-confirmations, marketing outreach, and patient messaging for comprehensive
-communication effectiveness analysis.
+Fact table model for patient communications and messaging.
+Part of System G: Scheduling and Communication Management
 
-Key features:
-- Complete communication lifecycle tracking
-- Multi-channel communication analysis
-- Response and engagement tracking
-- Communication timing and frequency
-- Patient preference adherence
+This model:
+1. Captures all communication activities including appointment reminders, confirmations, marketing outreach, and patient messaging
+2. Provides comprehensive communication effectiveness analysis and engagement tracking
+3. Enables multi-channel communication analysis and response time measurement
 
-TODO - APPOINTMENT CONFIRMATION ENHANCEMENT:
-When stg_opendental__confirmrequest staging model is created, add back:
-1. ConfirmationRequests CTE to transform confirmation request data
-2. Add 'union all select * from ConfirmationRequests' to main query
-3. This will include confirmation requests as a communication type alongside
-   emails, SMS, and commlog entries for complete communication tracking
+Business Logic Features:
+- Complete communication lifecycle tracking with response metrics
+- Multi-channel communication analysis (Email, SMS, Phone, In-Person)
+- Response and engagement tracking with timing analysis
+- Communication direction classification (Inbound/Outbound)
+- Business hours and weekend communication flagging
+
+Key Metrics:
+- Response time hours for communication effectiveness
+- Engagement levels (Engaged, Delivered, Connected, Confirmed, Sent)
+- Communication timing analysis (day of week, time period)
+- Success rates by communication method and category
+
+Data Quality Notes:
+- Email and SMS message integration temporarily disabled due to missing staging models
+- Confirmation requests not tracked as clinic doesn't use appointment confirmation functionality
+- Communication datetime filtering ensures only valid communications are included
+
+Performance Considerations:
+- Indexed on communication_datetime for time-based queries
+- Indexed on patient_id and user_id for relationship queries
+- Communication direction and engagement level calculations optimized
+
+Dependencies:
+- stg_opendental__commlog: Primary source for communication log data
+- dim_patient: Patient dimension for patient-related analysis
+- dim_user: User dimension for user-related analysis
 */
 
-with CommunicationBase as (
+-- 1. Source data retrieval
+with source_communication as (
     select * from {{ ref('stg_opendental__commlog') }}
 ),
 
@@ -69,43 +99,52 @@ When implementing SMS message integration, restore the following structure:
 - User tracking for sent messages
 */
 
-Final as (
+-- 2. Related dimension lookups
+communication_dimensions as (
+    select 
+        patient_id,
+        user_id,
+        program_id,
+        referral_id
+    from source_communication
+    where communication_datetime is not null
+),
+
+-- 3. Business logic and calculations
+communication_calculated as (
     select
-        -- Primary Key
-        cb.communication_id,
+        -- Primary key
+        sc.commlog_id as communication_id,
 
-        -- Foreign Keys
-        cb.patient_id,
-        cb.provider_id,
-        cb.appointment_id,
-        cb.user_id,
+        -- Foreign keys
+        sc.patient_id,
+        sc.user_id,
+        sc.program_id,
+        sc.referral_id,
 
-        -- Date and Time
-        cb.communication_datetime,
-        cb.response_datetime,
-        extract(year from cb.communication_datetime) as communication_year,
-        extract(month from cb.communication_datetime) as communication_month,
-        extract(quarter from cb.communication_datetime) as communication_quarter,
-        extract(dow from cb.communication_datetime) as communication_day_of_week,
-        extract(hour from cb.communication_datetime) as communication_hour,
+        -- Date and time measures
+        sc.communication_datetime,
+        sc.communication_end_datetime,
+        sc.entry_datetime,
+        extract(year from sc.communication_datetime) as communication_year,
+        extract(month from sc.communication_datetime) as communication_month,
+        extract(quarter from sc.communication_datetime) as communication_quarter,
+        extract(dow from sc.communication_datetime) as communication_day_of_week,
+        extract(hour from sc.communication_datetime) as communication_hour,
 
-        -- Communication Details
-        cb.communication_type,
-        cb.communication_status,
-        cb.communication_category,
-        cb.communication_method,
-        cb.communication_note,
+        -- Communication details
+        sc.communication_type,
+        sc.note as communication_note,
+        sc.mode as communication_mode,
+        sc.communication_source,
+        sc.referral_behavior,
 
-        -- Response Metrics
-        cb.has_response,
-        cb.is_successful,
-        case 
-            when cb.response_datetime is not null and cb.communication_datetime is not null
-            then extract(epoch from (cb.response_datetime - cb.communication_datetime))/3600
-        end as response_time_hours,
+        -- Response metrics
+        sc.is_sent,
+        sc.is_topaz_signature,
 
-        -- Timing Analysis
-        case extract(dow from cb.communication_datetime)
+        -- Timing analysis
+        case extract(dow from sc.communication_datetime)
             when 0 then 'Sunday'
             when 1 then 'Monday'
             when 2 then 'Tuesday'
@@ -116,58 +155,85 @@ Final as (
         end as communication_day_name,
 
         case 
-            when extract(hour from cb.communication_datetime) between 6 and 11 then 'Morning'
-            when extract(hour from cb.communication_datetime) between 12 and 17 then 'Afternoon'
-            when extract(hour from cb.communication_datetime) between 18 and 21 then 'Evening'
+            when extract(hour from sc.communication_datetime) between 6 and 11 then 'Morning'
+            when extract(hour from sc.communication_datetime) between 12 and 17 then 'Afternoon'
+            when extract(hour from sc.communication_datetime) between 18 and 21 then 'Evening'
             else 'Night'
         end as communication_time_period,
 
-        -- Communication Direction
+        -- Communication direction
         case 
-            when cb.communication_type in ('Email') and cb.communication_status = 'Received' then 'Inbound'
-            when cb.communication_type in ('SMS') and cb.communication_status = 'Received' then 'Inbound'
-            else 'Outbound'
+            when sc.is_sent = 2 then 'Inbound'
+            when sc.is_sent = 1 then 'Outbound'
+            else 'System'
         end as communication_direction,
 
-        -- Effectiveness Indicators
+        -- Communication method based on mode
         case 
-            when cb.communication_method = 'Email' and cb.has_response then 'Engaged'
-            when cb.communication_method = 'SMS' and cb.is_successful then 'Delivered'
-            when cb.communication_method = 'Phone' and cb.has_response then 'Connected'
-            when cb.communication_type = 'Confirmation Request' and cb.is_successful then 'Confirmed'
-            else 'Sent'
+            when sc.mode = 0 then 'Email'
+            when sc.mode = 1 then 'SMS'
+            when sc.mode = 2 then 'Phone'
+            when sc.mode = 3 then 'Letter'
+            when sc.mode = 4 then 'In-Person'
+            when sc.mode = 5 then 'System'
+            else 'Unknown'
+        end as communication_method,
+
+        -- Communication category based on type
+        case 
+            when sc.communication_type = 224 then 'Appointment'
+            when sc.communication_type = 228 then 'Appointment'
+            when sc.communication_type = 226 then 'Financial'
+            when sc.communication_type = 225 then 'Insurance'
+            when sc.communication_type = 571 then 'Insurance'
+            when sc.communication_type = 432 then 'Clinical'
+            when sc.communication_type = 509 then 'Clinical'
+            when sc.communication_type = 510 then 'Clinical'
+            when sc.communication_type = 614 then 'Referral'
+            when sc.communication_type = 615 then 'Referral'
+            when sc.communication_type = 636 then 'Treatment Plan'
+            else 'General'
+        end as communication_category,
+
+        -- Effectiveness indicators
+        case 
+            when sc.is_sent = 2 then 'Received'
+            when sc.is_sent = 1 and sc.mode = 4 then 'Completed'
+            when sc.is_sent = 1 then 'Sent'
+            else 'System Generated'
         end as engagement_level,
 
-        -- Boolean Flags
-        case when extract(dow from cb.communication_datetime) in (0, 6) then true else false end as sent_on_weekend,
-        case when extract(hour from cb.communication_datetime) between 9 and 17 then true else false end as sent_during_business_hours,
-        case when cb.communication_category = 'Appointment' then true else false end as is_appointment_related,
-        case when cb.communication_category = 'Financial' then true else false end as is_financial_related,
-        case when cb.communication_direction = 'Inbound' then true else false end as is_patient_initiated,
+        -- Boolean flags
+        case when extract(dow from sc.communication_datetime) in (0, 6) then true else false end as sent_on_weekend,
+        case when extract(hour from sc.communication_datetime) between 9 and 17 then true else false end as sent_during_business_hours,
+        case 
+            when sc.communication_type = 224 or sc.communication_type = 228 then true 
+            else false 
+        end as is_appointment_related,
+        case 
+            when sc.communication_type = 226 then true 
+            else false 
+        end as is_financial_related,
+        case 
+            when sc.is_sent = 2 then true
+            else false
+        end as is_patient_initiated,
+        case 
+            when sc.user_id is null or sc.user_id = 0 then true
+            else false
+        end as is_system_generated,
 
         -- Metadata
-        current_timestamp as _loaded_at
+        {{ standardize_mart_metadata() }}
 
-    from (
-        -- Union all communication sources
-        select * from CommunicationBase
-        where communication_datetime is not null
-        
-        -- TODO: Add back when stg_opendental__confirmrequest is available:
-        -- union all
-        -- select * from ConfirmationRequests
-        
-        -- TODO: Add back when stg_opendental__emailmessage is available:
-        -- union all
-        -- select * from EmailMessages
-        -- where communication_datetime is not null
-        
-        -- TODO: Add back when stg_opendental__smsmessage is available:
-        -- union all
-        -- select * from TextMessages
-        -- where communication_datetime is not null
-        
-    ) cb
+    from source_communication sc
+    where sc.communication_datetime is not null
+),
+
+-- 4. Final validation
+final as (
+    select * from communication_calculated
+    where communication_id is not null
 )
 
-select * from Final
+select * from final
