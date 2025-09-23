@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 def get_patients(db: Session, skip: int = 0, limit: int = 100):
-    # Direct SQL query to your DBT model
+    # Direct SQL query to your DBT model - using raw_marts.dim_patient
     query = text("""
-        SELECT * FROM analytics.mart_patients
+        SELECT * FROM raw_marts.dim_patient
         LIMIT :limit OFFSET :skip
     """)
     result = db.execute(query, {"skip": skip, "limit": limit})
@@ -13,7 +13,7 @@ def get_patients(db: Session, skip: int = 0, limit: int = 100):
 
 def get_patient_by_id(db: Session, patient_id: int):
     query = text("""
-        SELECT * FROM analytics.mart_patients
+        SELECT * FROM raw_marts.dim_patient
         WHERE patient_id = :patient_id
     """)
     result = db.execute(query, {"patient_id": patient_id})
