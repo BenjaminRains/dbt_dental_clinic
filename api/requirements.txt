@@ -1,0 +1,34 @@
+# API Dependencies for Dental Clinic FastAPI Application
+# Core FastAPI and server dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Database and ORM dependencies
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# Data validation and serialization
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Data processing and analytics
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# CORS and middleware
+python-multipart>=0.0.6
+
+# Development and testing (optional)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+httpx>=0.25.0
+
+# Logging and monitoring
+structlog>=23.0.0
+
+# Security (for production)
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
