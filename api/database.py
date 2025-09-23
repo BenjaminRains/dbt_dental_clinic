@@ -4,13 +4,17 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
-from dotenv import load_dotenv
+import logging
 
-load_dotenv()
+from config import get_config
 
-# Use environment variables for sensitive connection info
-DATABASE_URL = os.getenv("DATABASE_URL")
+logger = logging.getLogger(__name__)
+
+# Get database configuration using proper environment handling
+config = get_config()
+DATABASE_URL = config.get_database_url()
+
+logger.info(f"Connecting to database for environment: {config.environment}")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
