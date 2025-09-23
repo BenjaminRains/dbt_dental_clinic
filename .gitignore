@@ -27,6 +27,8 @@ ENV/
 .env
 .env_test
 .env_production
+.env_api_test
+.env_api_production
 !.env.template
 !**/.env.template
 
