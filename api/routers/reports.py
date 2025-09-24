@@ -1,6 +1,7 @@
 # Comprehensive reporting endpoints for dental analytics dashboard
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List, Optional
 from datetime import datetime, date
 import pandas as pd
@@ -53,7 +54,7 @@ async def get_revenue_trends(
     ORDER BY dd.date_actual
     """
     
-    result = db.execute(query, params).fetchall()
+    result = db.execute(text(query), params).fetchall()
     return [
         {
             "date": row.date_actual.isoformat(),
@@ -92,7 +93,7 @@ async def get_revenue_kpi_summary(
         query += " AND dd.date_actual <= :end_date"
         params['end_date'] = end_date
     
-    result = db.execute(query, params).fetchone()
+    result = db.execute(text(query), params).fetchone()
     
     return {
         "total_revenue_lost": float(result.total_revenue_lost or 0),
@@ -144,7 +145,7 @@ async def get_provider_performance(
     
     query += " ORDER BY mpp.date_actual DESC, dp.provider_name"
     
-    result = db.execute(query, params).fetchall()
+    result = db.execute(text(query), params).fetchall()
     return [
         {
             "provider_name": row.provider_name,
@@ -201,7 +202,7 @@ async def get_provider_summary(
     ORDER BY total_production DESC
     """
     
-    result = db.execute(query, params).fetchall()
+    result = db.execute(text(query), params).fetchall()
     return [
         {
             "provider_name": row.provider_name,
@@ -256,7 +257,7 @@ async def get_ar_summary(
     
     query += " ORDER BY mas.date_actual DESC"
     
-    result = db.execute(query, params).fetchall()
+    result = db.execute(text(query), params).fetchall()
     return [
         {
             "date": row.date_actual.isoformat(),
@@ -318,8 +319,8 @@ async def get_dashboard_kpis(
         provider_query += " AND mpp.date_actual <= :end_date"
         params['end_date'] = end_date
     
-    revenue_result = db.execute(revenue_query, params).fetchone()
-    provider_result = db.execute(provider_query, params).fetchone()
+    revenue_result = db.execute(text(revenue_query), params).fetchone()
+    provider_result = db.execute(text(provider_query), params).fetchone()
     
     return {
         "revenue": {
