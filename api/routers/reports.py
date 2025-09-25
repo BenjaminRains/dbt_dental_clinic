@@ -29,29 +29,28 @@ async def get_revenue_trends(
     """Get revenue trends over time with filtering capabilities"""
     query = """
     SELECT 
-        dd.date_actual,
-        SUM(mrl.revenue_lost_amount) as total_revenue_lost,
-        SUM(mrl.recovery_potential) as total_recovery_potential,
+        mrl.appointment_date as date_actual,
+        SUM(mrl.lost_revenue) as total_revenue_lost,
+        SUM(mrl.estimated_recoverable_amount) as total_recovery_potential,
         COUNT(DISTINCT mrl.opportunity_id) as opportunity_count
     FROM raw_marts.mart_revenue_lost mrl
-    JOIN raw_marts.dim_date dd ON mrl.date_id = dd.date_id
     WHERE 1=1
     """
     
     params = {}
     if start_date:
-        query += " AND dd.date_actual >= :start_date"
+        query += " AND mrl.appointment_date >= :start_date"
         params['start_date'] = start_date
     if end_date:
-        query += " AND dd.date_actual <= :end_date"
+        query += " AND mrl.appointment_date <= :end_date"
         params['end_date'] = end_date
     if provider_id:
         query += " AND mrl.provider_id = :provider_id"
         params['provider_id'] = provider_id
     
     query += """
-    GROUP BY dd.date_actual
-    ORDER BY dd.date_actual
+    GROUP BY mrl.appointment_date
+    ORDER BY mrl.appointment_date
     """
     
     result = db.execute(text(query), params).fetchall()
@@ -74,23 +73,22 @@ async def get_revenue_kpi_summary(
     """Get key revenue performance indicators"""
     query = """
     SELECT 
-        SUM(mrl.revenue_lost_amount) as total_revenue_lost,
-        SUM(mrl.recovery_potential) as total_recovery_potential,
-        AVG(mrl.recovery_potential) as avg_recovery_potential,
+        SUM(mrl.lost_revenue) as total_revenue_lost,
+        SUM(mrl.estimated_recoverable_amount) as total_recovery_potential,
+        AVG(mrl.estimated_recoverable_amount) as avg_recovery_potential,
         COUNT(DISTINCT mrl.opportunity_id) as total_opportunities,
         COUNT(DISTINCT mrl.patient_id) as affected_patients,
         COUNT(DISTINCT mrl.provider_id) as affected_providers
     FROM raw_marts.mart_revenue_lost mrl
-    JOIN raw_marts.dim_date dd ON mrl.date_id = dd.date_id
     WHERE 1=1
     """
     
     params = {}
     if start_date:
-        query += " AND dd.date_actual >= :start_date"
+        query += " AND mrl.appointment_date >= :start_date"
         params['start_date'] = start_date
     if end_date:
-        query += " AND dd.date_actual <= :end_date"
+        query += " AND mrl.appointment_date <= :end_date"
         params['end_date'] = end_date
     
     result = db.execute(text(query), params).fetchone()
@@ -115,35 +113,34 @@ async def get_provider_performance(
     """Get comprehensive provider performance metrics"""
     query = """
     SELECT 
-        dp.provider_name,
-        dp.provider_specialty,
-        mpp.date_actual,
-        mpp.production_amount,
-        mpp.collection_amount,
-        mpp.collection_rate,
-        mpp.patient_count,
-        mpp.appointment_count,
-        mpp.no_show_count,
-        mpp.no_show_rate,
-        mpp.avg_production_per_patient,
-        mpp.avg_production_per_appointment
+        mpp.provider_name,
+        mpp.specialty as provider_specialty,
+        mpp.production_date as date_actual,
+        mpp.total_production as production_amount,
+        mpp.total_collections as collection_amount,
+        mpp.collection_efficiency as collection_rate,
+        mpp.total_unique_patients as patient_count,
+        mpp.total_completed_appointments as appointment_count,
+        mpp.total_missed_appointments as no_show_count,
+        mpp.daily_no_show_rate as no_show_rate,
+        round(mpp.total_production / nullif(mpp.total_unique_patients, 0), 2) as avg_production_per_patient,
+        round(mpp.total_production / nullif(mpp.total_completed_appointments, 0), 2) as avg_production_per_appointment
     FROM raw_marts.mart_provider_performance mpp
-    JOIN raw_marts.dim_provider dp ON mpp.provider_id = dp.provider_id
     WHERE 1=1
     """
     
     params = {}
     if start_date:
-        query += " AND mpp.date_actual >= :start_date"
+        query += " AND mpp.production_date >= :start_date"
         params['start_date'] = start_date
     if end_date:
-        query += " AND mpp.date_actual <= :end_date"
+        query += " AND mpp.production_date <= :end_date"
         params['end_date'] = end_date
     if provider_id:
         query += " AND mpp.provider_id = :provider_id"
         params['provider_id'] = provider_id
     
-    query += " ORDER BY mpp.date_actual DESC, dp.provider_name"
+    query += " ORDER BY mpp.production_date DESC, mpp.provider_name"
     
     result = db.execute(text(query), params).fetchall()
     return [
@@ -173,32 +170,31 @@ async def get_provider_summary(
     """Get aggregated provider performance summary"""
     query = """
     SELECT 
-        dp.provider_name,
-        dp.provider_specialty,
-        SUM(mpp.production_amount) as total_production,
-        SUM(mpp.collection_amount) as total_collection,
-        AVG(mpp.collection_rate) as avg_collection_rate,
-        SUM(mpp.patient_count) as total_patients,
-        SUM(mpp.appointment_count) as total_appointments,
-        SUM(mpp.no_show_count) as total_no_shows,
-        AVG(mpp.no_show_rate) as avg_no_show_rate,
-        AVG(mpp.avg_production_per_patient) as avg_production_per_patient,
-        AVG(mpp.avg_production_per_appointment) as avg_production_per_appointment
+        mpp.provider_name,
+        mpp.specialty as provider_specialty,
+        SUM(mpp.total_production) as total_production,
+        SUM(mpp.total_collections) as total_collection,
+        AVG(mpp.collection_efficiency) as avg_collection_rate,
+        SUM(mpp.total_unique_patients) as total_patients,
+        SUM(mpp.total_completed_appointments) as total_appointments,
+        SUM(mpp.total_missed_appointments) as total_no_shows,
+        AVG(mpp.daily_no_show_rate) as avg_no_show_rate,
+        AVG(round(mpp.total_production / nullif(mpp.total_unique_patients, 0), 2)) as avg_production_per_patient,
+        AVG(round(mpp.total_production / nullif(mpp.total_completed_appointments, 0), 2)) as avg_production_per_appointment
     FROM raw_marts.mart_provider_performance mpp
-    JOIN raw_marts.dim_provider dp ON mpp.provider_id = dp.provider_id
     WHERE 1=1
     """
     
     params = {}
     if start_date:
-        query += " AND mpp.date_actual >= :start_date"
+        query += " AND mpp.production_date >= :start_date"
         params['start_date'] = start_date
     if end_date:
-        query += " AND mpp.date_actual <= :end_date"
+        query += " AND mpp.production_date <= :end_date"
         params['end_date'] = end_date
     
     query += """
-    GROUP BY dp.provider_id, dp.provider_name, dp.provider_specialty
+    GROUP BY mpp.provider_id, mpp.provider_name, mpp.specialty
     ORDER BY total_production DESC
     """
     
@@ -207,15 +203,80 @@ async def get_provider_summary(
         {
             "provider_name": row.provider_name,
             "provider_specialty": row.provider_specialty,
-            "total_production": float(row.total_production or 0),
-            "total_collection": float(row.total_collection or 0),
-            "avg_collection_rate": float(row.avg_collection_rate or 0),
-            "total_patients": row.total_patients,
-            "total_appointments": row.total_appointments,
-            "total_no_shows": row.total_no_shows,
-            "avg_no_show_rate": float(row.avg_no_show_rate or 0),
+            "total_production": float(row.production_amount or 0),
+            "total_collection": float(row.collection_amount or 0),
+            "avg_collection_rate": float(row.collection_rate or 0),
+            "total_patients": row.patient_count,
+            "total_appointments": row.appointment_count,
+            "total_no_shows": row.no_show_count,
+            "avg_no_show_rate": float(row.no_show_rate or 0),
             "avg_production_per_patient": float(row.avg_production_per_patient or 0),
             "avg_production_per_appointment": float(row.avg_production_per_appointment or 0)
+        }
+        for row in result
+    ]
+
+# Appointment Endpoints
+@router.get("/appointments/summary", response_model=List[dict])
+async def get_appointment_summary(
+    start_date: Optional[date] = Query(None, description="Start date for analysis"),
+    end_date: Optional[date] = Query(None, description="End date for analysis"),
+    provider_id: Optional[int] = Query(None, description="Filter by provider"),
+    db: Session = Depends(get_db)
+):
+    """Get appointment summary and scheduling metrics"""
+    query = """
+    SELECT 
+        fa.appointment_date as date_actual,
+        dp.provider_name,
+        COUNT(*) as total_appointments,
+        SUM(CASE WHEN fa.is_completed THEN 1 ELSE 0 END) as completed_appointments,
+        SUM(CASE WHEN fa.is_no_show THEN 1 ELSE 0 END) as no_show_appointments,
+        SUM(CASE WHEN fa.is_broken THEN 1 ELSE 0 END) as broken_appointments,
+        SUM(CASE WHEN fa.is_new_patient THEN 1 ELSE 0 END) as new_patient_appointments,
+        SUM(CASE WHEN fa.is_hygiene_appointment THEN 1 ELSE 0 END) as hygiene_appointments,
+        COUNT(DISTINCT fa.patient_id) as unique_patients,
+        ROUND(SUM(CASE WHEN fa.is_completed THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as appointment_completion_rate,
+        ROUND(SUM(CASE WHEN fa.is_no_show THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as no_show_rate,
+        ROUND(SUM(CASE WHEN fa.is_broken THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as cancellation_rate,
+        SUM(fa.scheduled_production_amount) as total_scheduled_production,
+        SUM(CASE WHEN fa.is_completed THEN fa.scheduled_production_amount ELSE 0 END) as completed_production
+    FROM raw_marts.fact_appointment fa
+    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
+    WHERE fa.appointment_date IS NOT NULL
+    """
+    
+    params = {}
+    if start_date:
+        query += " AND fa.appointment_date >= :start_date"
+        params['start_date'] = start_date
+    if end_date:
+        query += " AND fa.appointment_date <= :end_date"
+        params['end_date'] = end_date
+    if provider_id:
+        query += " AND fa.provider_id = :provider_id"
+        params['provider_id'] = provider_id
+    
+    query += " GROUP BY fa.appointment_date, dp.provider_name ORDER BY fa.appointment_date DESC, dp.provider_name"
+    
+    result = db.execute(text(query), params).fetchall()
+    return [
+        {
+            "date": row.date_actual.isoformat(),
+            "provider_name": row.provider_name,
+            "total_appointments": row.total_appointments,
+            "completed_appointments": row.completed_appointments,
+            "no_show_appointments": row.no_show_appointments,
+            "broken_appointments": row.broken_appointments,
+            "new_patient_appointments": row.new_patient_appointments,
+            "hygiene_appointments": row.hygiene_appointments,
+            "unique_patients": row.unique_patients,
+            "completion_rate": float(row.appointment_completion_rate or 0),
+            "no_show_rate": float(row.no_show_rate or 0),
+            "cancellation_rate": float(row.cancellation_rate or 0),
+            "utilization_rate": 0.0,  # Not available in fact_appointment
+            "scheduled_production": float(row.total_scheduled_production or 0),
+            "completed_production": float(row.completed_production or 0)
         }
         for row in result
     ]
@@ -230,32 +291,32 @@ async def get_ar_summary(
     """Get accounts receivable summary and aging analysis"""
     query = """
     SELECT 
-        mas.date_actual,
-        mas.total_ar_balance,
-        mas.current_balance,
-        mas.overdue_balance,
-        mas.overdue_30_days,
-        mas.overdue_60_days,
-        mas.overdue_90_days,
-        mas.overdue_120_plus_days,
-        mas.collection_rate,
-        mas.avg_days_to_payment,
-        mas.patient_count_with_ar,
-        mas.insurance_ar_balance,
-        mas.patient_ar_balance
+        mas.snapshot_date as date_actual,
+        mas.total_balance as total_ar_balance,
+        mas.balance_0_30_days as current_balance,
+        (mas.balance_31_60_days + mas.balance_61_90_days + mas.balance_over_90_days) as overdue_balance,
+        mas.balance_31_60_days as overdue_30_days,
+        mas.balance_61_90_days as overdue_60_days,
+        mas.balance_over_90_days as overdue_90_days,
+        mas.balance_over_90_days as overdue_120_plus_days,
+        round(mas.paid_last_year::numeric / nullif(mas.billed_last_year, 0) * 100, 2) as collection_rate,
+        mas.days_since_last_payment as avg_days_to_payment,
+        count(distinct mas.patient_id) as patient_count_with_ar,
+        mas.insurance_estimate as insurance_ar_balance,
+        mas.patient_responsibility as patient_ar_balance
     FROM raw_marts.mart_ar_summary mas
     WHERE 1=1
     """
     
     params = {}
     if start_date:
-        query += " AND mas.date_actual >= :start_date"
+        query += " AND mas.snapshot_date >= :start_date"
         params['start_date'] = start_date
     if end_date:
-        query += " AND mas.date_actual <= :end_date"
+        query += " AND mas.snapshot_date <= :end_date"
         params['end_date'] = end_date
     
-    query += " ORDER BY mas.date_actual DESC"
+    query += " GROUP BY mas.snapshot_date, mas.total_balance, mas.balance_0_30_days, mas.balance_31_60_days, mas.balance_61_90_days, mas.balance_over_90_days, mas.paid_last_year, mas.billed_last_year, mas.days_since_last_payment, mas.insurance_estimate, mas.patient_responsibility ORDER BY mas.snapshot_date DESC"
     
     result = db.execute(text(query), params).fetchall()
     return [
@@ -291,10 +352,9 @@ async def get_dashboard_kpis(
     # Revenue KPIs
     revenue_query = """
     SELECT 
-        SUM(mrl.revenue_lost_amount) as total_revenue_lost,
-        SUM(mrl.recovery_potential) as total_recovery_potential
+        SUM(mrl.lost_revenue) as total_revenue_lost,
+        SUM(mrl.estimated_recoverable_amount) as total_recovery_potential
     FROM raw_marts.mart_revenue_lost mrl
-    JOIN raw_marts.dim_date dd ON mrl.date_id = dd.date_id
     WHERE 1=1
     """
     
@@ -302,21 +362,21 @@ async def get_dashboard_kpis(
     provider_query = """
     SELECT 
         COUNT(DISTINCT mpp.provider_id) as active_providers,
-        SUM(mpp.production_amount) as total_production,
-        SUM(mpp.collection_amount) as total_collection,
-        AVG(mpp.collection_rate) as avg_collection_rate
+        SUM(mpp.total_production) as total_production,
+        SUM(mpp.total_collections) as total_collection,
+        AVG(mpp.collection_efficiency) as avg_collection_rate
     FROM raw_marts.mart_provider_performance mpp
     WHERE 1=1
     """
     
     params = {}
     if start_date:
-        revenue_query += " AND dd.date_actual >= :start_date"
-        provider_query += " AND mpp.date_actual >= :start_date"
+        revenue_query += " AND mrl.appointment_date >= :start_date"
+        provider_query += " AND mpp.production_date >= :start_date"
         params['start_date'] = start_date
     if end_date:
-        revenue_query += " AND dd.date_actual <= :end_date"
-        provider_query += " AND mpp.date_actual <= :end_date"
+        revenue_query += " AND mrl.appointment_date <= :end_date"
+        provider_query += " AND mpp.production_date <= :end_date"
         params['end_date'] = end_date
     
     revenue_result = db.execute(text(revenue_query), params).fetchone()
