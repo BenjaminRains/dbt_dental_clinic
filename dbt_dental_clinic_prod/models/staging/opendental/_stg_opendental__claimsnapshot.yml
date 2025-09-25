@@ -61,7 +61,7 @@ models:
         description: "Foreign key to the procedure record that this claim snapshot relates to. Links to the specific dental procedure that was performed and is being claimed."
         tests:
           - relationships:
-              to: ref('stg_opendental__procedure')
+              to: ref('stg_opendental__procedurelog')
               field: procedure_id
               severity: warn
               where: "procedure_id is not null"
@@ -70,7 +70,7 @@ models:
         description: "Foreign key to the claim procedure record that this snapshot represents. Links to the specific claim procedure line item that contains the billing details."
         tests:
           - relationships:
-              to: ref('stg_opendental__claimprocedure')
+              to: ref('stg_opendental__claimproc')
               field: claim_procedure_id
               severity: warn
               where: "claim_procedure_id is not null"
