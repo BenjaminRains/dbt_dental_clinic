@@ -95,7 +95,7 @@ models:
           - positive_values:
               where: "user_id is not null"
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
               severity: warn
               where: "user_id is not null"
