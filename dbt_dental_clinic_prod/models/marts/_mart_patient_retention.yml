@@ -204,7 +204,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: '1900-01-01'
-              max_value: '{{ "now" | date }}'
+              max_value: '{{ run_started_at.strftime("%Y-%m-%d") }}'
       
       - name: primary_provider_id
         description: >
@@ -434,7 +434,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: '1900-01-01'
-              max_value: '{{ "now" | date }}'
+              max_value: '{{ run_started_at.strftime("%Y-%m-%d") }}'
       
       - name: last_appointment_date
         description: >
@@ -448,7 +448,7 @@ models:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: '1900-01-01'
-              max_value: '{{ "now" | date }}'
+              max_value: '{{ run_started_at.strftime("%Y-%m-%d") }}'
       
       - name: last_completed_appointment
         description: >
@@ -461,7 +461,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: '1900-01-01'
-              max_value: '{{ "now" | date }}'
+              max_value: '{{ run_started_at.strftime("%Y-%m-%d") }}'
       
       # Recent Activity Metrics
       - name: appointments_last_30_days
@@ -673,7 +673,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: '1900-01-01'
-              max_value: '{{ "now" | date }}'
+              max_value: '{{ run_started_at.strftime("%Y-%m-%d") }}'
       
       - name: payments_last_year
         description: >
@@ -757,7 +757,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: '1900-01-01'
-              max_value: '{{ "now" | date }}'
+              max_value: '{{ run_started_at.strftime("%Y-%m-%d") }}'
       
       - name: production_last_year
         description: >
@@ -870,7 +870,7 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: '1900-01-01'
-              max_value: '{{ "now" | date }}'
+              max_value: '{{ run_started_at.strftime("%Y-%m-%d") }}'
       
       - name: communications_received
         description: >
