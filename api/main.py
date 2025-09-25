@@ -2,7 +2,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import patient, reports
+from routers import patient, reports, appointment, provider
+
 
 app = FastAPI(
     title="Dental Practice API",
@@ -22,6 +23,8 @@ app.add_middleware(
 # Include routers
 app.include_router(patient.router)
 app.include_router(reports.router)
+app.include_router(appointment.router)
+app.include_router(provider.router)
 
 @app.get("/")
 def read_root():
