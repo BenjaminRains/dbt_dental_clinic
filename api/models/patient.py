@@ -10,7 +10,7 @@ class Patient(BaseModel):
     # Demographics
     middle_initial: Optional[str] = None
     preferred_name: Optional[str] = None
-    gender: Optional[str] = None  # M=Male, F=Female, O=Other, U=Unknown
+    gender: Optional[str] = None  # M=Male, F=Female, O=Other
     language: Optional[str] = None
     birth_date: Optional[datetime] = None
     age: Optional[int] = None
