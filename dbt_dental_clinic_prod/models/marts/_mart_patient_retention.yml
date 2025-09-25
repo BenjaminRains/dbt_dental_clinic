@@ -1,0 +1,1212 @@
+version: 2
+
+models:
+  - name: mart_patient_retention
+    description: >
+      Summary mart for comprehensive patient retention analytics and lifecycle management.
+      This mart provides aggregated metrics and KPIs to support patient retention optimization,
+      churn risk assessment, and patient lifetime value analysis at the daily level
+      by patient, provider, and clinic.
+      
+      ## Business Context
+      The patient retention summary mart is a critical component of our analytical framework, enabling:
+      - Patient lifecycle stage classification and retention status tracking
+      - Churn risk assessment and early intervention strategies
+      - Patient lifetime value analysis and segmentation
+      - Engagement pattern analysis and communication effectiveness
+      - Loyalty program optimization and retention campaigns
+      - Executive reporting and patient relationship management
+      
+      ## Technical Specifications
+      - Grain: One row per date + patient combination (daily snapshot of patient retention status)
+      - Source: fact_appointment, fact_payment, fact_claim, fact_communication (primary sources)
+      - Refresh: Daily
+      - Dependencies: 
+        * fact_appointment (appointment history and completion data)
+        * fact_payment (financial transaction and payment history)
+        * fact_claim (production and billing information)
+        * fact_communication (patient communication and engagement data)
+        * dim_patient (patient demographic and status information)
+        * dim_provider (provider details and specialty information)
+        * dim_date (date dimension for temporal analysis)
+      
+      ## Business Logic
+      ### Patient Lifecycle Classification
+      - Active: Patients with appointments in last 30 days
+      - Recent: Patients with appointments in last 90 days
+      - Moderate: Patients with appointments in last 6 months
+      - Dormant: Patients with appointments in last year
+      - Inactive: Patients with appointments in last 2 years
+      - Scheduled: Patients with future appointments
+      - Lost: Patients with no activity in last 2 years
+      
+      ### Churn Risk Assessment
+      - High Risk: No visits in 365+ days OR no visits in 180+ days with no activity in last year
+      - Medium Risk: No visits in 120+ days with >30% no-show rate OR no visits in 90+ days OR <2 visits last year with >180 day gaps
+      - Low Risk: All other patients including those with future appointments
+      
+      ### Patient Value Categorization
+      - VIP: Lifetime production >= $5,000
+      - High Value: Lifetime production $2,000-$4,999
+      - Medium Value: Lifetime production $500-$1,999
+      - Low Value: Lifetime production < $500
+      - No Production: No recorded production
+      
+      ### Engagement Level Assessment
+      - Highly Engaged: 3+ completed visits last year AND 80%+ communication response rate
+      - Engaged: 2+ completed visits last year AND 60%+ communication response rate
+      - Moderately Engaged: 1+ completed visits last year
+      - Disengaged: No completed visits last year
+      
+      ## Data Quality Notes
+      - Excludes patients without first visit dates to ensure data completeness
+      - Handles null values in financial calculations with proper coalesce logic
+      - Uses safe division with nullif to prevent division by zero errors
+      - Filters to active patient statuses only (Patient, Inactive)
+      - Handles future appointment dates by excluding them from time-based calculations
+      - Patients with future appointments are classified as 'Scheduled' retention status
+      - Negative time calculations are prevented by filtering out future dates
+      
+      ## Performance Considerations
+      - Indexed on key query dimensions (date_id, patient_id, provider_id, clinic_id)
+      - Optimized joins using proper foreign key relationships
+      - Efficient aggregations with conditional counting and summing
+      - Window functions for complex patient lifecycle calculations
+      
+      ## Usage Notes
+      - Use for patient retention analysis and churn prediction
+      - Monitor churn risk scores for early intervention
+      - Segment patients by value category for targeted marketing
+      - Track engagement levels for communication strategy optimization
+      - Analyze loyalty segments for retention program effectiveness
+      - Combine with appointment and financial data for comprehensive patient analysis
+    
+    meta:
+      owner: "Patient Management Team"
+      contains_pii: true
+      business_process: "Patient Retention and Lifecycle Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + patient combination"
+      primary_consumers: ["Patient Management", "Marketing", "Executive Leadership", "Clinical Operations"]
+      data_quality_requirements:
+        - "Patient retention status must be accurately classified"
+        - "Churn risk scores must be calculated consistently"
+        - "Financial metrics must handle null values appropriately"
+      performance_requirements:
+        - "Daily refresh must complete within 30 minutes"
+        - "Query performance optimized for dashboard consumption"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 100000
+          config:
+            severity: error
+            description: "Expected patient retention records based on active patient base"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "retention_status in ('Active', 'Recent', 'Moderate', 'Dormant', 'Inactive', 'Scheduled', 'Lost')"
+          config:
+            severity: error
+            description: "Retention status must be one of the defined categories"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "churn_risk_category in ('Low Risk', 'Medium Risk', 'High Risk')"
+          config:
+            severity: error
+            description: "Churn risk category must be one of the defined risk levels"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis
+          
+          Business Rules:
+          - Represents the snapshot date for patient retention status
+          - Used for trend analysis and historical tracking
+          - Always current_date for daily snapshots
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Patient dimension for patient identification
+          
+          Business Rules:
+          - Unique identifier for each patient
+          - Links to patient demographic and status information
+          - Used for patient-level analysis and segmentation
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+          - not_null
+      
+      # Patient Demographics
+      - name: age
+        description: >
+          Patient age in years at the time of the snapshot
+          
+          Business Rules:
+          - Calculated from birth date to snapshot date
+          - Used for age-based segmentation and analysis
+          - Important for demographic analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+      
+      - name: gender
+        description: >
+          Patient gender classification
+          
+          Business Rules:
+          - Standardized gender values (M=Male, F=Female, O=Other, U=Unknown)
+          - Used for demographic analysis and segmentation
+          - Important for population health analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['M', 'F', 'O', 'U']
+      
+      - name: patient_status
+        description: >
+          Current patient status in the system
+          
+          Business Rules:
+          - Patient: Active patient in the system
+          - Inactive: Patient marked as inactive but not deleted
+          - Used for filtering active patient populations
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Patient', 'Inactive']
+      
+      - name: first_visit_date
+        description: >
+          Date of patient's first visit to the practice
+          
+          Business Rules:
+          - Used for patient tenure calculations
+          - Required for patient lifecycle analysis
+          - Basis for years_as_patient calculation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ "now" | date }}'
+      
+      - name: primary_provider_id
+        description: >
+          Foreign key to dim_provider - Patient's primary care provider
+          
+          Business Rules:
+          - Links to the provider primarily responsible for patient care
+          - Used for provider-specific retention analysis
+          - Important for care coordination analysis
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+          - not_null
+      
+      - name: clinic_id
+        description: >
+          Foreign key to clinic location - Practice location identifier
+          
+          Business Rules:
+          - Identifies the clinic location for the patient
+          - Used for location-based retention analysis
+          - Important for multi-location practice analysis
+        tests:
+          - not_null
+          - positive_values
+      
+      - name: has_insurance_flag
+        description: >
+          Flag indicating whether patient has active insurance coverage
+          
+          Business Rules:
+          - true: Patient has active insurance coverage
+          - false: Patient is self-pay or has no active insurance
+          - Used for insurance-based segmentation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Provider Information
+      - name: primary_provider_name
+        description: >
+          Full name of the patient's primary care provider
+          
+          Business Rules:
+          - Concatenated first and last name of primary provider
+          - Used for provider identification in reports
+          - Important for provider-specific analysis
+        tests:
+          - not_null
+      
+      - name: primary_provider_type
+        description: >
+          Category of the primary provider's type
+          
+          Business Rules:
+          - Standardized provider type classification
+          - Used for provider type analysis
+          - Important for care team composition analysis
+        tests:
+          - not_null
+      
+      - name: primary_provider_specialty
+        description: >
+          Category of the primary provider's specialty
+          
+          Business Rules:
+          - Standardized specialty classification
+          - Used for specialty-based retention analysis
+          - Important for clinical service analysis
+        tests:
+          - not_null
+      
+      # Date Information
+      - name: year
+        description: >
+          Year of the snapshot date
+          
+          Business Rules:
+          - Extracted from date_id for temporal analysis
+          - Used for year-over-year comparisons
+          - Important for trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+      
+      - name: month
+        description: >
+          Month of the snapshot date
+          
+          Business Rules:
+          - Extracted from date_id for temporal analysis
+          - Used for seasonal analysis
+          - Important for monthly trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+      
+      - name: quarter
+        description: >
+          Quarter of the snapshot date
+          
+          Business Rules:
+          - Extracted from date_id for temporal analysis
+          - Used for quarterly reporting
+          - Important for quarterly trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+      
+      - name: day_name
+        description: >
+          Day of the week for the snapshot date
+          
+          Business Rules:
+          - Extracted from date_id for temporal analysis
+          - Used for day-of-week analysis
+          - Important for operational planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+      
+      # Patient Tenure and Lifecycle
+      - name: days_as_patient
+        description: >
+          Number of days since patient's first visit
+          
+          Business Rules:
+          - Calculated as current_date - first_visit_date
+          - Used for patient tenure analysis
+          - Important for loyalty segmentation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 36500
+      
+      - name: years_as_patient
+        description: >
+          Number of years since patient's first visit
+          
+          Business Rules:
+          - Calculated as days_as_patient / 365.0
+          - Rounded to 1 decimal place
+          - Used for patient tenure analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      # Activity Summary
+      - name: total_appointments
+        description: >
+          Total number of appointments for the patient
+          
+          Business Rules:
+          - Count of all appointments regardless of status
+          - Used for patient activity analysis
+          - Important for engagement assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: completed_appointments
+        description: >
+          Number of completed appointments for the patient
+          
+          Business Rules:
+          - Count of appointments with is_completed = true
+          - Used for successful visit analysis
+          - Important for retention metrics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: no_show_appointments
+        description: >
+          Number of no-show appointments for the patient
+          
+          Business Rules:
+          - Count of appointments with is_no_show = true
+          - Used for reliability assessment
+          - Important for churn risk calculation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: cancelled_appointments
+        description: >
+          Number of cancelled appointments for the patient
+          
+          Business Rules:
+          - Count of appointments with is_broken = true
+          - Used for reliability assessment
+          - Important for operational analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: first_appointment_date
+        description: >
+          Date of patient's first appointment
+          
+          Business Rules:
+          - Earliest appointment date for the patient
+          - Used for patient journey analysis
+          - May differ from first_visit_date
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ "now" | date }}'
+      
+      - name: last_appointment_date
+        description: >
+          Date of patient's most recent appointment
+          
+          Business Rules:
+          - Latest appointment date for the patient
+          - Used for recency analysis
+          - May include future appointments
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ "now" | date }}'
+      
+      - name: last_completed_appointment
+        description: >
+          Date of patient's most recent completed appointment
+          
+          Business Rules:
+          - Latest completed appointment date
+          - Used for retention status calculation
+          - Excludes future appointments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ "now" | date }}'
+      
+      # Recent Activity Metrics
+      - name: appointments_last_30_days
+        description: >
+          Number of appointments in the last 30 days
+          
+          Business Rules:
+          - Count of appointments with appointment_date >= current_date - 30 days
+          - Used for active patient classification
+          - Key metric for retention status
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+      
+      - name: appointments_last_90_days
+        description: >
+          Number of appointments in the last 90 days
+          
+          Business Rules:
+          - Count of appointments with appointment_date >= current_date - 90 days
+          - Used for recent patient classification
+          - Important for retention analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: appointments_last_6_months
+        description: >
+          Number of appointments in the last 6 months
+          
+          Business Rules:
+          - Count of appointments with appointment_date >= current_date - 6 months
+          - Used for moderate patient classification
+          - Important for engagement analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 200
+      
+      - name: appointments_last_year
+        description: >
+          Number of appointments in the last year
+          
+          Business Rules:
+          - Count of appointments with appointment_date >= current_date - 1 year
+          - Used for dormant patient classification
+          - Important for annual activity analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+      
+      - name: appointments_last_2_years
+        description: >
+          Number of appointments in the last 2 years
+          
+          Business Rules:
+          - Count of appointments with appointment_date >= current_date - 2 years
+          - Used for inactive patient classification
+          - Important for long-term retention analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: completed_visits_last_year
+        description: >
+          Number of completed visits in the last year
+          
+          Business Rules:
+          - Count of completed appointments with appointment_date >= current_date - 1 year
+          - Used for engagement level assessment
+          - Important for retention metrics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+      
+      # Service Diversity
+      - name: hygiene_appointments
+        description: >
+          Number of hygiene appointments for the patient
+          
+          Business Rules:
+          - Count of appointments with is_hygiene_appointment = true
+          - Used for preventive care analysis
+          - Important for service mix analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+      
+      - name: treatment_appointments
+        description: >
+          Number of treatment appointments for the patient
+          
+          Business Rules:
+          - Count of appointments with is_hygiene_appointment = false
+          - Used for treatment analysis
+          - Important for service mix analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+      
+      - name: unique_providers_seen
+        description: >
+          Number of unique providers the patient has seen
+          
+          Business Rules:
+          - Count of distinct provider_id values
+          - Used for provider diversity analysis
+          - Important for loyalty segmentation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 50
+      
+      - name: hygiene_visit_percentage
+        description: >
+          Percentage of appointments that were hygiene visits
+          
+          Business Rules:
+          - Calculated as hygiene_appointments / total_appointments * 100
+          - Used for preventive care analysis
+          - Important for service mix analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      # Financial Metrics
+      - name: lifetime_patient_payments
+        description: >
+          Total amount of payments made by the patient
+          
+          Business Rules:
+          - Sum of payment_amount where is_patient_payment = true
+          - Used for patient payment analysis
+          - Important for financial assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: lifetime_insurance_payments
+        description: >
+          Total amount of payments made by insurance
+          
+          Business Rules:
+          - Sum of payment_amount where is_insurance_payment = true
+          - Used for insurance payment analysis
+          - Important for financial assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: lifetime_total_payments
+        description: >
+          Total amount of all payments for the patient
+          
+          Business Rules:
+          - Sum of all payment_amount values
+          - Used for total payment analysis
+          - Important for financial assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 200000
+      
+      - name: total_payment_transactions
+        description: >
+          Total number of payment transactions for the patient
+          
+          Business Rules:
+          - Count of all payment transactions
+          - Used for payment frequency analysis
+          - Important for financial behavior analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: last_payment_date
+        description: >
+          Date of the most recent payment transaction
+          
+          Business Rules:
+          - Latest payment_date for the patient
+          - Used for payment recency analysis
+          - Important for financial activity assessment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ "now" | date }}'
+      
+      - name: payments_last_year
+        description: >
+          Total amount of payments in the last year
+          
+          Business Rules:
+          - Sum of payment_amount where payment_date >= current_date - 1 year
+          - Used for recent payment analysis
+          - Important for financial activity assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+      
+      # Production and Value
+      - name: lifetime_production
+        description: >
+          Total billed amount for the patient
+          
+          Business Rules:
+          - Sum of billed_amount from all claims
+          - Used for patient value assessment
+          - Important for value categorization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 200000
+      
+      - name: lifetime_collections
+        description: >
+          Total collected amount for the patient
+          
+          Business Rules:
+          - Sum of paid_amount from all claims
+          - Used for collection analysis
+          - Important for financial performance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 200000
+      
+      - name: lifetime_write_offs
+        description: >
+          Total write-off amount for the patient
+          
+          Business Rules:
+          - Sum of write_off_amount from all claims
+          - Used for write-off analysis
+          - Important for financial performance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+      
+      - name: total_claims
+        description: >
+          Total number of claims for the patient
+          
+          Business Rules:
+          - Count of all claims
+          - Used for claim frequency analysis
+          - Important for service utilization analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: last_claim_date
+        description: >
+          Date of the most recent claim
+          
+          Business Rules:
+          - Latest claim_date for the patient
+          - Used for claim recency analysis
+          - Important for service activity assessment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ "now" | date }}'
+      
+      - name: production_last_year
+        description: >
+          Total billed amount in the last year
+          
+          Business Rules:
+          - Sum of billed_amount where claim_date >= current_date - 1 year
+          - Used for recent production analysis
+          - Important for annual value assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+      
+      - name: production_last_2_years
+        description: >
+          Total billed amount in the last 2 years
+          
+          Business Rules:
+          - Sum of billed_amount where claim_date >= current_date - 2 years
+          - Used for long-term production analysis
+          - Important for value trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      # Patient Lifetime Value
+      - name: annual_patient_value
+        description: >
+          Annual production value per year as a patient
+          
+          Business Rules:
+          - Calculated as lifetime_production / years_as_patient
+          - Used for patient value analysis
+          - Important for value segmentation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+      
+      - name: avg_payment_per_visit
+        description: >
+          Average payment amount per appointment
+          
+          Business Rules:
+          - Calculated as lifetime_total_payments / total_appointments
+          - Used for payment efficiency analysis
+          - Important for financial behavior analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+      
+      - name: avg_production_per_visit
+        description: >
+          Average production amount per completed appointment
+          
+          Business Rules:
+          - Calculated as lifetime_production / completed_appointments
+          - Used for production efficiency analysis
+          - Important for service value analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+      
+      # Communication and Engagement
+      - name: total_communications
+        description: >
+          Total number of communications with the patient
+          
+          Business Rules:
+          - Count of all communication records
+          - Used for communication frequency analysis
+          - Important for engagement assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: communications_with_response
+        description: >
+          Number of communications that received a response
+          
+          Business Rules:
+          - Count of communications with is_patient_initiated = true
+          - Used for response rate analysis
+          - Important for engagement assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: last_communication_date
+        description: >
+          Date of the most recent communication
+          
+          Business Rules:
+          - Latest communication_datetime for the patient
+          - Used for communication recency analysis
+          - Important for engagement assessment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: '1900-01-01'
+              max_value: '{{ "now" | date }}'
+      
+      - name: communications_received
+        description: >
+          Number of communications that were received
+          
+          Business Rules:
+          - Count of communications with engagement_level = 'Received'
+          - Used for communication effectiveness analysis
+          - Important for engagement assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+      
+      - name: communications_last_6_months
+        description: >
+          Number of communications in the last 6 months
+          
+          Business Rules:
+          - Count of communications with communication_datetime >= current_date - 6 months
+          - Used for recent communication analysis
+          - Important for engagement assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+      
+      - name: communication_response_rate
+        description: >
+          Percentage of communications that received a response
+          
+          Business Rules:
+          - Calculated as communications_with_response / total_communications * 100
+          - Used for communication effectiveness analysis
+          - Important for engagement assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      # Timing and Gaps
+      - name: days_since_last_visit
+        description: >
+          Number of days since the last completed visit
+          
+          Business Rules:
+          - Calculated as current_date - last_completed_appointment
+          - Used for recency analysis
+          - Important for retention status calculation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 3650
+      
+      - name: days_since_recent_activity
+        description: >
+          Number of days since any recent activity
+          
+          Business Rules:
+          - Calculated as current_date - recent_activity_date
+          - Used for activity recency analysis
+          - Important for engagement assessment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 3650
+      
+      - name: avg_days_between_appointments
+        description: >
+          Average number of days between appointments
+          
+          Business Rules:
+          - Calculated as (last_appointment_date - first_appointment_date) / (total_appointments - 1)
+          - Used for visit frequency analysis
+          - Important for churn risk assessment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 3650
+      
+      - name: avg_months_between_visits
+        description: >
+          Average number of months between visits
+          
+          Business Rules:
+          - Calculated as avg_days_between_appointments / 30.0
+          - Used for visit frequency analysis
+          - Important for retention analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+      
+      # Retention Status Assessment
+      - name: retention_status
+        description: >
+          Current patient retention status classification
+          
+          Categories:
+          - Active: Appointments in last 30 days
+          - Recent: Appointments in last 90 days
+          - Moderate: Appointments in last 6 months
+          - Dormant: Appointments in last year
+          - Inactive: Appointments in last 2 years
+          - Scheduled: Has future appointments
+          - Lost: No activity in last 2 years
+          
+          Business Rules:
+          - Used for patient lifecycle management
+          - Key metric for retention analysis
+          - Basis for intervention strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Recent', 'Moderate', 'Dormant', 'Inactive', 'Scheduled', 'Lost']
+      
+      - name: churn_risk_category
+        description: >
+          Patient churn risk assessment category
+          
+          Categories:
+          - Low Risk: Recent activity or future appointments
+          - Medium Risk: Moderate gaps or high no-show rates
+          - High Risk: Long gaps or no recent activity
+          
+          Business Rules:
+          - Used for churn prevention strategies
+          - Key metric for intervention prioritization
+          - Basis for retention campaigns
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Low Risk', 'Medium Risk', 'High Risk']
+      
+      - name: patient_value_category
+        description: >
+          Patient value segmentation based on lifetime production
+          
+          Categories:
+          - VIP: Lifetime production >= $5,000
+          - High Value: Lifetime production $2,000-$4,999
+          - Medium Value: Lifetime production $500-$1,999
+          - Low Value: Lifetime production < $500
+          - No Production: No recorded production
+          
+          Business Rules:
+          - Used for value-based segmentation
+          - Key metric for marketing strategies
+          - Basis for service prioritization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['VIP', 'High Value', 'Medium Value', 'Low Value', 'No Production']
+      
+      - name: engagement_level
+        description: >
+          Patient engagement level assessment
+          
+          Categories:
+          - Highly Engaged: 3+ visits last year AND 80%+ response rate
+          - Engaged: 2+ visits last year AND 60%+ response rate
+          - Moderately Engaged: 1+ visits last year
+          - Disengaged: No visits last year
+          
+          Business Rules:
+          - Used for engagement strategies
+          - Key metric for communication planning
+          - Basis for service delivery optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Highly Engaged', 'Engaged', 'Moderately Engaged', 'Disengaged']
+      
+      - name: loyalty_segment
+        description: >
+          Patient loyalty segmentation based on tenure and behavior
+          
+          Categories:
+          - Loyal: 3+ years tenure, 4+ visits last 2 years, 2+ providers
+          - Returning: 2+ years tenure, 2+ visits last year
+          - Active: 1+ visits last year
+          - New/Inactive: New or no recent activity
+          
+          Business Rules:
+          - Used for loyalty program management
+          - Key metric for retention strategies
+          - Basis for relationship management
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Loyal', 'Returning', 'Active', 'New/Inactive']
+      
+      # Boolean Flags
+      - name: active_last_year
+        description: >
+          Flag indicating if patient was active in the last year
+          
+          Logic:
+          - true when: appointments_last_year > 0
+          - false when: appointments_last_year = 0
+          
+          Business Impact:
+          - Used for active patient identification
+          - Important for retention analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: regular_hygiene_patient
+        description: >
+          Flag indicating if patient is a regular hygiene patient
+          
+          Logic:
+          - true when: hygiene_appointments >= 2
+          - false when: hygiene_appointments < 2
+          
+          Business Impact:
+          - Used for preventive care analysis
+          - Important for service planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: recent_production
+        description: >
+          Flag indicating if patient had recent production
+          
+          Logic:
+          - true when: production_last_year > 0
+          - false when: production_last_year = 0
+          
+          Business Impact:
+          - Used for financial activity analysis
+          - Important for value assessment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: recently_seen
+        description: >
+          Flag indicating if patient was recently seen
+          
+          Logic:
+          - true when: days_since_last_visit <= 180
+          - false when: days_since_last_visit > 180
+          
+          Business Impact:
+          - Used for recency analysis
+          - Important for retention assessment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: reliable_patient
+        description: >
+          Flag indicating if patient is reliable (low no-show rate)
+          
+          Logic:
+          - true when: no_show_rate <= 10%
+          - false when: no_show_rate > 10%
+          
+          Business Impact:
+          - Used for reliability assessment
+          - Important for scheduling optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: responsive_patient
+        description: >
+          Flag indicating if patient is responsive to communications
+          
+          Logic:
+          - true when: communication_response_rate >= 70%
+          - false when: communication_response_rate < 70%
+          
+          Business Impact:
+          - Used for communication strategy
+          - Important for engagement optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Risk Scores
+      - name: churn_risk_score
+        description: >
+          Numerical churn risk score (0-100)
+          
+          Calculation Logic:
+          - Base score from days since last visit (0-40 points)
+          - Additional points for no activity last year (30 points)
+          - Additional points for high no-show rate (20 points)
+          - Additional points for low response rate (10 points)
+          
+          Business Rules:
+          - Higher scores indicate higher churn risk
+          - Used for risk prioritization
+          - Important for intervention planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). May be null for calculated fields."
+        tests:
+          - not_null:
+              where: "patient_id is not null"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental)."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

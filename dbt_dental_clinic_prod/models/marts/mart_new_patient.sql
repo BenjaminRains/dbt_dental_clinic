@@ -1,22 +1,66 @@
 {{ config(
     materialized='table',
-    unique_key=['date_id', 'patient_id']
+    schema='marts',
+    unique_key=['date_id', 'patient_id'],
+    on_schema_change='fail',
+    indexes=[
+        {'columns': ['date_id']},
+        {'columns': ['patient_id']},
+        {'columns': ['primary_provider_id']},
+        {'columns': ['clinic_id']}
+    ]
 ) }}
 
 /*
-New Patient Mart - New patient acquisition and onboarding analytics
-This mart tracks new patient acquisition, sources, onboarding success,
-and early patient journey metrics to optimize marketing and patient experience.
+Summary Mart model for New Patient Analytics
+Part of System A: Patient Management
 
-Key metrics:
-- New patient acquisition patterns
-- Source and referral tracking
-- Onboarding appointment completion
-- Early patient lifetime value
-- Conversion and retention rates
+This model:
+1. Tracks new patient acquisition patterns and onboarding success
+2. Analyzes early patient journey metrics and retention indicators
+3. Provides comprehensive new patient analytics for marketing optimization
+
+Business Logic Features:
+- New patient identification and demographic categorization
+- First visit success tracking and completion rate analysis
+- Early engagement metrics (90-day window)
+- Patient value categorization and referral generation tracking
+- Onboarding success scoring (0-100 scale)
+- Acquisition performance tier classification
+
+Key Metrics:
+- New patient acquisition patterns by demographics and time periods
+- First visit completion rates and no-show tracking
+- Early patient engagement and retention indicators
+- Patient value categorization and lifetime value estimation
+- Referral generation and family acquisition tracking
+- Onboarding success scoring and performance tier classification
+
+Data Quality Notes:
+- New patients identified by first_visit_date not null and patient_status = 'Patient'
+- Production amounts calculated from actual procedure fees in procedurelog table
+- Procedure codes retrieved from procedurecode table via procedurelog relationship
+- Referral tracking assumes family relationships via guarantor_id
+- 90-day engagement window calculated from first_visit_date
+- Patient value categories based on realistic production thresholds ($100, $300, $600)
+
+Performance Considerations:
+- Indexed on date_id, patient_id, provider_id, and clinic_id for analytical queries
+- Complex aggregations across multiple fact tables require careful join optimization
+- Array aggregation for procedure codes may impact query performance
+
+Dependencies:
+- dim_patient: Primary patient demographic and status data
+- fact_appointment: Appointment scheduling and completion data
+- stg_opendental__procedurelog: Actual procedure fees and production data
+- stg_opendental__procedurecode: Procedure codes and descriptions
+- fact_payment: Early payment and financial activity data
+- dim_date: Date dimension for temporal analysis
+- dim_provider: Provider information and categorization
 */
 
-with NewPatients as (
+-- 1. Base patient data
+with new_patient_base as (
     select 
         dp.patient_id,
         dp.first_visit_date,
@@ -37,7 +81,8 @@ with NewPatients as (
         and dp.patient_status = 'Patient'
 ),
 
-FirstAppointments as (
+-- 2. First appointment analysis with procedure data
+first_appointments as (
     select 
         fa.patient_id,
         min(fa.appointment_date) as first_appointment_date,
@@ -45,32 +90,45 @@ FirstAppointments as (
         count(*) as total_first_day_appointments,
         sum(case when fa.is_completed then 1 else 0 end) as completed_first_appointments,
         sum(case when fa.is_no_show then 1 else 0 end) as no_show_first_appointments,
-        sum(fa.scheduled_production_amount) as first_visit_scheduled_production,
-        array_agg(fa.procedure_codes) as first_visit_procedures
+        -- Get actual production from procedures performed on first visit
+        coalesce(sum(pl.procedure_fee), 0.00) as first_visit_scheduled_production,
+        -- Get actual procedure codes from procedures performed
+        array_agg(distinct pc.procedure_code) filter (where pc.procedure_code is not null) as first_visit_procedures
     from {{ ref('fact_appointment') }} fa
-    inner join NewPatients np
+    inner join new_patient_base np
         on fa.patient_id = np.patient_id
         and fa.appointment_date = np.first_visit_date
+    left join {{ ref('stg_opendental__procedurelog') }} pl
+        on fa.appointment_id = pl.appointment_id
+        and pl.procedure_date = fa.appointment_date
+    left join {{ ref('stg_opendental__procedurecode') }} pc
+        on pl.procedure_code_id = pc.procedure_code_id
     group by fa.patient_id
 ),
 
-EarlyVisits as (
+-- 3. Early engagement analysis (90 days) with procedure data
+early_visits as (
     select 
         fa.patient_id,
         count(*) as appointments_first_90_days,
         sum(case when fa.is_completed then 1 else 0 end) as completed_appointments_90_days,
-        sum(fa.scheduled_production_amount) as production_first_90_days,
+        -- Get actual production from procedures performed in first 90 days
+        coalesce(sum(pl.procedure_fee), 0.00) as production_first_90_days,
         max(fa.appointment_date) as last_appointment_90_days,
         count(distinct fa.provider_id) as providers_seen_90_days
     from {{ ref('fact_appointment') }} fa
-    inner join NewPatients np
+    inner join new_patient_base np
         on fa.patient_id = np.patient_id
+    left join {{ ref('stg_opendental__procedurelog') }} pl
+        on fa.appointment_id = pl.appointment_id
+        and pl.procedure_date = fa.appointment_date
     where fa.appointment_date between np.first_visit_date 
         and np.first_visit_date + interval '90 days'
     group by fa.patient_id
 ),
 
-EarlyPayments as (
+-- 4. Early financial activity analysis
+early_payments as (
     select 
         fp.patient_id,
         count(*) as payments_first_90_days,
@@ -78,19 +136,20 @@ EarlyPayments as (
         sum(case when fp.is_insurance_payment then fp.payment_amount else 0 end) as insurance_payments_90_days,
         avg(fp.payment_amount) as avg_payment_amount_90_days
     from {{ ref('fact_payment') }} fp
-    inner join NewPatients np
+    inner join new_patient_base np
         on fp.patient_id = np.patient_id
     where fp.payment_date between np.first_visit_date 
         and np.first_visit_date + interval '90 days'
     group by fp.patient_id
 ),
 
-PatientReferrals as (
+-- 5. Referral generation analysis
+patient_referrals as (
     select 
         np.patient_id,
         count(*) as referrals_generated,
         array_agg(distinct ref_patient.patient_id::text) as referred_patient_ids
-    from NewPatients np
+    from new_patient_base np
     inner join {{ ref('dim_patient') }} ref_patient
         on np.patient_id = ref_patient.guarantor_id  -- Assuming family referrals
         and ref_patient.patient_id != np.patient_id
@@ -99,7 +158,8 @@ PatientReferrals as (
     group by np.patient_id
 ),
 
-Final as (
+-- 6. Final integration and business logic enhancement
+final as (
     select
         -- Keys and Dimensions
         dd.date_id,
@@ -113,9 +173,9 @@ Final as (
         np.clinic_id,
         
         -- Provider Information
-        prov.provider_name as primary_provider_name,
-        prov.provider_type as primary_provider_type,
-        prov.specialty as primary_provider_specialty,
+        concat(prov.provider_first_name, ' ', prov.provider_last_name) as primary_provider_name,
+        prov.provider_type_category as primary_provider_type,
+        prov.specialty_description as primary_provider_specialty,
         
         -- Date Dimensions
         dd.year as acquisition_year,
@@ -150,7 +210,10 @@ Final as (
         -- First Visit Success Indicators
         case when fa.completed_first_appointments > 0 then true else false end as completed_first_visit,
         case when fa.no_show_first_appointments > 0 then true else false end as no_show_first_visit,
-        round(fa.completed_first_appointments::numeric / nullif(fa.total_first_day_appointments, 0) * 100, 2) as first_visit_completion_rate,
+        round(
+            coalesce(fa.completed_first_appointments, 0)::numeric / 
+            nullif(coalesce(fa.total_first_day_appointments, 0), 0) * 100, 2
+        ) as first_visit_completion_rate,
         
         -- Early Engagement (90 days)
         ev.appointments_first_90_days,
@@ -170,32 +233,35 @@ Final as (
         case when ev.last_appointment_90_days >= np.first_visit_date + interval '60 days' then true else false end as active_after_60_days,
         
         -- Patient Value Metrics
-        round(ev.production_first_90_days / nullif(ev.appointments_first_90_days, 0), 2) as avg_production_per_visit_90_days,
+        round(
+            coalesce(ev.production_first_90_days, 0)::numeric / 
+            nullif(coalesce(ev.appointments_first_90_days, 0), 0)::numeric, 2
+        ) as avg_production_per_visit_90_days,
         case 
-            when ev.production_first_90_days = 0 then 'No Production'
-            when ev.production_first_90_days < 200 then 'Low Value'
-            when ev.production_first_90_days < 500 then 'Medium Value'
-            when ev.production_first_90_days < 1000 then 'High Value'
+            when coalesce(ev.production_first_90_days, 0) = 0 then 'No Production'
+            when coalesce(ev.production_first_90_days, 0) < 100 then 'Low Value'
+            when coalesce(ev.production_first_90_days, 0) < 300 then 'Medium Value'
+            when coalesce(ev.production_first_90_days, 0) < 600 then 'High Value'
             else 'Very High Value'
         end as patient_value_category_90_days,
         
         -- Referral Generation
         coalesce(pr.referrals_generated, 0) as referrals_generated_1_year,
         pr.referred_patient_ids,
-        case when pr.referrals_generated > 0 then true else false end as generated_referrals,
+        case when coalesce(pr.referrals_generated, 0) > 0 then true else false end as generated_referrals,
         
         -- Onboarding Success Score (0-100)
         round((
-            case when fa.completed_first_appointments > 0 then 25 else 0 end +
-            case when ev.returned_within_90_days then 25 else 0 end +
-            case when ep.patient_payments_90_days > 0 then 25 else 0 end +
-            case when pr.referrals_generated > 0 then 25 else 0 end
-        ), 0) as onboarding_success_score,
+            case when coalesce(fa.completed_first_appointments, 0) > 0 then 25 else 0 end +
+            case when coalesce(ev.appointments_first_90_days, 0) > 1 then 25 else 0 end +
+            case when coalesce(ep.patient_payments_90_days, 0) > 0 then 25 else 0 end +
+            case when coalesce(pr.referrals_generated, 0) > 0 then 25 else 0 end
+        )::numeric, 0) as onboarding_success_score,
         
         -- Time to Next Appointment
         case 
-            when ev.appointments_first_90_days > 1 then 
-                extract(days from ev.last_appointment_90_days - np.first_visit_date)
+            when coalesce(ev.appointments_first_90_days, 0) > 1 then 
+                (ev.last_appointment_90_days - np.first_visit_date)
         end as days_to_last_appointment_90_days,
         
         -- Current Status (based on recent activity)
@@ -208,28 +274,28 @@ Final as (
         
         -- Acquisition Performance
         case 
-            when fa.completed_first_visit and ev.returned_within_90_days and ep.patient_payments_90_days > 0 then 'Excellent'
-            when fa.completed_first_visit and ev.returned_within_90_days then 'Good'
-            when fa.completed_first_visit then 'Fair'
+            when coalesce(fa.completed_first_appointments, 0) > 0 and coalesce(ev.appointments_first_90_days, 0) > 1 and coalesce(ep.patient_payments_90_days, 0) > 0 then 'Excellent'
+            when coalesce(fa.completed_first_appointments, 0) > 0 and coalesce(ev.appointments_first_90_days, 0) > 1 then 'Good'
+            when coalesce(fa.completed_first_appointments, 0) > 0 then 'Fair'
             else 'Poor'
         end as acquisition_success,
         
         -- Metadata
-        current_timestamp as _loaded_at
+        {{ standardize_mart_metadata() }}
         
-    from NewPatients np
+    from new_patient_base np
     inner join {{ ref('dim_date') }} dd
-        on np.first_visit_date = dd.date_actual
+        on np.first_visit_date = dd.date_day
     inner join {{ ref('dim_provider') }} prov
         on np.primary_provider_id = prov.provider_id
-    left join FirstAppointments fa
+    left join first_appointments fa
         on np.patient_id = fa.patient_id
-    left join EarlyVisits ev
+    left join early_visits ev
         on np.patient_id = ev.patient_id
-    left join EarlyPayments ep
+    left join early_payments ep
         on np.patient_id = ep.patient_id
-    left join PatientReferrals pr
+    left join patient_referrals pr
         on np.patient_id = pr.patient_id
 )
 
-select * from Final 
+select * from final 

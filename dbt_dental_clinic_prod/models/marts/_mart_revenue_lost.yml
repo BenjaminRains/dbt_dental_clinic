@@ -1,0 +1,854 @@
+version: 2
+
+models:
+  - name: mart_revenue_lost
+    description: >
+      Summary mart for comprehensive revenue lost analysis and opportunity tracking.
+      This mart provides detailed analysis of all forms of revenue leakage and missed opportunities,
+      enabling proactive revenue recovery and operational optimization across multiple opportunity types.
+      
+      ## Business Context
+      The revenue lost summary mart is a critical component of our analytical framework, enabling:
+      - Revenue leakage identification and quantification across all business processes
+      - Recovery opportunity prioritization and action planning
+      - Operational efficiency analysis and improvement tracking
+      - Financial impact assessment and forecasting
+      - Performance monitoring and alerting for revenue protection
+      - Executive reporting and revenue optimization dashboards
+      
+      ## Technical Specifications
+      - Grain: One row per date + opportunity_id combination (unique opportunity instance)
+      - Source: fact_appointment, fact_claim, stg_opendental__treatplan, stg_opendental__adjustment (primary sources)
+      - Refresh: Daily
+      - Dependencies: 
+        * fact_appointment (missed appointments and cancellations)
+        * fact_claim (claim rejections and denials)
+        * stg_opendental__treatplan (treatment plan delays)
+        * stg_opendental__adjustment (write-offs and adjustments)
+        * dim_provider (provider information and relationships)
+        * dim_patient (patient information and demographics)
+        * dim_date (date dimension for temporal analysis)
+      
+      ## Business Logic
+      ### Opportunity Identification
+      - Missed Appointments: No-shows and cancellations with scheduled production amounts
+      - Claim Rejections: Insurance denials, claim rejections, and processing issues
+      - Treatment Plan Delays: Delayed treatment plan starts (90+ days old)
+      - Write Offs: Credit adjustments and charge adjustments from adjustment table
+      
+      ### Recovery Potential Scoring
+      - High: No-shows, recent claim rejections with patient responsibility
+      - Medium: Cancellations with <24 hour notice, delayed treatment plans (90-180 days)
+      - Low: Cancellations with >24 hour notice, very delayed treatment plans (180+ days), charge adjustments
+      - None: Zero adjustments and other non-recoverable items
+      
+      ### Priority Scoring Algorithm (0-100)
+      - Revenue Impact (0-40 points): Based on lost revenue amount thresholds
+      - Recovery Potential (0-30 points): High=30, Medium=20, Low=10, None=0
+      - Opportunity Type (0-20 points): Missed Appointment=20, Claim Rejection=15, Treatment Plan Delay=10, Write Off=5
+      - Recency (0-10 points): Recent (30 days)=10, Moderate (90 days)=5, Old=0
+      
+      ### Financial Impact Categorization
+      - No Revenue Impact: $0 lost revenue
+      - Low Impact: <$100 lost revenue
+      - Medium Impact: $100-500 lost revenue
+      - High Impact: $500-1000 lost revenue
+      - Very High Impact: >$1000 lost revenue
+      
+      ### Time Impact Analysis
+      - No Time Impact: No lost time minutes
+      - Low Time Impact: <30 minutes
+      - Medium Time Impact: 30-60 minutes
+      - High Time Impact: 60-120 minutes
+      - Very High Time Impact: >120 minutes
+      
+      ## Data Quality Notes
+      - Treatment plan data may have incomplete status information (all currently show as Active)
+      - Claim rejection data depends on insurance processing accuracy and timing
+      - Some opportunity types may have null provider_id (treatment plans, claim rejections)
+      - UnfilledSlots analysis removed due to missing schedule table columns
+      - Estimated recoverable amounts use conservative recovery rates (High=80%, Medium=50%, Low=20%)
+      
+      ## Performance Considerations
+      - Large volume model due to comprehensive opportunity tracking across all business processes
+      - Indexed on key analytical dimensions (date_id, provider_id, patient_id, opportunity_type, recovery_potential)
+      - Uses efficient window functions for opportunity scoring and prioritization
+      - Date filtering applied to limit historical data volume (1-2 years depending on opportunity type)
+      - Complex business logic calculations may impact query performance on large datasets
+      
+      ## Usage Notes
+      - Use for revenue recovery prioritization and action planning workflows
+      - Recovery priority scores range from 0-100 (higher = more urgent)
+      - Recovery timeline provides realistic expectations for opportunity resolution
+      - Preventability assessment helps identify process improvement opportunities
+      - Boolean flags provide quick filtering for common revenue recovery scenarios
+      - Estimated recoverable amounts help with financial planning and goal setting
+      
+      ## Business Impact
+      - Critical for revenue protection and cash flow optimization
+      - Enables proactive revenue recovery efforts and reduces revenue leakage
+      - Supports operational efficiency improvements and process optimization
+      - Drives data-driven decision making for revenue management
+      - Provides transparency into revenue loss patterns and trends
+    
+    meta:
+      owner: "Finance Team"
+      contains_pii: true
+      business_process: "Revenue Management and Recovery"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + opportunity_id combination"
+      primary_consumers: ["Finance Team", "Practice Management", "Executive Leadership", "Operations Team"]
+      data_quality_requirements:
+        - "Recovery priority scores must be between 0-100"
+        - "Lost revenue amounts must be non-negative"
+        - "Recovery potential must be one of: High, Medium, Low, None"
+        - "Opportunity types must be one of: Missed Appointment, Claim Rejection, Treatment Plan Delay, Write Off"
+        - "Estimated recoverable amounts must be <= lost revenue amounts"
+      performance_requirements:
+        - "Query response time under 15 seconds for date range filters"
+        - "Support concurrent access by multiple users"
+        - "Daily refresh completion within 60 minutes"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 100000
+          config:
+            severity: error
+            description: "Expected revenue lost opportunity records should be reasonable for business volume"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "lost_revenue >= 0"
+          config:
+            severity: error
+            description: "Lost revenue amounts must be non-negative"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "recovery_priority_score between 0 and 100"
+          config:
+            severity: error
+            description: "Recovery priority scores must be between 0-100"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "estimated_recoverable_amount <= lost_revenue"
+          config:
+            severity: error
+            description: "Estimated recoverable amounts cannot exceed lost revenue"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis
+          
+          Business Rules:
+          - Links to the date when the revenue opportunity occurred
+          - Used for temporal analysis and trend identification
+          - Enables time-based filtering and aggregation
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: opportunity_id
+        description: >
+          Unique identifier for each revenue opportunity instance
+          
+          Business Rules:
+          - Generated using row_number() over opportunity date, type, and appointment_id
+          - Ensures uniqueness across all opportunity types
+          - Used as part of composite primary key with date_id
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Dimension Keys
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Provider associated with the opportunity
+          
+          Business Rules:
+          - May be null for treatment plan delays and claim rejections
+          - Links to provider information for performance analysis
+          - Used for provider-specific revenue recovery tracking
+          
+          Data Quality Notes:
+          - Null values expected for non-appointment related opportunities
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: warn
+              where: "provider_id is not null"
+      
+      - name: clinic_id
+        description: >
+          Clinic identifier where the opportunity occurred
+          
+          Business Rules:
+          - May be null for treatment plan delays and claim rejections
+          - Used for clinic-specific revenue recovery analysis
+          - Enables multi-location performance comparison
+          
+          Data Quality Notes:
+          - Null values expected for non-appointment related opportunities
+        tests:
+          - not_null:
+              where: "opportunity_type = 'Missed Appointment' or opportunity_type = 'Write Off'"
+      
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Patient associated with the opportunity
+          
+          Business Rules:
+          - Links to patient information for demographic analysis
+          - Used for patient-specific recovery strategies
+          - Enables patient behavior pattern analysis
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+          - not_null
+      
+      - name: appointment_id
+        description: >
+          Source system identifier for the opportunity (appointment_id, claim_id, treatplan_id, or adjustment_id)
+          
+          Business Rules:
+          - Maps to different source IDs depending on opportunity type
+          - Used for traceability back to source system records
+          - Enables detailed investigation of specific opportunities
+        tests:
+          - not_null
+          - positive_values
+      
+      # Provider Information
+      - name: provider_last_name
+        description: >
+          Provider's last name for reporting and identification
+          
+          Business Rules:
+          - Populated from dim_provider when provider_id is available
+          - Used for provider-specific reporting and analysis
+          - May be null for non-appointment related opportunities
+        tests:
+          - not_null:
+              where: "provider_id is not null"
+      
+      - name: provider_first_name
+        description: >
+          Provider's first name for reporting and identification
+          
+          Business Rules:
+          - Populated from dim_provider when provider_id is available
+          - Used for provider-specific reporting and analysis
+          - May be null for non-appointment related opportunities
+        tests:
+          - not_null:
+              where: "provider_id is not null"
+      
+      - name: provider_preferred_name
+        description: >
+          Provider's preferred name for display purposes
+          
+          Business Rules:
+          - Populated from dim_provider when provider_id is available
+          - Used for user-friendly reporting and dashboards
+          - May be null for non-appointment related opportunities
+        tests:
+          - not_null:
+              where: "provider_id is not null"
+      
+      - name: provider_type_category
+        description: >
+          Categorized provider type (e.g., Dentist, Hygienist, Specialist)
+          
+          Business Rules:
+          - Populated from dim_provider when provider_id is available
+          - Used for provider type analysis and comparison
+          - May be null for non-appointment related opportunities
+        tests:
+          - not_null:
+              where: "provider_id is not null"
+      
+      - name: provider_specialty_category
+        description: >
+          Categorized provider specialty for specialized analysis
+          
+          Business Rules:
+          - Populated from dim_provider when provider_id is available
+          - Used for specialty-specific revenue recovery analysis
+          - May be null for non-appointment related opportunities
+        tests:
+          - not_null:
+              where: "provider_id is not null"
+      
+      # Patient Information
+      - name: patient_age
+        description: >
+          Patient's age at the time of the opportunity
+          
+          Business Rules:
+          - Populated from dim_patient for demographic analysis
+          - Used for age-based recovery strategy analysis
+          - Enables demographic pattern identification
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+              severity: warn
+      
+      - name: patient_gender
+        description: >
+          Patient's gender for demographic analysis
+          
+          Business Rules:
+          - Populated from dim_patient for demographic analysis
+          - Used for gender-based recovery strategy analysis
+          - Enables demographic pattern identification
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['M', 'F', 'Other', 'Unknown']
+      
+      - name: has_insurance_flag
+        description: >
+          Flag indicating whether patient has insurance coverage
+          
+          Business Rules:
+          - Populated from dim_patient for insurance analysis
+          - Used for insurance-based recovery strategy analysis
+          - Affects recovery potential and collection strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: patient_specific
+        description: >
+          Flag indicating whether this opportunity is patient-specific
+          
+          Business Rules:
+          - true when patient_id is not null
+          - false when patient_id is null
+          - Used for filtering patient-specific vs. general opportunities
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Date Information
+      - name: appointment_date
+        description: >
+          Date when the revenue opportunity occurred
+          
+          Business Rules:
+          - Maps to different date fields depending on opportunity type
+          - Used for temporal analysis and trend identification
+          - Enables date-based filtering and aggregation
+        tests:
+          - not_null
+      
+      - name: year
+        description: >
+          Year when the opportunity occurred
+          
+          Business Rules:
+          - Populated from dim_date for temporal analysis
+          - Used for year-over-year comparison and trend analysis
+          - Enables annual reporting and forecasting
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+              severity: warn
+      
+      - name: month
+        description: >
+          Month when the opportunity occurred
+          
+          Business Rules:
+          - Populated from dim_date for temporal analysis
+          - Used for seasonal pattern analysis and monthly reporting
+          - Enables monthly trend identification
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+              severity: warn
+      
+      - name: quarter
+        description: >
+          Quarter when the opportunity occurred
+          
+          Business Rules:
+          - Populated from dim_date for temporal analysis
+          - Used for quarterly reporting and trend analysis
+          - Enables quarterly performance comparison
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      
+      - name: day_name
+        description: >
+          Day of the week when the opportunity occurred
+          
+          Business Rules:
+          - Populated from dim_date for temporal analysis
+          - Used for day-of-week pattern analysis
+          - Enables scheduling optimization insights
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+      
+      - name: is_weekend
+        description: >
+          Flag indicating whether the opportunity occurred on a weekend
+          
+          Business Rules:
+          - Populated from dim_date for temporal analysis
+          - Used for weekend vs. weekday pattern analysis
+          - Enables scheduling optimization insights
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_holiday
+        description: >
+          Flag indicating whether the opportunity occurred on a holiday
+          
+          Business Rules:
+          - Populated from dim_date for temporal analysis
+          - Used for holiday impact analysis
+          - Enables holiday scheduling optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Opportunity Details
+      - name: opportunity_type
+        description: >
+          Primary category of the revenue opportunity
+          
+          Categories:
+          - Missed Appointment: No-shows and cancellations
+          - Claim Rejection: Insurance denials and claim rejections
+          - Treatment Plan Delay: Delayed treatment plan starts
+          - Write Off: Credit and charge adjustments
+          
+          Business Rules:
+          - Determines the source system and recovery strategy
+          - Used for opportunity type analysis and comparison
+          - Affects recovery potential and timeline
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Missed Appointment', 'Claim Rejection', 'Treatment Plan Delay', 'Write Off']
+      
+      - name: opportunity_subtype
+        description: >
+          Detailed subcategory of the revenue opportunity
+          
+          Subtypes by Type:
+          - Missed Appointment: No Show, Cancellation, Other
+          - Claim Rejection: Insurance Denial, Claim Rejection, Processing Issue
+          - Treatment Plan Delay: Very Delayed, Delayed Start, In Progress
+          - Write Off: Credit Adjustment, Charge Adjustment, Zero Adjustment
+          
+          Business Rules:
+          - Provides more granular classification within opportunity type
+          - Used for detailed analysis and recovery strategy selection
+          - Affects recovery potential and preventability assessment
+        tests:
+          - not_null
+      
+      - name: lost_revenue
+        description: >
+          Amount of revenue lost due to this opportunity
+          
+          Calculation Logic:
+          - Missed Appointments: scheduled_production_amount
+          - Claim Rejections: billed_amount - paid_amount
+          - Treatment Plan Delays: null (no revenue amount available)
+          - Write Offs: abs(adjustment_amount)
+          
+          Business Rules:
+          - Must be non-negative (zero or positive)
+          - Used for financial impact assessment and prioritization
+          - Basis for recovery potential and priority scoring
+          
+          Data Quality Notes:
+          - May be null for treatment plan delays due to missing data
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+              where: "lost_revenue is not null"
+      
+      - name: lost_time_minutes
+        description: >
+          Amount of time lost due to this opportunity (in minutes)
+          
+          Calculation Logic:
+          - Missed Appointments: appointment_length_minutes
+          - Other types: null (not applicable)
+          
+          Business Rules:
+          - Used for time impact analysis and scheduling optimization
+          - Affects time impact categorization
+          - May be null for non-appointment related opportunities
+          
+          Data Quality Notes:
+          - Only applicable to missed appointments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 480
+              severity: warn
+              where: "lost_time_minutes is not null"
+      
+      - name: missed_procedures
+        description: >
+          Array of procedure codes that were missed due to this opportunity
+          
+          Business Rules:
+          - Populated from procedure_codes for missed appointments
+          - Single procedure code array for claim rejections
+          - Null for treatment plan delays and write-offs
+          - Used for procedure-specific analysis and recovery planning
+          
+          Data Quality Notes:
+          - May be null for non-appointment related opportunities
+        tests:
+          - not_null:
+              where: "opportunity_type = 'Missed Appointment' or opportunity_type = 'Claim Rejection'"
+      
+      - name: opportunity_datetime
+        description: >
+          Timestamp when the opportunity occurred
+          
+          Business Rules:
+          - Maps to different datetime fields depending on opportunity type
+          - Used for precise timing analysis and pattern identification
+          - Enables hour-of-day and time period analysis
+        tests:
+          - not_null
+      
+      - name: recovery_potential
+        description: >
+          Assessment of how likely this opportunity can be recovered
+          
+          Categories:
+          - High: No-shows, recent claim rejections with patient responsibility
+          - Medium: Cancellations with <24 hour notice, delayed treatment plans (90-180 days)
+          - Low: Cancellations with >24 hour notice, very delayed treatment plans (180+ days), charge adjustments
+          - None: Zero adjustments and other non-recoverable items
+          
+          Business Rules:
+          - Determines recovery strategy and timeline
+          - Affects priority scoring and resource allocation
+          - Used for recovery planning and goal setting
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['High', 'Medium', 'Low', 'None']
+      
+      # Enhanced Business Logic
+      - name: opportunity_hour
+        description: >
+          Hour of the day when the opportunity occurred (0-23)
+          
+          Business Rules:
+          - Extracted from opportunity_datetime for time pattern analysis
+          - Used for hour-of-day pattern identification
+          - Enables scheduling optimization insights
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+              severity: warn
+      
+      - name: time_period
+        description: >
+          Time period categorization of when the opportunity occurred
+          
+          Categories:
+          - Morning: 8:00 AM - 11:59 AM
+          - Afternoon: 12:00 PM - 4:59 PM
+          - Evening: 5:00 PM - 7:59 PM
+          - Other: All other hours
+          
+          Business Rules:
+          - Used for time period pattern analysis
+          - Enables scheduling optimization insights
+          - Helps identify peak opportunity times
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Morning', 'Afternoon', 'Evening', 'Other']
+      
+      - name: revenue_impact_category
+        description: >
+          Categorization of the financial impact of the opportunity
+          
+          Categories:
+          - No Revenue Impact: $0 lost revenue
+          - Low Impact: <$100 lost revenue
+          - Medium Impact: $100-500 lost revenue
+          - High Impact: $500-1000 lost revenue
+          - Very High Impact: >$1000 lost revenue
+          
+          Business Rules:
+          - Used for impact-based prioritization and analysis
+          - Helps identify high-value recovery opportunities
+          - Enables impact-based reporting and dashboards
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['No Revenue Impact', 'Low Impact', 'Medium Impact', 'High Impact', 'Very High Impact']
+      
+      - name: time_impact_category
+        description: >
+          Categorization of the time impact of the opportunity
+          
+          Categories:
+          - No Time Impact: No lost time minutes
+          - Low Time Impact: <30 minutes
+          - Medium Time Impact: 30-60 minutes
+          - High Time Impact: 60-120 minutes
+          - Very High Time Impact: >120 minutes
+          
+          Business Rules:
+          - Used for time impact analysis and scheduling optimization
+          - Helps identify time-intensive opportunities
+          - Enables time-based resource planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['No Time Impact', 'Low Time Impact', 'Medium Time Impact', 'High Time Impact', 'Very High Time Impact']
+      
+      - name: recovery_timeline
+        description: >
+          Expected timeline for recovering this opportunity
+          
+          Categories:
+          - Immediate: High recovery potential opportunities
+          - 30 Days: Medium recovery potential opportunities
+          - 90 Days: Low recovery potential opportunities
+          - Unlikely: None recovery potential opportunities
+          
+          Business Rules:
+          - Based on recovery_potential assessment
+          - Used for recovery planning and goal setting
+          - Helps set realistic expectations for recovery efforts
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Immediate', '30 Days', '90 Days', 'Unlikely']
+      
+      - name: recovery_priority_score
+        description: >
+          Priority score for this opportunity (0-100, higher = more urgent)
+          
+          Calculation Logic:
+          - Revenue Impact (0-40 points): Based on lost revenue amount thresholds
+          - Recovery Potential (0-30 points): High=30, Medium=20, Low=10, None=0
+          - Opportunity Type (0-20 points): Missed Appointment=20, Claim Rejection=15, Treatment Plan Delay=10, Write Off=5
+          - Recency (0-10 points): Recent (30 days)=10, Moderate (90 days)=5, Old=0
+          
+          Business Rules:
+          - Used for opportunity prioritization and resource allocation
+          - Higher scores indicate more urgent recovery opportunities
+          - Enables data-driven recovery planning and action prioritization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      - name: preventability
+        description: >
+          Assessment of whether this opportunity could have been prevented
+          
+          Categories:
+          - Preventable: No-shows, treatment plan delays
+          - Partially Preventable: Cancellations, claim rejections
+          - Not Preventable: Write-offs and other unavoidable items
+          
+          Business Rules:
+          - Used for process improvement identification
+          - Helps focus prevention efforts on preventable opportunities
+          - Enables root cause analysis and process optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Preventable', 'Partially Preventable', 'Not Preventable']
+      
+      # Boolean Flags
+      - name: has_revenue_impact
+        description: >
+          Flag indicating whether this opportunity has a revenue impact
+          
+          Logic:
+          - true when: lost_revenue > 0
+          - false when: lost_revenue = 0 or null
+          
+          Business Impact:
+          - Used for quick filtering of revenue-impacting opportunities
+          - Enables focus on financially significant opportunities
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: has_time_impact
+        description: >
+          Flag indicating whether this opportunity has a time impact
+          
+          Logic:
+          - true when: lost_time_minutes > 0
+          - false when: lost_time_minutes = 0 or null
+          
+          Business Impact:
+          - Used for quick filtering of time-impacting opportunities
+          - Enables focus on scheduling-related opportunities
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: recoverable
+        description: >
+          Flag indicating whether this opportunity is recoverable
+          
+          Logic:
+          - true when: recovery_potential in ('High', 'Medium')
+          - false when: recovery_potential in ('Low', 'None')
+          
+          Business Impact:
+          - Used for quick filtering of recoverable opportunities
+          - Enables focus on actionable recovery opportunities
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: recent_opportunity
+        description: >
+          Flag indicating whether this opportunity occurred recently (within 30 days)
+          
+          Logic:
+          - true when: appointment_date >= current_date - interval '30 days'
+          - false when: appointment_date < current_date - interval '30 days'
+          
+          Business Impact:
+          - Used for quick filtering of recent opportunities
+          - Enables focus on timely recovery efforts
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: appointment_related
+        description: >
+          Flag indicating whether this opportunity is appointment-related
+          
+          Logic:
+          - true when: opportunity_type = 'Missed Appointment'
+          - false when: opportunity_type != 'Missed Appointment'
+          
+          Business Impact:
+          - Used for quick filtering of appointment-related opportunities
+          - Enables focus on scheduling-related issues
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Time Analysis
+      - name: days_since_opportunity
+        description: >
+          Number of days since the opportunity occurred
+          
+          Calculation Logic:
+          - current_date - appointment_date
+          
+          Business Rules:
+          - Used for aging analysis and urgency assessment
+          - Higher values indicate older opportunities
+          - Affects recovery potential and priority scoring
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 730
+              severity: warn
+      
+      - name: estimated_recoverable_amount
+        description: >
+          Estimated amount that can be recovered from this opportunity
+          
+          Calculation Logic:
+          - lost_revenue * recovery_rate
+          - Recovery rates: High=80%, Medium=50%, Low=20%, None=0%
+          
+          Business Rules:
+          - Used for recovery planning and goal setting
+          - Provides realistic expectations for recovery efforts
+          - Helps with financial forecasting and budgeting
+          
+          Data Quality Notes:
+          - Conservative recovery rates used for realistic expectations
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+              where: "estimated_recoverable_amount is not null"
+          - dbt_expectations.expression_is_true:
+              expression: "estimated_recoverable_amount <= lost_revenue"
+              config:
+                severity: error
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to different source timestamps depending on opportunity type. May be null for some opportunity types."
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to different source timestamps depending on opportunity type."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

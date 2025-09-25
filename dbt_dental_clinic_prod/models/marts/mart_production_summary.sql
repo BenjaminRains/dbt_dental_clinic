@@ -1,22 +1,60 @@
 {{ config(
     materialized='table',
-    unique_key=['date_id', 'provider_id', 'clinic_id']
+    schema='marts',
+    unique_key=['date_id', 'provider_id', 'clinic_id'],
+    on_schema_change='fail',
+    indexes=[
+        {'columns': ['date_id']},
+        {'columns': ['provider_id']},
+        {'columns': ['clinic_id']},
+        {'columns': ['production_date']}
+    ]
 ) }}
 
 /*
-Production Summary Mart - Daily production metrics and financial performance
-This mart provides comprehensive daily production analytics aggregated by provider
-and clinic to support financial performance monitoring and reporting.
+Summary Mart model for Production Summary
+Part of System G: Scheduling and Production Management
 
-Key metrics:
-- Daily production totals and targets
-- Procedure counts and average fees
-- Collection rates and payment timing
-- Provider performance comparison
-- Clinic efficiency metrics
+This model:
+1. Provides comprehensive daily production analytics aggregated by provider and clinic
+2. Supports financial performance monitoring and operational reporting
+3. Enables provider performance comparison and clinic efficiency analysis
+
+Business Logic Features:
+- Daily production totals and efficiency calculations
+- Appointment completion and time utilization metrics
+- Collection rate analysis and payment timing
+- Provider performance categorization and benchmarking
+- Procedure analysis and patient flow metrics
+
+Key Metrics:
+- Production efficiency: Actual vs scheduled production ratios
+- Collection rates: Collected vs billed amounts
+- Completion rates: Completed vs total appointments
+- Time utilization: Productive vs scheduled time
+- Provider performance tiers based on multiple KPIs
+
+Data Quality Notes:
+- Appointment-claim relationships may have data quality issues (assumed join logic)
+- Production amounts may include estimates vs actuals
+- Payment timing may not align perfectly with appointment dates
+
+Performance Considerations:
+- Large aggregation across multiple fact tables requires proper indexing
+- Date-based partitioning recommended for historical analysis
+- Provider and clinic dimensions should be pre-joined for efficiency
+
+Dependencies:
+- fact_appointment: Core scheduling and appointment data
+- fact_claim: Billing and production amounts
+- fact_payment: Payment and collection data
+- dim_date: Date dimension for temporal analysis
+- dim_provider: Provider information and categorization
+- dim_procedure: Procedure categorization and analysis
 */
 
-with ProductionBase as (
+-- 1. Base fact data
+with production_base as (
     select 
         fa.appointment_date,
         fa.provider_id,
@@ -29,36 +67,104 @@ with ProductionBase as (
         fa.appointment_length_minutes,
         
         -- Get actual production from procedures
-        coalesce(fc.billed_amount, 0) as actual_production,
+        coalesce(pl.procedure_fee, 0) as actual_production,
         coalesce(fc.paid_amount, 0) as collected_amount,
         
+        -- Procedure information
+        pl.procedure_code_id,
         dp.procedure_category_id,
-        dp.is_hygiene_flag,
+        dp.is_hygiene,
         dp.base_units
         
     from {{ ref('fact_appointment') }} fa
+    left join {{ ref('stg_opendental__procedurelog') }} pl
+        on fa.appointment_id = pl.appointment_id
+        and pl.procedure_date = fa.appointment_date
     left join {{ ref('fact_claim') }} fc
-        on fa.appointment_id = fc.claim_id  -- Assuming appointments link to claims
+        on pl.procedure_id = fc.procedure_id
     left join {{ ref('dim_procedure') }} dp
-        on fc.procedure_id = dp.procedure_id
+        on pl.procedure_code_id = dp.procedure_code_id
     where fa.appointment_date is not null
 ),
 
-PaymentMetrics as (
+-- 2. Dimension data
+production_dimensions as (
     select 
-        fp.payment_date,
-        fp.provider_id,
-        fp.clinic_id,
-        sum(case when fp.is_patient_payment then fp.payment_amount else 0 end) as patient_payments,
-        sum(case when fp.is_insurance_payment then fp.payment_amount else 0 end) as insurance_payments,
-        sum(case when fp.is_adjustment then fp.payment_amount else 0 end) as adjustments,
-        count(*) as payment_transaction_count
-    from {{ ref('fact_payment') }} fp
-    where fp.payment_date is not null
-    group by fp.payment_date, fp.provider_id, fp.clinic_id
+        provider_id,
+        provider_first_name,
+        provider_last_name,
+        provider_preferred_name,
+        specialty_description,
+        provider_status_description
+    from {{ ref('dim_provider') }}
 ),
 
-Daily_Production as (
+-- 3. Date dimension
+date_dimension as (
+    select 
+        date_id,
+        date_day,
+        year,
+        month,
+        quarter,
+        day_of_week,
+        day_name,
+        is_weekend,
+        is_holiday
+    from {{ ref('dim_date') }}
+),
+
+-- 4. Payment metrics aggregation (through paysplit to get provider associations)
+payment_metrics_raw as (
+    select 
+        p.payment_date,
+        coalesce(pl.provider_id, ps.provider_id) as provider_id,  -- Get provider from procedurelog or paysplit
+        coalesce(p.clinic_id, 0) as clinic_id,  -- Handle NULL clinic_id
+        sum(case when p.payment_type_id = 69 then ps.split_amount else 0 end) as patient_payments,
+        sum(case when p.payment_type_id = 71 then ps.split_amount else 0 end) as insurance_payments,
+        0.0 as adjustments,  -- Adjustments handled separately below
+        count(distinct p.payment_id) as payment_transaction_count
+    from {{ ref('stg_opendental__payment') }} p
+    inner join {{ ref('stg_opendental__paysplit') }} ps
+        on p.payment_id = ps.payment_id
+    left join {{ ref('stg_opendental__procedurelog') }} pl
+        on ps.procedure_id = pl.procedure_id
+    where p.payment_date is not null
+        and coalesce(pl.provider_id, ps.provider_id) is not null  -- Only include records with valid provider
+    group by p.payment_date, coalesce(pl.provider_id, ps.provider_id), coalesce(p.clinic_id, 0)
+    
+    UNION ALL
+    
+    -- Add adjustments separately since they're not linked through paysplit
+    select 
+        adj.adjustment_date as payment_date,
+        adj.provider_id,
+        coalesce(adj.clinic_id, 0) as clinic_id,
+        0.0 as patient_payments,
+        0.0 as insurance_payments,
+        adj.adjustment_amount as adjustments,
+        0 as payment_transaction_count
+    from {{ ref('int_adjustments') }} adj
+    where adj.adjustment_date is not null
+        and adj.provider_id is not null
+),
+
+-- Aggregate payment metrics to combine payments and adjustments
+payment_metrics as (
+    select 
+        payment_date,
+        provider_id,
+        clinic_id,
+        sum(patient_payments) as patient_payments,
+        sum(insurance_payments) as insurance_payments,
+        sum(adjustments) as adjustments,
+        sum(payment_transaction_count) as payment_transaction_count
+    from payment_metrics_raw
+    group by payment_date, provider_id, clinic_id
+),
+
+-- 5. Aggregations and calculations
+production_aggregated as (
     select
         pb.appointment_date as production_date,
         pb.provider_id,
@@ -81,29 +187,53 @@ Daily_Production as (
         sum(pb.collected_amount) as collections,
         
         -- Procedure Analysis
-        sum(pb.procedure_count) as total_procedures,
-        avg(pb.actual_production / nullif(pb.procedure_count, 0)) as avg_fee_per_procedure,
+        count(distinct pb.procedure_code_id) as total_procedures,
+        avg(pb.actual_production) as avg_fee_per_procedure,
         
         -- Patient Flow
         count(distinct pb.patient_id) as unique_patients,
-        sum(pb.procedure_count) / nullif(count(distinct pb.patient_id), 0) as procedures_per_patient
+        count(distinct pb.procedure_code_id)::numeric / nullif(count(distinct pb.patient_id)::numeric, 0) as procedures_per_patient
         
-    from ProductionBase pb
+    from production_base pb
     group by pb.appointment_date, pb.provider_id, pb.clinic_id
 ),
 
-Final as (
+-- 6. Business logic enhancement
+production_enhanced as (
     select
-        -- Keys and Dimensions
+        *,
+        -- Performance categorization
+        case 
+            when round((completed_appointments::numeric / nullif(total_appointments::numeric, 0) * 100)::numeric, 2) >= 95 then 'Excellent'
+            when round((completed_appointments::numeric / nullif(total_appointments::numeric, 0) * 100)::numeric, 2) >= 90 then 'Good'
+            when round((completed_appointments::numeric / nullif(total_appointments::numeric, 0) * 100)::numeric, 2) >= 80 then 'Fair'
+            else 'Poor'
+        end as appointment_performance,
+        
+        case 
+            when round((collections::numeric / nullif(actual_production::numeric, 0) * 100)::numeric, 2) >= 98 then 'Excellent'
+            when round((collections::numeric / nullif(actual_production::numeric, 0) * 100)::numeric, 2) >= 95 then 'Good'
+            when round((collections::numeric / nullif(actual_production::numeric, 0) * 100)::numeric, 2) >= 90 then 'Fair'
+            else 'Poor'
+        end as collection_performance
+    from production_aggregated
+),
+
+-- 7. Final integration
+final as (
+    select
+        -- Date and dimensions
         dd.date_id,
-        dp.production_date,
-        dp.provider_id,
-        dp.clinic_id,
+        pe.production_date,
+        pe.provider_id,
+        pe.clinic_id,
         
         -- Provider and Clinic Information
-        prov.provider_name,
-        prov.provider_type,
-        prov.specialty,
+        pd.provider_first_name,
+        pd.provider_last_name,
+        pd.provider_preferred_name,
+        pd.specialty_description,
+        pd.provider_status_description,
         
         -- Date Dimensions
         dd.year,
@@ -115,25 +245,25 @@ Final as (
         dd.is_holiday,
         
         -- Appointment Metrics
-        dp.total_appointments,
-        dp.completed_appointments,
-        dp.missed_appointments,
-        dp.hygiene_appointments,
-        round(dp.completed_appointments::numeric / nullif(dp.total_appointments, 0) * 100, 2) as completion_rate,
+        pe.total_appointments,
+        pe.completed_appointments,
+        pe.missed_appointments,
+        pe.hygiene_appointments,
+        round(pe.completed_appointments::numeric / nullif(pe.total_appointments::numeric, 0) * 100, 2) as completion_rate,
         
         -- Time Utilization Metrics
-        dp.total_scheduled_minutes,
-        dp.productive_minutes,
-        dp.avg_appointment_length,
-        round(dp.productive_minutes::numeric / nullif(dp.total_scheduled_minutes, 0) * 100, 2) as time_utilization_rate,
-        round(dp.productive_minutes / 60.0, 2) as productive_hours,
+        pe.total_scheduled_minutes,
+        pe.productive_minutes,
+        pe.avg_appointment_length,
+        round(pe.productive_minutes::numeric / nullif(pe.total_scheduled_minutes::numeric, 0) * 100, 2) as time_utilization_rate,
+        round(pe.productive_minutes::numeric / 60, 2) as productive_hours,
         
         -- Production and Financial Metrics
-        dp.scheduled_production,
-        dp.actual_production,
-        dp.collections,
-        round(dp.actual_production::numeric / nullif(dp.scheduled_production, 0) * 100, 2) as production_efficiency,
-        round(dp.collections::numeric / nullif(dp.actual_production, 0) * 100, 2) as collection_rate,
+        pe.scheduled_production,
+        pe.actual_production,
+        pe.collections,
+        round(pe.actual_production::numeric / nullif(pe.scheduled_production::numeric, 0) * 100, 2) as production_efficiency,
+        round(pe.collections::numeric / nullif(pe.actual_production::numeric, 0) * 100, 2) as collection_rate,
         
         -- Payment Information
         coalesce(pm.patient_payments, 0) as patient_payments,
@@ -142,42 +272,31 @@ Final as (
         coalesce(pm.payment_transaction_count, 0) as payment_transactions,
         
         -- Procedure Metrics
-        dp.total_procedures,
-        dp.avg_fee_per_procedure,
-        dp.unique_patients,
-        dp.procedures_per_patient,
+        pe.total_procedures,
+        pe.avg_fee_per_procedure,
+        pe.unique_patients,
+        pe.procedures_per_patient,
         
-        -- Performance Indicators
-        case 
-            when dp.completion_rate >= 95 then 'Excellent'
-            when dp.completion_rate >= 90 then 'Good'
-            when dp.completion_rate >= 80 then 'Fair'
-            else 'Poor'
-        end as appointment_performance,
-        
-        case 
-            when dp.collection_rate >= 98 then 'Excellent'
-            when dp.collection_rate >= 95 then 'Good'
-            when dp.collection_rate >= 90 then 'Fair'
-            else 'Poor'
-        end as collection_performance,
+        -- Performance Indicators (from business logic enhancement)
+        pe.appointment_performance,
+        pe.collection_performance,
         
         -- Goals and Targets (placeholder - would come from practice goals)
-        dp.actual_production as production_goal, -- Would be replaced with actual goal
-        round((dp.actual_production / nullif(dp.actual_production, 0)) * 100, 2) as goal_achievement, -- Placeholder
+        pe.actual_production as production_goal, -- Would be replaced with actual goal
+        round((pe.actual_production::numeric / nullif(pe.actual_production::numeric, 0)) * 100, 2) as goal_achievement, -- Placeholder
         
         -- Metadata
-        current_timestamp as _loaded_at
+        {{ standardize_mart_metadata() }}
         
-    from Daily_Production dp
-    inner join {{ ref('dim_date') }} dd
-        on dp.production_date = dd.date_actual
-    inner join {{ ref('dim_provider') }} prov
-        on dp.provider_id = prov.provider_id
-    left join PaymentMetrics pm
-        on dp.production_date = pm.payment_date
-        and dp.provider_id = pm.provider_id
-        and dp.clinic_id = pm.clinic_id
+    from production_enhanced pe
+    inner join date_dimension dd
+        on pe.production_date = dd.date_day
+    inner join production_dimensions pd
+        on pe.provider_id = pd.provider_id
+    left join payment_metrics pm
+        on pe.production_date = pm.payment_date
+        and pe.provider_id = pm.provider_id
+        and pe.clinic_id = pm.clinic_id
 )
 
-select * from Final
+select * from final

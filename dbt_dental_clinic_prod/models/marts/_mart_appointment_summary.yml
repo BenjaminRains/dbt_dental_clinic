@@ -1,0 +1,851 @@
+version: 2
+
+models:
+  - name: mart_appt_summary
+    description: >
+      Summary mart for comprehensive appointment analytics and scheduling efficiency.
+      This mart provides aggregated metrics and KPIs to support scheduling optimization,
+      patient flow analysis, and operational performance tracking at the daily level
+      by provider and clinic.
+      
+      ## Business Context
+      The appointment summary mart is a critical component of our analytical framework, enabling:
+      - Scheduling optimization and capacity planning
+      - Provider performance analysis and benchmarking
+      - Patient experience and wait time analysis
+      - Financial performance tracking and production efficiency
+      - Operational decision making and resource allocation
+      - Executive reporting and operational dashboards
+      
+      ## Technical Specifications
+      - Grain: One row per date + provider + clinic combination
+      - Source: fact_appointment (primary source)
+      - Refresh: Daily
+      - Dependencies: 
+        * fact_appointment (core appointment transaction data)
+        * dim_provider (provider dimension lookups)
+        * dim_date (date dimension for temporal analysis)
+      
+      ## Business Logic
+      ### Aggregation Rules
+      - Daily aggregation by appointment_date, provider_id, and clinic_id
+      - Time-based metrics aggregated using COALESCE to handle NULL values from data quality fixes
+      - Financial metrics calculated from scheduled and completed production amounts
+      - Utilization rates calculated using safe division with nullif() to prevent division by zero
+      
+      ### Metric Calculations
+      - Completion rates: completed_appointments / total_appointments * 100
+      - No-show rates: no_show_appointments / total_appointments * 100
+      - Time utilization: productive_minutes / total_scheduled_minutes * 100
+      - Production efficiency: completed_production / total_scheduled_production * 100
+      
+      ### Performance Categorization
+      - Completion Performance: Excellent (≥95%), Good (≥90%), Fair (≥85%), Poor (<85%)
+      - Reliability Performance: Excellent (≤5% no-show), Good (≤10%), Fair (≤15%), Poor (>15%)
+      - Utilization Performance: Excellent (≥85%), Good (≥75%), Fair (≥65%), Poor (<65%)
+      - Schedule Intensity: Standard Day (≤8hrs), Extended Day (≤10hrs), Long Day (>10hrs)
+      
+      ## Data Quality Notes
+      - Handles null appointment dates by filtering them out in the base CTE
+      - Uses safe division with nullif() for percentage calculations to prevent division by zero
+      - Time calculations from fact_appointment include data quality validation
+      - Negative time values are handled by converting to NULL in source fact table
+      - Uses COALESCE to handle NULL time values in aggregations for patient experience metrics
+      
+      ## Performance Considerations
+      - Aggregated at date/provider/clinic grain for optimal query performance
+      - Uses efficient joins with dimension tables
+      - Indexed on primary query dimensions (date_id, provider_id, clinic_id)
+      - Materialized as table for fast analytical queries
+      
+      ## Usage Notes
+      - Primary use case: Daily operational reporting and performance monitoring
+      - Best for: Provider performance analysis, scheduling efficiency, capacity planning
+      - Limitations: Not suitable for individual appointment analysis (use fact_appointment)
+      - Common analysis: Trend analysis over time, provider comparisons, clinic performance
+      - Best practices: Filter by date ranges for large datasets, use performance categories for benchmarking
+    
+    meta:
+      owner: "Operations Team"
+      contains_pii: false
+      business_process: "Appointment Scheduling and Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + provider + clinic combination"
+      primary_consumers: ["Operations Team", "Provider Management", "Executive Leadership", "Scheduling Staff"]
+      data_quality_requirements:
+        - "Appointment completion rates must be between 0-100%"
+        - "Time utilization rates must be between 0-100%"
+        - "Financial metrics must be non-negative"
+        - "Performance categories must follow defined thresholds"
+      performance_requirements:
+        - "Query response time under 5 seconds for date range filters"
+        - "Support concurrent access by multiple users"
+        - "Daily refresh completion within 30 minutes"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 10000
+          config:
+            severity: error
+            description: "Expected daily appointment summary records should be reasonable for operational scale"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "appointment_completion_rate >= 0 and appointment_completion_rate <= 100"
+          config:
+            severity: error
+            description: "Appointment completion rates must be valid percentages"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "time_utilization_rate >= 0 and time_utilization_rate <= 100"
+          config:
+            severity: error
+            description: "Time utilization rates must be valid percentages"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis
+          
+          Business Rules:
+          - Links to dim_date for consistent date handling across all marts
+          - Enables time-based analysis and reporting
+          - Supports calendar-based filtering and grouping
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Provider dimension for provider-specific analysis
+          
+          Business Rules:
+          - Links to dim_provider for provider information and attributes
+          - Enables provider performance analysis and benchmarking
+          - Supports provider-specific reporting and filtering
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+          - not_null
+      
+      - name: clinic_id
+        description: >
+          Clinic identifier for multi-location analysis
+          
+          Business Rules:
+          - Identifies the clinic location for the appointment summary
+          - Enables clinic-level performance comparison
+          - Supports multi-location operational reporting
+        tests:
+          - not_null
+          - positive_values
+      
+      # Date and Provider Information
+      - name: appointment_date
+        description: >
+          Actual date of the appointments being summarized
+          
+          Business Rules:
+          - Date when appointments occurred (not scheduled date)
+          - Used for temporal analysis and trend reporting
+          - Must match the date_id for consistency
+        tests:
+          - not_null
+      
+      - name: provider_first_name
+        description: >
+          Provider's first name from dim_provider
+          
+          Business Rules:
+          - Standardized provider identification
+          - Used for display and reporting purposes
+        tests:
+          - not_null
+      
+      - name: provider_last_name
+        description: >
+          Provider's last name from dim_provider
+          
+          Business Rules:
+          - Standardized provider identification
+          - Used for display and reporting purposes
+        tests:
+          - not_null
+      
+      - name: provider_preferred_name
+        description: >
+          Provider's preferred display name from dim_provider
+          
+          Business Rules:
+          - Preferred name for reporting and display
+          - May be different from first/last name combination
+        tests:
+          - not_null:
+              where: "provider_preferred_name is not null"
+      
+      - name: provider_type
+        description: >
+          Provider type category (e.g., Dentist, Hygienist, Assistant)
+          
+          Business Rules:
+          - Categorizes provider by their role type
+          - Enables provider type-specific analysis
+          - Used for role-based performance comparison
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Dentist", "Hygienist", "Assistant", "Other"]
+      
+      - name: specialty
+        description: >
+          Provider's specialty description from dim_provider
+          
+          Business Rules:
+          - Identifies provider's area of specialization
+          - Enables specialty-specific analysis
+          - May be null for non-specialist providers
+        tests:
+          - not_null:
+              where: "specialty is not null"
+      
+      # Date Dimension Attributes
+      - name: day_name
+        description: >
+          Day of the week name (Monday, Tuesday, etc.)
+          
+          Business Rules:
+          - Standardized day name for reporting
+          - Enables day-of-week analysis and patterns
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+      
+      - name: is_weekend
+        description: >
+          Boolean flag indicating if the date falls on a weekend
+          
+          Business Rules:
+          - true for Saturday and Sunday
+          - false for Monday through Friday
+          - Used for weekend vs weekday analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_holiday
+        description: >
+          Boolean flag indicating if the date is a recognized holiday
+          
+          Business Rules:
+          - true for recognized holidays
+          - false for regular business days
+          - Used for holiday impact analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: month
+        description: >
+          Month number (1-12) for temporal analysis
+          
+          Business Rules:
+          - Standardized month representation
+          - Enables monthly trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+      
+      - name: quarter
+        description: >
+          Quarter number (1-4) for temporal analysis
+          
+          Business Rules:
+          - Standardized quarter representation
+          - Enables quarterly trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+      
+      - name: year
+        description: >
+          Year for temporal analysis
+          
+          Business Rules:
+          - Standardized year representation
+          - Enables year-over-year analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+      
+      # Schedule Structure Metrics
+      - name: first_appointment_hour
+        description: >
+          Hour of the first appointment of the day (24-hour format)
+          
+          Business Rules:
+          - Earliest appointment start time for the day
+          - Used for schedule analysis and capacity planning
+          - Range: 0-23 (24-hour format)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+      
+      - name: last_appointment_hour
+        description: >
+          Hour of the last appointment of the day (24-hour format)
+          
+          Business Rules:
+          - Latest appointment start time for the day
+          - Used for schedule analysis and capacity planning
+          - Range: 0-23 (24-hour format)
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+      
+      - name: schedule_span_hours
+        description: >
+          Total hours between first and last appointment
+          
+          Business Rules:
+          - Calculated as last_appointment_hour - first_appointment_hour
+          - Indicates schedule intensity and day length
+          - Used for schedule intensity categorization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 24
+      
+      - name: active_hours
+        description: >
+          Number of distinct hours with appointments
+          
+          Business Rules:
+          - Count of unique appointment hours for the day
+          - Indicates schedule density and utilization
+          - Used for efficiency calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 24
+      
+      - name: total_scheduled_hours
+        description: >
+          Total scheduled appointment time in hours
+          
+          Business Rules:
+          - Sum of all appointment lengths converted to hours
+          - Represents total scheduled capacity
+          - Used for utilization rate calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 24
+      
+      - name: productive_hours
+        description: >
+          Total completed appointment time in hours
+          
+          Business Rules:
+          - Sum of completed appointment lengths converted to hours
+          - Represents actual productive time
+          - Used for utilization rate calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 24
+      
+      # Appointment Volume Metrics
+      - name: total_appointments
+        description: >
+          Total number of appointments scheduled for the day
+          
+          Business Rules:
+          - Count of all appointments regardless of status
+          - Base metric for all rate calculations
+          - Used for volume analysis and capacity planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: completed_appointments
+        description: >
+          Number of appointments that were completed
+          
+          Business Rules:
+          - Count of appointments with is_completed = true
+          - Used for completion rate calculations
+          - Key metric for operational efficiency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: no_show_appointments
+        description: >
+          Number of appointments where patients did not show up
+          
+          Business Rules:
+          - Count of appointments with is_no_show = true
+          - Used for no-show rate calculations
+          - Key metric for operational planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: broken_appointments
+        description: >
+          Number of appointments that were cancelled or broken
+          
+          Business Rules:
+          - Count of appointments with is_broken = true
+          - Used for cancellation rate calculations
+          - Key metric for operational planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: new_patient_appointments
+        description: >
+          Number of appointments for new patients
+          
+          Business Rules:
+          - Count of appointments with is_new_patient = true
+          - Used for new patient acquisition analysis
+          - Important for growth metrics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: hygiene_appointments
+        description: >
+          Number of hygiene appointments
+          
+          Business Rules:
+          - Count of appointments with is_hygiene_appointment = true
+          - Used for hygiene service analysis
+          - Important for preventive care metrics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: unique_patients
+        description: >
+          Number of unique patients seen during the day
+          
+          Business Rules:
+          - Count of distinct patient_id values
+          - Used for patient volume analysis
+          - Important for patient flow metrics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: total_procedures
+        description: >
+          Total number of procedures performed during the day
+          
+          Business Rules:
+          - Sum of procedure_count from all appointments
+          - Used for procedure volume analysis
+          - Important for production metrics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 500
+      
+      - name: procedures_per_patient
+        description: >
+          Average number of procedures per patient
+          
+          Business Rules:
+          - Calculated as total_procedures / unique_patients
+          - Used for treatment complexity analysis
+          - Indicates treatment intensity
+        tests:
+          - not_null:
+              where: "unique_patients > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+      
+      # Efficiency Metrics
+      - name: time_utilization_rate
+        description: >
+          Percentage of scheduled time that was productive
+          
+          Calculation Logic:
+          - productive_hours / total_scheduled_hours * 100
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Higher rates indicate better schedule utilization
+          - Used for performance categorization
+          - Key metric for operational efficiency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: appointment_completion_rate
+        description: >
+          Percentage of appointments that were completed
+          
+          Calculation Logic:
+          - completed_appointments / total_appointments * 100
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Higher rates indicate better operational performance
+          - Used for performance categorization
+          - Key metric for operational efficiency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: confirmation_rate
+        description: >
+          Percentage of appointments that were confirmed
+          
+          Calculation Logic:
+          - confirmed_appointments / total_appointments * 100
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Higher rates indicate better communication effectiveness
+          - Used for operational planning
+          - Key metric for patient engagement
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: no_show_rate
+        description: >
+          Percentage of appointments that resulted in no-shows
+          
+          Calculation Logic:
+          - no_show_appointments / total_appointments * 100
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Lower rates indicate better patient reliability
+          - Used for performance categorization
+          - Key metric for operational planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: cancellation_rate
+        description: >
+          Percentage of appointments that were cancelled
+          
+          Calculation Logic:
+          - broken_appointments / total_appointments * 100
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Lower rates indicate better schedule stability
+          - Used for operational planning
+          - Key metric for operational efficiency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: lost_appointment_rate
+        description: >
+          Percentage of appointments that were lost (no-shows + cancellations)
+          
+          Calculation Logic:
+          - (no_show_appointments + broken_appointments) / total_appointments * 100
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Lower rates indicate better operational efficiency
+          - Used for capacity planning
+          - Key metric for revenue impact analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      # Patient Experience Metrics
+      - name: avg_arrival_delay
+        description: >
+          Average delay in minutes between scheduled and actual arrival time
+          
+          Business Rules:
+          - Positive values indicate late arrivals
+          - Negative values indicate early arrivals
+          - Used for patient experience analysis
+          - Uses COALESCE to handle NULL values from data quality fixes
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -60
+              max_value: 120
+      
+      - name: avg_wait_time
+        description: >
+          Average wait time in minutes between arrival and treatment start
+          
+          Business Rules:
+          - Measures patient experience quality
+          - Used for operational efficiency analysis
+          - Uses COALESCE to handle NULL values from data quality fixes
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+      
+      - name: avg_treatment_time
+        description: >
+          Average treatment time in minutes
+          
+          Business Rules:
+          - Measures actual treatment duration
+          - Used for capacity planning and efficiency analysis
+          - Uses COALESCE to handle NULL values from data quality fixes
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 480
+      
+      # Financial Performance Metrics
+      - name: total_scheduled_production
+        description: >
+          Total scheduled production amount for the day
+          
+          Business Rules:
+          - Sum of all scheduled production amounts
+          - Represents planned revenue for the day
+          - Used for production efficiency calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: completed_production
+        description: >
+          Total production amount from completed appointments
+          
+          Business Rules:
+          - Sum of production amounts from completed appointments only
+          - Represents actual revenue generated
+          - Used for production efficiency calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: production_efficiency
+        description: >
+          Percentage of scheduled production that was actually completed
+          
+          Calculation Logic:
+          - completed_production / total_scheduled_production * 100
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Higher rates indicate better financial performance
+          - Used for revenue analysis
+          - Key metric for financial efficiency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+      
+      - name: avg_production_per_completed_appointment
+        description: >
+          Average production amount per completed appointment
+          
+          Calculation Logic:
+          - completed_production / completed_appointments
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Measures average appointment value
+          - Used for revenue analysis
+          - Key metric for financial performance
+        tests:
+          - not_null:
+              where: "completed_appointments > 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+      
+      # Performance Categories
+      - name: completion_performance
+        description: >
+          Performance category based on appointment completion rate
+          
+          Categories:
+          - Excellent: ≥95% completion rate
+          - Good: ≥90% completion rate
+          - Fair: ≥85% completion rate
+          - Poor: <85% completion rate
+          
+          Business Rules:
+          - Used for performance benchmarking
+          - Enables performance-based reporting
+          - Supports operational improvement initiatives
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Excellent", "Good", "Fair", "Poor"]
+      
+      - name: reliability_performance
+        description: >
+          Performance category based on no-show rate
+          
+          Categories:
+          - Excellent: ≤5% no-show rate
+          - Good: ≤10% no-show rate
+          - Fair: ≤15% no-show rate
+          - Poor: >15% no-show rate
+          
+          Business Rules:
+          - Used for reliability benchmarking
+          - Enables performance-based reporting
+          - Supports operational improvement initiatives
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Excellent", "Good", "Fair", "Poor"]
+      
+      - name: utilization_performance
+        description: >
+          Performance category based on time utilization rate
+          
+          Categories:
+          - Excellent: ≥85% utilization rate
+          - Good: ≥75% utilization rate
+          - Fair: ≥65% utilization rate
+          - Poor: <65% utilization rate
+          
+          Business Rules:
+          - Used for utilization benchmarking
+          - Enables performance-based reporting
+          - Supports operational improvement initiatives
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Excellent", "Good", "Fair", "Poor"]
+      
+      # Scheduling Insights
+      - name: schedule_intensity
+        description: >
+          Schedule intensity category based on schedule span
+          
+          Categories:
+          - Standard Day: ≤8 hours schedule span
+          - Extended Day: ≤10 hours schedule span
+          - Long Day: >10 hours schedule span
+          
+          Business Rules:
+          - Used for schedule analysis
+          - Enables capacity planning
+          - Supports workload management
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Standard Day", "Extended Day", "Long Day"]
+      
+      - name: appointments_per_hour
+        description: >
+          Average number of appointments per active hour
+          
+          Calculation Logic:
+          - total_appointments / active_hours
+          - Uses safe division with nullif() to prevent division by zero
+          
+          Business Rules:
+          - Measures schedule density
+          - Used for capacity analysis
+          - Indicates scheduling efficiency
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Not applicable for summary marts as they are aggregated views."
+        tests:
+          - not_null:
+              where: "_created_at is not null"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Not applicable for summary marts as they are aggregated views."
+        tests:
+          - not_null:
+              where: "_updated_at is not null"
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

@@ -1,0 +1,973 @@
+version: 2
+
+models:
+  - name: mart_hygiene_retention
+    description: >
+      Summary mart for comprehensive hygiene retention analytics and preventive care performance tracking.
+      This mart provides aggregated metrics and KPIs to support patient retention strategies,
+      enabling stakeholders to analyze hygiene appointment patterns, recall compliance,
+      and preventive care effectiveness at various levels of granularity.
+      
+      ## Business Context
+      The hygiene retention summary mart is a critical component of our analytical framework, enabling:
+      - Patient retention analysis and lapse prevention strategies
+      - Hygienist performance monitoring and capacity optimization
+      - Recall compliance tracking and scheduling effectiveness measurement
+      - Preventive care program optimization and patient engagement
+      - Performance monitoring and alerting for patient care quality
+      - Executive reporting and dashboards for clinical operations
+      - Operational decision making for scheduling and patient outreach
+      
+      ## Technical Specifications
+      - Grain: One row per date + patient + provider + hygienist combination
+      - Source: fact_appointment (primary source for hygiene appointments)
+      - Refresh: Daily
+      - Dependencies: 
+        * fact_appointment (core appointment data with hygienist_id filtering)
+        * dim_date (date dimension for temporal analysis)
+        * dim_patient (patient demographics and characteristics)
+        * dim_provider (provider and hygienist information)
+        * stg_opendental__recall (recall scheduling and compliance data)
+        * stg_opendental__recalltype (recall type definitions with interval values)
+      
+      ## Business Logic
+      ### Hygiene Appointment Processing
+      - Hygiene appointments identified by non-null hygienist_id (excludes hygienist_id = 0)
+      - 3-year lookback window for historical analysis and pattern recognition
+      - Window functions calculate appointment intervals and visit sequencing
+      - Appointment status tracking: completed, no-show, broken/cancelled
+      
+      ### Metric Calculations
+      - Completion rates: percentage of completed vs total hygiene appointments
+      - Interval analysis: average days between hygiene visits with variability measures
+      - Production metrics: total and average production amounts with hourly rates
+      - Consistency scoring: percentage of visits within regular intervals (120-240 days)
+      
+      ### Performance Categorization
+      - Hygiene Status: Current (≤6mo), Due (6-9mo), Overdue (9-12mo), Lapsed (>12mo)
+      - Retention Category: Excellent (≥2 visits/year, ≥80% regular), Good (≥2 visits/year, ≥60% regular), Fair (≥1 visit/year), Poor (<1 visit/year)
+      - Risk Assessment: High Risk (>12mo lapse), Medium Risk (>20% no-show or >240 day intervals), Low Risk (regular patterns)
+      - Frequency Category: 3-4 Months (≤120 days), 4-6 Months (120-180 days), 6-9 Months (180-270 days), Infrequent (>270 days)
+      
+      ## Data Quality Notes
+      - Handles missing recall data with appropriate null handling and left joins
+      - Accounts for appointment status variations (completed, no-show, broken) in calculations
+      - Manages edge cases in interval calculations for new patients with limited history
+      - Decodes OpenDental's encoded interval values to actual months:
+        * 393217/393216 (Prophy): 6 months
+        * 196609/196608 (Perio): 3 months  
+        * 16777217 (4BW, 2BW): 6 months
+        * 83886081 (Pano, FMX): 12 months
+        * Other encoded values mapped to appropriate month intervals
+      - Falls back to 6-month default for unknown or missing interval values
+      - Recall compliance window: ±30 days from target date for scheduling flexibility
+      
+      ## Performance Considerations
+      - Uses window functions for efficient interval calculations across patient histories
+      - Optimized joins with dimension tables using indexed foreign keys
+      - Indexed on key query dimensions (date_id, patient_id, provider_id, hygienist_id, hygiene_status, retention_category)
+      - 3-year data window limits historical data volume for performance
+      - Composite unique key ensures data integrity and enables incremental updates
+      
+      ## Usage Notes
+      - Current date snapshot: model shows current state as of refresh date
+      - Patient filtering: only includes patients with at least one hygiene appointment
+      - Hygienist identification: uses hygienist_id from fact_appointment for hygiene appointment classification
+      - Recall compliance: based on most recent recall record per patient
+      - Production calculations: uses scheduled production amounts, not actual collections
+      - Best practice: use hygiene_status and retention_category for patient segmentation
+      - Common pitfall: annual_hygiene_value calculation may be skewed for very new patients
+      - Performance tip: leverage indexed columns for filtering and grouping operations
+    
+    meta:
+      owner: "Clinical Operations Team"
+      contains_pii: true
+      business_process: "Preventive Care and Patient Retention"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + patient + provider + hygienist combination"
+      primary_consumers: ["Clinical Operations", "Hygienists", "Practice Management", "Executive Leadership"]
+      data_quality_requirements:
+        - "Hygiene appointment identification must be accurate"
+        - "Recall compliance calculations must handle missing data appropriately"
+        - "Interval calculations must account for patient history variations"
+      performance_requirements:
+        - "Model must refresh within 15 minutes daily"
+        - "Query performance must support real-time dashboard updates"
+        - "Indexes must support common filtering patterns"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100
+          max_value: 100000
+          config:
+            severity: error
+            description: "Expected hygiene retention records based on practice size and 3-year window"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "hygiene_completion_rate >= 0 and hygiene_completion_rate <= 100"
+          config:
+            severity: error
+            description: "Completion rates must be valid percentages between 0-100%"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "total_hygiene_appointments > 0"
+          config:
+            severity: error
+            description: "All records must have at least one hygiene appointment"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis
+          
+          Business Rules:
+          - Represents the current date when the mart was refreshed
+          - Used for time-based filtering and trend analysis
+          - Enables integration with other date-based marts
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Patient identifier for hygiene retention analysis
+          
+          Business Rules:
+          - Must have at least one hygiene appointment in the 3-year window
+          - Links to patient demographics and characteristics
+          - Enables patient-level retention analysis
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Provider identifier for hygiene retention analysis
+          
+          Business Rules:
+          - Represents the primary provider associated with the patient
+          - Links to provider information and performance metrics
+          - Enables provider-level hygiene retention analysis
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+          - not_null
+      
+      - name: hygienist_id
+        description: >
+          Foreign key to dim_provider - Hygienist identifier for hygiene appointment analysis
+          
+          Business Rules:
+          - Identifies the hygienist who performed the hygiene appointments
+          - May be null if hygienist information is not available
+          - Enables hygienist-level performance analysis
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: warn
+              where: "hygienist_id is not null"
+      
+      # Patient Information
+      - name: age
+        description: >
+          Patient age at the time of mart refresh
+          
+          Business Rules:
+          - Calculated from patient birth date and current date
+          - Used for age-based retention analysis
+          - May be null for patients without birth date information
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+              severity: warn
+              where: "age is not null"
+      
+      - name: gender
+        description: >
+          Patient gender for demographic analysis
+          
+          Business Rules:
+          - Standardized gender values from patient demographics
+          - Used for gender-based retention pattern analysis
+          - May be null if not provided by patient
+        tests:
+          - accepted_values:
+              values: ['Male', 'Female', 'Other', 'Unknown']
+              where: "gender is not null"
+      
+      - name: patient_status
+        description: >
+          Current patient status in the practice
+          
+          Business Rules:
+          - Active: Currently receiving care
+          - Inactive: Not currently active but may return
+          - Archived: No longer a patient
+          - Used for filtering active patient analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Inactive', 'Archived']
+      
+      - name: has_insurance_flag
+        description: >
+          Flag indicating whether patient has active insurance coverage
+          
+          Logic:
+          - true when: patient has at least one active insurance plan
+          - false when: patient has no active insurance or is self-pay
+          
+          Business Impact:
+          - Affects payment patterns and appointment scheduling
+          - Used for insurance-based retention analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: first_visit_date
+        description: >
+          Date of patient's first visit to the practice
+          
+          Business Rules:
+          - Used for calculating patient lifetime value
+          - Enables new vs established patient analysis
+          - May be null for very old records
+        tests:
+          - not_null:
+              where: "first_visit_date is not null"
+      
+      # Provider Information
+      - name: provider_name
+        description: >
+          Full name of the primary provider (concatenated first and last name)
+          
+          Business Rules:
+          - Concatenated from provider_first_name and provider_last_name
+          - Used for provider identification in reports
+          - May be null if provider information is incomplete
+        tests:
+          - not_null:
+              where: "provider_name is not null"
+      
+      - name: provider_type_category
+        description: >
+          Category of provider type for analysis grouping
+          
+          Business Rules:
+          - Groups providers by type (Dentist, Specialist, etc.)
+          - Used for provider-type based analysis
+          - Standardized categories for consistent reporting
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Dentist', 'Specialist', 'Hygienist', 'Other']
+      
+      - name: specialty_description
+        description: >
+          Detailed specialty description for specialist providers
+          
+          Business Rules:
+          - Provides specific specialty information
+          - May be null for general practitioners
+          - Used for specialty-based analysis
+        tests:
+          - not_null:
+              where: "provider_type_category = 'Specialist'"
+      
+      - name: hygienist_name
+        description: >
+          Full name of the hygienist (concatenated first and last name)
+          
+          Business Rules:
+          - Concatenated from hygienist provider information
+          - Used for hygienist identification in reports
+          - May be null if hygienist information is not available
+        tests:
+          - not_null:
+              where: "hygienist_id is not null"
+      
+      # Date Information
+      - name: year
+        description: >
+          Year component of the mart refresh date
+          
+          Business Rules:
+          - Extracted from date_id for year-based analysis
+          - Used for annual trend analysis and reporting
+          - Enables year-over-year comparisons
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+      
+      - name: month
+        description: >
+          Month component of the mart refresh date
+          
+          Business Rules:
+          - Extracted from date_id for monthly analysis
+          - Used for seasonal pattern analysis
+          - Enables month-over-month comparisons
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+      
+      - name: quarter
+        description: >
+          Quarter component of the mart refresh date
+          
+          Business Rules:
+          - Extracted from date_id for quarterly analysis
+          - Used for quarterly reporting and trend analysis
+          - Enables quarter-over-quarter comparisons
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      
+      - name: day_name
+        description: >
+          Day of week name for the mart refresh date
+          
+          Business Rules:
+          - Extracted from date_id for day-of-week analysis
+          - Used for scheduling pattern analysis
+          - Enables day-of-week trend analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+      
+      # Hygiene History Summary
+      - name: total_hygiene_appointments
+        description: >
+          Total number of hygiene appointments for the patient in the 3-year window
+          
+          Calculation Logic:
+          - Count of all hygiene appointments (completed, no-show, broken)
+          - Includes appointments with non-null hygienist_id
+          - 3-year lookback window from current date
+          
+          Business Rules:
+          - Must be greater than 0 (filtering condition)
+          - Used as denominator for completion rate calculations
+          - Indicates patient engagement level
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 100
+              severity: warn
+      
+      - name: completed_hygiene_appointments
+        description: >
+          Number of completed hygiene appointments for the patient
+          
+          Calculation Logic:
+          - Count of appointments where is_completed = true
+          - Used as numerator for completion rate calculations
+          - Indicates successful hygiene visits
+          
+          Business Rules:
+          - Cannot exceed total_hygiene_appointments
+          - Used for completion rate and reliability analysis
+          - Key metric for patient engagement assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: hygiene_no_shows
+        description: >
+          Number of no-show hygiene appointments for the patient
+          
+          Calculation Logic:
+          - Count of appointments where is_no_show = true
+          - Used for no-show rate calculations
+          - Indicates appointment reliability issues
+          
+          Business Rules:
+          - Cannot exceed total_hygiene_appointments
+          - Used for patient risk assessment
+          - Key metric for scheduling effectiveness
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: hygiene_cancellations
+        description: >
+          Number of cancelled/broken hygiene appointments for the patient
+          
+          Calculation Logic:
+          - Count of appointments where is_broken = true
+          - Used for cancellation rate calculations
+          - Indicates scheduling stability issues
+          
+          Business Rules:
+          - Cannot exceed total_hygiene_appointments
+          - Used for patient risk assessment
+          - Key metric for appointment reliability
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: first_hygiene_date
+        description: >
+          Date of patient's first hygiene appointment in the 3-year window
+          
+          Business Rules:
+          - Earliest hygiene appointment date for the patient
+          - Used for new patient identification
+          - May be null if no hygiene appointments in window
+        tests:
+          - not_null:
+              where: "first_hygiene_date is not null"
+      
+      - name: last_hygiene_date
+        description: >
+          Date of patient's most recent hygiene appointment
+          
+          Business Rules:
+          - Latest hygiene appointment date for the patient
+          - Used for hygiene status categorization
+          - Critical for lapse identification
+        tests:
+          - not_null
+      
+      # Timing and Frequency Metrics
+      - name: avg_hygiene_interval_days
+        description: >
+          Average number of days between hygiene appointments
+          
+          Calculation Logic:
+          - Average of days_since_last_hygiene for all appointments
+          - Excludes first appointment (no previous appointment)
+          - Used for frequency pattern analysis
+          
+          Business Rules:
+          - Typical range: 90-270 days (3-9 months)
+          - Used for hygiene frequency categorization
+          - Key metric for patient retention assessment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 30
+              max_value: 365
+              severity: warn
+              where: "avg_hygiene_interval_days is not null"
+      
+      - name: avg_hygiene_interval_months
+        description: >
+          Average hygiene interval converted to months (rounded to 1 decimal)
+          
+          Calculation Logic:
+          - avg_hygiene_interval_days divided by 30.0
+          - Rounded to 1 decimal place for readability
+          - Used for monthly interval analysis
+          
+          Business Rules:
+          - Typical range: 3.0-9.0 months
+          - Used for frequency categorization
+          - More intuitive than days for business users
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1.0
+              max_value: 12.0
+              severity: warn
+              where: "avg_hygiene_interval_months is not null"
+      
+      - name: hygiene_interval_variability
+        description: >
+          Standard deviation of hygiene appointment intervals
+          
+          Calculation Logic:
+          - Standard deviation of days_since_last_hygiene
+          - Measures consistency of appointment timing
+          - Lower values indicate more consistent patients
+          
+          Business Rules:
+          - Lower values indicate more consistent patients
+          - Used for patient reliability assessment
+          - May be null for patients with only one interval
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 180
+              severity: warn
+              where: "hygiene_interval_variability is not null"
+      
+      - name: hygiene_visits_last_year
+        description: >
+          Number of hygiene visits in the last 12 months
+          
+          Calculation Logic:
+          - Count of hygiene appointments in last 12 months
+          - Used for recent activity assessment
+          - Key metric for retention categorization
+          
+          Business Rules:
+          - Typical range: 0-4 visits per year
+          - Used for retention category assignment
+          - Indicates current patient engagement level
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 6
+              severity: warn
+      
+      # Completion and Reliability
+      - name: hygiene_completion_rate
+        description: >
+          Percentage of completed hygiene appointments (rounded to 2 decimals)
+          
+          Calculation Logic:
+          - (completed_hygiene_appointments / total_hygiene_appointments) * 100
+          - Rounded to 2 decimal places
+          - Used for patient reliability assessment
+          
+          Business Rules:
+          - Range: 0.00-100.00
+          - Higher values indicate more reliable patients
+          - Used for patient segmentation and risk assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.00
+              max_value: 100.00
+      
+      - name: hygiene_no_show_rate
+        description: >
+          Percentage of no-show hygiene appointments (rounded to 2 decimals)
+          
+          Calculation Logic:
+          - (hygiene_no_shows / total_hygiene_appointments) * 100
+          - Rounded to 2 decimal places
+          - Used for patient risk assessment
+          
+          Business Rules:
+          - Range: 0.00-100.00
+          - Higher values indicate higher risk patients
+          - Used for patient risk categorization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.00
+              max_value: 100.00
+      
+      - name: hygiene_cancellation_rate
+        description: >
+          Percentage of cancelled hygiene appointments (rounded to 2 decimals)
+          
+          Calculation Logic:
+          - (hygiene_cancellations / total_hygiene_appointments) * 100
+          - Rounded to 2 decimal places
+          - Used for scheduling stability assessment
+          
+          Business Rules:
+          - Range: 0.00-100.00
+          - Higher values indicate scheduling instability
+          - Used for patient risk assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.00
+              max_value: 100.00
+      
+      # Consistency and Regularity
+      - name: regular_interval_percentage
+        description: >
+          Percentage of hygiene visits within regular intervals (120-240 days)
+          
+          Calculation Logic:
+          - (regular_interval_visits / total_intervals) * 100
+          - Rounded to 2 decimal places
+          - Measures appointment consistency
+          
+          Business Rules:
+          - Range: 0.00-100.00
+          - Higher values indicate more consistent patients
+          - Used for retention category assignment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.00
+              max_value: 100.00
+      
+      # Financial Metrics
+      - name: total_hygiene_production
+        description: >
+          Total scheduled production amount for all hygiene appointments
+          
+          Calculation Logic:
+          - Sum of scheduled_production_amount for all hygiene appointments
+          - Used for financial performance analysis
+          - Indicates patient value from hygiene services
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for patient lifetime value calculations
+          - Key metric for financial analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+      
+      - name: avg_hygiene_production
+        description: >
+          Average scheduled production amount per hygiene appointment
+          
+          Calculation Logic:
+          - total_hygiene_production / total_hygiene_appointments
+          - Used for per-visit value analysis
+          - Indicates typical appointment value
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for production efficiency analysis
+          - Key metric for appointment value assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+      
+      - name: avg_hygiene_duration
+        description: >
+          Average duration of hygiene appointments in minutes
+          
+          Calculation Logic:
+          - Average of appointment_length_minutes for all hygiene appointments
+          - Used for scheduling and capacity analysis
+          - Indicates appointment efficiency
+          
+          Business Rules:
+          - Typical range: 30-90 minutes
+          - Used for production per hour calculations
+          - Key metric for scheduling optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 15
+              max_value: 180
+              severity: warn
+              where: "avg_hygiene_duration is not null"
+      
+      - name: production_per_hour
+        description: >
+          Average production amount per hour (rounded to 2 decimals)
+          
+          Calculation Logic:
+          - (avg_hygiene_production / avg_hygiene_duration) * 60
+          - Rounded to 2 decimal places
+          - Used for efficiency analysis
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for hygienist performance assessment
+          - Key metric for productivity analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+              where: "production_per_hour is not null"
+      
+      # Recall Compliance
+      - name: last_recall_compliance
+        description: >
+          Flag indicating compliance with most recent recall appointment
+          
+          Logic:
+          - true when: hygiene appointment scheduled within ±30 days of recall target date
+          - false when: no appointment or appointment outside compliance window
+          
+          Business Impact:
+          - Indicates patient adherence to recommended recall schedule
+          - Used for recall effectiveness analysis
+        tests:
+          - accepted_values:
+              values: [true, false]
+              where: "last_recall_compliance is not null"
+      
+      - name: days_from_last_recall_target
+        description: >
+          Number of days between actual appointment and recall target date
+          
+          Business Rules:
+          - Positive values: appointment after target date
+          - Negative values: appointment before target date
+          - Used for recall timing analysis
+          - May be null if no recall or appointment data
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -90
+              max_value: 365
+              severity: warn
+              where: "days_from_last_recall_target is not null"
+      
+      - name: recommended_recall_interval
+        description: >
+          Recommended recall interval in months based on recall type
+          
+          Business Rules:
+          - Decoded from OpenDental's encoded interval values
+          - Typical values: 3, 4, 5, 6, 8, 12, 18 months
+          - Used for recall scheduling analysis
+          - May be null if no recall data
+        tests:
+          - accepted_values:
+              values: [3, 4, 5, 6, 8, 12, 18]
+              where: "recommended_recall_interval is not null"
+      
+      # Business Categorization
+      - name: hygiene_status
+        description: >
+          Current hygiene status based on time since last appointment
+          
+          Categories:
+          - Current: Last hygiene within 6 months
+          - Due: Last hygiene 6-9 months ago
+          - Overdue: Last hygiene 9-12 months ago
+          - Lapsed: Last hygiene more than 12 months ago
+          
+          Business Rules:
+          - Used for patient outreach prioritization
+          - Critical for lapse prevention strategies
+          - Primary segmentation field for retention analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Current', 'Due', 'Overdue', 'Lapsed']
+      
+      - name: retention_category
+        description: >
+          Patient retention category based on visit frequency and consistency
+          
+          Categories:
+          - Excellent: ≥2 visits/year and ≥80% regular intervals
+          - Good: ≥2 visits/year and ≥60% regular intervals
+          - Fair: ≥1 visit/year
+          - Poor: <1 visit/year
+          
+          Business Rules:
+          - Used for patient segmentation and targeting
+          - Indicates likelihood of continued engagement
+          - Key metric for retention strategy development
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Excellent', 'Good', 'Fair', 'Poor']
+      
+      - name: patient_risk_category
+        description: >
+          Patient risk assessment for lapse or no-show behavior
+          
+          Categories:
+          - High Risk: >12 months since last hygiene
+          - Medium Risk: >20% no-show rate or >240 day average intervals
+          - Low Risk: Regular patterns and good attendance
+          
+          Business Rules:
+          - Used for targeted intervention strategies
+          - Indicates need for proactive outreach
+          - Key metric for patient care management
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['High Risk', 'Medium Risk', 'Low Risk']
+      
+      - name: hygiene_frequency_category
+        description: >
+          Categorization of patient hygiene visit frequency patterns
+          
+          Categories:
+          - 3-4 Months: Average interval ≤120 days
+          - 4-6 Months: Average interval 120-180 days
+          - 6-9 Months: Average interval 180-270 days
+          - Infrequent: Average interval >270 days
+          
+          Business Rules:
+          - Used for frequency-based analysis
+          - Indicates patient preference and compliance
+          - Key metric for scheduling optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['3-4 Months', '4-6 Months', '6-9 Months', 'Infrequent']
+      
+      # Boolean Flags
+      - name: recent_hygiene_visit
+        description: >
+          Flag indicating hygiene visit within last 6 months
+          
+          Logic:
+          - true when: last hygiene appointment within 6 months
+          - false when: no hygiene appointment in last 6 months
+          
+          Business Impact:
+          - Indicates current patient engagement
+          - Used for recent activity analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: regular_hygiene_patient
+        description: >
+          Flag indicating patient with ≥2 hygiene visits in last year
+          
+          Logic:
+          - true when: hygiene_visits_last_year ≥ 2
+          - false when: hygiene_visits_last_year < 2
+          
+          Business Impact:
+          - Indicates established hygiene routine
+          - Used for patient segmentation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: consistent_patient
+        description: >
+          Flag indicating patient with ≥70% regular interval visits
+          
+          Logic:
+          - true when: regular_interval_percentage ≥ 70
+          - false when: regular_interval_percentage < 70
+          
+          Business Impact:
+          - Indicates reliable scheduling patterns
+          - Used for patient reliability assessment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: reliable_patient
+        description: >
+          Flag indicating patient with ≥90% completion rate
+          
+          Logic:
+          - true when: hygiene_completion_rate ≥ 90
+          - false when: hygiene_completion_rate < 90
+          
+          Business Impact:
+          - Indicates high appointment reliability
+          - Used for patient trust assessment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: recall_compliant
+        description: >
+          Flag indicating compliance with most recent recall
+          
+          Logic:
+          - true when: last_recall_compliance = true
+          - false when: last_recall_compliance = false or null
+          
+          Business Impact:
+          - Indicates adherence to recommended schedule
+          - Used for recall effectiveness analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Additional Metrics
+      - name: days_since_last_hygiene
+        description: >
+          Number of days since patient's last hygiene appointment
+          
+          Calculation Logic:
+          - current_date - last_hygiene_date
+          - Used for lapse identification
+          - Critical for hygiene status categorization
+          
+          Business Rules:
+          - Must be non-negative
+          - Used for urgency assessment
+          - Key metric for patient outreach timing
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1095
+              severity: warn
+      
+      - name: annual_hygiene_value
+        description: >
+          Annual hygiene value per patient (rounded to 2 decimals)
+          
+          Calculation Logic:
+          - total_hygiene_production / ((current_date - first_visit_date) / 365.0)
+          - Rounded to 2 decimal places
+          - Used for patient lifetime value analysis
+          
+          Business Rules:
+          - Must be non-negative
+          - May be skewed for very new patients
+          - Used for patient value assessment
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+              severity: warn
+              where: "annual_hygiene_value is not null"
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to appointment creation timestamp. May be null for very old records."
+        tests:
+          - not_null:
+              where: "_created_at is not null"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to appointment last modified timestamp."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

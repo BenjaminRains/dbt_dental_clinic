@@ -1,0 +1,1197 @@
+version: 2
+
+models:
+  - name: mart_provider_performance
+    description: >
+      Summary mart for comprehensive provider performance analytics and tracking.
+      This mart provides aggregated metrics and KPIs to support provider performance
+      management and operational optimization, enabling stakeholders to analyze trends,
+      performance, and business outcomes at the provider level across all clinics.
+      
+      ## Business Context
+      The provider performance summary mart is a critical component of our analytical framework, enabling:
+      - Provider productivity analysis and performance benchmarking
+      - Practice management and provider development decisions
+      - Comparative performance analysis across providers and specialties
+      - Operational optimization through key performance indicator tracking
+      - Executive reporting and provider performance dashboards
+      - Scheduling efficiency and appointment management optimization
+      
+      ## Technical Specifications
+      - Grain: One row per date + provider (one row per date_id + provider_id combination)
+      - Source: mart_production_summary, mart_appt_summary, dim_date, dim_provider (primary sources)
+      - Refresh: Daily
+      - Dependencies: 
+        * mart_production_summary (core production and scheduling data)
+        * mart_appt_summary (appointment efficiency and timing metrics)
+        * dim_date (date dimension for temporal analysis)
+        * dim_provider (provider master data and attributes)
+        * dim_procedure (procedure classification and complexity flags)
+        * dim_patient (patient demographic and complexity indicators)
+      
+      ## Business Logic
+      ### Production Aggregation
+      - Aggregates production and collection metrics across all clinics for each provider
+      - Calculates production per hour using productive hours as denominator
+      - Computes collection efficiency as percentage of collections to production
+      - Handles division by zero using nullif() functions for data quality
+      
+      ### Performance Categorization
+      - Collection Performance: Excellent (≥98%), Good (≥95%), Fair (≥90%), Poor (<90%)
+      - Scheduling Performance: Excellent (≥95%), Good (≥90%), Fair (≥85%), Poor (<85%)
+      - Reliability Performance: Excellent (≤5% no-show), Good (≤10%), Fair (≤15%), Poor (>15%)
+      - Utilization Category: Full (≥7hrs), Good (≥5hrs), Moderate (≥3hrs), Low (<3hrs)
+      
+      ### Ranking and Benchmarking
+      - Production ranking within specialty and overall practice
+      - Monthly trend analysis with daily production vs monthly comparison
+      - Performance benchmarking against specialty and practice averages
+      
+      ## Data Quality Notes
+      - Handles null values in division operations with nullif() functions
+      - Aggregates data across multiple clinics for provider-level analysis
+      - Uses window functions for comparative rankings with proper partitioning
+      - Preserves data lineage from upstream mart models
+      - Patient demographic metrics set to 0 (calculated separately if needed)
+      - Claims metrics set to 0 (would need separate aggregation from fact_claim)
+      
+      ## Performance Considerations
+      - Optimized with composite indexes on date_id and provider_id
+      - Uses efficient joins with proper foreign key relationships
+      - Implements window functions for ranking calculations with partitioning
+      - Aggregates complex metrics in separate CTEs for clarity and performance
+      - Monthly trend calculations use date_trunc for efficient grouping
+      
+      ## Usage Notes
+      - Primary use case: Provider performance monitoring and benchmarking
+      - Supports provider development and practice management decisions
+      - Enables comparative analysis across specialties and time periods
+      - Monthly context provides trend analysis capabilities
+      - Performance categories enable quick identification of outliers
+      - Rankings support competitive analysis within practice
+      
+      ## Known Issues
+      - Patient demographic metrics (age, diseases, premedication) are placeholder values
+      - Claims processing metrics are placeholder values requiring separate fact_claim aggregation
+      - Procedure type breakdowns (hygiene, radiology, prosthetic) are placeholder values
+      - New patient count aggregation may not match individual appointment records
+    
+    meta:
+      owner: "Practice Management Team"
+      contains_pii: false
+      business_process: "Provider Performance Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + provider"
+      primary_consumers: ["Practice Managers", "Executive Team", "Provider Development", "Operations Team"]
+      data_quality_requirements:
+        - "Production and collection metrics must be non-negative"
+        - "Performance rates must be between 0-100%"
+        - "Provider rankings must be consistent within specialties"
+      performance_requirements:
+        - "Query response time under 30 seconds for daily provider reports"
+        - "Support concurrent access by multiple practice management users"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 10000
+          config:
+            severity: error
+            description: "Expected daily provider performance records between 1-10,000 rows"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "total_production >= 0"
+          config:
+            severity: error
+            description: "Production values must be non-negative for accurate financial reporting"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "collection_efficiency between 0 and 100"
+          config:
+            severity: error
+            description: "Collection efficiency must be between 0-100% for valid performance metrics"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis
+          
+          Business Rules:
+          - Links to dim_date for comprehensive date attributes
+          - Enables temporal analysis and trend reporting
+          - Supports calendar-based filtering and grouping
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider - Provider dimension for performance analysis
+          
+          Business Rules:
+          - Links to dim_provider for provider attributes and specialty information
+          - Enables provider-level performance tracking and analysis
+          - Supports specialty-based grouping and comparison
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+          - not_null
+          - positive_values
+      
+      # Provider Information
+      - name: provider_preferred_name
+        description: >
+          Provider's preferred name for display in reports and dashboards
+          
+          Business Rules:
+          - Used as primary display name for provider identification
+          - Consistent with provider preference settings
+        tests:
+          - not_null
+      
+      - name: provider_first_name
+        description: >
+          Provider's first name from provider master data
+          
+          Business Rules:
+          - Used for formal reporting and documentation
+          - Maintains consistency with HR records
+        tests:
+          - not_null
+      
+      - name: provider_last_name
+        description: >
+          Provider's last name from provider master data
+          
+          Business Rules:
+          - Used for formal reporting and documentation
+          - Maintains consistency with HR records
+        tests:
+          - not_null
+      
+      - name: specialty_description
+        description: >
+          Provider's specialty classification for comparative analysis
+          
+          Business Rules:
+          - Enables specialty-based performance comparison
+          - Supports specialty-specific benchmarking and rankings
+        tests:
+          - not_null
+      
+      - name: provider_status
+        description: >
+          Provider's current status code (Active, Inactive, etc.)
+          
+          Business Rules:
+          - Determines if provider is currently active in practice
+          - Affects performance reporting and scheduling decisions
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Active", "Inactive", "Suspended", "Terminated"]
+      
+      # Date Information
+      - name: production_date
+        description: >
+          Date of production and performance metrics
+          
+          Business Rules:
+          - Represents the calendar date for performance measurement
+          - Enables daily, weekly, monthly, and yearly analysis
+        tests:
+          - not_null
+      
+      - name: day_name
+        description: >
+          Day of week name for scheduling pattern analysis
+          
+          Business Rules:
+          - Enables day-of-week performance analysis
+          - Supports scheduling optimization and pattern recognition
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+      
+      - name: is_weekend
+        description: >
+          Boolean flag indicating if the date falls on a weekend
+          
+          Business Rules:
+          - Enables weekend vs weekday performance comparison
+          - Affects scheduling and operational planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_holiday
+        description: >
+          Boolean flag indicating if the date is a recognized holiday
+          
+          Business Rules:
+          - Enables holiday vs regular day performance comparison
+          - Affects scheduling and operational planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: month
+        description: >
+          Month number (1-12) for monthly analysis and reporting
+          
+          Business Rules:
+          - Enables monthly trend analysis and seasonal patterns
+          - Supports monthly performance reporting and goal tracking
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+      
+      - name: quarter
+        description: >
+          Quarter number (1-4) for quarterly analysis and reporting
+          
+          Business Rules:
+          - Enables quarterly performance analysis and goal tracking
+          - Supports seasonal pattern recognition and planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+      
+      - name: year
+        description: >
+          Year for annual analysis and reporting
+          
+          Business Rules:
+          - Enables year-over-year performance comparison
+          - Supports annual goal tracking and strategic planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+      
+      # Production Metrics
+      - name: total_production
+        description: >
+          Total production value for the provider on the given date
+          
+          Calculation Logic:
+          - Sum of actual_production across all clinics for the provider
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents total billable services provided
+          - Used as primary productivity metric for provider performance
+          - Supports financial planning and goal setting
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: total_collections
+        description: >
+          Total collections received for the provider on the given date
+          
+          Calculation Logic:
+          - Sum of collections across all clinics for the provider
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents actual revenue collected from services
+          - Used for cash flow analysis and financial performance
+          - Key metric for practice financial health
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: total_scheduled_production
+        description: >
+          Total scheduled production value for the provider on the given date
+          
+          Calculation Logic:
+          - Sum of scheduled_production across all clinics for the provider
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents planned production before service delivery
+          - Used for scheduling efficiency and capacity planning
+          - Enables production vs scheduled comparison
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+      
+      - name: production_per_hour
+        description: >
+          Production value per productive hour worked
+          
+          Calculation Logic:
+          - total_production / total_productive_hours
+          - Uses nullif() to handle division by zero
+          
+          Business Rules:
+          - Key productivity metric for provider efficiency
+          - Enables hourly rate analysis and goal setting
+          - Supports capacity planning and scheduling optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 2000
+              severity: warn
+      
+      - name: collection_efficiency
+        description: >
+          Percentage of production that was collected
+          
+          Calculation Logic:
+          - (total_collections / total_production) * 100
+          - Uses nullif() to handle division by zero
+          
+          Business Rules:
+          - Key financial performance metric
+          - Indicates billing and collection effectiveness
+          - Used for provider performance evaluation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Appointment Performance
+      - name: total_completed_appointments
+        description: >
+          Total number of appointments completed by the provider
+          
+          Calculation Logic:
+          - Sum of completed_appointments across all clinics
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents successful service delivery
+          - Used for capacity analysis and scheduling optimization
+          - Key metric for provider productivity
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: total_scheduled_appointments
+        description: >
+          Total number of appointments scheduled for the provider
+          
+          Calculation Logic:
+          - Sum of total_appointments across all clinics
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents planned capacity utilization
+          - Used for scheduling efficiency analysis
+          - Enables completion rate calculations
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: total_missed_appointments
+        description: >
+          Total number of missed appointments (no-shows) for the provider
+          
+          Calculation Logic:
+          - Sum of missed_appointments across all clinics
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents scheduling reliability issues
+          - Used for patient engagement and scheduling optimization
+          - Affects productivity and revenue planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+              severity: warn
+      
+      - name: daily_appointments
+        description: >
+          Daily appointment count from appointment summary data
+          
+          Calculation Logic:
+          - Sum of total_appointments from mart_appt_summary
+          - Provides appointment-specific metrics
+          
+          Business Rules:
+          - Alternative view of appointment volume
+          - Used for appointment pattern analysis
+          - Enables cross-validation with production data
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: new_patient_count
+        description: >
+          Number of new patient appointments for the provider
+          
+          Calculation Logic:
+          - Sum of new_patient_appointments from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Indicates provider's ability to attract new patients
+          - Used for practice growth analysis
+          - Important for practice development planning
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+              severity: warn
+      
+      - name: working_hours
+        description: >
+          Total working hours scheduled for the provider
+          
+          Calculation Logic:
+          - Max of schedule_span_hours from mart_appt_summary
+          - Represents total time allocated for appointments
+          
+          Business Rules:
+          - Used for capacity planning and utilization analysis
+          - Enables productivity per hour calculations
+          - Supports scheduling optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 12
+              severity: warn
+      
+      - name: appointments_per_hour
+        description: >
+          Average number of appointments per hour
+          
+          Calculation Logic:
+          - Average of appointments_per_hour from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Indicates scheduling efficiency and patient flow
+          - Used for capacity optimization
+          - Enables comparison of scheduling patterns
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: appointment_efficiency
+        description: >
+          Percentage of scheduled appointments that were completed
+          
+          Calculation Logic:
+          - (total_completed_appointments / total_scheduled_appointments) * 100
+          - Uses nullif() to handle division by zero
+          
+          Business Rules:
+          - Key metric for scheduling effectiveness
+          - Indicates provider reliability and patient engagement
+          - Used for performance evaluation and improvement
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Time Management
+      - name: total_productive_hours
+        description: >
+          Total productive hours worked by the provider
+          
+          Calculation Logic:
+          - Sum of productive_hours across all clinics
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents actual time spent providing services
+          - Used for productivity and efficiency calculations
+          - Enables capacity planning and scheduling
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 12
+              severity: warn
+      
+      - name: avg_patient_delay
+        description: >
+          Average patient arrival delay in minutes
+          
+          Calculation Logic:
+          - Average of avg_arrival_delay from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Indicates patient punctuality and engagement
+          - Used for scheduling optimization and patient communication
+          - Affects provider productivity and patient satisfaction
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -60
+              max_value: 120
+              severity: warn
+      
+      - name: avg_patient_wait_time
+        description: >
+          Average patient wait time in minutes
+          
+          Calculation Logic:
+          - Average of avg_wait_time from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Indicates scheduling efficiency and patient flow
+          - Used for patient satisfaction and operational optimization
+          - Affects provider productivity and patient experience
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+              severity: warn
+      
+      - name: avg_treatment_time
+        description: >
+          Average treatment time per appointment in minutes
+          
+          Calculation Logic:
+          - Average of avg_treatment_time from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Indicates treatment complexity and efficiency
+          - Used for scheduling optimization and capacity planning
+          - Enables procedure-specific time analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 15
+              max_value: 180
+              severity: warn
+      
+      - name: daily_no_show_rate
+        description: >
+          Daily no-show rate as a percentage
+          
+          Calculation Logic:
+          - Average of no_show_rate from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Key metric for patient engagement and reliability
+          - Used for scheduling optimization and patient communication
+          - Affects productivity and revenue planning
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: daily_cancellation_rate
+        description: >
+          Daily appointment cancellation rate as a percentage
+          
+          Calculation Logic:
+          - Average of cancellation_rate from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Indicates scheduling flexibility and patient satisfaction
+          - Used for appointment management optimization
+          - Affects capacity utilization and revenue
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: daily_confirmation_rate
+        description: >
+          Daily appointment confirmation rate as a percentage
+          
+          Calculation Logic:
+          - Average of confirmation_rate from mart_appt_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Indicates patient engagement and communication effectiveness
+          - Used for appointment management optimization
+          - Affects no-show rates and scheduling reliability
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Procedure Metrics
+      - name: total_procedures
+        description: >
+          Total number of procedures performed by the provider
+          
+          Calculation Logic:
+          - Sum of total_procedures across all clinics
+          - Aggregated from mart_production_summary
+          
+          Business Rules:
+          - Represents total service volume provided
+          - Used for productivity and efficiency analysis
+          - Enables procedure-specific performance tracking
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: procedures_per_appointment
+        description: >
+          Average number of procedures per completed appointment
+          
+          Calculation Logic:
+          - total_procedures / total_completed_appointments
+          - Uses nullif() to handle division by zero
+          
+          Business Rules:
+          - Indicates treatment complexity and efficiency
+          - Used for scheduling optimization and capacity planning
+          - Enables comparison across providers and specialties
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: procedure_variety
+        description: >
+          Number of unique procedure codes performed
+          
+          Calculation Logic:
+          - Uses total_procedures as proxy for procedure variety
+          - Placeholder for future enhancement with actual procedure counting
+          
+          Business Rules:
+          - Indicates scope of services provided
+          - Used for provider capability analysis
+          - Enables specialty-specific procedure tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: hygiene_procedures
+        description: >
+          Number of hygiene procedures performed (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require separate aggregation from procedure detail data
+          
+          Business Rules:
+          - Will indicate provider's hygiene service volume
+          - Used for hygiene scheduling and capacity planning
+          - Enables hygiene-specific performance analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: radiology_procedures
+        description: >
+          Number of radiology procedures performed (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require separate aggregation from procedure detail data
+          
+          Business Rules:
+          - Will indicate provider's radiology service volume
+          - Used for equipment utilization and capacity planning
+          - Enables radiology-specific performance analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 30
+              severity: warn
+      
+      - name: prosthetic_procedures
+        description: >
+          Number of prosthetic procedures performed (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require separate aggregation from procedure detail data
+          
+          Business Rules:
+          - Will indicate provider's prosthetic service volume
+          - Used for lab coordination and capacity planning
+          - Enables prosthetic-specific performance analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+              severity: warn
+      
+      # Financial Performance (Placeholders)
+      - name: total_claims
+        description: >
+          Total number of claims submitted (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from fact_claim
+          
+          Business Rules:
+          - Will indicate billing activity and insurance processing
+          - Used for revenue cycle management analysis
+          - Enables claims processing performance tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: total_billed
+        description: >
+          Total amount billed to insurance (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from fact_claim
+          
+          Business Rules:
+          - Will indicate billing volume and insurance utilization
+          - Used for revenue cycle analysis and financial planning
+          - Enables billing efficiency tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      
+      - name: total_allowed
+        description: >
+          Total amount allowed by insurance (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from fact_claim
+          
+          Business Rules:
+          - Will indicate insurance acceptance and contract performance
+          - Used for insurance relationship management
+          - Enables contract negotiation and optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      
+      - name: total_insurance_payments
+        description: >
+          Total payments received from insurance (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from fact_payment
+          
+          Business Rules:
+          - Will indicate actual insurance revenue received
+          - Used for cash flow analysis and financial planning
+          - Enables payment cycle optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      
+      - name: total_write_offs
+        description: >
+          Total write-offs for the provider (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from fact_payment
+          
+          Business Rules:
+          - Will indicate financial adjustments and bad debt
+          - Used for revenue cycle analysis and financial planning
+          - Enables write-off pattern analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+      
+      - name: avg_claim_amount
+        description: >
+          Average claim amount (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from fact_claim
+          
+          Business Rules:
+          - Will indicate average service value and complexity
+          - Used for pricing analysis and financial planning
+          - Enables claim value optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+              severity: warn
+      
+      - name: insurance_acceptance_rate
+        description: >
+          Percentage of billed amount accepted by insurance (placeholder)
+          
+          Calculation Logic:
+          - (total_allowed / total_billed) * 100
+          - Uses nullif() to handle division by zero
+          - Currently 0 due to placeholder values
+          
+          Business Rules:
+          - Will indicate insurance contract performance
+          - Used for contract negotiation and optimization
+          - Enables insurance relationship management
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Patient Metrics (Placeholders)
+      - name: daily_unique_patients
+        description: >
+          Number of unique patients seen by the provider
+          
+          Calculation Logic:
+          - Uses total_unique_patients from mart_production_summary
+          - Aggregated across all clinics for the provider
+          
+          Business Rules:
+          - Represents patient volume and provider reach
+          - Used for capacity planning and patient relationship analysis
+          - Enables patient engagement tracking
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: new_patients
+        description: >
+          Number of new patients (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require separate calculation from patient records
+          
+          Business Rules:
+          - Will indicate practice growth and provider attraction
+          - Used for practice development and marketing analysis
+          - Enables new patient acquisition tracking
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+              severity: warn
+      
+      - name: avg_patient_age
+        description: >
+          Average age of patients seen (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from patient demographic data
+          
+          Business Rules:
+          - Will indicate patient demographics and market focus
+          - Used for practice development and service planning
+          - Enables demographic analysis and targeting
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      - name: pediatric_patients
+        description: >
+          Number of pediatric patients seen (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require age-based filtering from patient data
+          
+          Business Rules:
+          - Will indicate pediatric service volume
+          - Used for pediatric scheduling and capacity planning
+          - Enables pediatric practice analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+              severity: warn
+      
+      - name: senior_patients
+        description: >
+          Number of senior patients seen (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require age-based filtering from patient data
+          
+          Business Rules:
+          - Will indicate senior service volume
+          - Used for senior scheduling and capacity planning
+          - Enables senior practice analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 30
+              severity: warn
+      
+      - name: avg_diseases_per_patient
+        description: >
+          Average number of diseases per patient (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require aggregation from patient medical records
+          
+          Business Rules:
+          - Will indicate patient complexity and treatment needs
+          - Used for treatment planning and resource allocation
+          - Enables complexity-based analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: premedication_patients
+        description: >
+          Number of patients requiring premedication (placeholder)
+          
+          Calculation Logic:
+          - Currently set to 0 (placeholder for future enhancement)
+          - Would require filtering from patient medical records
+          
+          Business Rules:
+          - Will indicate special needs patient volume
+          - Used for scheduling and resource planning
+          - Enables special needs patient analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: new_patient_rate
+        description: >
+          Percentage of patients that are new (placeholder)
+          
+          Calculation Logic:
+          - (new_patients / daily_unique_patients) * 100
+          - Uses nullif() to handle division by zero
+          - Currently 0 due to placeholder values
+          
+          Business Rules:
+          - Will indicate practice growth and patient acquisition
+          - Used for practice development and marketing analysis
+          - Enables growth tracking and planning
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Monthly Context
+      - name: monthly_production
+        description: >
+          Total production for the month containing this date
+          
+          Calculation Logic:
+          - Sum of total_production for the month
+          - Calculated using monthly_trends CTE
+          
+          Business Rules:
+          - Provides monthly context for daily performance
+          - Used for trend analysis and goal tracking
+          - Enables monthly performance evaluation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000000
+              severity: warn
+      
+      - name: monthly_collections
+        description: >
+          Total collections for the month containing this date
+          
+          Calculation Logic:
+          - Sum of total_collections for the month
+          - Calculated using monthly_trends CTE
+          
+          Business Rules:
+          - Provides monthly context for daily collections
+          - Used for cash flow analysis and financial planning
+          - Enables monthly financial performance evaluation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000000
+              severity: warn
+      
+      - name: monthly_appointments
+        description: >
+          Total appointments for the month containing this date
+          
+          Calculation Logic:
+          - Sum of total_completed_appointments for the month
+          - Calculated using monthly_trends CTE
+          
+          Business Rules:
+          - Provides monthly context for daily appointments
+          - Used for capacity analysis and scheduling optimization
+          - Enables monthly productivity evaluation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              severity: warn
+      
+      - name: working_days
+        description: >
+          Number of working days in the month
+          
+          Calculation Logic:
+          - Count of records for the month in monthly_trends
+          - Represents days with actual performance data
+          
+          Business Rules:
+          - Provides context for monthly performance calculations
+          - Used for productivity analysis and goal setting
+          - Enables per-day performance evaluation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 31
+              severity: warn
+      
+      - name: daily_production_vs_monthly
+        description: >
+          Daily production as percentage of monthly production
+          
+          Calculation Logic:
+          - (total_production / monthly_production) * 100
+          - Uses nullif() to handle division by zero
+          
+          Business Rules:
+          - Indicates daily performance relative to monthly goals
+          - Used for daily goal tracking and performance evaluation
+          - Enables daily contribution analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+      
+      # Performance Rankings
+      - name: production_rank_specialty
+        description: >
+          Provider's production ranking within their specialty for the date
+          
+          Calculation Logic:
+          - rank() over (partition by date_day, specialty_description order by total_production desc)
+          - Calculated using window function
+          
+          Business Rules:
+          - Enables specialty-specific performance comparison
+          - Used for provider development and performance evaluation
+          - Supports competitive analysis within specialty
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 100
+              severity: warn
+      
+      - name: production_rank_overall
+        description: >
+          Provider's production ranking across all providers for the date
+          
+          Calculation Logic:
+          - rank() over (partition by date_day order by total_production desc)
+          - Calculated using window function
+          
+          Business Rules:
+          - Enables practice-wide performance comparison
+          - Used for provider recognition and performance evaluation
+          - Supports overall competitive analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 100
+              severity: warn
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). DateCreated from provider and appointment tables. May be null for historical records."
+        tests:
+          - not_null:
+              where: "production_date >= '2023-01-01'"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). DateTStamp from provider and appointment tables."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null

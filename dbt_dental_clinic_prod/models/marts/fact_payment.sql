@@ -1,25 +1,63 @@
-{{ config(        materialized='table',
-        
-        unique_key='payment_id') }}
+{{
+    config(
+        materialized='table',
+        schema='marts',
+        unique_key='payment_id',
+        on_schema_change='fail',
+        indexes=[
+            {'columns': ['payment_id'], 'unique': true},
+            {'columns': ['patient_id']},
+            {'columns': ['provider_id']},
+            {'columns': ['payment_date']},
+            {'columns': ['_updated_at']}
+        ]
+    )
+}}
 
 /*
 Fact table for payment transactions and financial activity.
-This model captures all payment-related activities including patient payments,
-insurance payments, adjustments, and refunds for comprehensive financial analysis.
+Part of System 2: Revenue Cycle Management
 
-Key features:
-- Complete payment transaction tracking
-- Payment method and source analysis
-- Split payments and allocations
-- Adjustment and write-off tracking
-- Revenue cycle performance
+This model:
+1. Captures all payment-related activities including patient payments, insurance payments, adjustments, and refunds
+2. Provides comprehensive financial analysis capabilities for revenue cycle management
+3. Enables payment method and source analysis for operational insights
+
+Business Logic Features:
+- Complete payment transaction tracking with split payment allocation
+- Payment method and source categorization for operational analysis
+- Financial categorization (Income/Refund/Zero) and size classification
+- Timing analysis for payment processing efficiency
+- Validation flags for data quality assurance
+
+Key Metrics:
+- Payment amounts and directions (Income vs Refund)
+- Payment timing analysis (Same Day, Backdated, Future Dated)
+- Split payment validation and allocation tracking
+- Payment method distribution and source tracking
+
+Data Quality Notes:
+- Payment plan functionality not used by clinic (fields set to null)
+- Split amounts validated against payment amounts with mismatch flag
+- Zero payments identified and flagged for analysis
+
+Performance Considerations:
+- Indexed on payment_id (unique), patient_id, provider_id, payment_date
+- Payment splits aggregated to avoid N+1 query patterns
+- Date extractions performed at mart level for analytical queries
+
+Dependencies:
+- stg_opendental__payment: Primary source for payment transaction data
+- stg_opendental__paysplit: Payment allocation and split information
 */
 
-with PaymentBase as (
+-- 1. Source data retrieval
+with source_payment as (
     select * from {{ ref('stg_opendental__payment') }}
 ),
 
-PaymentSplits as (
+-- 2. Payment splits aggregation
+payment_splits as (
     select 
         payment_id,
         count(*) as split_count,
@@ -31,49 +69,32 @@ PaymentSplits as (
     group by payment_id
 ),
 
-/*
-TODO - PAYMENT PLAN CHARGE INTEGRATION:
-The PaymentPlans CTE has been temporarily removed because stg_opendental__payplancharge
-staging model does not exist. A new approach needs to be developed for incorporating
-payment plan charge information into the payment fact table.
+-- 3. Business logic and calculations
+payment_calculated as (
 
-Potential approaches:
-1. Create stg_opendental__payplancharge staging model from payplancharge source table
-2. Integrate payment plan data through the existing paysplit model (PayPlanChargeNum)
-3. Create a dedicated payment plan fact table that references payments
-4. Use payplan source table to track payment plan relationships
-
-When implementing payment plan charge integration, restore the following structure:
-- payment_id linkage to connect charges to payments
-- payment_plan_id for plan identification
-- payment_plan_charge_id for specific charge tracking
-- Consider charge amounts, due dates, and payment allocations
-*/
-
-Final as (
     select
-        -- Primary Key
-        pb.payment_id,
+        -- Primary key
+        sp.payment_id,
 
-        -- Foreign Keys
-        pb.patient_id,
-        pb.provider_id,
-        pb.clinic_id,
-        pb.payment_type_id,
-        pb.deposit_id,
-        null as payment_plan_id,  -- TODO: Restore when payplancharge integration is available
+        -- Foreign keys
+        sp.patient_id,
+        null as provider_id,  -- Provider not directly associated with payment
+        sp.clinic_id,
+        sp.payment_type_id,
+        sp.deposit_id,
+        null as payment_plan_id,  -- Not used by clinic
 
-        -- Date and Time
-        pb.payment_date,
-        pb.date_entry as entry_date,
-        pb.receipt_date,
-        extract(year from pb.payment_date) as payment_year,
-        extract(month from pb.payment_date) as payment_month,
-        extract(quarter from pb.payment_date) as payment_quarter,
-        extract(dow from pb.payment_date) as payment_day_of_week,
+        -- Date and time
+        sp.payment_date,
+        sp.entry_date,
+        null as receipt_date,  -- Not available in source
+        extract(year from sp.payment_date) as payment_year,
+        extract(month from sp.payment_date) as payment_month,
+        extract(quarter from sp.payment_date) as payment_quarter,
+        extract(dow from sp.payment_date) as payment_day_of_week,
 
-        -- Payment Details
-        case pb.payment_type
+        -- Payment details
+        case sp.payment_type_id
             when 0 then 'Patient'
             when 1 then 'Insurance'
             when 2 then 'Partial'
@@ -83,40 +104,25 @@ Final as (
             else 'Unknown'
         end as payment_type,
 
-        case pb.payment_method
-            when 0 then 'Check'
-            when 1 then 'Cash'
-            when 2 then 'Credit Card'
-            when 3 then 'Electronic'
-            when 4 then 'Online'
-            when 5 then 'Auto'
-            else 'Other'
-        end as payment_method,
+        'Unknown' as payment_method,  -- Payment method not available in source
 
-        pb.payment_amount,
-        pb.payment_note,
-        pb.check_number,
-        pb.bank_branch,
-        pb.is_recurring,
-        pb.external_id,
+        sp.payment_amount,
+        sp.payment_notes as payment_note,
+        sp.check_number,
+        sp.bank_branch,
+        sp.is_recurring_cc as is_recurring,
+        sp.external_id,
 
-        -- Payment Source Information
-        case pb.payment_source
-            when 0 then 'User'
-            when 1 then 'Practice'
-            when 2 then 'Insurance'
-            when 3 then 'Online'
-            when 4 then 'Kiosk'
-            else 'Unknown'
-        end as payment_source,
+        -- Payment source information
+        case when sp.payment_source then 'Practice' else 'External' end as payment_source,
 
-        -- Processing Information
-        pb.processing_status,
-        pb.receipt_number,
-        pb.external_reference,
-        pb.payment_software,
+        -- Processing information
+        sp.process_status as processing_status,
+        null as receipt_number,  -- Not available in source
+        null as external_reference,  -- Not available in source
+        null as payment_software,  -- Not available in source
 
-        -- Split Information
+        -- Split information
         ps.split_count,
         ps.total_split_amount,
         ps.split_provider_ids,
@@ -124,50 +130,51 @@ Final as (
         ps.split_patient_ids,
         
         -- Validation flags
-        case when pb.payment_amount = ps.total_split_amount then true else false end as splits_match_payment,
+        case when sp.payment_amount = ps.total_split_amount then true else false end as splits_match_payment,
         case when ps.split_count > 1 then true else false end as has_multiple_splits,
 
-        -- Financial Categorization
+        -- Financial categorization
         case 
-            when pb.payment_amount > 0 then 'Income'
-            when pb.payment_amount < 0 then 'Refund'
+            when sp.payment_amount > 0 then 'Income'
+            when sp.payment_amount < 0 then 'Refund'
             else 'Zero'
         end as payment_direction,
 
         case 
-            when pb.payment_amount between 0 and 50 then 'Small'
-            when pb.payment_amount between 50 and 200 then 'Medium'
-            when pb.payment_amount between 200 and 1000 then 'Large'
-            when pb.payment_amount > 1000 then 'Very Large'
+            when sp.payment_amount between 0 and 50 then 'Small'
+            when sp.payment_amount between 50 and 200 then 'Medium'
+            when sp.payment_amount between 200 and 1000 then 'Large'
+            when sp.payment_amount > 1000 then 'Very Large'
             else 'Negative'
         end as payment_size_category,
 
-        -- Timing Analysis
+        -- Timing analysis
         case 
-            when pb.payment_date = pb.date_entry then 'Same Day'
-            when pb.payment_date < pb.date_entry then 'Backdated'
-            when pb.payment_date > pb.date_entry then 'Future Dated'
+            when sp.payment_date = sp.entry_date then 'Same Day'
+            when sp.payment_date < sp.entry_date then 'Backdated'
+            when sp.payment_date > sp.entry_date then 'Future Dated'
         end as payment_timing,
 
-        -- Boolean Flags
-        case when pb.payment_type = 1 then true else false end as is_insurance_payment,
-        case when pb.payment_type = 0 then true else false end as is_patient_payment,
-        case when pb.payment_type = 4 then true else false end as is_adjustment,
-        case when pb.payment_type = 5 then true else false end as is_refund,
-        case when pb.payment_amount = 0 then true else false end as is_zero_payment,
-        case when pb.is_recurring then true else false end as is_recurring_payment,
+        -- Boolean flags
+        case when sp.payment_type_id = 1 then true else false end as is_insurance_payment,
+        case when sp.payment_type_id = 0 then true else false end as is_patient_payment,
+        case when sp.payment_type_id = 4 then true else false end as is_adjustment,
+        case when sp.payment_type_id = 5 then true else false end as is_refund,
+        case when sp.payment_amount = 0 then true else false end as is_zero_payment,
+        case when sp.is_recurring_cc then true else false end as is_recurring_payment,
 
         -- Metadata
-        pb._created_at,
-        pb._updated_at,
-        current_timestamp as _loaded_at
+        {{ standardize_mart_metadata() }}
 
-    from PaymentBase pb
-    left join PaymentSplits ps
-        on pb.payment_id = ps.payment_id
-    -- TODO: Restore when payplancharge integration is available:
-    -- left join PaymentPlans pp
-    --     on pb.payment_id = pp.payment_id
+    from source_payment sp
+    left join payment_splits ps
+        on sp.payment_id = ps.payment_id
+),
+
+-- 4. Final validation
+final as (
+    select * from payment_calculated
+    -- No additional filtering required - all payment records are valid
 )
 
-select * from Final
+select * from final

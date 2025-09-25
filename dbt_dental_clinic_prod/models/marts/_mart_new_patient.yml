@@ -1,0 +1,867 @@
+version: 2
+
+models:
+  - name: mart_new_patient
+    description: >
+      Summary mart for comprehensive new patient analytics and acquisition performance tracking.
+      This mart provides aggregated metrics and KPIs to support new patient acquisition analysis,
+      enabling stakeholders to analyze trends, performance, and business outcomes for new
+      patient onboarding and retention at various levels of granularity.
+      
+      ## Business Context
+      The new patient summary mart is a critical component of our analytical framework, enabling:
+      - New patient acquisition pattern analysis and marketing optimization
+      - First visit success tracking and completion rate monitoring
+      - Early patient engagement and retention indicator analysis
+      - Patient value categorization and lifetime value estimation
+      - Referral generation and family acquisition tracking
+      - Onboarding success scoring and performance tier classification
+      - Executive reporting and operational decision making
+      
+      ## Technical Specifications
+      - Grain: One row per date + patient (one row per date_id + patient_id)
+      - Source: dim_patient, fact_appointment, fact_payment (primary sources)
+      - Refresh: Daily
+      - Dependencies: 
+        * dim_patient (core patient demographic and status data)
+        * fact_appointment (appointment scheduling and completion data)
+        * fact_payment (early payment and financial activity data)
+        * stg_opendental__procedurelog (actual procedure fees and production data)
+        * stg_opendental__procedurecode (procedure codes and descriptions)
+        * dim_date (date dimension for temporal analysis)
+        * dim_provider (provider information and categorization)
+      
+      ## Business Logic
+      ### New Patient Identification
+      - New patients identified by first_visit_date not null and patient_status = 'Patient'
+      - Only includes patients with valid first visit dates for accurate acquisition tracking
+      
+      ### First Visit Analysis
+      - Tracks completion rates, no-shows, and production from first day appointments
+      - Calculates actual production from procedures performed on first visit
+      - Captures procedure codes performed during initial visit
+      
+      ### Early Engagement Metrics (90-day window)
+      - Monitors appointment frequency and completion in first 90 days
+      - Tracks production and provider diversity in early patient journey
+      - Calculates time-based engagement indicators
+      
+      ### Patient Value Categorization
+      - Categories based on realistic production thresholds: No Production, Low Value (<$100), Medium Value ($100-$299), High Value ($300-$599), Very High Value ($600+)
+      - Calculates average production per visit for efficiency analysis
+      
+      ### Onboarding Success Scoring
+      - 0-100 scale based on four key indicators (25 points each):
+        * Completed first visit (25 points)
+        * Returned within 90 days (25 points)
+        * Made patient payment within 90 days (25 points)
+        * Generated referrals within 1 year (25 points)
+      
+      ### Referral Generation Tracking
+      - Assumes family relationships via guarantor_id for referral attribution
+      - Tracks referrals generated within 1 year of first visit
+      - Captures referred patient IDs for detailed analysis
+      
+      ## Data Quality Notes
+      - New patients identified by first_visit_date not null and patient_status = 'Patient'
+      - Production amounts calculated from actual procedure fees in procedurelog table
+      - Procedure codes retrieved from procedurecode table via procedurelog relationship
+      - Referral tracking assumes family relationships via guarantor_id
+      - 90-day engagement window calculated from first_visit_date
+      - Patient value categories based on realistic production thresholds ($100, $300, $600)
+      - Current patient status based on last appointment within 90-day window
+      
+      ## Performance Considerations
+      - Indexed on date_id, patient_id, provider_id, and clinic_id for analytical queries
+      - Complex aggregations across multiple fact tables require careful join optimization
+      - Array aggregation for procedure codes may impact query performance
+      - 90-day window calculations require efficient date range filtering
+      
+      ## Usage Notes
+      - Use for new patient acquisition analysis and marketing campaign effectiveness
+      - Monitor first visit completion rates to identify onboarding issues
+      - Track early engagement patterns to predict long-term patient value
+      - Analyze referral generation for family acquisition strategies
+      - Use onboarding success scores for provider and clinic performance comparison
+      - Consider patient value categories for targeted marketing and retention efforts
+      
+    meta:
+      owner: "Patient Management Team"
+      contains_pii: true
+      business_process: "New Patient Acquisition and Onboarding"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + patient (date_id + patient_id)"
+      primary_consumers: ["Marketing Team", "Operations Team", "Executive Leadership", "Provider Management"]
+      data_quality_requirements:
+        - "New patients must have valid first_visit_date"
+        - "Production amounts must be non-negative"
+        - "Completion rates must be between 0-100%"
+        - "Onboarding success scores must be between 0-100"
+      performance_requirements:
+        - "Query response time under 30 seconds for standard reports"
+        - "Support concurrent access by multiple users"
+        - "Efficient filtering by date ranges and patient demographics"
+    
+    tests:
+      # Model-level tests
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 100
+          max_value: 100000
+          config:
+            severity: error
+            description: "Expected new patient volume based on clinic capacity and historical patterns"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "first_visit_date is not null"
+          config:
+            severity: error
+            description: "All new patients must have a valid first visit date for accurate acquisition tracking"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "onboarding_success_score >= 0 and onboarding_success_score <= 100"
+          config:
+            severity: error
+            description: "Onboarding success scores must be within valid 0-100 range"
+    
+    columns:
+      # Composite Key Components
+      - name: date_id
+        description: >
+          Foreign key to dim_date - Date dimension for temporal analysis of new patient acquisition
+          
+          Business Rules:
+          - Represents the date of first visit for new patient acquisition tracking
+          - Used for temporal analysis of acquisition patterns and trends
+          - Enables time-based filtering and aggregation
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+          - not_null
+      
+      - name: patient_id
+        description: >
+          Foreign key to dim_patient - Unique identifier for each new patient
+          
+          Business Rules:
+          - Must be unique within the new patient population
+          - Links to patient demographic and status information
+          - Used for patient-level analysis and tracking
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+          - not_null
+          - positive_values
+      
+      - name: first_visit_date
+        description: >
+          Date of patient's first visit to the clinic - primary acquisition date
+          
+          Business Rules:
+          - Must not be null for all new patients
+          - Used as baseline for 90-day engagement window calculations
+          - Enables acquisition trend analysis and seasonal pattern identification
+        tests:
+          - not_null
+      
+      # Patient Demographics
+      - name: age_at_first_visit
+        description: >
+          Patient's age at the time of their first visit
+          
+          Business Rules:
+          - Calculated from birth_date and first_visit_date
+          - Used for age-based demographic analysis and targeting
+          - Enables age category classification
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 120
+              severity: warn
+      
+      - name: gender
+        description: >
+          Patient's gender for demographic analysis
+          
+          Business Rules:
+          - Used for gender-based acquisition pattern analysis
+          - Enables demographic targeting and marketing optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['M', 'F', 'Other', 'Unknown']
+      
+      - name: age_category
+        description: >
+          Age-based demographic category for analysis and targeting
+          
+          Categories:
+          - Child: Age 0-12
+          - Teen: Age 13-17
+          - Young Adult: Age 18-34
+          - Adult: Age 35-49
+          - Middle Age: Age 50-64
+          - Senior: Age 65+
+          
+          Business Rules:
+          - Used for demographic analysis and marketing segmentation
+          - Enables age-appropriate service and communication strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Child', 'Teen', 'Young Adult', 'Adult', 'Middle Age', 'Senior']
+      
+      # Provider and Clinic Information
+      - name: primary_provider_id
+        description: >
+          Foreign key to dim_provider - Primary provider assigned to the new patient
+          
+          Business Rules:
+          - Links to provider information for performance analysis
+          - Used for provider-level acquisition and retention tracking
+          - Enables provider performance comparison
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+          - not_null
+          - positive_values
+      
+      - name: clinic_id
+        description: >
+          Foreign key to clinic location - Clinic where patient was acquired
+          
+          Business Rules:
+          - Links to clinic information for location-based analysis
+          - Used for clinic performance comparison and geographic analysis
+          - Enables multi-location acquisition tracking
+        tests:
+          - not_null
+          - positive_values
+      
+      - name: primary_provider_name
+        description: >
+          Full name of the primary provider (first_name + last_name)
+          
+          Business Rules:
+          - Concatenated from provider first and last names
+          - Used for provider identification in reports and analysis
+          - Enables human-readable provider references
+        tests:
+          - not_null
+      
+      - name: primary_provider_type
+        description: >
+          Category of the primary provider (e.g., Dentist, Hygienist, Specialist)
+          
+          Business Rules:
+          - Used for provider type-based analysis
+          - Enables comparison across different provider types
+        tests:
+          - not_null
+      
+      - name: primary_provider_specialty
+        description: >
+          Specialty description of the primary provider
+          
+          Business Rules:
+          - Used for specialty-based acquisition analysis
+          - Enables specialty-specific performance tracking
+        tests:
+          - not_null:
+              where: "primary_provider_type = 'Specialist'"
+      
+      # Date Dimensions
+      - name: acquisition_year
+        description: >
+          Year when the patient was acquired (from first_visit_date)
+          
+          Business Rules:
+          - Used for year-over-year acquisition trend analysis
+          - Enables annual performance comparison and planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+              severity: warn
+      
+      - name: acquisition_month
+        description: >
+          Month when the patient was acquired (1-12)
+          
+          Business Rules:
+          - Used for seasonal acquisition pattern analysis
+          - Enables monthly trend identification and planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+              severity: error
+      
+      - name: acquisition_quarter
+        description: >
+          Quarter when the patient was acquired (1-4)
+          
+          Business Rules:
+          - Used for quarterly acquisition analysis and reporting
+          - Enables quarterly performance tracking and planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      
+      - name: acquisition_day
+        description: >
+          Day of week when the patient was acquired
+          
+          Business Rules:
+          - Used for day-of-week acquisition pattern analysis
+          - Enables scheduling and staffing optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+      
+      - name: acquired_on_weekend
+        description: >
+          Flag indicating if patient was acquired on a weekend
+          
+          Logic:
+          - true when: acquisition_day is Saturday or Sunday
+          - false when: acquisition_day is Monday through Friday
+          
+          Business Impact:
+          - Used for weekend vs weekday acquisition analysis
+          - Enables weekend staffing and marketing strategy evaluation
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Patient Characteristics
+      - name: has_insurance_flag
+        description: >
+          Flag indicating if patient has insurance coverage
+          
+          Logic:
+          - true when: patient has active insurance coverage
+          - false when: patient is self-pay or uninsured
+          
+          Business Impact:
+          - Used for insurance vs self-pay acquisition analysis
+          - Enables payment method strategy and pricing optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: initial_balance
+        description: >
+          Patient's estimated balance at time of first visit
+          
+          Business Rules:
+          - Used for financial analysis and payment planning
+          - Enables balance-based patient segmentation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+      
+      - name: preferred_contact_method
+        description: >
+          Patient's preferred method of contact
+          
+          Business Rules:
+          - Used for communication strategy optimization
+          - Enables contact method effectiveness analysis
+        tests:
+          - not_null
+      
+      - name: preferred_confirmation_method
+        description: >
+          Patient's preferred appointment confirmation method
+          
+          Business Rules:
+          - Used for appointment confirmation strategy
+          - Enables confirmation method effectiveness analysis
+        tests:
+          - not_null
+      
+      # First Visit Metrics
+      - name: first_appointment_datetime
+        description: >
+          Date and time of patient's first scheduled appointment
+          
+          Business Rules:
+          - Used for appointment timing analysis
+          - Enables scheduling pattern identification
+        tests:
+          - not_null
+      
+      - name: total_first_day_appointments
+        description: >
+          Total number of appointments scheduled on first visit day
+          
+          Business Rules:
+          - Used for first visit complexity analysis
+          - Enables appointment volume planning
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 10
+              severity: warn
+      
+      - name: completed_first_appointments
+        description: >
+          Number of appointments completed on first visit day
+          
+          Business Rules:
+          - Used for first visit success rate calculation
+          - Enables completion rate analysis and improvement
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: no_show_first_appointments
+        description: >
+          Number of no-show appointments on first visit day
+          
+          Business Rules:
+          - Used for no-show rate analysis and improvement
+          - Enables no-show prevention strategy development
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: first_visit_scheduled_production
+        description: >
+          Total production amount from procedures performed on first visit
+          
+          Business Rules:
+          - Calculated from actual procedure fees in procedurelog
+          - Used for first visit value analysis
+          - Enables production-based patient segmentation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000
+              severity: warn
+      
+      - name: first_visit_procedures
+        description: >
+          Array of procedure codes performed during first visit
+          
+          Business Rules:
+          - Captures actual procedures performed for analysis
+          - Used for procedure pattern identification
+          - Enables procedure-based patient categorization
+        tests:
+          - not_null
+      
+      # First Visit Success Indicators
+      - name: completed_first_visit
+        description: >
+          Flag indicating if patient completed their first visit
+          
+          Logic:
+          - true when: completed_first_appointments > 0
+          - false when: completed_first_appointments = 0
+          
+          Business Impact:
+          - Used for first visit success rate analysis
+          - Enables onboarding success tracking and improvement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: no_show_first_visit
+        description: >
+          Flag indicating if patient had no-show appointments on first visit
+          
+          Logic:
+          - true when: no_show_first_appointments > 0
+          - false when: no_show_first_appointments = 0
+          
+          Business Impact:
+          - Used for no-show rate analysis and prevention
+          - Enables no-show reduction strategy development
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: first_visit_completion_rate
+        description: >
+          Percentage of first day appointments that were completed
+          
+          Calculation Logic:
+          - (completed_first_appointments / total_first_day_appointments) * 100
+          - Rounded to 2 decimal places
+          
+          Business Rules:
+          - Used for first visit success rate analysis
+          - Enables completion rate benchmarking and improvement
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      # Early Engagement (90 days)
+      - name: appointments_first_90_days
+        description: >
+          Total number of appointments scheduled in first 90 days
+          
+          Business Rules:
+          - Used for early engagement analysis
+          - Enables appointment frequency pattern identification
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 50
+              severity: warn
+      
+      - name: completed_appointments_90_days
+        description: >
+          Number of appointments completed in first 90 days
+          
+          Business Rules:
+          - Used for early engagement success analysis
+          - Enables completion rate tracking in early patient journey
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50
+              severity: warn
+      
+      - name: production_first_90_days
+        description: >
+          Total production amount from procedures in first 90 days
+          
+          Business Rules:
+          - Calculated from actual procedure fees
+          - Used for early patient value analysis
+          - Enables production-based patient categorization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20000
+              severity: warn
+      
+      - name: last_appointment_90_days
+        description: >
+          Date of last appointment within first 90 days
+          
+          Business Rules:
+          - Used for engagement duration analysis
+          - Enables time-based engagement pattern identification
+        tests:
+          - not_null
+      
+      - name: providers_seen_90_days
+        description: >
+          Number of different providers seen in first 90 days
+          
+          Business Rules:
+          - Used for provider diversity analysis
+          - Enables provider relationship pattern identification
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 10
+              severity: warn
+      
+      # Early Financial Activity
+      - name: payments_first_90_days
+        description: >
+          Total number of payments made in first 90 days
+          
+          Business Rules:
+          - Used for early payment behavior analysis
+          - Enables payment pattern identification
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20
+              severity: warn
+      
+      - name: patient_payments_90_days
+        description: >
+          Total amount of patient payments in first 90 days
+          
+          Business Rules:
+          - Used for patient payment behavior analysis
+          - Enables self-pay patient value assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+      
+      - name: insurance_payments_90_days
+        description: >
+          Total amount of insurance payments in first 90 days
+          
+          Business Rules:
+          - Used for insurance payment analysis
+          - Enables insurance relationship assessment
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 15000
+              severity: warn
+      
+      - name: avg_payment_amount_90_days
+        description: >
+          Average payment amount in first 90 days
+          
+          Business Rules:
+          - Used for payment size analysis
+          - Enables payment pattern identification
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 2000
+              severity: warn
+      
+      # Retention Indicators
+      - name: returned_within_90_days
+        description: >
+          Flag indicating if patient returned for additional appointments within 90 days
+          
+          Logic:
+          - true when: appointments_first_90_days > 1
+          - false when: appointments_first_90_days = 1
+          
+          Business Impact:
+          - Used for early retention analysis
+          - Enables retention rate tracking and improvement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: active_after_60_days
+        description: >
+          Flag indicating if patient was still active after 60 days
+          
+          Logic:
+          - true when: last_appointment_90_days >= first_visit_date + 60 days
+          - false when: last_appointment_90_days < first_visit_date + 60 days
+          
+          Business Impact:
+          - Used for mid-term retention analysis
+          - Enables retention milestone tracking
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Patient Value Metrics
+      - name: avg_production_per_visit_90_days
+        description: >
+          Average production amount per visit in first 90 days
+          
+          Calculation Logic:
+          - production_first_90_days / appointments_first_90_days
+          - Rounded to 2 decimal places
+          
+          Business Rules:
+          - Used for visit efficiency analysis
+          - Enables production optimization strategies
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 2000
+              severity: warn
+      
+      - name: patient_value_category_90_days
+        description: >
+          Patient value category based on 90-day production
+          
+          Categories:
+          - No Production: $0
+          - Low Value: $1-$99
+          - Medium Value: $100-$299
+          - High Value: $300-$599
+          - Very High Value: $600+
+          
+          Business Rules:
+          - Used for patient segmentation and targeting
+          - Enables value-based marketing and retention strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['No Production', 'Low Value', 'Medium Value', 'High Value', 'Very High Value']
+      
+      # Referral Generation
+      - name: referrals_generated_1_year
+        description: >
+          Number of referrals generated within 1 year of first visit
+          
+          Business Rules:
+          - Based on family relationships via guarantor_id
+          - Used for referral generation analysis
+          - Enables referral program effectiveness measurement
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              severity: warn
+      
+      - name: referred_patient_ids
+        description: >
+          Array of patient IDs for patients referred by this patient
+          
+          Business Rules:
+          - Captures specific referred patients for detailed analysis
+          - Used for referral tracking and attribution
+        tests:
+          - not_null
+      
+      - name: generated_referrals
+        description: >
+          Flag indicating if patient generated any referrals within 1 year
+          
+          Logic:
+          - true when: referrals_generated_1_year > 0
+          - false when: referrals_generated_1_year = 0
+          
+          Business Impact:
+          - Used for referral generation analysis
+          - Enables referral program effectiveness tracking
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Onboarding Success Score
+      - name: onboarding_success_score
+        description: >
+          Composite score (0-100) measuring new patient onboarding success
+          
+          Calculation Logic:
+          - Completed first visit: 25 points
+          - Returned within 90 days: 25 points
+          - Made patient payment within 90 days: 25 points
+          - Generated referrals within 1 year: 25 points
+          
+          Business Rules:
+          - Used for onboarding success benchmarking
+          - Enables provider and clinic performance comparison
+          - Supports onboarding improvement initiatives
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+      
+      # Time-based Metrics
+      - name: days_to_last_appointment_90_days
+        description: >
+          Number of days from first visit to last appointment within 90 days
+          
+          Business Rules:
+          - Only calculated for patients with multiple appointments
+          - Used for engagement duration analysis
+          - Enables time-based engagement pattern identification
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 90
+              severity: warn
+              where: "days_to_last_appointment_90_days is not null"
+      
+      # Current Status
+      - name: current_patient_status
+        description: >
+          Current patient status based on recent appointment activity
+          
+          Categories:
+          - Active: Last appointment within 30 days
+          - Recent: Last appointment within 90 days
+          - Dormant: Last appointment within 180 days
+          - Lost: Last appointment more than 180 days ago
+          
+          Business Rules:
+          - Used for current patient status analysis
+          - Enables status-based patient management strategies
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Recent', 'Dormant', 'Lost']
+      
+      # Acquisition Performance
+      - name: acquisition_success
+        description: >
+          Overall acquisition success category based on key performance indicators
+          
+          Categories:
+          - Excellent: Completed first visit + returned within 90 days + made payment
+          - Good: Completed first visit + returned within 90 days
+          - Fair: Completed first visit only
+          - Poor: Did not complete first visit
+          
+          Business Rules:
+          - Used for acquisition performance analysis
+          - Enables acquisition strategy optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Excellent', 'Good', 'Fair', 'Poor']
+      
+      # Required Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _created_at
+        description: "Timestamp when the record was created in the source system (OpenDental). Maps to patient creation date. May be null for historical patients."
+        tests:
+          - not_null:
+              where: "first_visit_date >= '2020-01-01'"
+      
+      - name: _updated_at
+        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to patient last update date."
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: "Timestamp when the mart model was last refreshed (using current_timestamp)"
+        tests:
+          - not_null
