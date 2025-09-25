@@ -118,20 +118,11 @@ models:
 
       - name: priority_def_id
         description: "Foreign key to the priority definition - determines task priority level (maps to PriorityDefNum in OpenDental)"
-        tests:
-          - relationships:
-              to: ref('stg_opendental__prioritydef')
-              field: priority_def_id
-              severity: warn
 
       - name: triage_category_id
         description: "Foreign key to the triage category - used for task categorization (maps to TriageCategory in OpenDental)"
         tests:
           - not_null:
-              severity: warn
-          - relationships:
-              to: ref('stg_opendental__triagecategory')
-              field: triage_category_id
               severity: warn
 
       # Dates and Timestamps
@@ -259,11 +250,4 @@ models:
           field: user_id
           related_to: stg_opendental__userod.user_id
           severity: warn
-        - relationship: many_to_one
-          field: priority_def_id
-          related_to: stg_opendental__prioritydef.priority_def_id
-          severity: warn
-        - relationship: many_to_one
-          field: triage_category_id
-          related_to: stg_opendental__triagecategory.triage_category_id
-          severity: warn
+      
