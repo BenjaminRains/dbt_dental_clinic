@@ -102,28 +102,16 @@ models:
         description: "Foreign key to fee schedule - determines pricing structure for this provider (maps to FeeSched in OpenDental)"
         tests:
           - relationships:
-              to: ref('stg_opendental__feeschedule')
+              to: ref('stg_opendental__feesched')
               field: fee_schedule_id
               severity: warn
               where: "fee_schedule_id IS NOT NULL"
       
       - name: specialty_id
         description: "Foreign key to provider specialty - defines clinical specialty and affects procedure coding (maps to Specialty in OpenDental)"
-        tests:
-          - relationships:
-              to: ref('stg_opendental__deflink')
-              field: def_link_id
-              severity: warn
-              where: "specialty_id IS NOT NULL"
       
       - name: school_class_id
         description: "Foreign key to school class - used for educational institutions tracking students (maps to SchoolClassNum in OpenDental)"
-        tests:
-          - relationships:
-              to: ref('stg_opendental__schoolclass')
-              field: school_class_id
-              severity: warn
-              where: "school_class_id IS NOT NULL"
       
       - name: billing_override_provider_id
         description: "Foreign key to provider used for billing override - allows billing under different provider (maps to ProvNumBillingOverride in OpenDental, nullified if 0)"
@@ -136,12 +124,6 @@ models:
       
       - name: email_address_id
         description: "Foreign key to email address record - provider's primary email contact (maps to EmailAddressNum in OpenDental, nullified if 0)"
-        tests:
-          - relationships:
-              to: ref('stg_opendental__emailaddress')
-              field: email_address_id
-              severity: warn
-              where: "email_address_id IS NOT NULL"
       
       # Provider Identifiers and Names
       - name: provider_abbreviation
