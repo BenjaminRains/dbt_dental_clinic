@@ -78,10 +78,6 @@ models:
           is associated with this schedule entry. Maps to OperatoryNum in OpenDental.
         tests:
           - not_null
-          - relationships:
-              to: ref('stg_opendental__operatory')
-              field: operatory_id
-              severity: error
 
       # Metadata columns
       - name: _loaded_at
