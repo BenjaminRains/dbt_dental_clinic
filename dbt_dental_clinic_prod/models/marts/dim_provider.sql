@@ -32,12 +32,19 @@ Enhanced as (
         
         -- Provider identifiers
         p.provider_abbreviation,
-        p.provider_last_name,
-        p.provider_first_name,
-        p.provider_middle_initial,
-        p.provider_suffix,
-        p.provider_preferred_name,
-        p.provider_custom_id,
+        p.last_name as provider_last_name,
+        p.first_name as provider_first_name,
+        p.middle_initial as provider_middle_initial,
+        p.name_suffix as provider_suffix,
+        p.preferred_name as provider_preferred_name,
+        p.custom_id as provider_custom_id,
+        
+        -- Computed provider name
+        case 
+            when p.preferred_name is not null and p.preferred_name != '' 
+            then p.preferred_name
+            else concat(p.first_name, ' ', p.last_name)
+        end as provider_name,
         
         -- Provider classifications
         p.fee_schedule_id,
@@ -49,7 +56,7 @@ Enhanced as (
         def_anesth.item_name as anesthesia_provider_type_description,
         
         -- Provider credentials
-        p.state_license,
+        p.state_license_number as state_license,
         p.dea_number,
         p.blue_cross_id,
         p.medicaid_id,
@@ -59,15 +66,15 @@ Enhanced as (
         p.taxonomy_code_override,
         
         -- Provider flags
-        case when p.is_secondary = 1 then true else false end as is_secondary,
-        case when p.is_hidden = 1 then true else false end as is_hidden,
-        case when p.using_tin = 1 then true else false end as is_using_tin,
-        case when p.sig_on_file = 1 then true else false end as has_signature_on_file,
-        case when p.is_cdanet = 1 then true else false end as is_cdanet,
-        case when p.is_not_person = 1 then true else false end as is_not_person,
-        case when p.is_instructor = 1 then true else false end as is_instructor,
-        case when p.is_hidden_report = 1 then true else false end as is_hidden_report,
-        case when p.is_erx_enabled = 1 then true else false end as is_erx_enabled,
+        p.is_secondary,
+        p.is_hidden,
+        p.is_using_tin,
+        p.has_signature_on_file,
+        p.is_cdanet,
+        p.is_not_person,
+        p.is_instructor,
+        p.is_hidden_report,
+        p.is_erx_enabled,
         
         -- Provider display properties
         p.provider_color,
@@ -108,9 +115,9 @@ Enhanced as (
         
         -- Provider type categorization
         case
-            when p.is_instructor = 1 then 'Instructor'
-            when p.is_secondary = 1 then 'Secondary'
-            when p.is_not_person = 1 then 'Non-Person'
+            when p.is_instructor then 'Instructor'
+            when p.is_secondary then 'Secondary'
+            when p.is_not_person then 'Non-Person'
             else 'Primary'
         end as provider_type_category,
         
