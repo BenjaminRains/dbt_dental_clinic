@@ -122,7 +122,7 @@ models:
         description: "Foreign key to user who created/modified the prescription record"
         tests:
           - relationships:
-              to: ref('stg_opendental__user')
+              to: ref('stg_opendental__userod')
               field: user_id
               severity: warn
 
