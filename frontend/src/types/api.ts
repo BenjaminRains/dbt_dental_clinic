@@ -128,6 +128,82 @@ export interface ProviderSummary {
     avg_production_per_appointment: number;
 }
 
+// Comprehensive provider interface matching the backend Provider model
+export interface Provider {
+    // Primary identification
+    provider_id: number;
+
+    // Provider identifiers
+    provider_abbreviation?: string;
+    provider_last_name?: string;
+    provider_first_name?: string;
+    provider_middle_initial?: string;
+    provider_suffix?: string;
+    provider_preferred_name?: string;
+    provider_custom_id?: string;
+
+    // Provider classifications
+    fee_schedule_id?: number;
+    specialty_id?: number;
+    specialty_description?: string;
+    provider_status?: number;
+    provider_status_description?: string;
+    anesthesia_provider_type?: number;
+    anesthesia_provider_type_description?: string;
+
+    // Provider credentials
+    state_license?: string;
+    dea_number?: string;
+    blue_cross_id?: string;
+    medicaid_id?: string;
+    national_provider_id?: string;
+    state_rx_id?: string;
+    state_where_licensed?: string;
+    taxonomy_code_override?: string;
+
+    // Provider flags
+    is_secondary?: boolean;
+    is_hidden?: boolean;
+    is_using_tin?: boolean;
+    has_signature_on_file?: boolean;
+    is_cdanet?: boolean;
+    is_not_person?: boolean;
+    is_instructor?: boolean;
+    is_hidden_report?: boolean;
+    is_erx_enabled?: boolean;
+
+    // Provider display properties
+    provider_color?: string;
+    outline_color?: string;
+    schedule_note?: string;
+    web_schedule_description?: string;
+    web_schedule_image_location?: string;
+
+    // Financial and goals
+    hourly_production_goal_amount?: number;
+
+    // Availability metrics
+    scheduled_days?: number;
+    total_available_minutes?: number;
+    avg_daily_available_minutes?: number;
+    days_off_count?: number;
+    avg_minutes_per_scheduled_day?: number;
+    availability_percentage?: number;
+
+    // Provider categorizations
+    provider_status_category?: string; // Active, Inactive, Terminated, Unknown
+    provider_type_category?: string; // Primary, Secondary, Instructor, Non-Person
+    provider_specialty_category?: string; // General Practice, Specialist, Hygiene, Other
+    availability_performance_tier?: string; // Excellent, Good, Fair, Poor, No Data
+
+    // Metadata
+    _loaded_at?: string; // ISO date string
+    _created_at?: string; // ISO date string
+    _updated_at?: string; // ISO date string
+    _transformed_at?: string; // ISO date string
+    _mart_refreshed_at?: string; // ISO date string
+}
+
 export interface ARSummary {
     date: string;
     total_ar_balance: number;
@@ -147,6 +223,100 @@ export interface ARSummary {
 export interface RevenueKPIs {
     total_revenue_lost: number;
     total_recovery_potential: number;
+}
+
+export interface RevenueOpportunity {
+    // Primary identification
+    date_id: number;
+    opportunity_id: number;
+    appointment_date: string;
+
+    // Dimension keys
+    provider_id?: number;
+    clinic_id?: number;
+    patient_id: number;
+    appointment_id: number;
+
+    // Provider information
+    provider_last_name?: string;
+    provider_first_name?: string;
+    provider_preferred_name?: string;
+    provider_type_category?: string;
+    provider_specialty_category?: string;
+
+    // Patient information
+    patient_age?: number;
+    patient_gender?: string;
+    has_insurance_flag?: boolean;
+    patient_specific: boolean;
+
+    // Date information
+    year: number;
+    month: number;
+    quarter: number;
+    day_name: string;
+    is_weekend: boolean;
+    is_holiday: boolean;
+
+    // Opportunity details
+    opportunity_type: string;
+    opportunity_subtype: string;
+    lost_revenue?: number;
+    lost_time_minutes?: number;
+    missed_procedures?: string[];
+    opportunity_datetime: string;
+    recovery_potential: string;
+
+    // Enhanced business logic
+    opportunity_hour: number;
+    time_period: string;
+    revenue_impact_category: string;
+    time_impact_category: string;
+    recovery_timeline: string;
+    recovery_priority_score: number;
+    preventability: string;
+
+    // Boolean flags
+    has_revenue_impact: boolean;
+    has_time_impact: boolean;
+    recoverable: boolean;
+    recent_opportunity: boolean;
+    appointment_related: boolean;
+
+    // Time analysis
+    days_since_opportunity: number;
+    estimated_recoverable_amount?: number;
+
+    // Metadata
+    _loaded_at?: string;
+    _created_at?: string;
+    _updated_at?: string;
+    _transformed_at?: string;
+    _mart_refreshed_at?: string;
+}
+
+export interface RevenueOpportunitySummary {
+    opportunity_type: string;
+    opportunity_subtype: string;
+    total_opportunities: number;
+    total_revenue_lost: number;
+    total_recovery_potential: number;
+    avg_priority_score: number;
+    recent_opportunities: number;
+    high_priority_opportunities: number;
+}
+
+export interface RevenueRecoveryPlan {
+    opportunity_id: number;
+    provider_name?: string;
+    patient_id: number;
+    opportunity_type: string;
+    lost_revenue?: number;
+    recovery_potential: string;
+    priority_score: number;
+    recommended_actions: string[];
+    estimated_recovery_amount?: number;
+    recovery_timeline: string;
 }
 
 export interface ProviderKPIs {
