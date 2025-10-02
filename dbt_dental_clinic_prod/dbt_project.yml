@@ -6,6 +6,12 @@ config-version: 2
 # Make sure this matches exactly what's in your profiles.yml
 profile: 'dbt_dental_clinic_prod'
 
+# Configure quote policy for case-sensitive identifiers
+quoting:
+  database: true
+  schema: true
+  identifier: true
+
 # Paths configuration
 model-paths: ["models"]
 test-paths: ["tests"]
@@ -22,6 +28,7 @@ clean-targets:
 # Variables configuration
 vars:
   max_valid_date: current_date
+  schedule_window_days: 30
 
 # Hooks for ETL tracking (run-level only for now)
 on-run-start:
@@ -35,9 +42,9 @@ on-run-end:
 # Database/schema configuration
 models:
   dbt_dental_clinic_prod  :
-    # Temporarily disable all tests to fix source test issues
+    # Enable tests now that we've fixed the case sensitivity issue
     +tests:
-      +enabled: false
+      +enabled: true
     
     # Configure materializations by folder
     staging:
