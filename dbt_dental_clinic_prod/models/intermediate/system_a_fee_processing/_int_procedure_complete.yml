@@ -116,6 +116,21 @@ models:
               to: ref('stg_opendental__provider')
               field: provider_id
 
+      - name: appointment_id
+        description: >
+          Foreign key to appointment (maps from "AptNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "AptNum" (CamelCase as stored)
+          - Transformed to: appointment_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedures to the appointment during which they were performed
+          - Critical for procedure timing analysis and appointment workflow tracking
+          - May be null for procedures not associated with specific appointments
+        tests:
+          - not_null
+
       - name: clinic_id
         description: >
           Foreign key to clinic (maps from "ClinicNum" in OpenDental)
