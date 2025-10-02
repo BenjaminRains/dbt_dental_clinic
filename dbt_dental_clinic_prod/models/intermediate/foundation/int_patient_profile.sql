@@ -23,7 +23,7 @@
     
     Business Logic Features:
     - Patient demographics and status categorization
-    - Family relationship linkage with bidirectional support
+    - Family relationship linkage with aggregated support (arrays for multiple relationships)
     - Emergency contact integration from patient notes
     - Medical and treatment notes consolidation
     - Patient preferences and consent tracking
@@ -31,7 +31,7 @@
     Data Quality Notes:
     - Geographic data (city, state, zipcode) pending investigation of patient-zipcode relationships
     - Consider checking for additional patient address/location tables in source system
-    - Family relationships may have multiple entries per patient
+    - Family relationships are aggregated to prevent duplicate patient records
     
     Performance Considerations:
     - Foundation model materialized as table for downstream performance
@@ -39,19 +39,24 @@
     - Weekly refresh cycle appropriate for demographic data
 */
 
--- 1. Source data retrieval
+-- 1. Source data retrieval with deduplication
 with source_patient as (
-    select * from {{ ref('stg_opendental__patient') }}
+    select distinct on (patient_id) *
+    from {{ ref('stg_opendental__patient') }}
+    order by patient_id, _created_at desc
 ),
 
--- 2. Lookup/reference data
+-- 2. Lookup/reference data - aggregated to prevent duplicates
 patient_family_links as (
     select
         patient_id_from as patient_id,
-        patient_id_to as family_id,
-        link_type,
-        linked_at
+        -- Aggregate family relationships to prevent duplicates
+        array_agg(distinct patient_id_to) as family_ids,
+        array_agg(distinct link_type) as family_link_types,
+        max(linked_at) as latest_family_link_date,
+        count(*) as total_family_links
     from {{ ref('stg_opendental__patientlink') }}
+    group by patient_id_from
 ),
 
 patient_notes_lookup as (
@@ -172,10 +177,11 @@ patient_integrated as (
         -- Important dates
         pde.first_visit_date,
         
-        -- Family relationships
-        pfl.family_id,
-        pfl.link_type as family_link_type,
-        pfl.linked_at as family_linked_at,
+        -- Family relationships (aggregated)
+        pfl.family_ids,
+        pfl.family_link_types,
+        pfl.latest_family_link_date,
+        pfl.total_family_links,
         
         -- Emergency contacts and notes
         pnl.ice_name as emergency_contact_name,
@@ -188,7 +194,10 @@ patient_integrated as (
         pnl.notes_updated_at,
         
         -- Metadata fields (standardized pattern)
-        {{ standardize_intermediate_metadata(source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']) }}
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='pde',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']
+        ) }}
         
     from patient_demographics_enhanced pde
     left join patient_family_links pfl
