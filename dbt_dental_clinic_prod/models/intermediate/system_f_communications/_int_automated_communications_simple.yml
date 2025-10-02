@@ -1,0 +1,442 @@
+version: 2
+
+models:
+  - name: int_automated_communications_simple
+    description: >
+      Comprehensive automated communications model that tracks system-generated messages
+      sent to patients. This model consolidates all automated, template-based communications
+      into a structured format that enables tracking of delivery, engagement, and effectiveness.
+
+      Grain: One row per automated communication sent to a patient. Each record represents 
+      a single message sent through an automated system with automated_communication_id 
+      as the primary key.
+
+      Key features:
+      - Identifies communications sent through automated systems
+      - Links to base communication records and templates
+      - Tracks triggers that initiated the communication
+      - Monitors delivery status and timestamps
+      - Provides metrics on engagement (opens, clicks, replies)
+      - Enables analysis of automated communication effectiveness
+      - Supports campaign performance tracking
+      - Uses advanced template matching with trigram similarity
+      - Implements fallback matching for non-PostgreSQL databases
+      - Filters matches to active templates only
+
+      Special Note on provider_id = 0:
+      This is a special case used for communications that aren't directly from a specific provider.
+      Analysis shows these communications fall into several categories:
+      1. Truly automated system communications:
+         - Balance notices (811 records)
+         - Appointment reminders (46 records)
+         - Review requests (32 records)
+         - Post-op instructions (24 records)
+      2. Staff-initiated communications through system interfaces:
+         - Notes with staff initials (e.g., "-MW", "-KB")
+         - Communication department activities (marked with "CD")
+      3. Automated business communications:
+         - End of year letters
+         - Statements with final notices
+         - Insurance-related communications
+      
+      Distribution of provider_id = 0 communications by type:
+      - Type 228 (Secondary automated system): 2,462 records
+      - Type 226 (Billing communications): 998 records
+      - Type 603 (Tertiary system): 485 records
+      - Type 225 (Insurance communications): 436 records
+      - Type 571 (Insurance narratives): 227 records
+
+      This special case should be considered when analyzing provider-specific communications
+      or when building reports that need to distinguish between provider and non-provider
+      communications.
+
+      Data Sources:
+      - int_patient_communications_base: Base communication data
+      - int_automated_communication_flags: Automation detection and metrics
+      - int_communication_templates: Template definitions with trigram indexing
+
+      Template Matching Strategy:
+      - Primary matching uses PostgreSQL's trigram similarity (threshold 0.4)
+      - Fallback to LIKE matching for non-PostgreSQL databases
+      - Only matches against active templates
+      - Additional matching based on category and communication mode
+      - Optimized with GIN index on template content
+
+      REFACTORED TO BREAK CIRCULAR DEPENDENCY:
+      - Uses int_patient_communications_base for base data
+      - Uses int_automated_communication_flags for automation detection
+      - Joins with int_communication_templates for template info
+    
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: automated_communication_id
+    
+    columns:
+      - name: automated_communication_id
+        description: >
+          Primary key - Unique identifier for the automated communication record.
+          Generated as a surrogate key based on communication_id and content.
+        tests:
+          - unique
+          - not_null
+      
+      - name: communication_id
+        description: >
+          Foreign key to int_patient_communications_base. Links this automated
+          communication to its base communication record.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_communications_base')
+              field: communication_id
+      
+      - name: patient_id
+        description: >
+          Foreign key to the patient profile. Identifies which patient
+          this communication is associated with.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_patient_profile')
+              field: patient_id
+      
+      - name: user_id
+        description: >
+          Foreign key to the user record. Identifies which staff member
+          initiated the communication. Note: user_id = 0 represents
+          system-generated communications.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__userod')
+              field: user_id
+              where: "user_id != 0"
+      
+      - name: communication_datetime
+        description: >
+          Timestamp when the communication was sent.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "'{{ var('max_valid_date') }} 23:59:59'"
+      
+      - name: communication_type
+        description: >
+          The type of communication in the system. Main types:
+          - 0: Legacy system communications (mode 5) - General automated communications
+          - 224: Primary appointment notification system (mode 1,4) - Appointment-related communications
+          - 228: Secondary automated communication system (mode 4) - General patient communications
+          - 603: Tertiary communication system (mode 5) - Clinical communications
+          - 226: Billing and financial communications
+          - 225: Insurance and claims communications
+          - 571: Insurance narratives and documentation
+          - 432: Medical clearances and prescriptions
+          - 509/510: Surgical procedures and clearances
+          - 614/615: Referrals and specialist communications
+          - 636: Treatment plans and financial arrangements
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
+      
+      - name: communication_mode
+        description: >
+          The mode or channel used for communication. Maps from the source
+          system's "mode" field:
+          - 0: Unknown/Unspecified mode
+          - 1: Email communications
+          - 2: Phone call communications
+          - 3: Letter communications
+          - 4: In-person communications
+          - 5: SMS/text message communications
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5]
+      
+      - name: content
+        description: >
+          The full content or notes from the communication. Contains the actual
+          message text or call notes.
+
+          Note: NULL content is acceptable for certain types of communications:
+          - Simple one-way communications (letters or SMS)
+          - System-generated notifications
+          - Communications that don't require message text
+        tests:
+          - not_null:
+              severity: warn
+      
+      - name: linked_appointment_id
+        description: >
+          Foreign key to appointment record if the communication references
+          a specific appointment. Extracted from content using regex pattern matching.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              where: "linked_appointment_id is not null"
+      
+      - name: linked_claim_id
+        description: >
+          Foreign key to claim record if the communication references
+          a specific insurance claim. Extracted from content using regex pattern matching.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              where: "linked_claim_id is not null"
+      
+      - name: linked_procedure_id
+        description: >
+          Foreign key to procedure record if the communication references
+          a specific dental procedure. Extracted from content using regex pattern matching.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__procedurelog')
+              field: procedure_id
+              where: "linked_procedure_id is not null"
+      
+      - name: contact_phone_number
+        description: >
+          Phone number extracted from the communication note, typically in format "Number XXXXXXXXXX".
+          Extracted via regex pattern matching from the content when phone numbers are mentioned.
+          Format is a 10-digit string without formatting characters.
+        tests:
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 10
+              max_value: 10
+              where: "contact_phone_number is not null"
+      
+      - name: communication_category
+        description: >
+          Basic categorization of the communication based on content analysis.
+          Possible values: appointment, billing, clinical, insurance, follow_up, general.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+      
+      - name: outcome
+        description: >
+          The result or outcome of the communication, derived from content analysis.
+          Possible values: confirmed, rescheduled, cancelled, no_answer, completed.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['confirmed', 'rescheduled', 'cancelled', 'no_answer', 'completed']
+      
+      - name: program_id
+        description: >
+          Identifier for the program or system that generated the communication.
+          Used for tracking automated communications.
+          - 0: Legacy system communications (not stored in program table)
+          - 95: Legacy communication system (not stored in program table)
+          - 137: Practice by Numbers (PbN) automated communications
+          Other values should reference valid programs in stg_opendental__program.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__program')
+              field: program_id
+              where: "program_id is not null and program_id not in (0, 95)"
+      
+      - name: patient_name
+        description: >
+          Patient's preferred name, joined from int_patient_profile.
+        tests:
+          - not_null
+      
+      - name: patient_status
+        description: >
+          Current status of the patient, joined from int_patient_profile.
+          Values:
+          - 0 = Patient (active)
+          - 1 = NonPatient
+          - 2 = Inactive
+          - 3 = Archived
+          - 4 = Deceased
+          - 5 = Deleted
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3, 4, 5]
+      
+      - name: birth_date
+        description: >
+          Patient's date of birth, joined from int_patient_profile.
+        tests:
+          - not_null:
+              severity: warn
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'1900-01-01'"
+              max_value: "'{{ var('max_valid_date') }}'"
+      
+      - name: user_name
+        description: >
+          Name of the staff member who initiated the communication,
+          joined from stg_opendental__userod. Note: System communications (user_id = 0)
+          will have NULL user_name.
+        tests:
+          - not_null:
+              where: "user_id != 0"
+      
+      - name: provider_id
+        description: >
+          Provider ID associated with the user, if applicable. Joined from 
+          stg_opendental__userod for provider correlation.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              where: "provider_id is not null AND provider_id != 0"
+      
+      - name: trigger_type
+        description: >
+          Type of trigger that initiated the automated communication.
+          Examples:
+          - appointment_reminder: Standard appointment reminders
+          - appointment_confirmation: Confirmations of scheduled appointments
+          - review_request: Requests for patient reviews
+          - balance_notice: Notifications about account balances
+          - broken_appointment: Notifications about broken/cancelled appointments
+          - post_op_instructions: Post-operative care instructions
+          - form_request: Requests to complete forms
+          - patient_response: Inbound communications from patients
+          - preference_update: Updates to patient communication preferences
+          - annual_notification: Annual communications like end-of-year letters
+          - delivery_failure: System notifications about failed message delivery
+          - other: Miscellaneous automated communications
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['appointment_reminder', 'appointment_confirmation', 'review_request', 
+                      'balance_notice', 'broken_appointment', 'post_op_instructions', 
+                      'form_request', 'patient_response', 'preference_update', 
+                      'annual_notification', 'delivery_failure', 'other']
+      
+      - name: status
+        description: >
+          Current status of the automated communication.
+          Possible values: sent, responded_positive, responded_negative, undelivered.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sent', 'responded_positive', 'responded_negative', 'undelivered']
+      
+      - name: open_count
+        description: >
+          Number of times the communication was opened (for email communications).
+          Currently estimated based on content patterns.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: click_count
+        description: >
+          Number of times links in the communication were clicked (for email communications).
+          Currently estimated based on content patterns.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: reply_count
+        description: >
+          Number of replies received to this communication.
+          Determined by looking for inbound communications from the same patient
+          within 3 days of the automated message.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: bounce_count
+        description: >
+          Number of times the communication bounced (for email communications).
+          Currently estimated based on content patterns.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      
+      - name: template_id
+        description: >
+          Foreign key to int_communication_templates. Identifies which template
+          was used to generate this communication.
+        tests:
+          - relationships:
+              to: ref('int_communication_templates')
+              field: template_id
+              where: "template_id is not null"
+      
+      - name: template_name
+        description: >
+          Name of the template used for this communication.
+        tests:
+          - not_null:
+              where: "template_id is not null"
+      
+      - name: template_type
+        description: >
+          Type of template used (email, SMS, letter).
+        tests:
+          - accepted_values:
+              values: ['email', 'SMS', 'letter']
+          - not_null:
+              where: "template_id is not null"
+      
+      - name: template_category
+        description: >
+          Category of the template used (appointment, billing, etc.).
+        tests:
+          - accepted_values:
+              values: ['appointment', 'billing', 'clinical', 'insurance', 'follow_up', 'general']
+          - not_null:
+              where: "template_id is not null"
+      
+      - name: template_subject
+        description: >
+          Subject line used in the template.
+        tests:
+          - not_null:
+              where: "template_id is not null AND template_type = 'email'"
+      
+      - name: created_at
+        description: >
+          Timestamp when the record was created in the source system.
+        tests:
+          - not_null
+      
+      - name: updated_at
+        description: >
+          Timestamp when the record was last updated in the source system.
+        tests:
+          - not_null
+      
+      - name: model_created_at
+        description: >
+          Timestamp when the record was created in this model.
+        tests:
+          - not_null
+      
+      - name: model_updated_at
+        description: >
+          Timestamp when the record was last updated in this model.
+        tests:
+          - not_null
+
+    meta:
+      business_owners: ["dental_communications_team", "patient_care_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "daily"
+      contains_pii: true
+      data_quality_requirements:
+        - "All communications must be associated with a valid patient"
+        - "Communication categories must accurately reflect content"
+        - "Trigger types must match content patterns"
+        - "Status must reflect actual communication outcomes"
+        - "Engagement metrics must be accurately tracked"
+        - "Template matching must be accurate and consistent"
+        - "Future incremental loading must only process new communications"
