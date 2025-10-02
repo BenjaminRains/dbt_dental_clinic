@@ -11,6 +11,7 @@
     
     Args:
         primary_source_alias (str|none): Alias of the primary source table (e.g., 'ip', 'pp')
+        REQUIRED when preserve_source_metadata=true to specify which table to pull metadata from
         preserve_source_metadata (bool): Whether to preserve metadata from primary source
         source_metadata_fields (list): List of metadata fields to preserve from primary source
         
@@ -31,6 +32,10 @@
         
         -- No source metadata (not recommended):
         {{ standardize_intermediate_metadata(preserve_source_metadata=false) }}
+        
+        -- IMPORTANT: When preserve_source_metadata=true (default), primary_source_alias is REQUIRED
+        -- The macro needs to know which table alias to reference for metadata fields
+        -- This should match the alias used in the FROM clause of your final SELECT statement
         
     Example with specific options:
         {{ standardize_intermediate_metadata(
