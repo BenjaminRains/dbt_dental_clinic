@@ -18,17 +18,20 @@
     1. Combines claim data with detailed procedure and insurance information
     2. Provides comprehensive view of claim procedures with financial details
     3. Integrates insurance coverage verification and benefit information
+    4. Includes claim form template details for form management and analytics
     
     Business Logic Features:
     - Claim Procedure Integration: Links claims to specific procedures with billing details
     - Insurance Coverage Mapping: Associates claims with active insurance plans and benefits
     - Financial Tracking: Tracks billed, allowed, paid amounts and patient responsibility
     - Procedure Classification: Includes procedure codes, categories, and treatment area details
+    - Form Template Integration: Associates claims with their form templates and layout settings
     
     Data Quality Notes:
     - Some claims may have multiple procedures requiring composite key handling
     - Insurance coverage data depends on verification status and effective dates
     - Financial amounts may be null for pending or rejected claims
+    - Claim form templates may be null for claims without specified forms
     
     Performance Considerations:
     - Uses table materialization due to complex joins across multiple large tables
@@ -41,6 +44,7 @@ with source_claim as (
         claim_id,
         patient_id,
         plan_id,
+        claim_form_id,
         claim_status,
         claim_type,
         service_date as claim_date,
@@ -65,7 +69,8 @@ source_claim_proc as (
 procedure_lookup as (
     select distinct
         pl.procedure_id,
-        pl.procedure_code_id
+        pl.procedure_code_id,
+        pl.provider_id
     from {{ ref('stg_opendental__procedurelog') }} pl
     inner join {{ ref('stg_opendental__claimproc') }} cp
         on pl.procedure_id = cp.procedure_id
@@ -109,6 +114,22 @@ insurance_coverage as (
     from {{ ref('int_insurance_coverage') }}
 ),
 
+claim_form_templates as (
+    select
+        claim_form_id,
+        description as claim_form_description,
+        font_name as form_font_name,
+        font_size as form_font_size,
+        unique_id as form_unique_id,
+        is_hidden as form_is_hidden,
+        print_images as form_print_images,
+        offset_x as form_offset_x,
+        offset_y as form_offset_y,
+        width as form_width,
+        height as form_height
+    from {{ ref('stg_opendental__claimform') }}
+),
+
 claim_details_integrated as (
     select
         -- Primary Key
@@ -118,10 +139,12 @@ claim_details_integrated as (
 
         -- Foreign Keys
         c.patient_id,
+        c.claim_form_id,
         ic.insurance_plan_id,
         ic.carrier_id,
         ic.subscriber_id,
         cp.procedure_id,
+        pl.provider_id,
 
         -- Claim Status and Type
         c.claim_status,
@@ -163,6 +186,18 @@ claim_details_integrated as (
         ic.effective_date,
         ic.termination_date,
 
+        -- Claim Form Template Details
+        cft.claim_form_description,
+        cft.form_font_name,
+        cft.form_font_size,
+        cft.form_unique_id,
+        cft.form_is_hidden,
+        cft.form_print_images,
+        cft.form_offset_x,
+        cft.form_offset_y,
+        cft.form_width,
+        cft.form_height,
+
         -- Generate metadata for this intermediate model
         current_timestamp as _loaded_at,
         c.claim_date as _created_at,
@@ -179,6 +214,8 @@ claim_details_integrated as (
     left join insurance_coverage ic
         on c.patient_id = ic.patient_id
         and c.plan_id = ic.insurance_plan_id
+    left join claim_form_templates cft
+        on c.claim_form_id = cft.claim_form_id
 ),
 
 final as (
@@ -192,6 +229,7 @@ final as (
         carrier_id,
         subscriber_id,
         procedure_id,
+        provider_id,
         claim_status,
         claim_type,
         claim_date,
@@ -224,6 +262,19 @@ final as (
         verification_status,
         effective_date,
         termination_date,
+        
+        -- Claim Form Template Details
+        claim_form_id,
+        claim_form_description,
+        form_font_name,
+        form_font_size,
+        form_unique_id,
+        form_is_hidden,
+        form_print_images,
+        form_offset_x,
+        form_offset_y,
+        form_width,
+        form_height,
         
         -- Standardized metadata (preserved from staging models)
         _loaded_at,
