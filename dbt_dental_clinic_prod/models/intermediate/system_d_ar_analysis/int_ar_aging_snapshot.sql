@@ -38,6 +38,7 @@
 */
 
 WITH PreviousSnapshot AS (
+    {% if is_incremental() %}
     SELECT
         snapshot_date,
         patient_id,
@@ -59,6 +60,28 @@ WITH PreviousSnapshot AS (
         _transformed_at as source_transformed_at
     FROM {{ this }}
     WHERE snapshot_date = CURRENT_DATE - INTERVAL '1 day'
+    {% else %}
+    SELECT
+        NULL::date AS snapshot_date,
+        NULL::integer AS patient_id,
+        NULL::numeric AS total_ar_balance,
+        NULL::numeric AS balance_0_30_days,
+        NULL::numeric AS balance_31_60_days,
+        NULL::numeric AS balance_61_90_days,
+        NULL::numeric AS balance_over_90_days,
+        NULL::numeric AS estimated_insurance_ar,
+        NULL::numeric AS patient_responsibility,
+        NULL::numeric AS insurance_responsibility,
+        NULL::integer AS open_procedures_count,
+        NULL::integer AS active_claims_count,
+        -- Preserve metadata from previous snapshot
+        NULL::timestamp AS _loaded_at,
+        NULL::timestamp AS _created_at,
+        NULL::timestamp AS _updated_at,
+        NULL::varchar AS _created_by,
+        NULL::timestamp as source_transformed_at
+    WHERE FALSE
+    {% endif %}
 ),
 
 CurrentSnapshot AS (
