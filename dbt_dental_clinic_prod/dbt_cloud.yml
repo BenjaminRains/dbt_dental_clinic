@@ -1,0 +1,14 @@
+version: "1"
+context:
+  active-host: "sh805.us1.dbt.com"
+  active-project: "70471823444639"
+projects:
+  - project-name: "Dental Clinic Analytics"
+    project-id: "70471823444639"
+    account-name: "Student"
+    account-id: "70471823439559"
+    account-host: "sh805.us1.dbt.com"
+    token-name: "cloud-cli-4f8a"
+    token-value: "dbtu_y1Mv2ow6UEXUXF0HT9EMpQsZpuRl2I96PTGvKDGMZVOVm3uHjo"
+
+
