@@ -52,7 +52,7 @@ WITH StatementBase AS (
         s.is_invoice,
         s.statement_type,
         s.sms_send_status,
-        s.date_timestamp,
+        s.date_tstamp,
         s.note,
         s.email_subject,
         s.email_body,
