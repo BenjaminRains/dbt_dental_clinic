@@ -45,7 +45,7 @@ WITH CollectionCommunications AS (
             ELSE 'other'
         END AS communication_type,
         CASE 
-            WHEN cl.is_sent = 1 THEN 'outbound'
+            WHEN cl.is_sent = true THEN 'outbound'
             ELSE 'inbound'
         END AS direction,
         CASE
