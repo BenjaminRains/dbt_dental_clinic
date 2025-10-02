@@ -40,7 +40,7 @@
 with source_procedures as (
     select * from {{ ref('stg_opendental__procedurelog') }}
     {% if is_incremental() %}
-        where _updated_at > (select max(_updated_at) from {{ this }})
+        where _loaded_at > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -266,7 +266,7 @@ fee_model_integrated as (
         p.is_multi_visit_procedure,
         
         -- Metadata (using standardized macro - only fields that exist in source)
-        {{ standardize_intermediate_metadata(source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']) }}
+        {{ standardize_intermediate_metadata(primary_source_alias='p', source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']) }}
         
     from procedure_fees_enhanced p
     left join fee_adjustments_categorized a

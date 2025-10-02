@@ -2,7 +2,7 @@
     materialized='incremental',
     schema='intermediate',
     unique_key='procedure_id',
-    on_schema_change='fail',
+    on_schema_change='sync_all_columns',
     incremental_strategy='merge',
     indexes=[
         {'columns': ['procedure_id'], 'unique': true},
@@ -41,7 +41,7 @@ with source_procedure_log as (
     select *
     from {{ ref('stg_opendental__procedurelog') }}
     {% if is_incremental() %}
-        where _updated_at > (select max(_updated_at) from {{ this }})
+        where _loaded_at > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 
@@ -129,6 +129,7 @@ procedure_complete_integrated as (
         pl.procedure_id,
         pl.patient_id,
         pl.provider_id,
+        pl.appointment_id,
         pl.clinic_id,
         pl.procedure_code_id,
         pl.procedure_date,
@@ -139,6 +140,8 @@ procedure_complete_integrated as (
         pl.tooth_number,
         pl.surface,
         pl.old_code,
+        pl.procedure_time,
+        pl.procedure_time_end,
         
         -- Procedure code information
         pc.procedure_code,
@@ -181,8 +184,6 @@ procedure_complete_integrated as (
         pn.last_note_timestamp,
         
         -- Metadata fields (standardized pattern)
-        pl._loaded_at,
-        pl._created_at,
         {{ standardize_intermediate_metadata(primary_source_alias='pl') }}
         
     from source_procedure_log pl
