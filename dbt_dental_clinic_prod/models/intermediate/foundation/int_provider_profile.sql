@@ -2,7 +2,7 @@
         materialized='incremental',
         schema='intermediate',
         unique_key='provider_id',
-        on_schema_change='fail',
+        on_schema_change='sync_all_columns',
         incremental_strategy='merge',
         indexes=[
             {'columns': ['provider_id'], 'unique': true},
@@ -53,7 +53,7 @@
 with source_providers as (
     select * from {{ ref('stg_opendental__provider') }}
     {% if is_incremental() %}
-    where _updated_at > (select max(_updated_at) from {{ this }})
+    where _loaded_at > (select coalesce(max(_loaded_at), '1900-01-01'::timestamp) from {{ this }})
     {% endif %}
 ),
 
@@ -159,7 +159,8 @@ provider_enhanced as (
         -- Metadata (preserved from source staging model)
         _loaded_at,
         _created_at,
-        _updated_at
+        _updated_at,
+        _transformed_at
         
     from source_providers
 ),
@@ -264,7 +265,7 @@ provider_integrated as (
         pc.can_bill_procedures,
         
         -- Standardized metadata (provider staging model has _loaded_at, _created_at, _updated_at)
-        {{ standardize_intermediate_metadata(source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']) }}
+        {{ standardize_intermediate_metadata(primary_source_alias='pc', source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']) }}
         
     from provider_capabilities pc
 )
