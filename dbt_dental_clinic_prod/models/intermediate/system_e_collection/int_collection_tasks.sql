@@ -265,8 +265,10 @@ WITH CollectionTasks AS (
         
     {% if is_incremental() %}
         -- If this is an incremental run, only process new or changed tasks
-        AND (t.entry_timestamp > (SELECT MAX(model_created_at) FROM {{ this }})
-            OR t.finished_timestamp > (SELECT MAX(model_updated_at) FROM {{ this }}))
+        AND t.entry_timestamp > (
+            SELECT COALESCE(MAX(model_created_at), '1900-01-01'::timestamp) 
+            FROM {{ this }}
+        )
     {% endif %}
 )
 
