@@ -204,7 +204,10 @@ provider_enhanced as (
         end as availability_performance_tier,
         
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='p',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+        ) }}
         
     from source_provider p
     left join provider_availability pa
