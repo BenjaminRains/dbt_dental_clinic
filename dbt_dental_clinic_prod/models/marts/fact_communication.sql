@@ -8,8 +8,7 @@
             {'columns': ['communication_id'], 'unique': true},
             {'columns': ['patient_id']},
             {'columns': ['user_id']},
-            {'columns': ['communication_datetime']},
-            {'columns': ['_updated_at']}
+            {'columns': ['communication_datetime']}
         ]
     )
 }}
@@ -40,6 +39,9 @@ Data Quality Notes:
 - Email and SMS message integration temporarily disabled due to missing staging models
 - Confirmation requests not tracked as clinic doesn't use appointment confirmation functionality
 - Communication datetime filtering ensures only valid communications are included
+- Communication type 0 represents default/legacy communications (116K+ records)
+- Communication modes 6 and 8 are additional system modes beyond the standard 0-5 range
+- _created_at metadata column removed due to null values in source data
 
 Performance Considerations:
 - Indexed on communication_datetime for time-based queries
@@ -163,9 +165,10 @@ communication_calculated as (
 
         -- Communication direction
         case 
-            when sc.is_sent = 2 then 'Inbound'
-            when sc.is_sent = 1 then 'Outbound'
-            else 'System'
+            when sc.sent_or_received_raw = 0 then 'Inbound'
+            when sc.sent_or_received_raw = 1 then 'Outbound'
+            when sc.sent_or_received_raw = 2 then 'System'
+            else 'Unknown'
         end as communication_direction,
 
         -- Communication method based on mode
@@ -176,11 +179,14 @@ communication_calculated as (
             when sc.mode = 3 then 'Letter'
             when sc.mode = 4 then 'In-Person'
             when sc.mode = 5 then 'System'
+            when sc.mode = 6 then 'System'  -- Additional system mode
+            when sc.mode = 8 then 'System'  -- Additional system mode
             else 'Unknown'
         end as communication_method,
 
         -- Communication category based on type
         case 
+            when sc.communication_type = 0 then 'General'      -- Default/legacy communication type
             when sc.communication_type = 224 then 'Appointment'
             when sc.communication_type = 228 then 'Appointment'
             when sc.communication_type = 226 then 'Financial'
@@ -197,10 +203,11 @@ communication_calculated as (
 
         -- Effectiveness indicators
         case 
-            when sc.is_sent = 2 then 'Received'
-            when sc.is_sent = 1 and sc.mode = 4 then 'Completed'
-            when sc.is_sent = 1 then 'Sent'
-            else 'System Generated'
+            when sc.sent_or_received_raw = 0 then 'Received'
+            when sc.sent_or_received_raw = 1 and sc.mode = 4 then 'Completed'
+            when sc.sent_or_received_raw = 1 then 'Sent'
+            when sc.sent_or_received_raw = 2 then 'System Generated'
+            else 'Unknown'
         end as engagement_level,
 
         -- Boolean flags
@@ -215,7 +222,7 @@ communication_calculated as (
             else false 
         end as is_financial_related,
         case 
-            when sc.is_sent = 2 then true
+            when sc.sent_or_received_raw = 0 then true
             else false
         end as is_patient_initiated,
         case 
@@ -224,7 +231,10 @@ communication_calculated as (
         end as is_system_generated,
 
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='sc',
+            source_metadata_fields=['_loaded_at']
+        ) }}
 
     from source_communication sc
     where sc.communication_datetime is not null
