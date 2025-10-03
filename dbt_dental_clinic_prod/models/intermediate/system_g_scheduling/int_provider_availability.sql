@@ -95,5 +95,5 @@ SELECT
 from daily_availability
 
 {% if is_incremental() %}
-WHERE schedule_date >= (SELECT MAX(schedule_date) FROM {{ this }})
+WHERE schedule_date >= (SELECT MAX(schedule_date)::date FROM {{ this }})
 {% endif %}
