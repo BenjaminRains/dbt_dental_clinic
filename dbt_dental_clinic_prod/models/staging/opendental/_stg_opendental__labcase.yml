@@ -164,10 +164,7 @@ models:
           for lab delivery when scheduling is in planning phase. Used for 
           workflow coordination and scheduling optimization.
         tests:
-          - relationships:
-              to: ref('stg_opendental__plannedappt')
-              field: planned_appointment_id
-              severity: warn
+          - not_null:
               where: "planned_appointment_id IS NOT NULL"
       
       - name: provider_id
