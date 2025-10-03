@@ -88,6 +88,7 @@ claims_calculated as (
         sc.insurance_plan_id,
         sc.carrier_id,
         sc.subscriber_id,
+        sc.provider_id,
 
         -- Date Fields
         sc.claim_date,
@@ -179,7 +180,10 @@ claims_calculated as (
         end as eob_documentation_status,
 
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='sc',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']
+        ) }}
 
     from source_claims sc
     left join claim_payments cp
