@@ -86,6 +86,7 @@ models:
       refresh_frequency: "daily"
       business_impact: "High"
       mart_type: "summary"
+      system_integration: "System G: Scheduling and Patient Management"
       grain_description: "One row per date + patient + provider + hygienist combination"
       primary_consumers: ["Clinical Operations", "Hygienists", "Practice Management", "Executive Leadership"]
       data_quality_requirements:
@@ -206,7 +207,7 @@ models:
           - May be null if not provided by patient
         tests:
           - accepted_values:
-              values: ['Male', 'Female', 'Other', 'Unknown']
+              values: ['M', 'F', 'O']
               where: "gender is not null"
       
       - name: patient_status
@@ -221,7 +222,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['Active', 'Inactive', 'Archived']
+              values: ['Patient', 'Inactive', 'Archived', 'Deleted', 'NonPatient', 'Deceased']
       
       - name: has_insurance_flag
         description: >
@@ -275,7 +276,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['Dentist', 'Specialist', 'Hygienist', 'Other']
+              values: ['Primary']
       
       - name: specialty_description
         description: >

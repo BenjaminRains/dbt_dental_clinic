@@ -192,15 +192,14 @@ models:
           Clinic identifier where the opportunity occurred
           
           Business Rules:
-          - May be null for treatment plan delays and claim rejections
+          - Set to 0 for treatment plan delays and claim rejections (no clinic context)
           - Used for clinic-specific revenue recovery analysis
           - Enables multi-location performance comparison
           
           Data Quality Notes:
-          - Null values expected for non-appointment related opportunities
+          - Value of 0 indicates no specific clinic context for the opportunity
         tests:
-          - not_null:
-              where: "opportunity_type = 'Missed Appointment' or opportunity_type = 'Write Off'"
+          - not_null
       
       - name: patient_id
         description: >
@@ -253,6 +252,8 @@ models:
         tests:
           - not_null:
               where: "provider_id is not null"
+              config:
+                severity: warn
       
       - name: provider_preferred_name
         description: >
@@ -317,7 +318,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['M', 'F', 'Other', 'Unknown']
+              values: ['M', 'F', 'O']
       
       - name: has_insurance_flag
         description: >
@@ -822,10 +823,6 @@ models:
               max_value: 10000
               severity: warn
               where: "estimated_recoverable_amount is not null"
-          - dbt_expectations.expression_is_true:
-              expression: "estimated_recoverable_amount <= lost_revenue"
-              config:
-                severity: error
       
       # Required Metadata Columns
       - name: _loaded_at

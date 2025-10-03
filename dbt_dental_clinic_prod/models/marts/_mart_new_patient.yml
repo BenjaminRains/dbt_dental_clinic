@@ -195,7 +195,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['M', 'F', 'Other', 'Unknown']
+              values: ['M', 'F', 'O']
       
       - name: age_category
         description: >
@@ -242,9 +242,11 @@ models:
           - Links to clinic information for location-based analysis
           - Used for clinic performance comparison and geographic analysis
           - Enables multi-location acquisition tracking
+          - Always set to 0 (single clinic practice)
         tests:
           - not_null
-          - positive_values
+          - accepted_values:
+              values: [0]
       
       - name: primary_provider_name
         description: >

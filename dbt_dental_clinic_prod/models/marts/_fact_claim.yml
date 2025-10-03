@@ -8,73 +8,48 @@ models:
       providing detailed information about each claim procedure and its associated
       payments, statuses, and documentation.
 
-      ## Business Context
-      The claim fact table is a critical component of our dimensional model, enabling:
-      - Individual claim transaction analysis
-      - Procedure-level payment tracking
-      - Claim status monitoring
-      - EOB documentation tracking
-      - Payment timing analysis
-      - Revenue cycle metrics
-
-      ## Technical Specifications
-      - Grain: One row per claim procedure (claim_id + procedure_id + claim_procedure_id)
-      - Source: int_claim_details (primary source)
-      - Refresh: Daily
-      - Dependencies: 
-        * int_claim_details (core claim data)
-        * int_claim_payments (payment information)
-        * int_claim_snapshot (historical states)
-        * int_claim_tracking (status updates)
-        * int_insurance_eob_attachments (EOB documentation)
-
-      ## Business Logic
-      ### Claim Processing
-      - Claims are tracked at the procedure level
-      - Multiple procedures can be part of one claim
-      - Each procedure can have multiple payments
-      - EOB attachments are linked to payments
-
-      ### Payment Handling
-      - Payments can be partial or complete
-      - Multiple payment types supported
-      - Write-offs and patient responsibility tracked
-      - Payment timing recorded
-
-      ### Status Tracking
-      - Claim status at procedure level
-      - Payment status tracking
-      - EOB documentation status
-      - Verification status
-
-      ## Data Quality Notes
-      - Claims are deduplicated using composite key
-      - Payment amounts are validated
-      - Status transitions are tracked
-      - EOB attachments are verified
-
-      ## Usage Guidelines
-      - Primary source for claim-level analysis
-      - Supports daily, monthly, and rolling period aggregations
-      - Enables breakdowns by provider, location, and patient type
-      - Integrates with dim_insurance for plan-level analysis
-      - Supports procedure-level analysis
-      - Enables payment performance analysis
-      - Facilitates EOB documentation tracking
-
-      ## Dimensional Relationships
-      - Links to dim_insurance through insurance_plan_id
-      - Links to dim_patient through patient_id
-      - Links to dim_procedure through procedure_id
-      - Links to dim_provider through provider_id
-      - Links to dim_date through claim_date
-
-      ## Naming Conventions
-      - Source columns from OpenDental use original CamelCase names
-      - Derived/calculated fields use snake_case
-      - Metadata columns use underscore prefix (_loaded_at, _created_at, _updated_at)
-      - Amount fields use descriptive suffixes (_amount)
-      - Status fields use descriptive prefixes (is_, has_)
+      This fact table serves as the central hub for insurance billing and revenue cycle management
+      and provides comprehensive financial transaction tracking. Part of System A: Financial Management workflow.
+      
+      Key Features:
+      - Individual claim transaction tracking: Enables procedure-level financial analysis and reconciliation
+      - Payment processing integration: Provides comprehensive payment tracking with EOB documentation
+      - Revenue cycle management: Supports billing analysis, collection tracking, and financial performance monitoring
+      - Financial calculation engine: Calculates payment timing, completion status, and documentation compliance
+      - Data integration hub: Consolidates claim, payment, and documentation data from multiple sources
+      
+      Data Sources:
+      - int_claim_details: Core claim transaction data with procedure-level granularity
+      - int_claim_payments: Payment processing information and EOB documentation metadata
+      - int_claim_snapshot: Historical claim status snapshots for audit and compliance tracking
+      - int_claim_tracking: Claim processing workflow tracking and status transitions
+      
+      Business Logic Features:
+      - Composite key deduplication: Ensures unique records using claim_id + procedure_id + claim_procedure_id
+      - Payment status categorization: Automatically categorizes claims as Paid, Denied, Pending, or Rejected
+      - Billing status determination: Classifies procedures as Billable or Non-Billable based on business rules
+      - Payment timing calculation: Computes days between claim submission and payment receipt
+      - Completion status tracking: Determines payment completion status (Write-off, Patient Balance, Fully Paid, Partial)
+      - EOB documentation validation: Tracks documentation completeness for audit compliance
+      
+      Financial Calculations:
+      - Payment timing analysis: Calculates payment_days_from_claim for revenue cycle optimization
+      - Payment completion assessment: Determines payment_completion_status for collection analysis
+      - Documentation compliance: Tracks eob_documentation_status for audit requirements
+      - Amount reconciliation: Validates billed vs paid amounts for financial accuracy
+      
+      Data Quality Notes:
+      - Claims are deduplicated using composite key to handle multiple payment scenarios
+      - Some claims may have missing payment information (handled with left joins for data completeness)
+      - EOB attachments are optional and may be null for some claims (documented in eob_documentation_status)
+      - Claim status fields may have different granularity across source systems (normalized in calculated fields)
+      - Payment amounts are validated against business rules and financial constraints
+      
+      Business Rules:
+      - All claims must have valid procedure and patient associations for billing integrity
+      - Payment amounts must be non-negative and cannot exceed billed amounts
+      - EOB documentation is required for payments above certain thresholds
+      - Claim status transitions must follow defined business workflow rules
 
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -82,159 +57,885 @@ models:
 
     columns:
       - name: claim_id
-        description: Primary key for the claim
+        description: >
+          Primary key for the claim (maps from "ClaimNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClaimNum" (CamelCase)
+          - Transformed to: claim_id (snake_case with _id suffix)
+          
+          Business Context:
+          - Uniquely identifies each claim record
+          - Used as part of composite key for claim procedure identification
+          - Critical for claim-level analysis and financial reconciliation
         tests:
           - not_null
 
       - name: procedure_id
-        description: Foreign key to the procedure
+        description: >
+          Foreign key to the procedure (maps from "ProcNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase)
+          - Transformed to: procedure_id (snake_case with _id suffix)
+          
+          Business Relationship:
+          - Links to dim_procedure for procedure details and categorization
+          - Enables procedure-level analysis and reporting
+          - Critical for billing accuracy and procedure tracking
         tests:
           - not_null
-          - relationships:
-              to: ref('dim_procedure')
-              field: procedure_id
 
       - name: claim_procedure_id
-        description: Unique identifier for the claim procedure
+        description: >
+          Unique identifier for the claim procedure combination
+          
+          Business Context:
+          - Part of composite key ensuring unique claim procedure records
+          - Enables tracking of multiple procedures within a single claim
+          - Critical for procedure-level payment and status tracking
         tests:
           - not_null
 
       - name: insurance_plan_id
-        description: Foreign key to the insurance plan
+        description: >
+          Foreign key to the insurance plan (maps from "PlanNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PlanNum" (CamelCase)
+          - Transformed to: insurance_plan_id (snake_case with _id suffix)
+          
+          Business Relationship:
+          - Links to dim_insurance for plan details and coverage information
+          - Enables insurance-specific analysis and reporting
+          - Critical for billing accuracy and coverage validation
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           - relationships:
               to: ref('dim_insurance')
               field: insurance_plan_id
+              config:
+                severity: error
+                description: "All claims must reference valid insurance plans for billing integrity"
 
       - name: patient_id
-        description: Foreign key to the patient
+        description: >
+          Foreign key to the patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase)
+          - Transformed to: patient_id (snake_case with _id suffix)
+          
+          Business Relationship:
+          - Links to dim_patient for patient demographics and history
+          - Enables patient-level analysis and reporting
+          - Critical for patient billing and care coordination
         tests:
           - not_null
           - relationships:
               to: ref('dim_patient')
               field: patient_id
+              config:
+                severity: error
+                description: "All claims must reference valid patients for billing integrity"
 
       - name: provider_id
-        description: Foreign key to the provider
+        description: >
+          Foreign key to the provider (maps from "ProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProvNum" (CamelCase)
+          - Transformed to: provider_id (snake_case with _id suffix)
+          
+          Business Relationship:
+          - Links to dim_provider for provider details and performance tracking
+          - Enables provider-level analysis and reporting
+          - Critical for provider billing and performance monitoring
         tests:
           - not_null
           - relationships:
               to: ref('dim_provider')
               field: provider_id
+              config:
+                severity: error
+                description: "All claims must reference valid providers for billing integrity"
 
       - name: claim_date
-        description: Date when the claim was submitted
+        description: >
+          Date when the claim was submitted
+          
+          Business Context:
+          - Used for time-based analysis and reporting
+          - Critical for revenue cycle management and payment timing analysis
+          - Enables monthly, quarterly, and annual financial reporting
         tests:
           - not_null
           - relationships:
               to: ref('dim_date')
               field: date_id
+              config:
+                severity: error
+                description: "All claims must have valid submission dates for financial reporting"
 
       - name: claim_status
-        description: Current status of the claim
+        description: >
+          Current status of the claim in the billing workflow
+          
+          Valid Values:
+          - 'S': Submitted claim
+          - 'W': Waiting/Processing claim
+          - 'R': Received/Paid claim
+          - 'H': Hold claim
+          
+          Business Rules:
+          - Status transitions must follow defined workflow rules
+          - Status affects payment processing and collection activities
         tests:
           - not_null
           - accepted_values:
-              values: ['pending', 'approved', 'denied', 'paid', 'rejected']
+              values: ['S', 'W', 'R', 'H']
+              config:
+                description: "Claim status must be one of the defined workflow states"
 
       - name: claim_type
-        description: Type of claim (e.g., primary, secondary)
+        description: >
+          Type of claim indicating billing priority and processing order
+          
+          Valid Values:
+          - 'P': Primary insurance claim
+          - 'S': Secondary insurance claim
+          - 'Other': Other claim types
+          
+          Business Rules:
+          - Determines billing sequence and payment coordination
+          - Affects payment processing and patient responsibility calculations
         tests:
           - not_null
           - accepted_values:
-              values: ['primary', 'secondary', 'tertiary']
+              values: ['P', 'S', 'Other']
+              config:
+                description: "Claim type must be one of the defined billing priorities"
 
       - name: claim_procedure_status
-        description: Status of the specific procedure in the claim
+        description: >
+          Status of the specific procedure within the claim
+          
+          Valid Values:
+          - 0: Default/Initial status
+          - 1: Active/Processing status
+          - 4: Completed status
+          
+          Business Context:
+          - Individual procedures can have different statuses within the same claim
+          - Affects procedure-level payment and collection activities
         tests:
           - not_null
           - accepted_values:
-              values: ['pending', 'approved', 'denied', 'paid', 'rejected']
+              values: [0, 1, 4]
+              config:
+                description: "Procedure status must be one of the defined numeric status codes"
 
       - name: billed_amount
-        description: Amount billed for the procedure
+        description: >
+          Amount billed for the procedure to insurance
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Based on fee schedule and procedure codes
+          - Business Rules: Must be non-negative and within reasonable ranges
+          
+          Accounting Impact:
+          - Used for revenue recognition and billing reconciliation
+          - Critical for financial reporting and audit compliance
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Billed amounts should be reasonable for dental procedures"
 
       - name: allowed_amount
-        description: Amount allowed by insurance
+        description: >
+          Amount allowed by insurance for the procedure
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Determined by insurance plan coverage and fee schedules
+          - Business Rules: Cannot exceed billed amount, must be non-negative
+          
+          Accounting Impact:
+          - Used for payment reconciliation and patient responsibility calculations
+          - Critical for insurance payment processing and audit compliance
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Allowed amounts should be reasonable for dental procedures"
 
       - name: paid_amount
-        description: Amount paid by insurance
+        description: >
+          Amount actually paid by insurance for the procedure
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Actual payment received from insurance
+          - Business Rules: Cannot exceed allowed amount, must be non-negative
+          
+          Accounting Impact:
+          - Used for revenue recognition and payment reconciliation
+          - Critical for financial reporting and collection analysis
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Paid amounts should be reasonable for dental procedures"
 
       - name: write_off_amount
-        description: Amount written off
+        description: >
+          Amount written off due to insurance adjustments or contractual obligations
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Difference between allowed and paid amounts
+          - Business Rules: Must be non-negative, typically represents contractual adjustments
+          
+          Accounting Impact:
+          - Used for financial reporting and audit compliance
+          - Critical for understanding revenue adjustments and contractual obligations
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Write-off amounts should be reasonable for dental procedures"
 
       - name: patient_responsibility
-        description: Amount patient is responsible for
+        description: >
+          Amount patient is responsible for after insurance payment
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Billed amount minus paid amount minus write-off amount
+          - Business Rules: Must be non-negative, represents patient's financial obligation
+          
+          Accounting Impact:
+          - Used for patient billing and collection activities
+          - Critical for accounts receivable management and patient communication
         tests:
           - not_null
-
-      - name: claim_payment_id
-        description: ID of the associated payment
-        tests:
-          - relationships:
-              to: ref('int_claim_payments')
-              field: claim_payment_id
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Patient responsibility amounts should be reasonable for dental procedures"
 
       - name: check_amount
-        description: Amount of the insurance check
+        description: >
+          Amount of the insurance check received
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Actual check amount from insurance payment
+          - Business Rules: Must match paid amount for the procedure
+          
+          Accounting Impact:
+          - Used for payment reconciliation and bank deposit tracking
+          - Critical for financial reporting and audit compliance
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Check amounts should be reasonable for dental procedures"
 
       - name: check_date
-        description: Date when the check was received
+        description: >
+          Date when the insurance check was received
+          
+          Business Context:
+          - Used for payment timing analysis and revenue cycle management
+          - Critical for understanding payment delays and collection efficiency
+          - Enables time-based financial reporting and analysis
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: payment_type_id
-        description: Type of payment received
+        description: >
+          Type of payment received from insurance (numeric payment type code)
+          
+          Valid Values:
+          - 465: Check payment
+          - 467: Electronic payment
+          - 646: Other payment type
+          
+          Business Rules:
+          - Determines payment processing workflow and reconciliation method
+          - Affects deposit timing and bank reconciliation processes
+        tests:
+          - not_null:
+              config:
+                severity: warn
+          - accepted_values:
+              values: [465, 467, 646]
+              config:
+                description: "Payment type must be one of the defined payment method codes"
+
+      - name: is_partial
+        description: >
+          Flag indicating if this is a partial payment
+          
+          Business Context:
+          - Used to identify claims requiring additional payment processing
+          - Critical for collection activities and payment follow-up
+          - Affects revenue recognition and accounts receivable management
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: eob_attachment_count
+        description: >
+          Number of EOB (Explanation of Benefits) attachments
+          
+          Business Context:
+          - Used for audit compliance and documentation tracking
+          - Critical for insurance payment verification and dispute resolution
+          - Enables documentation completeness analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              config:
+                severity: warn
+                description: "EOB attachment count should be reasonable for claim documentation"
+
+      - name: eob_attachment_ids
+        description: >
+          Array of EOB attachment IDs for documentation tracking
+          
+          Business Context:
+          - Used for audit compliance and documentation retrieval
+          - Critical for insurance payment verification and dispute resolution
+          - Enables documentation completeness analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: eob_attachment_file_names
+        description: >
+          Array of EOB attachment file names for documentation tracking
+          
+          Business Context:
+          - Used for audit compliance and documentation retrieval
+          - Critical for insurance payment verification and dispute resolution
+          - Enables documentation completeness analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: payment_status_category
+        description: >
+          Calculated payment status category for business analysis
+          
+          Valid Values:
+          - 'Paid': Payment has been received
+          - 'Denied': Claim was denied by insurance
+          - 'Pending': Claim is awaiting processing
+          - 'Rejected': Claim was rejected due to errors
+          - 'Unknown': Status cannot be determined
+          
+          Business Rules:
+          - Automatically calculated based on paid_amount and claim_status
+          - Used for payment analysis and collection activities
         tests:
           - not_null
           - accepted_values:
-              values: ['check', 'electronic', 'credit_card']
+              values: ['Paid', 'Denied', 'Pending', 'Rejected', 'Unknown']
+              config:
+                description: "Payment status category must be one of the defined business states"
 
-      - name: is_partial
-        description: Flag indicating if this is a partial payment
+      - name: billing_status_category
+        description: >
+          Calculated billing status category for business analysis
+          
+          Valid Values:
+          - 'Billable': Procedure is billable to insurance
+          - 'Non-Billable': Procedure is not billable to insurance
+          - 'Unknown': Billing status cannot be determined
+          
+          Business Rules:
+          - Automatically calculated based on billed_amount and no_bill_insurance flag
+          - Used for billing analysis and revenue recognition
         tests:
           - not_null
+          - accepted_values:
+              values: ['Billable', 'Non-Billable', 'Unknown']
+              config:
+                description: "Billing status category must be one of the defined business states"
 
-      - name: eob_attachment_count
-        description: Number of EOB attachments
+      - name: payment_days_from_claim
+        description: >
+          Calculated number of days between claim submission and payment receipt
+          
+          Business Context:
+          - Used for revenue cycle management and payment timing analysis
+          - Critical for understanding payment delays and collection efficiency
+          - Enables performance monitoring and process optimization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              config:
+                severity: warn
+                description: "Payment days should be reasonable for insurance processing"
+
+      - name: payment_completion_status
+        description: >
+          Calculated payment completion status for business analysis
+          
+          Valid Values:
+          - 'Write-off': Amount was written off
+          - 'Patient Balance': Patient is responsible for remaining amount
+          - 'Fully Paid': Payment is complete
+          - 'Partial Payment': Payment is incomplete
+          
+          Business Rules:
+          - Automatically calculated based on payment amounts and write-offs
+          - Used for collection analysis and accounts receivable management
         tests:
           - not_null
+          - accepted_values:
+              values: ['Write-off', 'Patient Balance', 'Fully Paid', 'Partial Payment']
+              config:
+                description: "Payment completion status must be one of the defined business states"
 
-      - name: eob_attachment_ids
-        description: Array of EOB attachment IDs
+      - name: eob_documentation_status
+        description: >
+          Calculated EOB documentation status for audit compliance
+          
+          Valid Values:
+          - 'Documented': EOB attachments are present
+          - 'Payment Without EOB': Payment received but no EOB documentation
+          - 'No Documentation': No payment or EOB documentation
+          
+          Business Rules:
+          - Automatically calculated based on payment and EOB attachment data
+          - Used for audit compliance and documentation tracking
         tests:
           - not_null
-
-      - name: eob_attachment_file_names
-        description: Array of EOB attachment file names
-        tests:
-          - not_null
+          - accepted_values:
+              values: ['Documented', 'Payment Without EOB', 'No Documentation']
+              config:
+                description: "EOB documentation status must be one of the defined business states"
 
       - name: _created_at
-        description: Timestamp when the record was created
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
         tests:
           - not_null
 
       - name: _updated_at
-        description: Timestamp when the record was last updated
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
         tests:
           - not_null
 
       - name: _loaded_at
-        description: Timestamp when the record was loaded
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
         tests:
           - not_null
+
+      - name: carrier_id
+        description: >
+          Foreign key to the insurance carrier
+          
+          Business Context:
+          - Links to insurance carrier information
+          - Used for carrier-specific analysis and reporting
+          - Critical for insurance plan management and billing
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: subscriber_id
+        description: >
+          Foreign key to the insurance subscriber
+          
+          Business Context:
+          - Links to subscriber information for insurance verification
+          - Used for subscriber-specific analysis and reporting
+          - Critical for insurance eligibility and coverage validation
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: snapshot_date
+        description: >
+          Date of the claim status snapshot
+          
+          Business Context:
+          - Used for historical claim status tracking
+          - Critical for audit compliance and status change analysis
+          - Enables historical reporting and trend analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: tracking_date
+        description: >
+          Date of the claim tracking event
+          
+          Business Context:
+          - Used for claim processing workflow tracking
+          - Critical for understanding claim processing timeline
+          - Enables workflow analysis and process optimization
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: snapshot_status
+        description: >
+          Status from the claim snapshot
+          
+          Business Context:
+          - Historical claim status for audit and compliance tracking
+          - Used for status change analysis and workflow monitoring
+          - Critical for understanding claim processing history
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: tracking_status
+        description: >
+          Status from the claim tracking event
+          
+          Business Context:
+          - Current tracking status for workflow monitoring
+          - Used for claim processing analysis and optimization
+          - Critical for understanding claim processing workflow
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: procedure_code
+        description: >
+          Procedure code for the claim
+          
+          Business Context:
+          - Links to procedure code information
+          - Used for procedure-specific analysis and reporting
+          - Critical for billing accuracy and procedure tracking
+        tests:
+          - not_null
+
+      - name: code_prefix
+        description: >
+          Prefix for the procedure code
+          
+          Business Context:
+          - Used for procedure code categorization
+          - Critical for procedure grouping and analysis
+          - Enables procedure code hierarchy analysis
+        tests:
+          - not_null
+
+      - name: procedure_description
+        description: >
+          Full description of the procedure
+          
+          Business Context:
+          - Used for procedure identification and reporting
+          - Critical for procedure analysis and documentation
+          - Enables procedure-specific reporting and analysis
+        tests:
+          - not_null
+
+      - name: abbreviated_description
+        description: >
+          Abbreviated description of the procedure
+          
+          Business Context:
+          - Used for procedure identification in reports
+          - Critical for space-constrained reporting
+          - Enables concise procedure reporting
+        tests:
+          - not_null
+
+      - name: procedure_time
+        description: >
+          Time required for the procedure
+          
+          Business Context:
+          - Used for procedure scheduling and resource planning
+          - Critical for operational efficiency analysis
+          - Enables procedure time analysis and optimization
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: procedure_category_id
+        description: >
+          Category ID for the procedure
+          
+          Business Context:
+          - Links to procedure category information
+          - Used for procedure categorization and analysis
+          - Critical for procedure grouping and reporting
+        tests:
+          - not_null
+
+      - name: treatment_area
+        description: >
+          Area of treatment for the procedure
+          
+          Business Context:
+          - Used for treatment area analysis and reporting
+          - Critical for treatment planning and analysis
+          - Enables treatment area-specific reporting
+        tests:
+          - not_null
+
+      - name: is_prosthetic
+        description: >
+          Flag indicating if the procedure is prosthetic
+          
+          Business Context:
+          - Used for prosthetic procedure identification
+          - Critical for prosthetic analysis and reporting
+          - Enables prosthetic-specific analysis
+        tests:
+          - not_null
+
+      - name: is_hygiene
+        description: >
+          Flag indicating if the procedure is hygiene-related
+          
+          Business Context:
+          - Used for hygiene procedure identification
+          - Critical for hygiene analysis and reporting
+          - Enables hygiene-specific analysis
+        tests:
+          - not_null
+
+      - name: base_units
+        description: >
+          Base units for the procedure
+          
+          Business Context:
+          - Used for procedure unit calculation
+          - Critical for billing accuracy and procedure tracking
+          - Enables unit-based analysis and reporting
+        tests:
+          - not_null
+
+      - name: is_radiology
+        description: >
+          Flag indicating if the procedure is radiology-related
+          
+          Business Context:
+          - Used for radiology procedure identification
+          - Critical for radiology analysis and reporting
+          - Enables radiology-specific analysis
+        tests:
+          - not_null
+
+      - name: no_bill_insurance
+        description: >
+          Flag indicating if the procedure should not be billed to insurance
+          
+          Business Context:
+          - Used for billing determination
+          - Critical for billing accuracy and revenue recognition
+          - Enables billing-specific analysis
+        tests:
+          - not_null
+
+      - name: default_claim_note
+        description: >
+          Default note for the claim
+          
+          Business Context:
+          - Used for claim documentation
+          - Critical for claim processing and documentation
+          - Enables claim note analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: medical_code
+        description: >
+          Medical code for the procedure
+          
+          Business Context:
+          - Used for medical coding and billing
+          - Critical for billing accuracy and compliance
+          - Enables medical code analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: diagnostic_codes
+        description: >
+          Diagnostic codes for the procedure
+          
+          Business Context:
+          - Used for diagnostic coding and billing
+          - Critical for billing accuracy and compliance
+          - Enables diagnostic code analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: plan_type
+        description: >
+          Type of insurance plan
+          
+          Business Context:
+          - Used for plan type analysis and reporting
+          - Critical for plan-specific analysis
+          - Enables plan type-specific reporting
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: group_number
+        description: >
+          Group number for the insurance plan
+          
+          Business Context:
+          - Used for group identification and reporting
+          - Critical for group-specific analysis
+          - Enables group-specific reporting
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: group_name
+        description: >
+          Group name for the insurance plan
+          
+          Business Context:
+          - Used for group identification and reporting
+          - Critical for group-specific analysis
+          - Enables group-specific reporting
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: verification_date
+        description: >
+          Date of insurance verification
+          
+          Business Context:
+          - Used for verification timing analysis
+          - Critical for verification process monitoring
+          - Enables verification timeline analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: benefit_details
+        description: >
+          Details of insurance benefits
+          
+          Business Context:
+          - Used for benefit analysis and reporting
+          - Critical for benefit verification and analysis
+          - Enables benefit-specific reporting
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: verification_status
+        description: >
+          Status of insurance verification
+          
+          Business Context:
+          - Used for verification status tracking
+          - Critical for verification process monitoring
+          - Enables verification status analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: effective_date
+        description: >
+          Effective date of the insurance plan
+          
+          Business Context:
+          - Used for plan effective date analysis
+          - Critical for plan coverage validation
+          - Enables plan timeline analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: termination_date
+        description: >
+          Termination date of the insurance plan
+          
+          Business Context:
+          - Used for plan termination analysis
+          - Critical for plan coverage validation
+          - Enables plan timeline analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -243,50 +944,27 @@ models:
             - procedure_id
             - claim_procedure_id
 
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - claim_id
-            - claim_payment_id
-
     meta:
-      owner: "Data Team"
+      owner: "Insurance Operations Team"
       contains_pii: true
       contains_phi: true
+      business_process: "Insurance Billing and Revenue Cycle Management"
       refresh_frequency: "Daily"
-      business_owner: "Insurance Operations Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This fact table is used for all claim-level analysis and reporting.
-        
-        ## Key Use Cases
-        - Claim analysis
-          * Claim status tracking
-          * Procedure-level analysis
-          * Payment tracking
-          * EOB documentation
-        
-        - Financial analysis
-          * Billed vs paid amounts
-          * Write-off analysis
-          * Patient responsibility
-          * Payment timing
-        
-        - Operational metrics
-          * Claim processing time
-          * Payment receipt time
-          * EOB documentation
-          * Status transitions
-        
-        ## Common Analysis Patterns
-        - Claim status distribution
-        - Payment timing analysis
-        - Procedure-level analysis
-        - EOB documentation tracking
-        - Write-off analysis
-        - Patient responsibility analysis
-        
-        ## Performance Optimization
-        - Use composite key for joins
-        - Leverage pre-calculated metrics
-        - Utilize status fields for filtering
-        - Apply date fields for time-based analysis 
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per claim procedure (composite key: claim_id + procedure_id + claim_procedure_id)"
+      primary_consumers: ["Insurance Operations Team", "Financial Analysis Team", "Revenue Cycle Team"]
+      system_integration: "System A: Financial Management"
+      data_quality_requirements:
+        - "All fact records must have valid dimensional relationships"
+        - "Financial amounts must be non-negative where applicable"
+        - "Date fields must be valid and within business ranges"
+        - "Status transitions must follow business rules"
+        - "Composite keys must be unique"
+        - "Payment amounts must be validated against business rules"
+        - "EOB documentation must be tracked for audit compliance"
+      performance_requirements:
+        - "Model must support daily refresh within 30 minutes"
+        - "Query performance must support real-time dashboard updates"
+        - "Indexes must be optimized for common query patterns"
+        - "Aggregations must be pre-calculated for reporting efficiency" 

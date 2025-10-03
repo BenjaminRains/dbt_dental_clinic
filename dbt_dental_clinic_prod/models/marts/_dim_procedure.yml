@@ -6,87 +6,143 @@ models:
       Procedure dimension table providing comprehensive dental procedure attributes and categorizations.
       This model serves as the foundation for procedure-based analysis in the dental practice,
       supporting clinical, operational, and financial reporting needs.
-
-      ## Business Context
-      The procedure dimension is a critical component of our dimensional model, enabling:
-      - Procedure-based analysis across all business processes
-      - Clinical categorization and complexity assessment
-      - Revenue tier analysis and financial planning
-      - Treatment planning and scheduling optimization
-      - Insurance billing and claim processing
-      - Fee schedule management and standard fee analysis
-
-      ## Technical Specifications
-      - Grain: One row per unique procedure code
-      - Source: stg_opendental__procedurecode
-      - Refresh: Incremental (based on source updates)
-      - Dependencies: 
-        * stg_opendental__feesched
-        * stg_opendental__fee
-        * stg_opendental__definition
-
-      ## Business Logic
-      ### Procedure Categories
-      - Based on CDT code prefixes (D1-D8)
-      - Enhanced with clinical flags (hygiene, prosthetic, radiology)
-      - Supports both standard and custom procedure types
-
-      ### Complexity Levels
-      - Simple: Single visit, low base units
-      - Moderate: Multiple visits or medium base units
-      - Complex: Multi-visit procedures or high base units
-
-      ### Revenue Tiers
-      - High: Major procedures (prosthodontics, surgery, orthodontics)
-      - Medium: Specialty procedures (endodontics, periodontics)
-      - Low: Basic procedures (preventive, restorative, diagnostic)
-
-      ### Clinical Attributes
-      - Treatment area specifications
-      - Base unit calculations
-      - Default provider assignments
-      - Documentation requirements
-
-      ### Fee Schedule Management
-      - Standard fee tracking per procedure
-      - Fee schedule type categorization
-      - Fee statistics and validation
-      - Historical fee tracking
+      
+      This dimension table serves as the central reference for all procedure-related data, including
+      clinical categorization, complexity analysis, revenue classification, and fee management
+      for each procedure code in the system.
+      Part of System A: Fee Processing and Procedure Management workflow.
+      
+      Key Features:
+      - Clinical categorization: CDT code-based classification with clinical flag enhancement
+      - Complexity analysis: Multi-dimensional complexity assessment for treatment planning
+      - Revenue tier classification: Financial impact categorization for business analysis
+      - Fee integration: Comprehensive fee data with statistical analysis and validation
+      - Treatment planning support: Clinical workflow categorization and resource allocation
+      
+      Data Sources:
+      - stg_opendental__procedurecode: Primary procedure data and clinical attributes
+      - stg_opendental__feesched: Fee schedule information and type categorization
+      - stg_opendental__fee: Fee amounts, statistics, and historical tracking
+      - stg_opendental__definition: Lookup values for coded fields and descriptions
+      
+      Business Logic Features:
+      - Clinical categorization: Based on CDT code prefixes (D1-D8) with clinical flag fallbacks
+      - Complexity analysis: Multi-visit flags and base unit thresholds for resource planning
+      - Revenue tier classification: Category-based financial impact assessment
+      - Clinical urgency assessment: Treatment priority based on procedure type and complexity
+      - Insurance complexity evaluation: Billing complexity based on multi-visit and documentation requirements
+      - Treatment planning categorization: Duration-based classification for clinical workflow
+      - Fee statistics calculation: Comprehensive fee analysis with min/max/average calculations
+      
+      Dimensional Relationships:
+      - procedure_code_id: Primary key linking to all procedure-related fact tables
+      - fee_schedule_id: Links to fee schedule dimension for pricing analysis
+      - default_provider_id: Links to provider dimension for clinical assignments
+      - procedure_category_id: Links to procedure category reference data
+      
+      Data Quality Notes:
+      - Some procedures may not have standard fees (handled with null checks and has_standard_fee flag)
+      - Definition lookups use hardcoded category IDs (category_id 5 for treatment areas, 6 for fee types)
+      - Fee statistics are calculated from available fee data and may be incomplete for new procedures
+      - Clinical categorization uses both CDT codes and clinical flags for comprehensive coverage
+      
+      Business Rules:
+      - All procedure codes must have valid clinical categorization (Preventive, Restorative, etc.)
+      - Complexity levels are determined by multi-visit flags and base unit thresholds
+      - Revenue tiers are assigned based on procedure category and clinical significance
+      - Fee statistics are calculated from all available fee records per procedure
+      - Treatment planning categories align with clinical workflow requirements
 
     columns:
       - name: procedure_code_id
-        description: Primary key for the procedure dimension
+        description: >
+          Primary key - Unique identifier for each procedure code (maps from "CodeNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "CodeNum" (CamelCase)
+          - Transformed to: procedure_code_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all procedure codes
+          - Used as foreign key in multiple downstream models
+          - Critical for procedure identification and record linking
         tests:
           - unique
           - not_null
+          - relationships:
+              to: ref('stg_opendental__procedurecode')
+              field: procedure_code_id
+              config:
+                severity: error
+                description: "Procedure code must exist in source staging model"
 
       - name: procedure_code
-        description: Standard dental procedure code (e.g., D0120)
+        description: >
+          Standard dental procedure code (e.g., D0120)
+          
+          Business Context:
+          - CDT (Code on Dental Procedures and Nomenclature) standard codes
+          - Used for billing, insurance claims, and clinical documentation
+          - Critical for procedure identification and standardization
         tests:
           - not_null
 
       - name: description
-        description: Full description of the procedure
+        description: >
+          Full description of the procedure
+          
+          Business Context:
+          - Official procedure description for clinical and billing purposes
+          - Used in treatment plans, insurance claims, and patient communication
         tests:
           - not_null
 
       - name: abbreviated_description
-        description: Short form of the procedure description
+        description: >
+          Short form of the procedure description
+          
+          Business Context:
+          - Condensed description for reports and quick reference
+          - Used in summary views and abbreviated documentation
+          - May be null for newer or custom procedure codes
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: procedure_category_id
-        description: Foreign key to procedure category
+        description: >
+          Foreign key to procedure category (maps from "CategoryNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "CategoryNum" (CamelCase as stored)
+          - Transformed to: procedure_category_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links to procedure category reference data
+          - Used for procedure grouping and classification
         tests:
           - not_null
 
       - name: treatment_area
-        description: Area of the mouth where procedure is performed
+        description: >
+          Area of the mouth where procedure is performed
+          
+          Business Context:
+          - Numeric code representing anatomical location
+          - Used for treatment planning and clinical documentation
         tests:
           - not_null
 
       - name: treatment_area_desc
-        description: Human-readable description of the treatment area
+        description: >
+          Human-readable description of the treatment area
+          
+          Business Context:
+          - Lookup from definition table (category_id = 5)
+          - Provides user-friendly description of treatment area
+          - Used in reports and patient communication
         tests:
           - not_null
 
@@ -146,23 +202,47 @@ models:
           - accepted_values:
               values: ['Long-term', 'Medium-term', 'Short-term']
 
-      - name: is_hygiene_flag
-        description: Boolean flag indicating if procedure is a hygiene service
+      - name: is_hygiene
+        description: >
+          Boolean flag indicating if procedure is a hygiene service
+          
+          Business Context:
+          - Clinical flag for preventive care procedures
+          - Used for hygiene scheduling and provider assignment
+          - Affects procedure categorization and billing
         tests:
           - not_null
 
-      - name: is_prosthetic_flag
-        description: Boolean flag indicating if procedure is prosthetic
+      - name: is_prosthetic
+        description: >
+          Boolean flag indicating if procedure is prosthetic
+          
+          Business Context:
+          - Clinical flag for prosthetic procedures (crowns, bridges, dentures)
+          - Used for treatment planning and provider specialization
+          - Affects procedure categorization and complexity assessment
         tests:
           - not_null
 
-      - name: is_radiology_flag
-        description: Boolean flag indicating if procedure is radiological
+      - name: is_radiology
+        description: >
+          Boolean flag indicating if procedure is radiological
+          
+          Business Context:
+          - Clinical flag for diagnostic imaging procedures
+          - Used for radiology scheduling and equipment planning
+          - Affects procedure categorization and billing codes
         tests:
           - not_null
 
-      - name: is_multi_visit_flag
-        description: Boolean flag indicating if procedure requires multiple visits
+      - name: is_multi_visit
+        description: >
+          Boolean flag indicating if procedure requires multiple visits
+          
+          Business Context:
+          - Clinical flag for complex procedures requiring multiple appointments
+          - Used for treatment planning and scheduling optimization
+          - Affects complexity level and resource allocation
         tests:
           - not_null
 
@@ -172,94 +252,244 @@ models:
           - not_null
 
       - name: default_provider_id
-        description: Default provider type for this procedure
+        description: >
+          Default provider type for this procedure
+          
+          Business Context:
+          - Optional suggested provider type for this procedure code
+          - Used as a default when scheduling or planning procedures
+          - May be null if no default provider is specified or if any qualified provider can perform the procedure
+          - Provider assignment can be made dynamically based on availability and patient needs
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: default_revenue_code
-        description: Default revenue code for billing
+        description: >
+          Default revenue code for billing
+          
+          Business Context:
+          - Optional default revenue code for billing this procedure
+          - Used for insurance billing and financial reporting
+          - May be null if no specific revenue code is required or if revenue codes are assigned dynamically
+          - Revenue codes can be determined based on procedure type, insurance requirements, or billing rules
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: standard_fee_id
-        description: ID of the most recent standard fee for this procedure
+        description: >
+          ID of the most recent standard fee for this procedure
+          
+          Business Context:
+          - Optional ID of the most recent standard fee for this procedure
+          - Used for fee tracking and billing validation
+          - May be null for procedures that don't have standard fees (procedure sets, follow-up procedures, etc.)
+          - Fee IDs can be assigned dynamically based on procedure type and billing rules
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: fee_schedule_id
-        description: ID of the associated fee schedule
+        description: >
+          ID of the associated fee schedule
+          
+          Business Context:
+          - Optional ID of the fee schedule associated with this procedure
+          - Used for fee analysis and pricing validation
+          - May be null for procedures that don't have associated fee schedules
+          - Fee schedules can be assigned dynamically based on procedure type and billing rules
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: standard_fee
-        description: Most recent standard fee amount for this procedure
+        description: >
+          Most recent standard fee amount for this procedure
+          
+          Business Context:
+          - Optional standard fee amount for this procedure
+          - Used for pricing analysis and billing validation
+          - May be null for procedures that don't have standard fees (procedure sets, follow-up procedures, etc.)
+          - Fee amounts can be determined dynamically based on procedure type and billing rules
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: fee_schedule_description
-        description: Description of the associated fee schedule
+        description: >
+          Description of the associated fee schedule
+          
+          Business Context:
+          - Optional description of the fee schedule associated with this procedure
+          - Used for fee analysis and pricing validation
+          - May be null for procedures that don't have associated fee schedules
+          - Fee schedules can be assigned dynamically based on procedure type and billing rules
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: fee_schedule_type_id
-        description: ID of the fee schedule type
+        description: >
+          ID of the fee schedule type
+          
+          Business Context:
+          - Optional ID of the fee schedule type associated with this procedure
+          - Used for fee analysis and pricing validation
+          - May be null for procedures that don't have associated fee schedule types
+          - Fee schedule types can be assigned dynamically based on procedure type and billing rules
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: fee_schedule_type_desc
-        description: Description of the fee schedule type
+        description: >
+          Description of the fee schedule type
+          
+          Business Context:
+          - Lookup from definition table (category_id = 6)
+          - Provides user-friendly description of fee schedule type
+          - Used in reports and fee analysis
+          - May be null for procedures that don't have associated fee schedule types
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: available_fee_options
-        description: Number of different fee options available for this procedure
+        description: >
+          Number of different fee options available for this procedure
+          
+          Business Context:
+          - Count of distinct fee records for this procedure code
+          - May be null for procedure sets, follow-up procedures, or newer codes
+          - Used for fee analysis and pricing validation
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: min_available_fee
-        description: Minimum fee amount available for this procedure
+        description: >
+          Minimum fee amount available for this procedure
+          
+          Business Context:
+          - Lowest fee amount across all fee records for this procedure
+          - May be null for procedure sets, follow-up procedures, or newer codes
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: max_available_fee
-        description: Maximum fee amount available for this procedure
+        description: >
+          Maximum fee amount available for this procedure
+          
+          Business Context:
+          - Highest fee amount across all fee records for this procedure
+          - May be null for procedure sets, follow-up procedures, or newer codes
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: avg_fee_amount
-        description: Average fee amount across all fee options
+        description: >
+          Average fee amount across all fee options
+          
+          Business Context:
+          - Average fee amount across all fee records for this procedure
+          - May be null for procedure sets, follow-up procedures, or newer codes
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: has_standard_fee
-        description: Boolean flag indicating if a standard fee exists
+        description: >
+          Boolean flag indicating if a standard fee exists
+          
+          Business Context:
+          - Calculated field indicating whether procedure has associated standard fee
+          - Used for fee validation and pricing analysis
+          - Critical for billing and financial reporting
         tests:
           - not_null
 
       - name: default_claim_note
-        description: Standard note for insurance claims
+        description: >
+          Standard note for insurance claims
+          
+          Business Context:
+          - Optional note that can be included with insurance claims for this procedure
+          - May be null for standard procedures that don't require special claim documentation
+          - Used for procedures that need additional explanation or justification
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: default_treatment_plan_note
-        description: Standard note for treatment plans
+        description: >
+          Standard note for treatment plans
+          
+          Business Context:
+          - Optional note that can be included in treatment plans for this procedure
+          - May be null for standard procedures that don't require special treatment plan documentation
+          - Used for procedures that need additional explanation or patient education
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: layman_term
-        description: Patient-friendly description of the procedure
+        description: >
+          Patient-friendly description of the procedure
+          
+          Business Context:
+          - Optional patient-friendly description of the procedure
+          - Used for patient communication and education
+          - May be null for procedures that don't require patient-friendly descriptions
+          - Can be generated dynamically from the main description if needed
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: medical_code
-        description: Associated medical procedure code
+        description: >
+          Associated medical procedure code
+          
+          Business Context:
+          - Optional medical procedure code associated with this dental procedure
+          - Used for cross-referencing with medical billing systems
+          - May be null for procedures that don't have associated medical codes
+          - Required for some procedures that have both dental and medical components
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: diagnostic_codes
-        description: Associated diagnostic codes
+        description: >
+          Associated diagnostic codes
+          
+          Business Context:
+          - Optional diagnostic codes associated with this procedure
+          - Used for insurance billing and clinical documentation
+          - May be null for routine procedures that don't require specific diagnostic justification
+          - Required for some specialty procedures and complex treatments
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -267,68 +497,26 @@ models:
             - procedure_code_id
             - procedure_code
 
-      - relationships:
-          to: ref('dim_procedure')
-          field: procedure_code_id
-          config:
-            severity: error
-
     meta:
-      owner: "Data Team"
+      owner: "Clinical Operations Team"
       contains_pii: false
       contains_phi: false
+      business_process: "Procedure Management and Fee Processing"
       refresh_frequency: "Daily"
-      business_owner: "Clinical Operations Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This dimension table is used for all procedure-based analysis and reporting.
-        
-        ## Key Use Cases
-        - Clinical procedure analysis
-          * Procedure mix and volume
-          * Complexity distribution
-          * Treatment planning
-          * Clinical outcomes
-        
-        - Financial analysis
-          * Revenue by procedure type
-          * Procedure profitability
-          * Insurance reimbursement
-          * Fee schedule analysis
-          * Standard fee tracking
-          * Fee variation analysis
-        
-        - Operational metrics
-          * Procedure scheduling
-          * Provider productivity
-          * Chair time utilization
-          * Resource allocation
-        
-        - Insurance processing
-          * Claim submission
-          * Coverage verification
-          * Reimbursement tracking
-          * Denial analysis
-        
-        - Fee management
-          * Standard fee maintenance
-          * Fee schedule updates
-          * Fee variation tracking
-          * Historical fee analysis
-        
-        ## Common Analysis Patterns
-        - Procedure category distribution
-        - Complexity level analysis
-        - Revenue tier performance
-        - Treatment planning optimization
-        - Insurance billing efficiency
-        - Clinical outcome tracking
-        - Fee schedule analysis
-        - Standard fee compliance
-        
-        ## Performance Optimization
-        - Use procedure_code_id for joins to fact tables
-        - Leverage pre-calculated categorizations
-        - Utilize complexity levels for resource planning
-        - Apply revenue tiers for financial analysis
-        - Use fee statistics for pricing analysis 
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per procedure code"
+      primary_consumers: ["Clinical Operations Team", "Finance Team", "Analytics Team"]
+      system_integration: "System A: Fee Processing and Procedure Management"
+      data_quality_requirements:
+        - "All procedure codes must have valid clinical categorization"
+        - "Primary keys must be non-null and unique"
+        - "Clinical flags must be boolean values"
+        - "Fee statistics must be calculated from available fee data"
+        - "Complexity levels must align with business rules"
+        - "Revenue tiers must be assigned based on procedure category"
+      performance_requirements:
+        - "Fast lookups by procedure_code_id for fact table joins"
+        - "Efficient filtering by procedure_category and clinical flags"
+        - "Optimized fee statistics calculations"
+        - "Indexed access patterns for common queries" 

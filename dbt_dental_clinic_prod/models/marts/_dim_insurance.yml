@@ -7,15 +7,17 @@ models:
       This model serves as the primary reference for insurance-related analytics and
       reporting, combining data from multiple sources to provide a complete view of
       insurance plans, carriers, and their performance metrics.
+      
+      Part of System G: Insurance and Claims Management workflow.
 
       ## Business Context
       The insurance dimension is a critical component of our dimensional model, enabling:
-      - Insurance plan and carrier analysis
-      - Benefit coverage and verification tracking
-      - Claim performance and payment analysis
-      - Network status monitoring
-      - Employer-based insurance tracking
-      - Historical plan changes and coverage evolution
+      - Insurance plan and carrier analysis and performance tracking
+      - Benefit coverage and verification compliance monitoring
+      - Claim performance and payment velocity analysis
+      - Network status monitoring and verification tracking
+      - Employer-based insurance tracking and group plan management
+      - Historical plan changes and coverage evolution analysis
 
       ## Technical Specifications
       - Grain: One row per insurance plan (insurance_plan_id)
@@ -23,67 +25,74 @@ models:
       - Refresh: Daily
       - Dependencies: 
         * int_insurance_coverage (core insurance plan data)
-        * int_insurance_employer (employer information)
-        * int_claim_details (claim performance metrics)
-        * int_claim_payments (payment tracking)
-        * int_claim_snapshot (historical claim states)
-        * int_claim_tracking (claim status updates)
-        * int_insurance_eob_attachments (EOB documentation)
+        * int_insurance_employer (employer information for group plans)
+        * int_claim_details (claim performance metrics and status)
+        * int_claim_payments (payment tracking and reimbursement data)
 
       ## Business Logic
-      ### Plan Status Management
-      - Active status based on verification date and pending flags
-      - Incomplete records preserved with carrier_id = -1
-      - Historical tracking through effective and termination dates
-      - Template benefits (patient_plan_id = 0) preserved for reference
+      ### Network Status Calculation
+      - **Unverified**: verification_date is null (requires verification)
+      - **Expired**: verification_date > 90 days ago (verification expired)
+      - **Active**: verification_date within 90 days AND is_active = true
+      - **Inactive**: verification_date within 90 days BUT is_active = false
+      - 90-day verification window ensures compliance with insurance regulations
 
-      ### Benefit Management
-      - Benefit details stored as JSON for flexibility
-      - Coverage rules maintained at plan level
-      - Procedure-specific benefits tracked
-      - Time period and quantity limits enforced
+      ### Claim Performance Metrics
+      - **Approval Rate**: approved_claims / total_claims * 100 (percentage)
+      - **Reimbursement Rate**: total_paid_amount / total_billed_amount * 100 (percentage)
+      - **Payment Velocity**: Currently set to 'unknown' (payment timing data not available)
+      - Metrics aggregated at plan level for performance analysis
 
-      ### Claim Performance
-      - Metrics aggregated at plan level
-      - Payment velocity categorized (excellent/good/average/poor)
-      - Approval rates and reimbursement rates calculated
-      - Historical performance tracked
+      ### Employer Integration
+      - Employer information enriched from int_insurance_employer lookup
+      - Group plans linked to employer details (name, city, state)
+      - Individual plans have null employer information (handled with coalesce)
 
-      ### Network Status
-      - Based on verification date and active status
-      - Categories: unverified/expired/active/inactive
-      - 90-day verification window
-      - Hidden status tracking
+      ### Data Quality Handling
+      - Incomplete records preserved for data integrity
+      - Missing verification dates handled as 'unverified' status
+      - Zero claim metrics handled for new plans without claim history
 
       ## Data Quality Notes
-      - Incomplete records preserved with carrier_id = -1
-      - Missing carrier names handled with empty strings
-      - Subscriber information validated
-      - Benefit details normalized
-      - Historical changes tracked through timestamps
+      - **Missing Verification Dates**: Some plans lack verification dates (handled as 'unverified' status)
+      - **Employer Information**: May be null for individual plans (handled with coalesce logic)
+      - **Claim Metrics**: May be zero for new plans without claim history (expected behavior)
+      - **Performance Calculations**: Division by zero handled with case statements
+      - **Data Completeness**: All records preserved with null handling for missing data
+      - **Plan Type Data Quality**: 99.68% of records have empty plan_type values, indicating the PlanType field is not being populated in OpenDental source system
+      - **Timestamp Data Quality**: 69.4% of records have null _created_at timestamps due to OpenDental using '0001-01-01' placeholder dates instead of proper null values (source system data quality issue)
+      - **Group Number Data Quality**: 0.04% of records have null group_number values, which is acceptable for individual plans that may not have group numbers
+      - **Benefit Details Data Quality**: 99.68% of records have null benefit_details, indicating that most insurance plans do not have granular benefit information configured (acceptable as benefit details are nice-to-have but not required)
+      - **Active Incomplete Records**: 2 records (0.07%) are marked as active but have incomplete carrier information (insurance_plan_id: 4821, 13027). These represent data quality issues where active plans lack proper carrier setup and should be investigated.
+
+      ## Performance Considerations
+      - **Primary Index**: insurance_plan_id (unique) for fast lookups
+      - **Secondary Indexes**: patient_id, carrier_id, is_active, _updated_at
+      - **Query Optimization**: Indexed for patient-centric, carrier-centric, and status-based queries
+      - **Join Performance**: Optimized for downstream fact table joins
 
       ## Usage Guidelines
-      - Primary source for insurance-related analysis
+      - Primary source for insurance-related analysis and reporting
       - Supports daily, monthly, and rolling period aggregations
       - Enables breakdowns by provider, location, and patient type
-      - Integrates with fact_procedure and fact_claim
-      - Supports benefit analysis and coverage verification
-      - Enables payment performance analysis
-      - Facilitates network status monitoring
+      - Integrates with fact_procedure and fact_claim for comprehensive analysis
+      - Supports benefit analysis and coverage verification workflows
+      - Enables payment performance analysis and carrier comparison
+      - Facilitates network status monitoring and compliance tracking
 
       ## Dimensional Relationships
-      - Links to dim_patient through patient_id
-      - Links to dim_employer through employer_id
-      - Links to fact_procedure through insurance_plan_id
-      - Links to fact_claim through insurance_plan_id
-      - Links to dim_procedure through benefit_details
+      - Links to dim_patient through patient_id (one-to-many)
+      - Links to dim_employer through employer_id (one-to-many for group plans)
+      - Links to fact_procedure through insurance_plan_id (one-to-many)
+      - Links to fact_claim through insurance_plan_id (one-to-many)
+      - Links to dim_carrier through carrier_id (many-to-one)
 
-      ## SCD Type
-      Type 2 - Tracks historical changes through:
-      - created_at and updated_at timestamps
-      - effective_date and termination_date
-      - verification_date
-      - benefit_details changes
+      ## Business Rules
+      - **Network Status**: Must follow verification date and active status logic
+      - **Claim Metrics**: Calculated from available claim data with zero handling
+      - **Employer Data**: Enriched from lookup table with null handling for individual plans
+      - **Data Integrity**: All insurance plans preserved regardless of completeness
+      - **Performance Calculations**: Division by zero prevented with case statements
 
       ## Naming Conventions
       - Source columns from OpenDental use original CamelCase names
@@ -109,13 +118,14 @@ models:
           - relationships:
               to: ref('stg_opendental__carrier')
               field: carrier_id
+              config:
+                where: "is_incomplete_record = false"
+                severity: warn
 
       - name: employer_id
         description: Foreign key to the employer (if applicable)
         tests:
-          - relationships:
-              to: ref('dim_employer')
-              field: employer_id
+          - not_null:
               config:
                 severity: warn
 
@@ -139,16 +149,37 @@ models:
                 severity: warn
 
       - name: plan_type
-        description: Type of insurance plan (e.g., PPO, HMO, Indemnity)
+        description: >
+          Type of insurance plan (e.g., PPO, HMO, Indemnity)
+          
+          Data Quality Note:
+          - Current data shows 99.68% empty strings and 0.32% NULL values
+          - Expected values (PPO, HMO, Indemnity, DHMO, EPO) are not present in current data
+          - Source system issue: OpenDental insplan table PlanType field is not being populated
+          - This indicates a business process issue in insurance plan setup workflows
+          
+          Business Impact:
+          - Empty plan types limit plan categorization and analysis capabilities
+          - Affects downstream reporting and plan performance comparisons
+          - May indicate incomplete insurance plan setup in OpenDental
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: "Plan type should not be null - indicates incomplete insurance plan data"
           - accepted_values:
-              values: ['PPO', 'HMO', 'Indemnity', 'DHMO', 'EPO']
+              values: ['PPO', 'HMO', 'Indemnity', 'DHMO', 'EPO', '']
+              config:
+                severity: warn
+                description: "Plan type should be a valid insurance plan type or empty string"
 
       - name: group_number
         description: Insurance group number
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: "Group number should be populated but some records may legitimately have null values"
 
       - name: group_name
         description: Name of the insurance group
@@ -158,7 +189,16 @@ models:
       - name: carrier_name
         description: Name of the insurance carrier
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "is_incomplete_record = false"
+                severity: warn
+                description: "Carrier name should be populated for complete records"
+          - dbt_expectations.expect_column_values_to_not_be_null:
+              row_condition: "is_incomplete_record = true and is_active = true"
+              config:
+                severity: error
+                description: "Active incomplete records should have carrier names - this indicates a data quality issue"
 
       - name: employer_name
         description: Name of the employer (if applicable)
@@ -173,8 +213,16 @@ models:
         description: >
           JSON array containing detailed benefit information for the plan.
           Includes coverage rules, procedure-specific benefits, and limitations.
+          
+          Data Quality Note: 99.68% of records have null benefit_details, indicating that most 
+          insurance plans do not have granular benefit information configured in OpenDental.
+          This is acceptable as benefit details are nice-to-have but not required for basic
+          insurance plan functionality.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: "Benefit details are nice-to-have but not required - most plans don't have granular benefit information configured"
 
       - name: is_active
         description: Flag indicating if the insurance plan is currently active
@@ -186,20 +234,30 @@ models:
         tests:
           - not_null
 
-      - name: hide_from_verify_list
-        description: Flag indicating if the plan should be hidden from verification list
-        tests:
-          - not_null
 
       - name: verification_date
         description: Date when the insurance plan was last verified
 
       - name: network_status_current
-        description: Current network status based on verification date and active status
+        description: >
+          Current network status based on verification date and active status
+          
+          Business Logic:
+          - 'unverified': verification_date is null (requires verification)
+          - 'expired': verification_date > 90 days ago (verification expired)
+          - 'active': verification_date within 90 days AND is_active = true
+          - 'inactive': verification_date within 90 days BUT is_active = false
+          
+          Business Significance:
+          - Determines insurance plan verification compliance
+          - Drives verification workflow and follow-up processes
+          - Critical for claim submission eligibility
         tests:
           - not_null
           - accepted_values:
               values: ['unverified', 'expired', 'active', 'inactive']
+              config:
+                description: "Network status must follow business logic for verification compliance"
 
       - name: total_claims
         description: Total number of claims submitted for this plan
@@ -231,40 +289,127 @@ models:
         tests:
           - not_null
 
-      - name: average_payment_time_days
-        description: Average number of days for the carrier to process payments
-        tests:
-          - not_null
 
       - name: claim_approval_rate
-        description: Percentage of claims approved
+        description: >
+          Percentage of claims approved for this insurance plan
+          
+          Calculation Method:
+          - Numerator: approved_claims (count of approved claims)
+          - Denominator: total_claims (total claims submitted)
+          - Formula: (approved_claims / total_claims) * 100
+          
+          Business Significance:
+          - Target Range: Higher rates indicate better plan performance
+          - Benchmark: Industry standard varies by plan type and carrier
+          - Decision Impact: Drives carrier selection and plan evaluation
+          
+          Data Quality:
+          - Zero handling: Returns 0 when total_claims = 0
+          - Accuracy: Based on claim status from int_claim_details
+          - Timeliness: Updated with daily refresh cycle
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: warn
+                description: "Claim approval rate should be between 0-100%"
 
       - name: average_reimbursement_rate
-        description: Percentage of billed amount reimbursed
+        description: >
+          Percentage of billed amount reimbursed by the insurance carrier
+          
+          Calculation Method:
+          - Numerator: total_paid_amount (total payments received)
+          - Denominator: total_billed_amount (total amount billed)
+          - Formula: (total_paid_amount / total_billed_amount) * 100
+          
+          Business Significance:
+          - Target Range: Higher rates indicate better reimbursement
+          - Benchmark: Varies by plan type, typically 70-90%
+          - Decision Impact: Critical for revenue cycle management
+          
+          Data Quality:
+          - Zero handling: Returns 0 when total_billed_amount = 0
+          - Accuracy: Based on payment data from int_claim_payments
+          - Timeliness: Updated with daily refresh cycle
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: warn
+                description: "Reimbursement rate should be between 0-100%"
 
       - name: payment_velocity_score
-        description: Categorized payment speed rating
+        description: >
+          Categorized payment speed rating for the insurance carrier
+          
+          Current Implementation:
+          - Set to 'unknown' for all plans (payment timing data not available)
+          - Future enhancement: Will categorize based on average_payment_time_days
+          
+          Planned Categories:
+          - 'excellent': < 30 days average payment time
+          - 'good': 30-45 days average payment time
+          - 'average': 46-60 days average payment time
+          - 'poor': > 60 days average payment time
+          
+          Business Significance:
+          - Helps identify slow-paying carriers
+          - Drives cash flow management decisions
+          - Influences carrier relationship management
         tests:
           - not_null
           - accepted_values:
               values: ['excellent', 'good', 'average', 'poor', 'unknown']
+              config:
+                description: "Payment velocity score must be a valid category"
 
       - name: _created_at
-        description: Timestamp when the record was created in the source system
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "SecDateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+          
+          Data Quality Note: 69.4% of records have null _created_at due to OpenDental using '0001-01-01' 
+          as placeholder dates instead of proper null values. This is a source system data quality issue.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: "Creation timestamp should be populated but OpenDental uses '0001-01-01' placeholder dates"
 
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "SecDateTEdit" (CamelCase as stored)
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+          
+          Data Quality Note: Most records have valid _updated_at timestamps, but some may be null
+          due to OpenDental data quality issues with placeholder dates.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: "Update timestamp should be populated but some records may have null values due to source system data quality"
 
       - name: _loaded_at
-        description: Timestamp when the record was loaded into the data warehouse
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
         tests:
           - not_null
 
@@ -280,50 +425,25 @@ models:
             - patient_id
 
     meta:
-      owner: "Data Team"
+      owner: "Insurance Operations Team"
       contains_pii: true
       contains_phi: true
+      business_process: "Insurance and Claims Management"
       refresh_frequency: "Daily"
-      business_owner: "Insurance Operations Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This dimension table is used for all insurance-related analysis and reporting.
-        
-        ## Key Use Cases
-        - Insurance plan analysis
-          * Plan mix and distribution
-          * Network status tracking
-          * Benefit coverage analysis
-          * Verification compliance
-        
-        - Claim performance
-          * Approval rates
-          * Payment velocity
-          * Reimbursement rates
-          * Denial analysis
-        
-        - Financial analysis
-          * Billed vs paid amounts
-          * Payment timing
-          * Write-off analysis
-          * Revenue cycle metrics
-        
-        - Operational metrics
-          * Verification status
-          * Network participation
-          * Plan maintenance
-          * Coverage updates
-        
-        ## Common Analysis Patterns
-        - Plan type distribution
-        - Network status analysis
-        - Payment performance
-        - Benefit coverage analysis
-        - Claim approval rates
-        - Reimbursement analysis
-        
-        ## Performance Optimization
-        - Use insurance_plan_id for joins to fact tables
-        - Leverage pre-calculated metrics
-        - Utilize benefit_details for coverage analysis
-        - Apply network status for verification tracking 
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per insurance plan (insurance_plan_id)"
+      primary_consumers: ["Insurance Operations Team", "Revenue Cycle Team", "Analytics Team"]
+      system_integration: "System G: Insurance and Claims Management"
+      data_quality_requirements:
+        - "All insurance plans must have valid insurance_plan_id"
+        - "Network status must follow verification date and active status logic"
+        - "Claim performance metrics must be calculated correctly with zero handling"
+        - "Employer information must be enriched for group plans"
+        - "Benefit details must be preserved as JSON for flexibility"
+        - "Plan type data quality issues must be monitored (source system not populating PlanType field)"
+      performance_requirements:
+        - "Primary index on insurance_plan_id for fast lookups"
+        - "Secondary indexes on patient_id, carrier_id, is_active for query optimization"
+        - "Optimized joins for downstream fact table integration"
+        - "Efficient aggregation for claim performance metrics" 

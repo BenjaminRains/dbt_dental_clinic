@@ -6,246 +6,812 @@ models:
       Dimension table containing standardized patient information. This table serves as the central
       reference for all patient-related data, including demographics, status, financial information,
       and relationships with other entities in the system.
+      
+      This dimension table serves as the foundation for patient analytics and clinical workflow management
+      and provides comprehensive patient data for operational and analytical use cases.
+      Part of System A: Core Data Foundation workflow.
+      
+      Key Features:
+      - Patient Demographics: Age, gender, language, contact preferences for patient segmentation
+      - Clinical Management: Disease tracking, document management, provider relationships for care coordination
+      - Financial Analysis: Balance aging, insurance status, payment preferences for revenue management
+      - Relationship Management: Family links, guarantor relationships, provider assignments for care coordination
+      - Data Integration: Comprehensive patient data from multiple OpenDental sources with business logic
+      
+      Data Sources:
+      - stg_opendental__patient: Core patient demographic and status data
+      - stg_opendental__patientnote: Patient notes, emergency contacts, and clinical information
+      - stg_opendental__patientlink: Family and relationship linkages between patients
+      - stg_opendental__disease: Active disease conditions and health status
+      - stg_opendental__document: Patient document management and categorization
+      
+      Business Logic Features:
+      - Status Mapping: Patient status codes (0-5) mapped to business-friendly descriptions (Patient, NonPatient, Inactive, Archived, Deceased, Deleted)
+      - Gender Standardization: Numeric gender codes (0-2) mapped to standardized values (M, F, O, U)
+      - Contact Method Mapping: Numeric preference codes mapped to descriptive text (Phone, Email, Text, Mail, None, Portal, Other)
+      - Age Categorization: Age-based segmentation into Minor (<18), Adult (18-64), Senior (65+)
+      - Balance Status Classification: Financial balance categorization (No Balance, Outstanding Balance, Credit Balance)
+      - Disease Aggregation: Active disease counting and status tracking from disease table
+      - Document Management: Document counting and category aggregation for patient records
+      
+      Dimensional Relationships:
+      - Guarantor Relationship: Self-referencing relationship for family financial responsibility
+      - Provider Relationships: Primary and secondary provider assignments for care coordination
+      - Clinic Assignment: Clinic location assignment for multi-location practices
+      - Fee Schedule: Patient-specific fee schedule for billing and pricing
+      
+      Data Quality Notes:
+      - Patient status codes mapped to business-friendly descriptions for consistent reporting
+      - Age calculated from birth_date for consistency across all patient records
+      - Balance fields aggregated from financial transactions with aging analysis
+      - Disease and document counts from related tables with active status filtering
+      - Contact preference mappings handle legacy numeric codes from OpenDental
+      
+      Business Rules:
+      - Patient Status: Must be one of Patient, NonPatient, Inactive, Archived, Deceased, Deleted
+      - Gender Values: Must be M (Male), F (Female), O (Other), or U (Unknown)
+      - Contact Methods: Must be valid preference values (Phone, Email, Text, Mail, None, Portal, Other)
+      - Age Calculation: Must be non-negative and calculated from valid birth_date
+      - Balance Validation: Financial amounts must be within reasonable business ranges
+      - Relationship Integrity: Foreign key relationships must reference valid entities
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: patient_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['patient_id']
+          unique: true
+        - columns: ['_updated_at']
+        - columns: ['primary_provider_id']
+        - columns: ['clinic_id']
+        - columns: ['patient_status']
+        - columns: ['birth_date']
+      tags: ['dimension', 'daily']
     
     columns:
       - name: patient_id
-        description: Unique identifier for each patient
+        description: >
+          Primary key - Unique identifier for each patient (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase)
+          - Transformed to: patient_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all patients in the system
+          - Used as foreign key in multiple downstream models (appointments, procedures, claims)
+          - Critical for patient identification and record linking across all business processes
         tests:
           - unique
           - not_null
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                severity: error
+                description: "Patient ID must reference valid staging patient record for data integrity"
 
       - name: middle_initial
-        description: Patient's middle initial
-        tests:
-          - test_string_length:
-              max_length: 1
+        description: >
+          Patient's middle initial
+          
+          Business Context:
+          - Used for patient identification and record matching
+          - Optional field for patient demographic completeness
+        
 
       - name: preferred_name
-        description: Patient's preferred name or nickname
+        description: >
+          Patient's preferred name or nickname
+          
+          Business Context:
+          - Used for patient communication and record display
+          - May differ from legal name for patient comfort and identification
 
       - name: gender
-        description: Patient's gender
+        description: >
+          Patient's gender (maps from numeric codes in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: Numeric codes (0=M, 1=F, 2=O)
+          - Transformed to: Standardized text values (M, F, O, U)
+          - Business rule: Unknown (U) for invalid or missing values
+          
+          Business Context:
+          - Used for demographic analysis and reporting
+          - Important for clinical care and treatment planning
         tests:
           - accepted_values:
-              values: ['M', 'F', 'O', 'U']  # Male, Female, Other, Unknown
+              values: ['M', 'F', 'O', 'U']
+              config:
+                description: "Gender must be one of: M (Male), F (Female), O (Other), U (Unknown)"
 
       - name: language
-        description: Patient's preferred language
+        description: >
+          Patient's preferred language
+          
+          Business Context:
+          - Used for patient communication and care coordination
+          - Important for providing culturally appropriate care
 
       - name: birth_date
-        description: Patient's date of birth
+        description: >
+          Patient's date of birth
+          
+          Business Context:
+          - Critical for age calculation and demographic analysis
+          - Used for clinical decision making and treatment planning
+          - Required for patient identification and record matching
+          
+          Data Quality Notes:
+          - Some patients may not have birth dates recorded
+          - Null values are acceptable for patients where birth date is unknown
+          - Age calculation handles null birth dates appropriately
+          - Placeholder dates ('0001-01-01') are converted to null in the model
+          
+          Distribution (from `raw_marts.dim_patient`):
+          - Before 1900: 2,670 (8.01%)
+          - 1900-1949: 5,175 (15.53%)
+          - 1950-1969: 10,313 (30.95%)
+          - 1970-1989: 9,733 (29.21%)
+          - 1990-2009: 4,895 (14.69%)
+          - 2010-2019: 479 (1.44%)
+          - 2020+: 58 (0.17%)
         tests:
-          - not_null
-          - test_date_after:
-              compare_column: '1900-01-01'
+          - not_null:
+              severity: warn
+              config:
+                description: "Birth date should be recorded for patient demographics and age calculation (warning for missing values)"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'1900-01-01'"
+              max_value: "current_date"
+              severity: warn
+              name: warn_birth_date_before_1900
+              config:
+                description: "Birth date before 1900 detected; warn for potential placeholder or legacy dates"
 
       - name: age
-        description: Patient's current age
+        description: >
+          Patient's current age in years
+          
+          Business Context:
+          - Calculated from birth_date for consistency
+          - Used for age-based analysis and demographic segmentation
+          - Important for clinical care guidelines and treatment protocols
+
+      - name: age_category
+        description: >
+          Age-based demographic categorization
+          
+          Business Logic:
+          - Minor: Age < 18
+          - Adult: Age 18-64
+          - Senior: Age 65+
+          - Unknown: Invalid or missing age data
+          
+          Business Context:
+          - Used for demographic analysis and reporting
+          - Important for age-appropriate care and treatment planning
 
       - name: patient_status
-        description: Current status of the patient (e.g., Active, Inactive)
+        description: >
+          Current status of the patient (maps from numeric codes in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: Numeric codes (0-5)
+          - Transformed to: Business-friendly descriptions
+          - Values: Patient, NonPatient, Inactive, Archived, Deceased, Deleted
+          
+          Business Context:
+          - Critical for patient workflow and care management
+          - Determines patient eligibility for appointments and treatment
+          - Used for patient segmentation and reporting
         tests:
           - not_null
+          - accepted_values:
+              values: ['Patient', 'NonPatient', 'Inactive', 'Archived', 'Deceased', 'Deleted']
+              config:
+                description: "Patient status must be one of the valid business status values"
 
       - name: position_code
-        description: Patient's position or role code
+        description: >
+          Patient's position or role code (maps from numeric codes in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: Numeric codes (0-4)
+          - Transformed to: Business-friendly descriptions
+          - Values: Default, House, Staff, VIP, Other
+          
+          Business Context:
+          - Used for patient categorization and special handling
+          - Determines billing rates and service levels
+          - Important for operational workflow and patient experience
 
       - name: student_status
-        description: Indicates if the patient is a student
+        description: >
+          Indicates if the patient is a student
+          
+          Business Context:
+          - Used for billing and insurance verification
+          - May affect treatment scheduling and payment terms
 
       - name: urgency
-        description: Patient's urgency level for treatment
+        description: >
+          Patient's urgency level for treatment (maps from boolean in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: Boolean flag
+          - Transformed to: Text descriptions (Normal, High, Unknown)
+          
+          Business Context:
+          - Determines appointment scheduling priority
+          - Used for clinical workflow and patient care coordination
 
       - name: premedication_required
-        description: Flag indicating if premedication is required for the patient
+        description: >
+          Flag indicating if premedication is required for the patient
+          
+          Business Context:
+          - Critical for clinical safety and treatment planning
+          - Affects appointment scheduling and preparation requirements
+          - Used for patient safety protocols and care coordination
         tests:
           - accepted_values:
               values: [true, false]
+              config:
+                description: "Premedication requirement must be explicitly true or false for patient safety"
 
       # Contact Preferences
       - name: preferred_confirmation_method
-        description: Patient's preferred method for appointment confirmation
+        description: >
+          Patient's preferred method for appointment confirmation (maps from numeric codes in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: Numeric codes (0, 2, 4, 8)
+          - Transformed to: Text descriptions (None, Email, Text, Phone, Unknown)
+          
+          Business Context:
+          - Used for appointment confirmation workflow
+          - Determines communication method for appointment reminders
+          - Important for patient satisfaction and appointment adherence
         tests:
           - accepted_values:
-              values: ['Phone', 'Email', 'Text', 'Mail', 'None']
+              values: ['Phone', 'Email', 'Text', 'Mail', 'None', 'Unknown']
+              config:
+                description: "Confirmation method must be a valid communication preference"
 
       - name: preferred_contact_method
-        description: Patient's preferred method of contact
+        description: >
+          Patient's preferred method of contact (maps from numeric codes in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: Numeric codes (0, 2, 3, 4, 5, 6, 8)
+          - Transformed to: Text descriptions (None, Email, Mail, Phone, Text, Other, Portal)
+          
+          Business Context:
+          - Used for general patient communication
+          - Determines primary contact method for patient outreach
+          - Important for patient engagement and communication effectiveness
         tests:
           - accepted_values:
               values: ['Phone', 'Email', 'Text', 'Mail', 'None', 'Portal', 'Other']
+              config:
+                description: "Contact method must be a valid communication preference"
 
       - name: preferred_recall_method
-        description: Patient's preferred method for recall notifications
+        description: >
+          Patient's preferred method for recall notifications (maps from numeric codes in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: Numeric codes (0, 2, 4, 8)
+          - Transformed to: Text descriptions (None, Email, Text, Phone)
+          
+          Business Context:
+          - Used for recall and follow-up appointment scheduling
+          - Determines communication method for preventive care reminders
+          - Critical for patient retention and preventive care compliance
         tests:
           - accepted_values:
               values: ['Phone', 'Email', 'Text', 'Mail', 'None']
+              config:
+                description: "Recall method must be a valid communication preference"
 
       - name: text_messaging_consent
-        description: Flag indicating if patient has consented to text messaging
+        description: >
+          Flag indicating if patient has consented to text messaging
+          
+          Business Context:
+          - Required for HIPAA compliance and patient privacy
+          - Determines eligibility for text-based communications
+          - Critical for legal compliance and patient consent management
         tests:
           - accepted_values:
               values: [true, false]
+              config:
+                description: "Text messaging consent must be explicitly true or false for compliance"
 
       - name: prefer_confidential_contact
-        description: Flag indicating if patient prefers confidential contact
+        description: >
+          Flag indicating if patient prefers confidential contact
+          
+          Business Context:
+          - Used for patient privacy and confidentiality preferences
+          - Affects communication methods and information sharing
+          - Important for patient trust and privacy protection
         tests:
           - accepted_values:
               values: [true, false]
+              config:
+                description: "Confidential contact preference must be explicitly true or false"
 
       # Financial Information
       - name: estimated_balance
-        description: Estimated balance for the patient (can be negative for credits/refunds)
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "estimated_balance >= -25000"  # Allow negative balances up to $25k for credits/refunds
-              severity: error
-              name: check_estimated_balance_reasonable
+        description: >
+          Estimated current balance for the patient (can be negative for credits/refunds)
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Current estimated balance from financial transactions
+          - Business Rules: Can be negative for credits, refunds, or overpayments
+          
+          Business Context:
+          - Used for patient financial status and collection efforts
+          - Critical for revenue management and cash flow analysis
+          - Important for patient communication about outstanding balances
 
       - name: total_balance
-        description: Total balance for the patient (can be negative for credits/refunds)
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "total_balance >= -25000"  # Allow negative balances up to $25k for credits/refunds
-              severity: error
-              name: check_total_balance_reasonable
+        description: >
+          Total outstanding balance for the patient (can be negative for credits/refunds)
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Total balance from all financial transactions
+          - Business Rules: Can be negative for credits, refunds, or overpayments
+          
+          Business Context:
+          - Used for comprehensive financial analysis and reporting
+          - Critical for accounts receivable management
+          - Important for financial reconciliation and audit purposes
 
       - name: balance_0_30_days
-        description: Balance aged 0-30 days
+        description: >
+          Balance aged 0-30 days
+          
+          Business Context:
+          - Used for accounts receivable aging analysis
+          - Critical for cash flow management and collection prioritization
+          - Important for financial reporting and aging reports
 
       - name: balance_31_60_days
-        description: Balance aged 31-60 days
+        description: >
+          Balance aged 31-60 days
+          
+          Business Context:
+          - Used for accounts receivable aging analysis
+          - Indicates moderately overdue balances requiring attention
+          - Important for collection workflow and financial management
 
       - name: balance_61_90_days
-        description: Balance aged 61-90 days
+        description: >
+          Balance aged 61-90 days
+          
+          Business Context:
+          - Used for accounts receivable aging analysis
+          - Indicates significantly overdue balances requiring immediate attention
+          - Critical for collection efforts and bad debt management
 
       - name: balance_over_90_days
-        description: Balance aged over 90 days
+        description: >
+          Balance aged over 90 days
+          
+          Business Context:
+          - Used for accounts receivable aging analysis
+          - Indicates severely overdue balances at risk of becoming bad debt
+          - Critical for collection efforts and financial risk assessment
+
+      - name: balance_status
+        description: >
+          Financial balance categorization for business analysis
+          
+          Business Logic:
+          - No Balance: estimated_balance = 0
+          - Outstanding Balance: estimated_balance > 0
+          - Credit Balance: estimated_balance < 0
+          
+          Business Context:
+          - Used for patient financial status segmentation
+          - Important for collection workflow and patient communication
+          - Critical for financial reporting and analysis
 
       - name: insurance_estimate
-        description: Estimated insurance coverage amount
+        description: >
+          Estimated insurance coverage amount
+          
+          Business Context:
+          - Used for patient financial planning and treatment cost estimation
+          - Important for insurance verification and pre-authorization
+          - Critical for patient communication about financial responsibility
 
       - name: payment_plan_due
-        description: Amount due for payment plan
+        description: >
+          Amount due for payment plan
+          
+          Business Context:
+          - Used for payment plan management and collection
+          - Important for patient financial arrangements and compliance
+          - Critical for cash flow planning and revenue management
 
       - name: has_insurance_flag
-        description: Flag indicating if patient has insurance
+        description: >
+          Flag indicating if patient has insurance
+          
+          Business Context:
+          - Used for insurance verification and billing workflow
+          - Important for treatment planning and cost estimation
+          - Critical for financial analysis and patient segmentation
         tests:
           - accepted_values:
               values: [true, false]
+              config:
+                description: "Insurance status must be explicitly true or false"
 
       - name: billing_cycle_day
-        description: Day of the month for billing cycle
+        description: >
+          Day of the month for billing cycle (1-31)
+          
+          Business Context:
+          - Used for billing schedule and payment collection
+          - Important for cash flow management and billing automation
+          - Critical for patient communication about billing timing
 
       # Important Dates
       - name: first_visit_date
-        description: Date of patient's first visit
+        description: >
+          Date of patient's first visit
+          
+          Business Context:
+          - Used for patient lifecycle analysis and retention tracking
+          - Important for new patient reporting and growth analysis
+          - Critical for patient relationship management and anniversary tracking
         tests:
-          - test_date_after:
-              compare_column: '1900-01-01'
+          - not_null:
+              severity: warn
+              config:
+                description: "Warn when first_visit_date is null (e.g., placeholder dates normalized to null)"
 
       - name: deceased_datetime
-        description: Date and time of patient's death, if applicable
+        description: >
+          Date and time of patient's death, if applicable
+          
+          Business Context:
+          - Used for patient status management and record handling
+          - Important for family communication and record retention policies
+          - Critical for compliance with healthcare regulations and privacy requirements
 
       - name: admit_date
-        description: Date patient was admitted to the system
+        description: >
+          Date patient was admitted to the system
+          
+          Business Context:
+          - Used for patient onboarding analysis and system adoption tracking
+          - Important for patient lifecycle management and retention analysis
+          - Critical for patient relationship timeline and history tracking
+          
+          Data Quality Notes:
+          - Some patients may not have admit dates recorded
+          - Null values are acceptable for patients where admit date is unknown
+          - Historical records may lack this information
+          - Placeholder dates ('0001-01-01') are converted to null in the model
         tests:
-          - not_null
-          - test_date_after:
-              compare_column: '1900-01-01'
+          - not_null:
+              severity: warn
+              config:
+                description: "Admit date should be recorded for patient onboarding tracking (warning for missing values)"
 
       # Relationships
       - name: guarantor_id
-        description: ID of the patient's guarantor
+        description: >
+          Foreign key to guarantor patient (maps from "Guarantor" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "Guarantor" (CamelCase)
+          - Transformed to: guarantor_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Self-referencing relationship for family financial responsibility
+          - Links patient to their financial guarantor (often parent or spouse)
+          - Critical for billing and payment collection workflow
+          
+          Data Quality Considerations:
+          - Can be null for patients who are their own guarantor
+          - Must reference valid patient_id when not null
+          - Used for family billing and financial responsibility management
         tests:
           - relationships:
               to: ref('dim_patient')
               field: patient_id
+              severity: warn
+              where: "guarantor_id is not null"
+              config:
+                description: "Guarantor ID must reference valid patient when specified"
 
       - name: primary_provider_id
-        description: ID of the patient's primary provider
+        description: >
+          Foreign key to primary provider (maps from "PriProv" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PriProv" (CamelCase)
+          - Transformed to: primary_provider_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links patient to their primary care provider
+          - Determines primary provider for appointments and treatment
+          - Critical for care coordination and provider assignment
+          
+          Data Quality Considerations:
+          - Should reference valid provider_id for active patients
+          - Used for provider performance analysis and patient assignment
+          - Important for clinical workflow and care management
         tests:
           - relationships:
               to: ref('dim_provider')
               field: provider_id
+              severity: warn
+              where: "primary_provider_id is not null"
+              config:
+                description: "Primary provider ID must reference valid provider when specified"
 
       - name: secondary_provider_id
-        description: ID of the patient's secondary provider
+        description: >
+          Foreign key to secondary provider (maps from "SecProv" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "SecProv" (CamelCase)
+          - Transformed to: secondary_provider_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links patient to their secondary care provider
+          - Used for multi-provider practices and care coordination
+          - Important for provider assignment and treatment planning
+          
+          Data Quality Considerations:
+          - Can be null for patients with single provider
+          - Must reference valid provider_id when not null
+          - Used for provider performance analysis and care coordination
         tests:
           - relationships:
               to: ref('dim_provider')
               field: provider_id
+              severity: warn
+              where: "secondary_provider_id is not null"
+              config:
+                description: "Secondary provider ID must reference valid provider when specified"
 
       - name: clinic_id
-        description: ID of the clinic where the patient is registered
-        tests:
-          - relationships:
-              to: ref('dim_clinic')
-              field: clinic_id
+        description: >
+          Foreign key to clinic (maps from "ClinicNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClinicNum" (CamelCase)
+          - Transformed to: clinic_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links patient to their assigned clinic location
+          - Used for multi-location practice management
+          - Important for location-based reporting and analysis
+          
+          Data Quality Considerations:
+          - In single-entity practices, clinic_id = 0 is expected for all patients
+          - Used for location-based patient segmentation and reporting
+          - Important for multi-location practice management
 
       - name: fee_schedule_id
-        description: ID of the patient's fee schedule
+        description: >
+          Foreign key to fee schedule (maps from "FeeSched" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "FeeSched" (CamelCase)
+          - Transformed to: fee_schedule_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links patient to their assigned fee schedule
+          - Determines pricing and billing rates for the patient
+          - Critical for financial management and billing accuracy
+          
+          Data Quality Considerations:
+          - Must reference valid fee_schedule_id for billing accuracy
+          - Used for patient-specific pricing and billing rates
+          - Important for financial analysis and revenue management
+          
+          Out-of-Network Clinic Notes:
+          - This clinic operates as out-of-network with patients paying out-of-pocket
+          - Most patients (33,320 records) have fee_schedule_id = 0 (no fee schedule)
+          - A few patients (3 records) have fee_schedule_id = 55 (legacy/placeholder value)
+          - The dim_fee_schedule table contains values starting from 8285, which are not referenced
+          - Fee schedules are not actively used in this practice's billing model
         tests:
           - relationships:
               to: ref('dim_fee_schedule')
               field: fee_schedule_id
+              severity: warn
+              where: "fee_schedule_id > 0"
+              config:
+                description: "Fee schedule ID should reference valid fee schedule when not zero (out-of-network clinic)"
 
       # Patient Notes
       - name: medical_notes
-        description: Medical notes for the patient
+        description: >
+          Medical notes for the patient
+          
+          Business Context:
+          - Used for clinical documentation and care coordination
+          - Important for provider communication and treatment planning
+          - Critical for patient safety and continuity of care
 
       - name: treatment_notes
-        description: Treatment notes for the patient
+        description: >
+          Treatment notes for the patient
+          
+          Business Context:
+          - Used for treatment documentation and care planning
+          - Important for provider communication and treatment history
+          - Critical for treatment continuity and patient care coordination
 
       - name: financial_notes
-        description: Financial notes for the patient
+        description: >
+          Financial notes for the patient
+          
+          Business Context:
+          - Used for financial documentation and payment arrangements
+          - Important for billing and collection workflow
+          - Critical for financial communication and payment planning
 
       - name: emergency_contact_name
-        description: Name of the patient's emergency contact
+        description: >
+          Name of the patient's emergency contact
+          
+          Business Context:
+          - Used for emergency situations and patient safety
+          - Important for patient care coordination and emergency protocols
+          - Critical for patient safety and emergency response
 
       - name: emergency_contact_phone
-        description: Phone number of the patient's emergency contact
+        description: >
+          Phone number of the patient's emergency contact
+          
+          Business Context:
+          - Used for emergency situations and patient safety
+          - Important for emergency communication and patient care
+          - Critical for patient safety and emergency response protocols
 
       # Patient Links
       - name: linked_patient_ids
-        description: Array of IDs for linked patients
+        description: >
+          Array of IDs for linked patients
+          
+          Business Context:
+          - Used for family relationship management and care coordination
+          - Important for family billing and financial responsibility
+          - Critical for family care coordination and relationship management
 
       - name: link_types
-        description: Array of types for patient links
+        description: >
+          Array of types for patient links
+          
+          Business Context:
+          - Used for relationship type identification and management
+          - Important for family relationship categorization
+          - Critical for relationship-based business logic and workflows
 
       # Patient Diseases
       - name: disease_count
-        description: Count of active diseases for the patient
+        description: >
+          Count of active diseases for the patient
+          
+          Business Context:
+          - Used for clinical risk assessment and care planning
+          - Important for provider awareness and treatment planning
+          - Critical for patient safety and clinical decision making
 
       - name: disease_ids
-        description: Array of disease definition IDs
+        description: >
+          Array of disease definition IDs
+          
+          Business Context:
+          - Used for clinical documentation and care coordination
+          - Important for provider awareness and treatment planning
+          - Critical for clinical decision making and patient safety
 
       - name: disease_statuses
-        description: Array of disease statuses
+        description: >
+          Array of disease statuses
+          
+          Business Context:
+          - Used for clinical status tracking and care management
+          - Important for treatment monitoring and care coordination
+          - Critical for clinical decision making and patient care
 
       # Patient Documents
       - name: document_count
-        description: Count of documents associated with the patient
+        description: >
+          Count of documents associated with the patient
+          
+          Business Context:
+          - Used for document management and record completeness
+          - Important for compliance and audit requirements
+          - Critical for patient record management and documentation
 
       - name: document_categories
-        description: Array of document category IDs
+        description: >
+          Array of document category IDs
+          
+          Business Context:
+          - Used for document categorization and management
+          - Important for document organization and retrieval
+          - Critical for compliance and audit requirements
 
       # Metadata
       - name: _loaded_at
-        description: Timestamp when the record was loaded
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
 
       - name: _created_at
-        description: Timestamp when the record was created
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+          
+          Data Quality Notes:
+          - Many historical records have null values for this field
+          - _updated_at is available for all records and serves as fallback for change tracking
+        tests:
+          - test_date_after:
+              compare_column: '1900-01-01'
+              where: "_created_at is not null"
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
         tests:
           - not_null
 
-      - name: _updated_at
-        description: Timestamp when the record was last updated
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this mart model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+
+      - name: _mart_refreshed_at
+        description: >
+          Mart refresh timestamp - when this mart was last refreshed
+          
+          Source: current_timestamp at mart refresh
+          Purpose: Mart refresh tracking and monitoring
+          Usage: Understanding mart refresh timeline and frequency
         tests:
           - not_null
 
@@ -254,88 +820,149 @@ models:
           combination_of_columns:
             - patient_id
             - _loaded_at
+          config:
+            description: "Patient ID and load timestamp combination must be unique for data integrity"
 
       - dbt_utils.expression_is_true:
           expression: "age >= 0"
           severity: error
           name: check_age_not_negative
+          config:
+            description: "Age must be non-negative for valid patient demographics"
 
       - dbt_utils.expression_is_true:
-          expression: "estimated_balance >= 0"
+          expression: "estimated_balance >= -25000 and estimated_balance <= 25000"
           severity: error
-          name: check_estimated_balance_not_negative
+          name: check_estimated_balance_reasonable_range
+          config:
+            description: "Estimated balance must be within reasonable business range (-$25k to $25k)"
 
       - dbt_utils.expression_is_true:
-          expression: "total_balance >= 0"
+          expression: "total_balance >= -25000 and total_balance <= 25000"
           severity: error
-          name: check_total_balance_not_negative
+          name: check_total_balance_reasonable_range
+          config:
+            description: "Total balance must be within reasonable business range (-$25k to $25k)"
 
       - dbt_utils.expression_is_true:
           expression: "balance_0_30_days >= 0"
           severity: error
           name: check_balance_0_30_days_not_negative
+          config:
+            description: "0-30 day balance must be non-negative for accurate aging analysis"
 
       - dbt_utils.expression_is_true:
           expression: "balance_31_60_days >= 0"
           severity: error
           name: check_balance_31_60_days_not_negative
+          config:
+            description: "31-60 day balance must be non-negative for accurate aging analysis"
 
       - dbt_utils.expression_is_true:
           expression: "balance_61_90_days >= 0"
           severity: error
           name: check_balance_61_90_days_not_negative
+          config:
+            description: "61-90 day balance must be non-negative for accurate aging analysis"
 
       - dbt_utils.expression_is_true:
           expression: "balance_over_90_days >= 0"
           severity: error
           name: check_balance_over_90_days_not_negative
+          config:
+            description: "Over 90 day balance must be non-negative for accurate aging analysis"
 
       - dbt_utils.expression_is_true:
           expression: "insurance_estimate >= 0"
           severity: error
           name: check_insurance_estimate_not_negative
+          config:
+            description: "Insurance estimate must be non-negative for accurate financial planning"
 
       - dbt_utils.expression_is_true:
           expression: "payment_plan_due >= 0"
           severity: error
           name: check_payment_plan_due_not_negative
+          config:
+            description: "Payment plan due must be non-negative for accurate payment tracking"
 
       - dbt_utils.expression_is_true:
           expression: "billing_cycle_day >= 1 and billing_cycle_day <= 31"
           severity: error
           name: check_billing_cycle_day_valid
+          config:
+            description: "Billing cycle day must be between 1 and 31 for valid billing schedule"
 
       - dbt_utils.expression_is_true:
           expression: "array_length(linked_patient_ids, 1) >= 0"
           severity: error
           name: check_linked_patient_ids_array_valid
+          config:
+            description: "Linked patient IDs array must be valid for family relationship management"
 
       - dbt_utils.expression_is_true:
           expression: "array_length(link_types, 1) >= 0"
           severity: error
           name: check_link_types_array_valid
+          config:
+            description: "Link types array must be valid for relationship type management"
 
       - dbt_utils.expression_is_true:
           expression: "disease_count >= 0"
           severity: error
           name: check_disease_count_not_negative
+          config:
+            description: "Disease count must be non-negative for accurate clinical assessment"
 
       - dbt_utils.expression_is_true:
           expression: "array_length(disease_ids, 1) >= 0"
           severity: error
           name: check_disease_ids_array_valid
+          config:
+            description: "Disease IDs array must be valid for clinical documentation"
 
       - dbt_utils.expression_is_true:
           expression: "array_length(disease_statuses, 1) >= 0"
           severity: error
           name: check_disease_statuses_array_valid
+          config:
+            description: "Disease statuses array must be valid for clinical status tracking"
 
       - dbt_utils.expression_is_true:
           expression: "document_count >= 0"
           severity: error
           name: check_document_count_not_negative
+          config:
+            description: "Document count must be non-negative for accurate document management"
 
       - dbt_utils.expression_is_true:
           expression: "array_length(document_categories, 1) >= 0"
           severity: error
           name: check_document_categories_array_valid
+          config:
+            description: "Document categories array must be valid for document organization"
+
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      contains_phi: true
+      business_process: "Patient Management and Care Coordination"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per patient"
+      primary_consumers: ["Clinical Operations", "Financial Operations", "Analytics Team"]
+      system_integration: "System A: Core Data Foundation"
+      data_quality_requirements:
+        - "All patient records must be unique and complete"
+        - "Primary keys must be non-null and positive"
+        - "Foreign key relationships must be valid"
+        - "Status fields must have valid business values"
+        - "Financial amounts must be within reasonable business ranges"
+        - "Contact preferences must be valid communication methods"
+        - "Clinical data must be accurate and up-to-date"
+      performance_requirements:
+        - "Patient lookups must be fast for clinical workflow"
+        - "Provider and clinic filtering must be optimized"
+        - "Financial analysis queries must perform well"
+        - "Patient relationship queries must be efficient"

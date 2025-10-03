@@ -5,50 +5,110 @@ models:
     description: >
       Dimension table containing comprehensive provider information including demographics,
       credentials, availability metrics, and status information. This table serves as the
-      primary lookup for provider-related analytics and reporting.
+      central reference for all provider-related data, including professional credentials,
+      scheduling availability, and business categorizations for each provider in the system.
+      
+      Part of System G: Scheduling workflow.
+      
+      Key Features:
+      - Provider Status Categorization: Active, Inactive, Terminated status classification with business rules
+      - Provider Type Classification: Primary, Secondary, Instructor, Non-Person categorization for operational workflows
+      - Availability Metrics: 90-day rolling availability calculations for scheduling optimization and capacity planning
+      - Professional Credentials: Comprehensive credential tracking for compliance, billing, and regulatory requirements
+      - Performance Tier Classification: Availability-based performance categorization for operational excellence
+      
+      Data Sources:
+      - stg_opendental__provider: Primary source for provider demographics, credentials, and operational flags
+      - stg_opendental__definition: Lookup tables for specialty descriptions, status descriptions, and anesthesia provider types
+      - int_provider_availability: Provider scheduling and availability metrics calculated over 90-day rolling window
+      
+      Business Logic Features:
+      - Provider Status Categorization: Determined by termination_date and provider_status with business rule logic
+      - Provider Type Classification: Based on instructor, secondary, and not_person flags with operational impact
+      - Availability Performance Tier: Calculated from availability percentage with performance standards (Excellent ≥95%, Good ≥90%, Fair ≥80%, Poor >0%, No Data = 0%)
+      - Specialty Categorization: Groups specialties into General Practice, Specialist, Hygiene, and Other categories
+      - Availability Metrics Calculation: 90-day rolling window calculations for scheduling optimization
+      
+      Dimensional Relationships:
+      - Primary Key: provider_id serves as foreign key in fact_procedure, fact_appointment, fact_claim
+      - Fee Schedule Relationship: Links to fee schedule for procedure pricing and billing
+      - Specialty Relationship: Links to definition table for specialty descriptions and categorization
+      - Availability Relationship: Links to intermediate availability model for scheduling metrics
+      
+      Data Quality Notes:
+      - Provider ID 0 represents system-generated communications, not actual providers - excluded from analysis
+      - Hidden providers are excluded from current UI but retained for historical data integrity
+      - Availability metrics are calculated over 90-day rolling window for optimal performance
+      - Boolean flags are converted from smallint (0/1) to true/false for consistency
+      - Null availability metrics indicate no scheduling data in the 90-day window
+      
+      Business Rules:
+      - Provider status categorization follows termination_date precedence over provider_status
+      - Provider type classification uses hierarchical logic (Instructor > Secondary > Non-Person > Primary)
+      - Availability performance tiers are calculated from percentage with business-defined thresholds
+      - Specialty categorization groups related specialties for operational reporting
+      - All provider records must have valid provider_id for referential integrity
     
     config:
+      materialized: table
+      schema: marts
+      unique_key: provider_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['provider_id']
+          unique: true
+        - columns: ['_updated_at']
+        - columns: ['provider_status']
+        - columns: ['specialty_id']
+        - columns: ['is_hidden']
       tags: ['dimension', 'provider', 'operational']
     
     meta:
       owner: "Dental Analytics Team"
-      grain: "One row per provider"
-      business_logic: >
-        - Provider status is determined by termination_date and provider_status
-        - Provider type is determined by instructor, secondary, and not_person flags
-        - Availability metrics are calculated over a 90-day rolling window
-        - Boolean flags are converted from smallint (0/1) to true/false
-        - Specialty and status descriptions are joined from the definitions table
-      business_context: >
-        This dimension is used for:
-        - Provider scheduling and availability analysis
-        - Provider productivity and performance tracking
-        - Provider credentialing and compliance reporting
-        - Provider revenue and production analysis
-        - Provider type and status reporting
+      contains_pii: true
+      contains_phi: true
+      business_process: "Provider Management and Scheduling"
       refresh_frequency: "Daily"
-      primary_use_cases:
-        - "Provider scheduling and availability dashboards"
-        - "Provider productivity reports"
-        - "Provider credentialing reports"
-        - "Provider revenue analysis"
-        - "Provider status tracking"
-      related_models:
-        - "fact_procedure"
-        - "fact_appointment"
-        - "fact_claim"
-        - "mart_provider_performance"
-        - "mart_daily_schedule_performance"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per provider"
+      primary_consumers: ["Clinical Operations Team", "Scheduling Team", "Analytics Team"]
+      system_integration: "System G: Scheduling"
+      data_quality_requirements:
+        - "All provider records must have unique provider_id"
+        - "Provider status categorization must follow business rules"
+        - "Availability metrics must be calculated over 90-day window"
+        - "Professional credentials must be validated for compliance"
+        - "Provider type classification must be accurate for operational workflows"
+      performance_requirements:
+        - "Table materialization for fast lookups across all mart models"
+        - "Indexed on key lookup fields for optimal query performance"
+        - "Availability calculations limited to 90-day window for performance"
     
     columns:
       - name: provider_id
-        description: Primary key for the provider dimension
+        description: >
+          Primary key - Unique identifier for each provider (maps from "ProviderNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProviderNum" (CamelCase)
+          - Transformed to: provider_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all providers in the system
+          - Used as foreign key in multiple downstream models (fact_procedure, fact_appointment, fact_claim)
+          - Critical for provider identification and record linking across all business processes
+          - Provider ID 0 represents system-generated communications, not actual providers
         tests:
           - unique
           - not_null
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              config:
+                severity: error
+                description: "Provider dimension must maintain referential integrity with source staging model"
 
       # Provider identifiers
       - name: provider_abbreviation
@@ -156,20 +216,173 @@ models:
 
       # Provider categorizations
       - name: provider_status_category
-        description: Categorized provider status (Active, Inactive, Terminated, Unknown), used for reporting and filtering
+        description: >
+          Categorized provider status based on termination_date and provider_status with business rule logic
+          
+          Valid Values:
+          - 'Active': Provider is currently active and available for scheduling
+          - 'Inactive': Provider is temporarily inactive but may return
+          - 'Terminated': Provider has been terminated and will not return
+          - 'Unknown': Status cannot be determined from available data
+          
+          Business Rules:
+          - Termination date takes precedence over provider_status for categorization
+          - Used for operational reporting and provider availability analysis
+          - Critical for scheduling and capacity planning decisions
         tests:
           - accepted_values:
               values: ['Active', 'Inactive', 'Terminated', 'Unknown']
+              config:
+                description: "Provider status must be one of the valid business categories"
       - name: provider_type_category
-        description: Categorized provider type (Primary, Secondary, Instructor, Non-Person), used for reporting and filtering
+        description: >
+          Categorized provider type based on instructor, secondary, and not_person flags with hierarchical logic
+          
+          Valid Values:
+          - 'Instructor': Provider is an instructor (highest priority in hierarchy)
+          - 'Secondary': Provider is a secondary provider for procedures
+          - 'Non-Person': Provider is not an individual person (e.g., corporation)
+          - 'Primary': Default provider type for standard individual providers
+          
+          Business Rules:
+          - Hierarchical classification: Instructor > Secondary > Non-Person > Primary
+          - Used for procedure assignment and billing workflows
+          - Affects scheduling and operational processes
         tests:
           - accepted_values:
               values: ['Primary', 'Secondary', 'Instructor', 'Non-Person']
+              config:
+                description: "Provider type must be one of the valid business categories"
+      - name: provider_specialty_category
+        description: >
+          Categorized provider specialty for operational reporting and analysis
+          
+          Valid Values:
+          - 'General Practice': General dentistry providers
+          - 'Specialist': Orthodontics, Oral Surgery, Endodontics, Periodontics
+          - 'Hygiene': Dental hygiene providers
+          - 'Other': All other specialty types
+          
+          Business Rules:
+          - Groups related specialties for operational reporting
+          - Used for capacity planning and resource allocation
+          - Affects procedure assignment and scheduling workflows
+        tests:
+          - accepted_values:
+              values: ['General Practice', 'Specialist', 'Hygiene', 'Other']
+              config:
+                description: "Provider specialty must be one of the valid business categories"
+      - name: availability_performance_tier
+        description: >
+          Performance tier based on provider availability percentage over 90-day rolling window
+          
+          Valid Values:
+          - 'Excellent': ≥95% availability - optimal performance
+          - 'Good': ≥90% availability - good performance
+          - 'Fair': ≥80% availability - acceptable performance
+          - 'Poor': >0% availability - needs improvement
+          - 'No Data': 0% availability - no scheduling data available
+          
+          Business Rules:
+          - Calculated from availability percentage with business-defined thresholds
+          - Used for performance monitoring and operational excellence
+          - Helps identify providers needing scheduling optimization
+        tests:
+          - accepted_values:
+              values: ['Excellent', 'Good', 'Fair', 'Poor', 'No Data']
+              config:
+                description: "Availability performance tier must be one of the valid performance categories"
 
       # Metadata columns
       - name: _created_at
-        description: Timestamp when the record was created in the source system
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the provider record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null:
+              where: "provider_id > 0"
+              config:
+                description: "Provider creation date must exist for valid providers"
       - name: _updated_at
-        description: Timestamp when the record was last updated in the source system
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
       - name: _loaded_at
-        description: Timestamp when the record was loaded into the data warehouse
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [provider_id]
+          config:
+            description: "Provider dimension must have unique provider_id values"
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000
+          config:
+            severity: warn
+            description: >
+              Performance Monitor: Provider dimension record count
+              
+              Baseline: Expected range for dental practice provider count
+              Alert Threshold: Investigate if count exceeds normal practice size
+              Action Required: Review provider data if count is outside expected range
+      - dbt_expectations.expression_is_true:
+          expression: "provider_id > 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Provider ID must be positive
+              
+              Requirement: All provider IDs must be positive integers
+              Impact: Negative or zero provider IDs indicate data quality issues
+              Enforcement: This test ensures data integrity for provider identification
+      - dbt_expectations.expression_is_true:
+          expression: "provider_status_category in ('Active', 'Inactive', 'Terminated', 'Unknown')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Provider status categorization must be valid
+              
+              Requirement: All providers must have valid status categorization
+              Impact: Invalid status affects scheduling and operational workflows
+              Enforcement: This test validates business rule implementation
+      - dbt_expectations.expression_is_true:
+          expression: "provider_type_category in ('Primary', 'Secondary', 'Instructor', 'Non-Person')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Provider type categorization must be valid
+              
+              Requirement: All providers must have valid type categorization
+              Impact: Invalid type affects procedure assignment and billing
+              Enforcement: This test validates hierarchical classification logic
+      - dbt_expectations.expression_is_true:
+          expression: "availability_performance_tier in ('Excellent', 'Good', 'Fair', 'Poor', 'No Data')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Availability performance tier must be valid
+              
+              Requirement: All providers must have valid performance tier classification
+              Impact: Invalid tier affects performance monitoring and operational excellence
+              Enforcement: This test validates performance categorization logic

@@ -19,11 +19,11 @@ models:
       
       ## Technical Specifications
       - Grain: One row per date + provider (one row per date_id + provider_id combination)
-      - Source: mart_production_summary, mart_appt_summary, dim_date, dim_provider (primary sources)
+      - Source: mart_production_summary, mart_appointment_summary, dim_date, dim_provider (primary sources)
       - Refresh: Daily
       - Dependencies: 
         * mart_production_summary (core production and scheduling data)
-        * mart_appt_summary (appointment efficiency and timing metrics)
+        * mart_appointment_summary (appointment efficiency and timing metrics)
         * dim_date (date dimension for temporal analysis)
         * dim_provider (provider master data and attributes)
         * dim_procedure (procedure classification and complexity flags)
@@ -443,7 +443,7 @@ models:
           Daily appointment count from appointment summary data
           
           Calculation Logic:
-          - Sum of total_appointments from mart_appt_summary
+          - Sum of total_appointments from mart_appointment_summary
           - Provides appointment-specific metrics
           
           Business Rules:
@@ -461,7 +461,7 @@ models:
           Number of new patient appointments for the provider
           
           Calculation Logic:
-          - Sum of new_patient_appointments from mart_appt_summary
+          - Sum of new_patient_appointments from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:
@@ -479,7 +479,7 @@ models:
           Total working hours scheduled for the provider
           
           Calculation Logic:
-          - Max of schedule_span_hours from mart_appt_summary
+          - Max of schedule_span_hours from mart_appointment_summary
           - Represents total time allocated for appointments
           
           Business Rules:
@@ -497,7 +497,7 @@ models:
           Average number of appointments per hour
           
           Calculation Logic:
-          - Average of appointments_per_hour from mart_appt_summary
+          - Average of appointments_per_hour from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:
@@ -553,7 +553,7 @@ models:
           Average patient arrival delay in minutes
           
           Calculation Logic:
-          - Average of avg_arrival_delay from mart_appt_summary
+          - Average of avg_arrival_delay from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:
@@ -571,7 +571,7 @@ models:
           Average patient wait time in minutes
           
           Calculation Logic:
-          - Average of avg_wait_time from mart_appt_summary
+          - Average of avg_wait_time from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:
@@ -589,7 +589,7 @@ models:
           Average treatment time per appointment in minutes
           
           Calculation Logic:
-          - Average of avg_treatment_time from mart_appt_summary
+          - Average of avg_treatment_time from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:
@@ -607,7 +607,7 @@ models:
           Daily no-show rate as a percentage
           
           Calculation Logic:
-          - Average of no_show_rate from mart_appt_summary
+          - Average of no_show_rate from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:
@@ -625,7 +625,7 @@ models:
           Daily appointment cancellation rate as a percentage
           
           Calculation Logic:
-          - Average of cancellation_rate from mart_appt_summary
+          - Average of cancellation_rate from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:
@@ -643,7 +643,7 @@ models:
           Daily appointment confirmation rate as a percentage
           
           Calculation Logic:
-          - Average of confirmation_rate from mart_appt_summary
+          - Average of confirmation_rate from mart_appointment_summary
           - Aggregated across all clinics for the provider
           
           Business Rules:

@@ -6,60 +6,55 @@ models:
       Date dimension table providing comprehensive time intelligence and calendar attributes.
       This model serves as the foundation for all time-based analysis in the dental practice,
       supporting both operational and financial reporting needs.
-
-      ## Business Context
-      The date dimension is a critical component of our dimensional model, enabling:
-      - Time-based analysis across all business processes
-      - Fiscal period alignment for financial reporting
-      - Business day calculations for operational metrics
-      - Holiday-adjusted performance analysis
-      - Rolling period comparisons
-
-      ## Technical Specifications
-      - Grain: One row per calendar day
-      - Date Range: 2020-01-01 through 2030-12-31
-      - Refresh: Daily (static data, no incremental processing needed)
-      - Dependencies: None (self-contained date generation)
-
-      ## Business Logic
-      ### Calendar Attributes
-      - Standard calendar year, quarter, month, and day attributes
-      - Day of week (0-6, where 0 is Sunday, 6 is Saturday)
-      - Month and day names for reporting
-
-      ### Fiscal Periods
-      - Fiscal year starts in October (Q1: Oct-Dec)
-      - Fiscal quarters aligned with business planning cycles
-      - Fiscal year calculation: Current year + 1 if month >= 10
-
-      ### Business Days
-      - Weekdays (Monday-Friday) excluding holidays
-      - Sequential business day numbering within each month
-      - Holiday calendar includes major US federal holidays
-      - Business day flags for operational metrics
-
-      ### Time Intelligence
-      - Rolling 12-month window for trend analysis
-      - Prior year period comparison support
-      - Holiday-adjusted performance indicators
-      - Weekend vs. weekday differentiation
-
-      ## Usage Guidelines
-      ### Common Time Periods
-      - Current Month: WHERE is_rolling_12_months = true
-      - Prior Year: WHERE is_same_period_prior_year = true
-      - Business Days: WHERE is_business_day = true
-      - Fiscal Periods: GROUP BY fiscal_year, fiscal_quarter
-
-      ### Performance Considerations
-      - Pre-calculated flags minimize runtime calculations
-      - Indexed on date_id for optimal join performance
-      - Static nature allows for materialized views
-
-      ### Common Joins
-      - Fact tables: ON fact.date_id = dim_date.date_id
-      - Appointment tables: ON apt.appointment_date = dim_date.date_day
-      - Financial tables: ON fin.transaction_date = dim_date.date_day
+      Part of System A: Core Data Foundation workflow.
+      
+      Key Features:
+      - Time Intelligence: Comprehensive calendar attributes and fiscal period alignment
+      - Business Day Calculations: Weekday and holiday-adjusted operational metrics
+      - Performance Optimization: Pre-calculated flags for efficient analysis
+      - Data Integration: Standard join key for all time-based fact tables
+      - Business Categorization: Fiscal periods, business days, and time intelligence flags
+      
+      Data Sources:
+      - PostgreSQL generate_series: Self-contained date generation (2020-2030)
+      - US Federal Holiday Calendar: Major holidays for business day calculations
+      
+      Business Logic Features:
+      - Calendar Processing: Standard calendar year, quarter, month, and day attributes
+      - Fiscal Period Logic: Fiscal year starts in October (Q1: Oct-Dec)
+      - Business Day Logic: Weekdays excluding US federal holidays
+      - Time Intelligence: Rolling periods and prior year comparison support
+      
+      Dimensional Relationships:
+      - Primary Key: date_id serves as standard join key for all fact tables
+      - Date Arithmetic: date_day supports direct date comparisons and calculations
+      - Business Context: Links to appointment, financial, and operational fact tables
+      
+      Data Quality Notes:
+      - Date Range: Comprehensive 11-year coverage (2020-2030) for historical and future analysis
+      - Holiday Calendar: Includes all major US federal holidays with accurate date calculations
+      - Business Day Logic: Consistent weekday and holiday exclusion for operational metrics
+      - Performance Optimization: Pre-calculated flags minimize runtime calculations
+      
+      Business Rules:
+      - Fiscal Year Definition: October through September (Q1: Oct-Dec, Q2: Jan-Mar, Q3: Apr-Jun, Q4: Jul-Sep)
+      - Business Day Definition: Monday through Friday excluding federal holidays
+      - Time Intelligence: Rolling 12-month and prior year period calculations
+      - Holiday Calendar: Comprehensive US federal holiday coverage with accurate date logic
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: date_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['date_id']
+          unique: true
+        - columns: ['date_day']
+        - columns: ['year', 'month']
+        - columns: ['fiscal_year', 'fiscal_quarter']
+        - columns: ['is_business_day']
+      tags: ['dimension', 'daily']
 
     columns:
       - name: date_id
@@ -207,6 +202,59 @@ models:
         tests:
           - not_null
 
+      - name: _loaded_at
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+
+      - name: _created_at  
+        description: >
+          Original creation timestamp from date generation process
+          
+          Source: current_timestamp at model execution
+          Represents: When the date record was created in the dimension
+          Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from date generation process
+          
+          Source: current_timestamp at model execution
+          Logic: Static date dimension, updated timestamp reflects model refresh
+          Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this mart model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+
+      - name: _mart_refreshed_at
+        description: >
+          Mart refresh timestamp - when this dimension table was last refreshed
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Mart refresh tracking and data freshness monitoring
+          Usage: Understanding mart update frequency and data currency
+        tests:
+          - not_null
+
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
@@ -215,58 +263,71 @@ models:
             - year
             - month
             - day
+      
+      - dbt_expectations.expression_is_true:
+          expression: "fiscal_year >= 2020 and fiscal_year <= 2031"
+          config:
+            severity: error
+            description: >
+              Business Rule: Fiscal Year Range Validation
+              
+              Requirement: Fiscal years must be within expected business range
+              Impact: Ensures fiscal reporting alignment with business planning cycles
+              Enforcement: Validates fiscal year calculation logic
+      
+      - dbt_expectations.expression_is_true:
+          expression: "fiscal_quarter >= 1 and fiscal_quarter <= 4"
+          config:
+            severity: error
+            description: >
+              Business Rule: Fiscal Quarter Validation
+              
+              Requirement: Fiscal quarters must be valid (1-4)
+              Impact: Ensures fiscal period reporting accuracy
+              Enforcement: Validates fiscal quarter calculation logic
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_business_day = (is_weekday and not is_holiday)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Business Day Logic Validation
+              
+              Requirement: Business days must be weekdays that are not holidays
+              Impact: Ensures operational metrics use correct business day definition
+              Enforcement: Validates business day calculation consistency
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_holiday_adjusted = (is_holiday or is_weekend)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Holiday Adjusted Logic Validation
+              
+              Requirement: Holiday adjusted days must be either holidays or weekends
+              Impact: Ensures holiday-adjusted performance metrics are accurate
+              Enforcement: Validates holiday adjustment calculation logic
 
     meta:
-      owner: "Data Team"
+      owner: "data_team"
       contains_pii: false
       contains_phi: false
-      refresh_frequency: "Daily"
-      business_owner: "Finance Team"
-      technical_owner: "Data Engineering Team"
-      usage_notes: >
-        This dimension table is used for all time-based analysis and reporting.
-        
-        ## Key Use Cases
-        - Financial reporting and analysis
-          * Monthly financial statements
-          * Quarterly performance reviews
-          * Annual budget comparisons
-          * Fiscal year reporting
-        
-        - Operational metrics and KPIs
-          * Daily production tracking
-          * Business day averages
-          * Holiday-adjusted performance
-          * Rolling period analysis
-        
-        - Patient appointment scheduling
-          * Business day availability
-          * Holiday calendar integration
-          * Weekend vs. weekday patterns
-          * Seasonal scheduling trends
-        
-        - Provider productivity analysis
-          * Business day productivity
-          * Holiday-adjusted metrics
-          * Rolling period comparisons
-          * Year-over-year growth
-        
-        - Revenue cycle management
-          * Daily collection tracking
-          * Business day collections
-          * Holiday-adjusted metrics
-          * Fiscal period reporting
-        
-        ## Common Analysis Patterns
-        - Month-to-date calculations
-        - Year-over-year comparisons
-        - Rolling 12-month trends
-        - Business day averages
-        - Holiday-adjusted metrics
-        - Fiscal period analysis
-        
-        ## Performance Optimization
-        - Use date_id for joins to fact tables
-        - Leverage pre-calculated flags for filtering
-        - Utilize business day calculations for operational metrics
-        - Apply holiday adjustments for accurate comparisons 
+      business_process: "Time Intelligence and Calendar Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per calendar day"
+      primary_consumers: ["Finance Team", "Operations Team", "Analytics Team"]
+      system_integration: "System A: Core Data Foundation"
+      data_quality_requirements:
+        - "All date records must be unique and non-null"
+        - "Fiscal year and quarter calculations must be accurate"
+        - "Business day logic must be consistent with operational requirements"
+        - "Holiday calendar must include all relevant federal holidays"
+        - "Time intelligence flags must be calculated correctly"
+        - "Date range must cover all business reporting periods"
+      performance_requirements:
+        - "Pre-calculated flags must minimize runtime calculations"
+        - "Indexes must support efficient joins to fact tables"
+        - "Static nature must allow for materialized table optimization"
+        - "Date arithmetic operations must be performant" 
