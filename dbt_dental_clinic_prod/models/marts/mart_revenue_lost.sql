@@ -117,7 +117,7 @@ MissedAppointments as (
     select 
         fa.appointment_date,
         fa.provider_id,
-        fa.clinic_id,
+        coalesce(fa.clinic_id, 0) as clinic_id,
         fa.patient_id,
         fa.appointment_id,
         'Missed Appointment' as opportunity_type,
@@ -142,7 +142,12 @@ MissedAppointments as (
             when fa.is_broken and extract(hours from fa.appointment_datetime - current_timestamp) < 24 then 'Medium'
             when fa.is_broken then 'Low'
             else 'None'
-        end as recovery_potential
+        end as recovery_potential,
+        
+        -- Metadata fields
+        fa._loaded_at,
+        fa._created_at,
+        fa._updated_at
         
     from appointment_base fa
 ),
@@ -155,7 +160,7 @@ ClaimRejections as (
     select 
         fc.claim_date as appointment_date,
         null::integer as provider_id,  -- No provider_id available in claim data
-        null::integer as clinic_id,
+        0::integer as clinic_id,
         fc.patient_id,
         fc.claim_id as appointment_id,  -- Already integer from transform_id_columns
         'Claim Rejection' as opportunity_type,
@@ -173,7 +178,12 @@ ClaimRejections as (
             when fc.claim_status = 'Denied' and fc.patient_responsibility > 0 then 'High'
             when fc.claim_status = 'Rejected' then 'High'
             else 'Medium'
-        end as recovery_potential
+        end as recovery_potential,
+        
+        -- Metadata fields
+        fc._loaded_at,
+        fc._created_at,
+        fc._updated_at
         
     from claim_base fc
 ),
@@ -182,7 +192,7 @@ TreatmentPlanDelays as (
     select 
         tp.treatment_plan_date as appointment_date,
         null::integer as provider_id,  -- No provider_id available in treatplan table
-        null::integer as clinic_id,
+        0::integer as clinic_id,
         tp.patient_id,
         tp.treatment_plan_id as appointment_id,  -- Already integer from transform_id_columns
         'Treatment Plan Delay' as opportunity_type,
@@ -200,7 +210,12 @@ TreatmentPlanDelays as (
             when current_date - tp.treatment_plan_date > 180 then 'Low'
             when current_date - tp.treatment_plan_date > 90 then 'Medium'
             else 'High'
-        end as recovery_potential
+        end as recovery_potential,
+        
+        -- Metadata fields
+        tp._loaded_at,
+        tp._created_at,
+        tp._updated_at
         
     from treatment_base tp
 ),
@@ -209,7 +224,7 @@ WriteOffs as (
     select 
         adj.adjustment_date as appointment_date,
         adj.provider_id,
-        adj.clinic_id,
+        coalesce(adj.clinic_id, 0) as clinic_id,
         adj.patient_id,
         adj.adjustment_id as appointment_id,  -- Already integer from transform_id_columns
         'Write Off' as opportunity_type,
@@ -227,7 +242,12 @@ WriteOffs as (
             when adj.adjustment_direction = 'positive' then 'Medium'  -- Credits may be recoverable
             when adj.adjustment_direction = 'negative' then 'Low'     -- Charges less likely to be recoverable
             else 'None'
-        end as recovery_potential
+        end as recovery_potential,
+        
+        -- Metadata fields
+        adj._loaded_at,
+        adj._created_at,
+        adj._updated_at
         
     from adjustment_base adj
 ),
@@ -400,7 +420,10 @@ final as (
         oe.estimated_recoverable_amount,
         
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='oe',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+        ) }}
         
     from opportunities_enhanced oe
     inner join date_dimension dd
