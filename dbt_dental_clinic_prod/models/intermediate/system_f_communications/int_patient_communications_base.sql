@@ -26,9 +26,9 @@ WITH CommunicationBase AS (
         cl.communication_type,
         cl.mode AS communication_mode,
         CASE 
-            WHEN cl.is_sent = 2 THEN 'outbound'
-            WHEN cl.is_sent = 1 THEN 'inbound'
-            WHEN cl.is_sent = 0 THEN 'system'
+            WHEN cl.sent_or_received_raw = 2 THEN 'outbound'
+            WHEN cl.sent_or_received_raw = 1 THEN 'inbound'
+            WHEN cl.sent_or_received_raw = 0 THEN 'system'
             ELSE 'unknown'
         END AS direction,
         NULL AS subject,
@@ -89,7 +89,7 @@ WITH CommunicationBase AS (
         END AS follow_up_date,
         NULL AS follow_up_task_id, -- Would be linked to a task record
         cl.program_id,
-        cl.created_at,
+        cl._created_at,
         CURRENT_TIMESTAMP AS updated_at
     FROM {{ ref('stg_opendental__commlog') }} cl
     
@@ -189,7 +189,7 @@ SELECT
     ui.provider_id,
     
     -- Metadata fields
-    cb.created_at,
+    cb._created_at,
     cb.updated_at,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
