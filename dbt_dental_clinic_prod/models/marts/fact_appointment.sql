@@ -136,6 +136,8 @@ appointment_calculated as (
         -- Calculate timing metrics with data quality validation
         case 
             when ab.arrival_datetime is not null and ab.appointment_datetime is not null
+            and ab.arrival_datetime >= ab.appointment_datetime - interval '1 day'  -- Arrival can't be more than 1 day before appointment
+            and ab.arrival_datetime <= ab.appointment_datetime + interval '2 days'  -- Arrival can't be more than 2 days after appointment
             then extract(epoch from (ab.arrival_datetime - ab.appointment_datetime))/60
             else null
         end as arrival_delay_minutes,
@@ -201,18 +203,20 @@ appointment_calculated as (
         -- Notes and Communication
         ab.note as appointment_note,
         ab.pattern_secondary,
-        ab.color_override
+        ab.color_override,
+
+        -- Metadata
+        {{ standardize_mart_metadata(
+            primary_source_alias='ab',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']
+        ) }}
 
     from source_appointment ab
 ),
 
--- 3. Final validation and metadata
+-- 3. Final validation
 final as (
-    select
-        *,
-        -- Metadata
-        {{ standardize_mart_metadata() }}
-    from appointment_calculated
+    select * from appointment_calculated
 )
 
 select * from final
