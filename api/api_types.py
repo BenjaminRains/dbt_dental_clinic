@@ -1,7 +1,7 @@
 # Type definitions for API responses
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import date
+from typing import List, Optional, Dict, Any
+from datetime import date, datetime
 
 # Revenue Analytics Types
 class RevenueTrend(BaseModel):
@@ -76,3 +76,43 @@ class ProviderKPIs(BaseModel):
 class DashboardKPIs(BaseModel):
     revenue: RevenueKPIs
     providers: ProviderKPIs
+
+# DBT Lineage and Metadata Types
+class DBTModelMetadata(BaseModel):
+    model_name: str
+    model_type: str
+    schema_name: str
+    description: Optional[str] = None
+    business_context: Optional[str] = None
+    technical_specs: Optional[str] = None
+    dependencies: Optional[List[str]] = None
+    downstream_models: Optional[List[str]] = None
+    data_quality_notes: Optional[str] = None
+    refresh_frequency: Optional[str] = None
+    grain_definition: Optional[str] = None
+    source_tables: Optional[List[str]] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    is_active: bool = True
+
+class DBTMetricLineage(BaseModel):
+    metric_name: str
+    metric_display_name: str
+    source_model: str
+    source_column: Optional[str] = None
+    calculation_logic: Optional[str] = None
+    business_definition: Optional[str] = None
+    data_freshness: Optional[str] = None
+    last_updated: Optional[datetime] = None
+    is_active: bool = True
+
+class MetricLineageInfo(BaseModel):
+    """Lineage information for a specific metric displayed in UI"""
+    metric_name: str
+    source_model: str
+    source_schema: str
+    calculation_description: str
+    data_freshness: str
+    business_definition: str
+    dependencies: List[str]
+    last_updated: datetime
