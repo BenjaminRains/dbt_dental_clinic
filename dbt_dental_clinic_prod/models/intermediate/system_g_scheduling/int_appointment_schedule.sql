@@ -36,7 +36,7 @@ ProviderSchedule AS (
         p.is_hidden,
         p.specialty_id as specialty
     FROM {{ ref('stg_opendental__provider') }} p
-    WHERE p.is_hidden = 0  -- 0 = not hidden, 1 = hidden
+    WHERE p.is_hidden = false  -- false = not hidden, true = hidden
 ),
 
 AppointmentMetrics AS (
@@ -132,8 +132,7 @@ SELECT
     is_day_off,
     days_scheduled,
     days_worked,
-    CURRENT_TIMESTAMP as model_created_at,
-    CURRENT_TIMESTAMP as model_updated_at
+    {{ standardize_intermediate_metadata(preserve_source_metadata=false) }}
 FROM DailySchedule
 
 {% if is_incremental() %}
