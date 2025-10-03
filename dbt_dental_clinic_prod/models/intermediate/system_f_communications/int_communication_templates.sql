@@ -132,7 +132,7 @@ CommunicationTemplates AS (
             LEFT(content, 50) AS content_pattern,
             content,
             user_id,
-            created_at,
+            _created_at as created_at,
             updated_at,
             COUNT(*) AS frequency
         FROM {{ ref('int_patient_communications_base') }}
@@ -144,7 +144,7 @@ CommunicationTemplates AS (
             LEFT(content, 50),
             content,
             user_id,
-            created_at,
+            _created_at,
             updated_at
         HAVING COUNT(*) > 3  -- Only include patterns used multiple times
     ) AS pattern_detection
