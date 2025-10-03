@@ -203,33 +203,38 @@ final as (
         dd.day_name,
         
         -- Patient Tenure and Lifecycle
-        case when pt.first_visit_date is not null 
-            then current_date - pt.first_visit_date 
+        case 
+            when pt.first_visit_date is null then null
+            when pt.first_visit_date > current_date then null  -- Future patients have no tenure yet
+            else current_date - pt.first_visit_date 
         end as days_as_patient,
-        round(((current_date - pt.first_visit_date) / 365.0)::numeric, 1) as years_as_patient,
+        case 
+            when pt.first_visit_date > current_date then null  -- Future patients have no tenure yet
+            else round(((current_date - pt.first_visit_date) / 365.0)::numeric, 1)
+        end as years_as_patient,
         
         -- Activity Summary
-        pa.total_appointments,
-        pa.completed_appointments,
-        pa.no_show_appointments,
-        pa.cancelled_appointments,
+        coalesce(pa.total_appointments, 0) as total_appointments,
+        coalesce(pa.completed_appointments, 0) as completed_appointments,
+        coalesce(pa.no_show_appointments, 0) as no_show_appointments,
+        coalesce(pa.cancelled_appointments, 0) as cancelled_appointments,
         pa.first_appointment_date,
         pa.last_appointment_date,
         pa.last_completed_appointment,
         
         -- Recent Activity Metrics
-        pa.appointments_last_30_days,
-        pa.appointments_last_90_days,
-        pa.appointments_last_6_months,
-        pa.appointments_last_year,
-        pa.appointments_last_2_years,
-        pa.completed_visits_last_year,
+        coalesce(pa.appointments_last_30_days, 0) as appointments_last_30_days,
+        coalesce(pa.appointments_last_90_days, 0) as appointments_last_90_days,
+        coalesce(pa.appointments_last_6_months, 0) as appointments_last_6_months,
+        coalesce(pa.appointments_last_year, 0) as appointments_last_year,
+        coalesce(pa.appointments_last_2_years, 0) as appointments_last_2_years,
+        coalesce(pa.completed_visits_last_year, 0) as completed_visits_last_year,
         
         -- Service Diversity
-        pa.hygiene_appointments,
-        pa.treatment_appointments,
-        pa.unique_providers_seen,
-        round((pa.hygiene_appointments::numeric / nullif(pa.total_appointments, 0) * 100)::numeric, 2) as hygiene_visit_percentage,
+        coalesce(pa.hygiene_appointments, 0) as hygiene_appointments,
+        coalesce(pa.treatment_appointments, 0) as treatment_appointments,
+        coalesce(pa.unique_providers_seen, 0) as unique_providers_seen,
+        round((coalesce(pa.hygiene_appointments, 0)::numeric / nullif(coalesce(pa.total_appointments, 0), 0) * 100)::numeric, 2) as hygiene_visit_percentage,
         
         -- Financial Metrics (with proper null handling)
         coalesce(pf.lifetime_patient_payments, 0) as lifetime_patient_payments,
@@ -247,11 +252,15 @@ final as (
         coalesce(pp.production_last_year, 0) as production_last_year,
         coalesce(pp.production_last_2_years, 0) as production_last_2_years,
         
-        -- Patient Lifetime Value (with safe calculations)
-        round(
-            (coalesce(pp.lifetime_production, 0) / 
-            nullif((current_date - pt.first_visit_date) / 365.0, 0))::numeric, 2
-        ) as annual_patient_value,
+        -- Patient Lifetime Value (with safe calculations and future date handling)
+        case 
+            when pt.first_visit_date > current_date then null  -- Future patients have no annual value yet
+            when (current_date - pt.first_visit_date) / 365.0 <= 0 then null  -- Handle edge cases
+            else round(
+                (coalesce(pp.lifetime_production, 0) / 
+                nullif((current_date - pt.first_visit_date) / 365.0, 0))::numeric, 2
+            )
+        end as annual_patient_value,
         round(
             (coalesce(pf.lifetime_total_payments, 0) / 
             nullif(coalesce(pa.total_appointments, 0), 0))::numeric, 2
@@ -345,7 +354,10 @@ final as (
         )::numeric, 0) as churn_risk_score,
         
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='pt',
+            source_metadata_fields=['_loaded_at', '_updated_at']
+        ) }}
         
     from {{ ref('dim_patient') }} pt
     inner join {{ ref('dim_date') }} dd
@@ -364,6 +376,11 @@ final as (
         on pt.patient_id = pg.patient_id
     where pt.patient_status in ('Patient', 'Inactive')
         and pt.first_visit_date is not null
+        and pt.first_visit_date <= current_date  -- Exclude future patients
+        and pt.first_visit_date >= '2000-01-01'  -- Exclude patients with invalid early dates
+        and pt.patient_id != 32974  -- Exclude GLIC (implant center)
+        and pt.birth_date != '0001-01-01'  -- Exclude entities with invalid birth dates
+        and pt.position_code != 'House'  -- Exclude facility entities
 )
 
 select * from Final

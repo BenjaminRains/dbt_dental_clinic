@@ -74,6 +74,10 @@ with new_patient_base as (
         dp.guarantor_id,
         dp.has_insurance_flag,
         dp.estimated_balance,
+        -- Source metadata persisted from staging/dimensions
+        dp._loaded_at,
+        dp._created_at,
+        dp._updated_at,
         dp.preferred_contact_method,
         dp.preferred_confirmation_method
     from {{ ref('dim_patient') }} dp
@@ -200,33 +204,36 @@ final as (
         np.preferred_confirmation_method,
         
         -- First Visit Metrics
-        fa.first_appointment_datetime,
-        fa.total_first_day_appointments,
-        fa.completed_first_appointments,
-        fa.no_show_first_appointments,
-        fa.first_visit_scheduled_production,
-        fa.first_visit_procedures,
+        coalesce(fa.first_appointment_datetime, np.first_visit_date::timestamp) as first_appointment_datetime,
+        coalesce(fa.total_first_day_appointments, 0) as total_first_day_appointments,
+        coalesce(fa.completed_first_appointments, 0) as completed_first_appointments,
+        coalesce(fa.no_show_first_appointments, 0) as no_show_first_appointments,
+        coalesce(fa.first_visit_scheduled_production, 0.00) as first_visit_scheduled_production,
+        coalesce(fa.first_visit_procedures, array[]::text[]) as first_visit_procedures,
         
         -- First Visit Success Indicators
-        case when fa.completed_first_appointments > 0 then true else false end as completed_first_visit,
-        case when fa.no_show_first_appointments > 0 then true else false end as no_show_first_visit,
-        round(
-            coalesce(fa.completed_first_appointments, 0)::numeric / 
-            nullif(coalesce(fa.total_first_day_appointments, 0), 0) * 100, 2
-        ) as first_visit_completion_rate,
+        case when coalesce(fa.completed_first_appointments, 0) > 0 then true else false end as completed_first_visit,
+        case when coalesce(fa.no_show_first_appointments, 0) > 0 then true else false end as no_show_first_visit,
+        case 
+            when coalesce(fa.total_first_day_appointments, 0) = 0 then 0.00
+            else round(
+                coalesce(fa.completed_first_appointments, 0)::numeric / 
+                coalesce(fa.total_first_day_appointments, 0)::numeric * 100, 2
+            )
+        end as first_visit_completion_rate,
         
         -- Early Engagement (90 days)
-        ev.appointments_first_90_days,
-        ev.completed_appointments_90_days,
-        ev.production_first_90_days,
-        ev.last_appointment_90_days,
-        ev.providers_seen_90_days,
+        coalesce(ev.appointments_first_90_days, 1) as appointments_first_90_days,
+        coalesce(ev.completed_appointments_90_days, 0) as completed_appointments_90_days,
+        coalesce(ev.production_first_90_days, 0.00) as production_first_90_days,
+        coalesce(ev.last_appointment_90_days, np.first_visit_date) as last_appointment_90_days,
+        coalesce(ev.providers_seen_90_days, 1) as providers_seen_90_days,
         
         -- Early Financial Activity
-        ep.payments_first_90_days,
-        ep.patient_payments_90_days,
-        ep.insurance_payments_90_days,
-        ep.avg_payment_amount_90_days,
+        coalesce(ep.payments_first_90_days, 0) as payments_first_90_days,
+        coalesce(ep.patient_payments_90_days, 0.00) as patient_payments_90_days,
+        coalesce(ep.insurance_payments_90_days, 0.00) as insurance_payments_90_days,
+        coalesce(ep.avg_payment_amount_90_days, 0.00) as avg_payment_amount_90_days,
         
         -- Retention Indicators
         case when ev.appointments_first_90_days > 1 then true else false end as returned_within_90_days,
@@ -247,7 +254,7 @@ final as (
         
         -- Referral Generation
         coalesce(pr.referrals_generated, 0) as referrals_generated_1_year,
-        pr.referred_patient_ids,
+        coalesce(pr.referred_patient_ids, array[]::text[]) as referred_patient_ids,
         case when coalesce(pr.referrals_generated, 0) > 0 then true else false end as generated_referrals,
         
         -- Onboarding Success Score (0-100)
@@ -280,8 +287,12 @@ final as (
             else 'Poor'
         end as acquisition_success,
         
-        -- Metadata
-        {{ standardize_mart_metadata() }}
+        -- Metadata (with fallback for legacy patients)
+        np._loaded_at,
+        coalesce(np._created_at, np.first_visit_date) as _created_at,
+        np._updated_at,
+        current_timestamp as _transformed_at,
+        current_timestamp as _mart_refreshed_at
         
     from new_patient_base np
     inner join {{ ref('dim_date') }} dd
