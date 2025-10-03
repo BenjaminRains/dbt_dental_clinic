@@ -4,6 +4,9 @@ import {
     Patient,
     RevenueTrend,
     RevenueKPISummary,
+    RevenueOpportunity,
+    RevenueOpportunitySummary,
+    RevenueRecoveryPlan,
     ProviderPerformance,
     ProviderSummary,
     ARSummary,
@@ -12,7 +15,9 @@ import {
     ProviderFilter,
     ApiResponse,
     AppointmentSummary,
-    AppointmentDetail
+    AppointmentDetail,
+    MetricLineageInfo,
+    DBTModelMetadata
 } from '../types/api';
 
 // Configure axios base URL
@@ -63,21 +68,76 @@ async function apiCall<T>(
             loading: false,
         };
     } catch (error: any) {
+        let errorMessage = 'An error occurred';
+
+        if (error.response?.data?.detail) {
+            if (Array.isArray(error.response.data.detail)) {
+                errorMessage = error.response.data.detail.map((d: any) => d.msg || d).join(', ');
+            } else {
+                errorMessage = error.response.data.detail;
+            }
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+
         return {
-            error: error.response?.data?.detail || error.message || 'An error occurred',
+            error: errorMessage,
             loading: false,
         };
+    }
+}
+
+// Standardized API response helper for fetch-based requests
+export async function toApiResponse<T>(p: Promise<Response>): Promise<ApiResponse<T>> {
+    try {
+        const res = await p;
+        if (!res.ok) return { loading: false, error: `${res.status}: ${res.statusText}` };
+        const data = await res.json();
+        return { loading: false, data };
+    } catch (e: any) {
+        return { loading: false, error: e?.message ?? 'Network error' };
     }
 }
 
 // Revenue Analytics API calls
 export const revenueApi = {
     getTrends: async (params: ProviderFilter = {}): Promise<ApiResponse<RevenueTrend[]>> => {
-        return apiCall(() => api.get('/reports/revenue/trends', { params }));
+        return apiCall(() => api.get('/revenue/trends', { params }));
     },
 
     getKPISummary: async (params: DateRange = {}): Promise<ApiResponse<RevenueKPISummary>> => {
-        return apiCall(() => api.get('/reports/revenue/kpi-summary', { params }));
+        return apiCall(() => api.get('/revenue/kpi-summary', { params }));
+    },
+
+    getOpportunities: async (
+        skip: number = 0,
+        limit: number = 100,
+        params: ProviderFilter & {
+            opportunity_type?: string;
+            recovery_potential?: string;
+            min_priority_score?: number;
+        } = {}
+    ): Promise<ApiResponse<RevenueOpportunity[]>> => {
+        return apiCall(() => api.get('/revenue/opportunities', {
+            params: { skip, limit, ...params }
+        }));
+    },
+
+    getOpportunitySummary: async (params: DateRange = {}): Promise<ApiResponse<RevenueOpportunitySummary[]>> => {
+        return apiCall(() => api.get('/revenue/opportunities/summary', { params }));
+    },
+
+    getRecoveryPlan: async (
+        min_priority_score: number = 50,
+        params: DateRange = {}
+    ): Promise<ApiResponse<RevenueRecoveryPlan[]>> => {
+        return apiCall(() => api.get('/revenue/recovery-plan', {
+            params: { min_priority_score, ...params }
+        }));
+    },
+
+    getOpportunityById: async (opportunityId: number): Promise<ApiResponse<RevenueOpportunity>> => {
+        return apiCall(() => api.get(`/revenue/opportunities/${opportunityId}`));
     },
 };
 
@@ -108,7 +168,7 @@ export const dashboardApi = {
 
 // Patient API calls
 export const patientApi = {
-    getPatients: async (skip: number = 0, limit: number = 100): Promise<ApiResponse<Patient[]>> => {
+    getPatients: async (skip: number = 0, limit: number = 100): Promise<ApiResponse<{ patients: Patient[], total: number }>> => {
         return apiCall(() => api.get('/patients/', { params: { skip, limit } }));
     },
 
@@ -174,6 +234,28 @@ export const dateUtils = {
     getLastYear: (): DateRange => dateUtils.getDateRange(365),
 };
 
+// DBT Metadata API calls
+export const dbtMetadataApi = {
+    getMetricLineage: async (metricName: string): Promise<ApiResponse<MetricLineageInfo>> => {
+        return apiCall(() => api.get(`/dbt/metric-lineage/${metricName}`));
+    },
+
+    getAllMetricLineage: async (): Promise<ApiResponse<MetricLineageInfo[]>> => {
+        return apiCall(() => api.get('/dbt/metric-lineage'));
+    },
+
+    getModelMetadata: async (modelName: string): Promise<ApiResponse<DBTModelMetadata>> => {
+        return apiCall(() => api.get(`/dbt/model-metadata/${modelName}`));
+    },
+
+    getAllModels: async (params: {
+        model_type?: string;
+        schema_name?: string;
+    } = {}): Promise<ApiResponse<DBTModelMetadata[]>> => {
+        return apiCall(() => api.get('/dbt/models', { params }));
+    },
+};
+
 // Export all API functions
 export const apiService = {
     patient: patientApi,
@@ -182,6 +264,7 @@ export const apiService = {
     ar: arApi,
     dashboard: dashboardApi,
     appointment: appointmentApi,
+    dbt: dbtMetadataApi,
     utils: dateUtils,
 };
 
