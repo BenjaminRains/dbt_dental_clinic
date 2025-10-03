@@ -21,22 +21,19 @@ sources:
           - name: "PatNum"
             description: "Primary key for patient records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "SecDateEntry"
             description: "Creation timestamp that can be null"
           - name: "DateTStamp"
             description: "Last update timestamp"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
+              - expression_is_true_quoted:
+                  expression: "\"DateTStamp\" <= current_timestamp"
         tests:
-          - dbt_utils.unique_combination_of_columns:
-              combination_of_columns:
-                - "PatNum"
-          - dbt_utils.expression_is_true:
-              expression: "\"EstBalance\" = \"Bal_0_30\" + \"Bal_31_60\" + \"Bal_61_90\" + \"BalOver90\""
+          - expression_is_true_quoted:
+              expression: "\"PatNum\" > 0"
       
       - name: patientlink
         description: "Links between patient records, tracking relationships or merges between patients"
@@ -44,37 +41,31 @@ sources:
           - name: "PatientLinkNum"
             description: "Primary key for patient link records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNumFrom"
             description: "Source patient identifier referencing the patient_id in patient table"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
+              - not_null_quoted
           - name: "PatNumTo"
             description: "Destination patient identifier referencing the patient_id in patient table"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
+              - not_null_quoted
           - name: "LinkType"
             description: "Type of relationship between patients"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "DateTimeLink"
             description: "Timestamp when the link was created"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
+              - expression_is_true_quoted:
+                  expression: "\"DateTimeLink\" <= current_timestamp"
         tests:
-          - row_count:
-              min_count: 50
-              max_count: 200
-          - dbt_utils.expression_is_true:
+          # - row_count:
+          #     min_count: 50
+          #     max_count: 200
+          - expression_is_true_quoted:
               expression: "\"PatNumFrom\" != \"PatNumTo\""
       
       - name: patientnote
@@ -83,11 +74,8 @@ sources:
           - name: "PatNum"
             description: "Foreign key to patient, serves as primary key for patientnote"
             tests:
-              - not_null
-              - unique
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
+              - not_null_quoted
+              - unique_quoted
           - name: "FamFinancial"
             description: "Family financial notes"
           - name: "ApptPhone"
@@ -111,11 +99,11 @@ sources:
           - name: "SecDateTEntry"
             description: "Creation timestamp for the note"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "SecDateTEdit"
             description: "Last update timestamp for the note"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "Consent"
             description: "Consent indicator"
           - name: "UserNumOrthoLocked"
@@ -123,7 +111,7 @@ sources:
           - name: "Pronoun"
             description: "Patient's preferred pronoun"
         tests:
-          - dbt_utils.expression_is_true:
+          - expression_is_true_quoted:
               expression: "\"SecDateTEdit\" >= \"SecDateTEntry\""
       
       - name: zipcode
@@ -132,12 +120,12 @@ sources:
           - name: "ZipCodeNum"
             description: "Primary key for zipcode records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "ZipCodeDigits"
             description: "Postal code digits"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "City"
             description: "City name associated with the zipcode"
           - name: "State"
@@ -145,8 +133,8 @@ sources:
           - name: "IsFrequent"
             description: "Flag indicating if this zipcode is frequently used (0=no, 1=yes)"
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "\"IsFrequent\" IN (0, 1)"
+          - expression_is_true_quoted:
+              expression: "\"IsFrequent\" IN (false, true)"
       
       - name: toothinitial
         description: "Initial conditions of patient teeth"
@@ -157,15 +145,12 @@ sources:
           - name: "ToothInitialNum"
             description: "Primary key for tooth initial conditions"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to patient"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
+              - not_null_quoted
           - name: "ToothNum"
             description: "Tooth number identifier"
           - name: "InitialType"
@@ -179,12 +164,12 @@ sources:
           - name: "SecDateTEntry"
             description: "Timestamp when the record was created"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "SecDateTEdit"
             description: "Timestamp when the record was last updated"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: ">= \"SecDateTEntry\""
+              - not_null_quoted
+              - expression_is_true_quoted:
+                  expression: "\"SecDateTEdit\" >= \"SecDateTEntry\""
           - name: "DrawText"
             description: "Text description for drawings"

@@ -19,8 +19,8 @@ sources:
           - name: "DocNum"
             description: "Primary key for documents"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to patient records"
           - name: "DocCategory"
@@ -86,8 +86,8 @@ sources:
           - name: "SheetNum"
             description: "Primary key for sheets"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to patient"
           - name: "SheetDefNum"
@@ -113,8 +113,8 @@ sources:
           - name: "SheetDefNum"
             description: "Primary key for sheet definitions"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "Description"
             description: "Sheet description"
           - name: "SheetType"
@@ -152,8 +152,8 @@ sources:
           - name: "SheetFieldNum"
             description: "Primary key for sheet fields"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "SheetNum"
             description: "Foreign key to sheet"
           - name: "SheetFieldDefNum"
@@ -193,8 +193,8 @@ sources:
           - name: "SheetFieldDefNum"
             description: "Primary key for sheet field definitions"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "SheetDefNum"
             description: "Foreign key to sheet definition"
           - name: "FieldType"

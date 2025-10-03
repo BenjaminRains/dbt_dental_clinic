@@ -19,8 +19,8 @@ sources:
           - name: CommlogNum
             description: "Primary key for communication logs"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: PatNum
             description: "Foreign key to patient table"
           - name: UserNum
@@ -58,8 +58,8 @@ sources:
           - name: ReferralNum
             description: "Primary key for referrals"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: LName
             description: "Last name of the referral contact"
           - name: FName
@@ -121,8 +121,8 @@ sources:
           - name: RefAttachNum
             description: "Primary key for referral attachments"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           
           # Foreign Keys
           - name: ReferralNum

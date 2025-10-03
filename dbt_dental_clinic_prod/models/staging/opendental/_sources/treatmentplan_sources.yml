@@ -23,12 +23,12 @@ sources:
           - name: "TreatPlanNum"
             description: "Primary key for treatment plans"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum" 
             description: "Foreign key to patient table"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "DateTP"
             description: "Date the treatment plan was created"
           - name: "TPStatus"
@@ -46,16 +46,16 @@ sources:
           - name: "TreatPlanAttachNum"
             description: "Primary key for treatment plan attachments"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "TreatPlanNum"
             description: "Foreign key to treatment plan table"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ProcNum"
             description: "Foreign key to procedure table"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "Priority"
             description: "Priority value determining the order of procedures within the treatment plan"
         meta:
@@ -69,16 +69,16 @@ sources:
           - name: "TreatPlanParamNum"
             description: "Primary key for treatment plan parameters"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to patient table"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "TreatPlanNum"
             description: "Foreign key to treatment plan table"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ShowDiscount"
             description: "Flag indicating whether discounts should be shown (0=No, 1=Yes)"
           - name: "ShowMaxDed"

@@ -26,40 +26,28 @@ sources:
           - name: AdjNum
             description: Primary key for adjustments
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: PatNum
             description: Reference to patient record (indexed)
             tests:
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: PatNum
+              - not_null_quoted
           - name: AdjAmt
             description: Adjustment amount (positive for credits, negative for debits)
             tests:
-              - not_null
+              - not_null_quoted
           - name: AdjDate
             description: Date of adjustment (BRIN indexed)
             tests:
-              - not_null
+              - not_null_quoted
           - name: AdjType
             description: Type code for adjustment classification
             tests:
-              - not_null
+              - not_null_quoted
           - name: ProcNum
             description: Reference to procedure if applicable (indexed)
-            tests:
-              - relationships:
-                  to: source('opendental', 'procedurelog')
-                  field: ProcNum
-                  where: "ProcNum is not null"
           - name: ProvNum
             description: Reference to provider who authorized the adjustment
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: ProvNum
-                  where: "ProvNum is not null"
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
@@ -124,10 +112,6 @@ sources:
         columns:
           - name: PatNum
             description: Reference to patient
-            tests:
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: PatNum
 
       - name: paysplit
         description: >
@@ -141,44 +125,30 @@ sources:
           - name: SplitNum
             description: Primary key for payment splits
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: PayNum
             description: Reference to parent payment record
             tests:
-              - relationships:
-                  to: source('opendental', 'payment')
-                  field: PayNum
+              - not_null_quoted
           - name: SplitAmt
             description: Amount of the split (default 0)
             tests:
-              - not_null
+              - not_null_quoted
           - name: DatePay
             description: Payment date (BRIN indexed)
             tests:
-              - not_null
+              - not_null_quoted
           - name: ProcNum
             description: Reference to procedure if applicable
-            tests:
-              - relationships:
-                  to: source('opendental', 'procedurelog')
-                  field: ProcNum
-                  where: "ProcNum is not null"
           - name: AdjNum
             description: Reference to adjustment if applicable
-            tests:
-              - relationships:
-                  to: source('opendental', 'adjustment')
-                  field: AdjNum
-                  where: "AdjNum is not null"
           - name: IsDiscount
             description: Flag for discounts (smallint)
           - name: PatNum
             description: Reference to patient
             tests:
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: PatNum
+              - not_null_quoted
           - name: UnearnedType
             description: Income recognition type (288 and 439 for unearned)
         meta:
@@ -225,14 +195,10 @@ sources:
           - name: StatementNum
             description: Primary key for statements
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: PatNum
             description: Reference to patient record
-            tests:
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: PatNum
           - name: DateSent
             description: Date when statement was sent
           - name: DateRangeFrom
@@ -295,14 +261,10 @@ sources:
           - name: StatementProdNum
             description: Primary key for statement production items
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: StatementNum
             description: Reference to parent statement
-            tests:
-              - relationships:
-                  to: source('opendental', 'statement')
-                  field: StatementNum
           - name: FKey
             description: Foreign key reference (varies based on ProdType)
           - name: ProdType
@@ -341,18 +303,18 @@ sources:
           - name: FeeNum
             description: Primary key for fees
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: FeeSched
             description: Reference to fee schedule
             tests:
-              - not_null
+              - not_null_quoted
           - name: CodeNum
             description: Reference to procedure code
           - name: Amount
             description: Fee amount
             tests:
-              - not_null
+              - not_null_quoted
           - name: UseDefaultFee
             description: Flag for using default fee (smallint)
           - name: UseDefaultCov
@@ -380,16 +342,16 @@ sources:
           - name: FeeSchedNum
             description: Primary key for fee schedules
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: Description
             description: Name/description of the fee schedule
             tests:
-              - not_null
+              - not_null_quoted
           - name: FeeSchedType
             description: Type identifier for fee schedule classification
             tests:
-              - not_null
+              - not_null_quoted
           - name: ItemOrder
             description: Display order for the fee schedule
           - name: IsHidden

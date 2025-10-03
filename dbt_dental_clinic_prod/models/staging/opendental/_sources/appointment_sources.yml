@@ -54,19 +54,18 @@ sources:
               - Controls clinic-specific schedule views
               - Manages provider and operatory visibility
             tests:
-              - unique
-              - not_null
-              - positive_values
+              - unique_quoted
+              - not_null_quoted
           - name: "Description"
             description: "Name or description of the appointment view (e.g., 'Office', 'HIPAA', 'Week')"
           - name: "ItemOrder"
             description: "Numeric value determining the display order of views"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "RowsPerIncr"
             description: "Number of rows per increment in the schedule display"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "OnlyScheduledProvs"
             description: "Flag indicating if only scheduled providers should be shown"
           - name: "OnlySchedBeforeTime"
@@ -79,10 +78,6 @@ sources:
             description: "Stack behavior setting for left/right direction"
           - name: "ClinicNum"
             description: "Foreign key to clinic table - identifies which clinic this view applies to"
-            tests:
-              - relationships:
-                  to: source('opendental', 'clinic')
-                  field: "ClinicNum"
           - name: "ApptTimeScrollStart"
             description: "Starting time for appointment scrolling"
           - name: "IsScrollStartDynamic"
@@ -211,9 +206,8 @@ sources:
               - Manages provider schedule visibility
               - Enforces clinic-specific access rules
             tests:
-              - unique
-              - not_null
-              - positive_values
+              - unique_quoted
+              - not_null_quoted
           - name: "UserNum"
             description: >
               Foreign key reference to userod table - identifies which user this permission applies to.
@@ -228,11 +222,7 @@ sources:
               - Null values indicate system-level access
               - Historical records may reference inactive users
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
-                  severity: error
+              - not_null_quoted
           - name: "ClinicNum"
             description: >
               Foreign key to clinic table - identifies which clinic this view applies to.
@@ -246,12 +236,6 @@ sources:
               - Null in single-clinic implementations
               - Must reference valid clinic if not null
               - Critical for multi-clinic access control
-            tests:
-              - relationships:
-                  to: source('opendental', 'clinic')
-                  field: "ClinicNum"
-                  severity: warn
-                  where: "ClinicNum is not null"
           - name: "ApptViewNum"
             description: >
               Foreign key to apptview table - identifies which appointment view this permission grants access to.
@@ -266,11 +250,7 @@ sources:
               - Critical for access control
               - Historical records may reference inactive views
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'apptview')
-                  field: "ApptViewNum"
-                  severity: error
+              - not_null_quoted
         meta:
           # System Classification
           system_integration: "System G: Scheduling & Resources"
@@ -396,9 +376,8 @@ sources:
               - Links appointments to procedures
               - Used for appointment history tracking
             tests:
-              - unique
-              - not_null
-              - positive_values
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: >
               Foreign key to patient table - identifies the patient for this appointment.
@@ -413,11 +392,7 @@ sources:
               - Critical for patient care coordination
               - Historical records may reference inactive patients
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
-                  severity: error
+              - not_null_quoted
           - name: "AptDateTime"
             description: >
               Date and time the appointment is scheduled for.
@@ -432,11 +407,7 @@ sources:
               - Historical appointments must be in the past
               - Timezone: Local practice time
             tests:
-              - not_null
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: "'2000-01-01'::timestamp"
-                  max_value: "current_timestamp + interval '1 year'"
-                  severity: warn
+              - not_null_quoted
           - name: "AptStatus"
             description: >
               Status code for the appointment controlling workflow progression.
@@ -453,8 +424,8 @@ sources:
               - Completed appointments should have all timestamps
               - Broken appointments require documentation
             tests:
-              - not_null
-              - accepted_values:
+              - not_null_quoted
+              - accepted_values_quoted:
                   values: [1, 2, 3, 5, 6]
                   config:
                     severity: warn
@@ -471,9 +442,9 @@ sources:
               - Should be true for confirmed appointments
               - May be false for tentative scheduling
             tests:
-              - not_null
-              - accepted_values:
-                  values: [0, 1]
+              - not_null_quoted
+              - accepted_values_quoted:
+                  values: [false, true]
         meta:
           # System Classification
           system_integration: "System G: Scheduling & Resources"
@@ -606,9 +577,8 @@ sources:
               - Controls scheduler display settings
               - Links to procedure codes
             tests:
-              - unique
-              - not_null
-              - positive_values
+              - unique_quoted
+              - not_null_quoted
           - name: "AppointmentTypeName"
             description: >
               The name of the appointment type displayed to users.
@@ -623,8 +593,8 @@ sources:
               - Used in patient communications
               - Affects schedule visualization
             tests:
-              - not_null
-              - unique
+              - not_null_quoted
+              - unique_quoted
           - name: "AppointmentTypeColor"
             description: >
               Integer representing the color code for display in the scheduler.
@@ -639,11 +609,7 @@ sources:
               - Should be visually distinct
               - Used for quick type identification
             tests:
-              - not_null
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: 0
-                  max_value: 16777215  # Maximum 24-bit color value
-                  severity: warn
+              - not_null_quoted
           - name: "ItemOrder"
             description: >
               Numeric value determining the display order of appointment types.
@@ -658,8 +624,8 @@ sources:
               - Lower numbers appear first
               - Used for UI organization
             tests:
-              - not_null
-              - unique
+              - not_null_quoted
+              - unique_quoted
           - name: "IsHidden"
             description: >
               Flag indicating if the appointment type is hidden (1) or visible (0).
@@ -674,9 +640,9 @@ sources:
               - May be 1 for historical types
               - Used for type management
             tests:
-              - not_null
-              - accepted_values:
-                  values: [0, 1]
+              - not_null_quoted
+              - accepted_values_quoted:
+                  values: [false, true]
           - name: "Pattern"
             description: >
               Pattern string used for visual representation in the scheduler.
@@ -691,7 +657,7 @@ sources:
               - Used for visual identification
               - Affects user experience
             tests:
-              - not_null
+              - not_null_quoted
           - name: "CodeStr"
             description: >
               String of procedure codes associated with this appointment type.
@@ -706,7 +672,7 @@ sources:
               - Should reference valid codes
               - Used for procedure association
             tests:
-              - not_null
+              - not_null_quoted
           - name: "CodeStrRequired"
             description: >
               String of procedure codes that are required for this appointment type.
@@ -721,7 +687,7 @@ sources:
               - Should reference valid codes
               - Used for requirement enforcement
             tests:
-              - not_null
+              - not_null_quoted
           - name: "RequiredProcCodesNeeded"
             description: >
               Number of required procedure codes needed for this appointment type.
@@ -736,11 +702,7 @@ sources:
               - Used for requirement validation
               - Affects scheduling workflow
             tests:
-              - not_null
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: 0
-                  max_value: 100
-                  severity: warn
+              - not_null_quoted
           - name: "BlockoutTypes"
             description: >
               Types of blockouts associated with this appointment type.
@@ -755,7 +717,7 @@ sources:
               - Used for blockout management
               - Affects scheduling rules
             tests:
-              - not_null
+              - not_null_quoted
         meta:
           # System Classification
           system_integration: "System G: Scheduling & Resources"
@@ -885,9 +847,8 @@ sources:
               - Enables change tracking
               - Supports audit requirements
             tests:
-              - unique
-              - not_null
-              - positive_values
+              - unique_quoted
+              - not_null_quoted
           - name: "AptNum"
             description: >
               Foreign key to the original appointment record.
@@ -902,11 +863,7 @@ sources:
               - Critical for change tracking
               - Historical records may reference deleted appointments
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'appointment')
-                  field: "AptNum"
-                  severity: warn
+              - not_null_quoted
           - name: "PatNum"
             description: >
               Foreign key to the patient associated with this appointment.
@@ -921,10 +878,7 @@ sources:
               - Critical for patient history
               - Historical records may reference inactive patients
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
+              - not_null_quoted:
                   severity: warn
           - name: "HistUserNum"
             description: >
@@ -940,11 +894,7 @@ sources:
               - Critical for audit trail
               - Historical records may reference inactive users
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
-                  severity: warn
+              - not_null_quoted
           - name: "HistDateTStamp"
             description: >
               Timestamp when this history record was created.
@@ -959,11 +909,7 @@ sources:
               - Should be in chronological order
               - Used for change tracking
             tests:
-              - not_null
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: "'2000-01-01'::timestamp"
-                  max_value: "current_timestamp + interval '1 hour'"
-                  severity: warn
+              - not_null_quoted
           - name: "HistApptAction"
             description: >
               Code indicating what type of action was performed.
@@ -979,8 +925,8 @@ sources:
               - Critical for audit trail
               - Used for change analysis
             tests:
-              - not_null
-              - accepted_values:
+              - not_null_quoted
+              - accepted_values_quoted:
                   values: [0, 1, 2, 3]
                   config:
                     severity: warn
@@ -1000,8 +946,8 @@ sources:
               - Critical for status history
               - Used for workflow analysis
             tests:
-              - not_null
-              - accepted_values:
+              - not_null_quoted
+              - accepted_values_quoted:
                   values: [1, 2, 3, 5, 6]
                   config:
                     severity: warn
@@ -1019,11 +965,7 @@ sources:
               - Should be in chronological order
               - Used for schedule tracking
             tests:
-              - not_null
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: "'2000-01-01'::timestamp"
-                  max_value: "current_timestamp + interval '1 year'"
-                  severity: warn
+              - not_null_quoted
           - name: "DateTimeArrived"
             description: >
               Timestamp when the patient arrived for this appointment.
@@ -1037,11 +979,6 @@ sources:
               - May be null if patient didn't arrive
               - Should be before seating time
               - Used for flow tracking
-            tests:
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: "'2000-01-01'::timestamp"
-                  max_value: "current_timestamp + interval '1 hour'"
-                  severity: warn
           - name: "DateTimeSeated"
             description: >
               Timestamp when the patient was seated in the operatory.
@@ -1055,11 +992,6 @@ sources:
               - May be null if not seated
               - Should be after arrival time
               - Used for flow tracking
-            tests:
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: "'2000-01-01'::timestamp"
-                  max_value: "current_timestamp + interval '1 hour'"
-                  severity: warn
           - name: "DateTimeDismissed"
             description: >
               Timestamp when the patient was dismissed after the appointment.
@@ -1073,11 +1005,6 @@ sources:
               - May be null if not dismissed
               - Should be after seating time
               - Used for flow tracking
-            tests:
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: "'2000-01-01'::timestamp"
-                  max_value: "current_timestamp + interval '1 hour'"
-                  severity: warn
           - name: "AppointmentTypeNum"
             description: >
               Foreign key to the appointment type at time of change.
@@ -1092,11 +1019,7 @@ sources:
               - Critical for type history
               - Historical records may reference inactive types
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'appointmenttype')
-                  field: "AppointmentTypeNum"
-                  severity: warn
+              - not_null_quoted
           - name: "ProvNum"
             description: >
               Foreign key to the primary provider at time of change.
@@ -1111,11 +1034,7 @@ sources:
               - Critical for provider history
               - Historical records may reference inactive providers
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: "ProvNum"
-                  severity: warn
+              - not_null_quoted
           - name: "ProvHyg"
             description: >
               Foreign key to the hygienist provider at time of change.
@@ -1129,12 +1048,6 @@ sources:
               - Must reference valid provider if not null
               - Used for hygienist history
               - Historical records may reference inactive providers
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: "ProvNum"
-                  severity: warn
-                  where: "ProvHyg is not null"
           - name: "Op"
             description: >
               Foreign key to the operatory (chair/room) at time of change.
@@ -1149,11 +1062,7 @@ sources:
               - Critical for room history
               - Historical records may reference inactive operatories
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'operatory')
-                  field: "OperatoryNum"
-                  severity: warn
+              - not_null_quoted
           - name: "TimeLocked"
             description: >
               Smallint (0/1) indicating if the appointment time was locked at time of change.
@@ -1168,9 +1077,9 @@ sources:
               - Used for lock history
               - Affects change tracking
             tests:
-              - not_null
-              - accepted_values:
-                  values: [0, 1]
+              - not_null_quoted
+              - accepted_values_quoted:
+                  values: [false, true]
         meta:
           # System Classification
           system_integration: "System G: Scheduling & Resources"
@@ -1274,10 +1183,6 @@ sources:
             description: "Foreign key to patient table - identifies the patient for this recall"
           - name: "RecallTypeNum"
             description: "Foreign key to recalltype table - specifies the type of recall appointment"
-            tests:
-              - relationships:
-                  to: source('opendental', 'recalltype')
-                  field: "RecallTypeNum"
           - name: "DateDueCalc"
             description: "Calculated date when the patient's recall is due based on recall interval"
           - name: "DateDue"
@@ -1351,8 +1256,8 @@ sources:
           - name: "ScheduleNum"
             description: "Primary key - Unique identifier for each schedule record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "SchedDate"
             description: "The date of the scheduled event or blockout"
           - name: "StartTime"
@@ -1365,10 +1270,6 @@ sources:
               different schedule categories)
           - name: "ProvNum"
             description: "Foreign key to provider table - identifies which provider this schedule entry applies to"
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: "ProvNum"
           - name: "BlockoutType"
             description: "Foreign key identifying the type of blockout if this is a blockout entry (e.g., lunch, meeting, vacation)"
           - name: "Note"

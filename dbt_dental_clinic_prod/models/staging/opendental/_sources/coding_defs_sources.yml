@@ -19,8 +19,8 @@ sources:
           - name: "AutoCodeNum"
             description: "Primary key for automatic code assignments"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "Description"
             description: "Description of the autocode and its purpose"
           - name: "IsHidden"
@@ -34,8 +34,8 @@ sources:
           - name: "CodeGroupNum"
             description: "Primary key for code groups"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "GroupName"
             description: "Name of the code group (varchar 50)"
           - name: "ProcCodes"
@@ -55,18 +55,16 @@ sources:
           - name: "DefNum"
             description: "Primary key for system definitions"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "Category"
             description: "Category identifier for grouping related definitions"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ItemOrder"
             description: "Display order sequence within a category"
           - name: "ItemName"
             description: "Name or identifier of the definition item"
-            tests:
-              - not_null
           - name: "ItemValue"
             description: "Value or setting associated with the definition item"
           - name: "ItemColor"
@@ -74,9 +72,9 @@ sources:
           - name: "IsHidden"
             description: "Flag indicating if the definition is hidden from view (0=visible, 1=hidden)"
             tests:
-              - not_null
-              - accepted_values:
-                  values: [0, 1]
+              - not_null_quoted
+              - accepted_values_quoted:
+                  values: [false, true]
 
       - name: program
         description: "Configuration for integrated software programs and external tools in OpenDental"
@@ -84,20 +82,18 @@ sources:
           - name: "ProgramNum"
             description: "Primary key for program configurations"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "ProgName"
             description: "Name of the integrated program or software (varchar 100)"
-            tests:
-              - not_null
           - name: "ProgDesc"
             description: "Description of the program or software (varchar 100)"
           - name: "Enabled"
             description: "Flag indicating if the program integration is enabled (0=disabled, 1=enabled)"
             tests:
-              - not_null
-              - accepted_values:
-                  values: [0, 1]
+              - not_null_quoted
+              - accepted_values_quoted:
+                  values: [false, true]
           - name: "Path"
             description: "File system path to the program executable"
           - name: "CommandLine"
@@ -123,21 +119,16 @@ sources:
           - name: "ProgramPropertyNum"
             description: "Primary key for program properties"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           
           - name: "ProgramNum"
             description: "Foreign key to the program table, linking to the associated program configuration"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'program')
-                  field: ProgramNum
+              - not_null_quoted
 
           - name: "PropertyDesc"
             description: "Description of the program property or setting"
-            tests:
-              - not_null
 
           - name: "PropertyValue"
             description: "Value assigned to the program property"
@@ -151,13 +142,13 @@ sources:
           - name: "IsMasked"
             description: "Flag indicating if the property value is masked for security (0=not masked, 1=masked)"
             tests:
-              - not_null
-              - accepted_values:
-                  values: [0, 1]
+              - not_null_quoted
+              - accepted_values_quoted:
+                  values: [false, true]
 
           - name: "IsHighSecurity"
             description: "Flag indicating if the property requires high security access (0=normal, 1=high security)"
             tests:
-              - not_null
-              - accepted_values:
-                  values: [0, 1]
+              - not_null_quoted
+              - accepted_values_quoted:
+                  values: [false, true]

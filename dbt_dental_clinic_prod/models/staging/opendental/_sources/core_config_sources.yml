@@ -24,8 +24,8 @@ sources:
           - name: "ClinicNum"
             description: "Primary key for clinic records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "Description"
             description: "Name or description of the clinic location"
           - name: "Abbr"
@@ -115,4 +115,53 @@ sources:
           data_quality_results:
             last_tested: '2024-03-14'
             tests_passed: 15
-            tests_total: 15 
+            tests_total: 15
+
+      - name: operatory
+        description: >
+          Core operatory (dental chair/room) configuration for scheduling and resource management.
+          Contains essential information about each operatory including name, provider assignments,
+          clinic location, and operational settings. Critical for appointment scheduling,
+          provider workflow management, and resource utilization tracking.
+        columns:
+          - name: "OperatoryNum"
+            description: "Primary key - Unique identifier for each operatory"
+            tests:
+              - unique_quoted
+              - not_null_quoted
+          - name: "OpName"
+            description: "Name or description of the operatory (e.g., 'Chair 1', 'Room A')"
+          - name: "Abbrev"
+            description: "Abbreviation used for the operatory in schedules and reports"
+          - name: "ItemOrder"
+            description: "Display order for the operatory in lists and dropdowns"
+          - name: "IsHidden"
+            description: "Flag indicating if the operatory is hidden from normal view (0=no, 1=yes)"
+          - name: "ProvDentist"
+            description: "Foreign key to provider table - identifies the primary dentist assigned to this operatory"
+          - name: "ProvHygienist"
+            description: "Foreign key to provider table - identifies the hygienist assigned to this operatory"
+          - name: "IsHygiene"
+            description: "Flag indicating if this operatory is designated for hygiene appointments (0=no, 1=yes)"
+          - name: "ClinicNum"
+            description: "Foreign key to clinic table - identifies which clinic this operatory belongs to"
+          - name: "DateTStamp"
+            description: "Timestamp when this operatory record was last updated"
+            tests:
+              - not_null_quoted
+          - name: "SetProspective"
+            description: "Flag indicating if this operatory is set for prospective scheduling (0=no, 1=yes)"
+          - name: "IsWebSched"
+            description: "Flag indicating if this operatory is available for web scheduling (0=no, 1=yes)"
+          - name: "IsNewPatAppt"
+            description: "Flag indicating if this operatory is available for new patient appointments (0=no, 1=yes)"
+          - name: "OperatoryType"
+            description: "Foreign key to operatory type definition table"
+        meta:
+          contains_pii: false
+          business_owners: ["dental_operations_team"]
+          technical_owners: ["data_engineering_team"]
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 8
+            tests_total: 8 

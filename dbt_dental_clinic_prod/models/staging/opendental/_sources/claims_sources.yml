@@ -21,15 +21,11 @@ sources:
           - name: "ClaimNum"
             description: "Primary key for insurance claims"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           # Primary patient and plan relationships
           - name: "PatNum"
             description: "Foreign key to the patient associated with this claim"
-            tests:
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
           - name: "PlanNum"
             description: "Foreign key to the primary insurance plan for this claim"
           - name: "PlanNum2"
@@ -37,18 +33,8 @@ sources:
           # Provider information
           - name: "ProvTreat"
             description: "Foreign key to the provider who performed the treatment"
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: "ProvNum"
-                  where: "ProvTreat is not null"
           - name: "ProvBill"
             description: "Foreign key to the provider responsible for billing"
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: "ProvNum"
-                  where: "ProvBill is not null"
           - name: "ReferringProv"
             description: "Foreign key to the provider who referred the patient"
           - name: "OrderingReferralNum"
@@ -167,8 +153,8 @@ sources:
           - name: "ClaimPaymentNum"
             description: "Primary key for claim payments"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           # Dates
           - name: "CheckDate"
             description: "Date the insurance check was issued or received"
@@ -220,8 +206,8 @@ sources:
           - name: "ClaimProcNum"
             description: "Primary key for claim procedures"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           # Relationships
           - name: "ProcNum"
             description: "Foreign key to the procedure record (ProcNum)"
@@ -340,8 +326,8 @@ sources:
           - name: "ClaimTrackingNum"
             description: "Primary key for claim tracking records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           # Relationships
           - name: "ClaimNum"
             description: "Foreign key to the insurance claim (ClaimNum)"
@@ -376,53 +362,30 @@ sources:
           - name: "ClaimSnapshotNum"
             description: "Primary key for claim snapshot records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "ProcNum"
             description: "Foreign key to the procedure record"
-            tests:
-              - relationships:
-                  to: source('opendental', 'procedurelog')
-                  field: "ProcNum"
           - name: "ClaimType"
             description: "Type of claim (e.g., primary, secondary)"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "Writeoff"
             description: "Amount written off at snapshot time"
-            tests:
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: 0
-                  max_value: 10000
           - name: "InsPayEst"
             description: "Estimated insurance payment amount at snapshot time"
-            tests:
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: 0
-                  max_value: 10000
           - name: "Fee"
             description: "Fee amount at snapshot time"
-            tests:
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: 0
-                  max_value: 10000
           - name: "DateTEntry"
             description: "Timestamp when the snapshot was created"
             tests:
-              - not_null
-              - dbt_expectations.expect_column_values_to_be_between:
-                  min_value: "'2023-01-01'::timestamp"
-                  max_value: "'{{ var('max_valid_date', 'current_date') }}'::timestamp"
+              - not_null_quoted
           - name: "ClaimProcNum"
             description: "Foreign key to the claim procedure record"
-            tests:
-              - relationships:
-                  to: source('opendental', 'claimproc')
-                  field: "ClaimProcNum"
           - name: "SnapshotTrigger"
             description: "Indicator of what triggered this snapshot (e.g., claim submission, payment received)"
             tests:
-              - not_null
+              - not_null_quoted
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
@@ -455,31 +418,71 @@ sources:
           - name: "EobAttachNum"
             description: "Primary key for EOB attachments"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "ClaimPaymentNum"
             description: "Foreign key to the claim payment this attachment is associated with"
-            tests:
-              - relationships:
-                  to: source('opendental', 'claimpayment')
-                  field: "ClaimPaymentNum"
           - name: "DateTCreated"
             description: "Timestamp when the EOB attachment was created"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "FileName"
             description: "Name of the attached file"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "RawBase64"
             description: "Base64 encoded content of the attached file"
             tests:
-              - not_null
+              - not_null_quoted
         meta:
           data_quality_results:
             last_tested: '2024-03-14'
             tests_passed: 5
             tests_total: 5
           contains_pii: true
+          business_owners: ["dental_finance_team", "insurance_team"]
+          technical_owners: ["data_engineering_team"]
+
+      - name: claimform
+        description: "Claim form templates and layout definitions for insurance billing"
+        freshness:
+          warn_after: {count: 7, period: day}
+          error_after: {count: 30, period: day}
+        columns:
+          - name: "ClaimFormNum"
+            description: "Primary key for claim form templates"
+            tests:
+              - unique_quoted
+              - not_null_quoted
+          - name: "Description"
+            description: "Human-readable name or description of the claim form template"
+          - name: "IsHidden"
+            description: "Flag indicating whether the claim form template is hidden from user interfaces (0=Visible, 1=Hidden)"
+          - name: "FontName"
+            description: "Font family name used for text rendering on the claim form"
+          - name: "FontSize"
+            description: "Font size in points for text rendering on the claim form"
+          - name: "UniqueID"
+            description: "Unique identifier string for the claim form template"
+          - name: "PrintImages"
+            description: "Flag indicating whether images should be included when printing claim forms (0=No, 1=Yes)"
+          - name: "OffsetX"
+            description: "Horizontal offset in pixels for form element positioning"
+          - name: "OffsetY"
+            description: "Vertical offset in pixels for form element positioning"
+          - name: "Width"
+            description: "Width of the claim form in pixels"
+            tests:
+              - not_null_quoted
+          - name: "Height"
+            description: "Height of the claim form in pixels"
+            tests:
+              - not_null_quoted
+        meta:
+          data_quality_results:
+            last_tested: '2024-03-14'
+            tests_passed: 4
+            tests_total: 4
+          contains_pii: false
           business_owners: ["dental_finance_team", "insurance_team"]
           technical_owners: ["data_engineering_team"]

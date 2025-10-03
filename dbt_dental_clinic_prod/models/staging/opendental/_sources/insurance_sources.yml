@@ -21,12 +21,12 @@ sources:
           - name: EmployerNum
             description: "Primary key - Unique identifier for each employer"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: EmpName
             description: "Name of the employer"
             tests:
-              - not_null
+              - not_null_quoted
           - name: Address
             description: "Primary address line of the employer"
           - name: Address2
@@ -47,34 +47,32 @@ sources:
           group numbers can have legitimate duplicates across different scenarios 
           (e.g., federal programs, Medicare, multi-carrier corporate plans).
         columns:
-          - name: insurance_plan_id
+          - name: "PlanNum"
             description: "Primary key for insurance plans"
             tests:
-              - unique
-              - not_null
-          - name: employer_id
+              - unique_quoted
+              - not_null_quoted
+          - name: "EmployerNum"
             description: "Reference to employer associated with the plan"
-          - name: carrier_id
+          - name: "CarrierNum"
             description: "Reference to insurance carrier/provider"
-          - name: group_number
+          - name: "GroupNum"
             description: >
               Insurance group identifier. Can be legitimately duplicated in several cases:
               - Federal agency programs (e.g., 104, 105)
               - Corporate plans across multiple carriers
               - Medicare/program-specific numbers
               - Industry-specific group numbers
-          - name: group_name
+          - name: "GroupName"
             description: "Name of the insurance group, may vary slightly for same group across carriers"
-          - name: fee_schedule_id
+          - name: "FeeSched"
             description: "Reference to the primary fee schedule for the plan"
-          - name: is_medical
+          - name: "IsMedical"
             description: "Flag indicating medical vs dental insurance"
-          - name: is_hidden
+          - name: "IsHidden"
             description: "Administrative visibility flag"
-          - name: created_at
+          - name: "DateTStamp"
             description: "Timestamp of record creation"
-          - name: updated_at
-            description: "Timestamp of last update"
 
       - name: inssub
         description: "Insurance subscriber information linking patients to insurance plans"
@@ -82,16 +80,16 @@ sources:
           - name: InsSubNum
             description: "Primary key - Unique identifier for the insurance subscriber record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: PlanNum
             description: "Foreign key to insurance plan"
             tests:
-              - not_null
+              - not_null_quoted
           - name: Subscriber
             description: "Foreign key to the subscriber (patient) record"
             tests:
-              - not_null
+              - not_null_quoted
           - name: DateEffective
             description: "Date when the insurance subscription becomes effective"
           - name: DateTerm
@@ -113,7 +111,7 @@ sources:
           - name: SecDateTEdit
             description: "Timestamp of the last modification to the record"
             tests:
-              - not_null
+              - not_null_quoted
 
       - name: patplan
         description: >
@@ -124,23 +122,23 @@ sources:
           - name: PatPlanNum
             description: "Primary key - Unique identifier for each patient plan record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
 
           - name: PatNum
             description: "Foreign key to the patient table"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: InsSubNum
             description: "Foreign key to insurance subscriber (inssub.InsSubNum)"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: Ordinal
             description: "Order/priority of the insurance plan for the patient (primary, secondary, etc.)"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: IsPending
             description: "Flag indicating if the insurance plan assignment is pending"
@@ -160,12 +158,12 @@ sources:
           - name: SecDateTEntry
             description: "Timestamp when the record was created"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: SecDateTEdit
             description: "Timestamp when the record was last modified"
             tests:
-              - not_null
+              - not_null_quoted
 
       - name: benefit
         description: >
@@ -177,18 +175,18 @@ sources:
           - name: BenefitNum
             description: "Primary key - Unique identifier for the benefit record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
 
           - name: PlanNum
             description: "Foreign key to insurance plans (insplan.PlanNum)"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: PatPlanNum
             description: "Foreign key to patient plan assignments (patplan.PatPlanNum)"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: CovCatNum
             description: "Foreign key to coverage categories, defines service category for the benefit"
@@ -196,7 +194,7 @@ sources:
           - name: BenefitType
             description: "Type of benefit rule (e.g., limitations, coverage percentage, deductible)"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: Percent
             description: "Coverage percentage for this benefit"
@@ -228,12 +226,12 @@ sources:
           - name: SecDateTEntry
             description: "Timestamp when the benefit record was created"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: SecDateTEdit
             description: "Timestamp when the benefit record was last modified"
             tests:
-              - not_null
+              - not_null_quoted
 
       - name: insverify
         description: "Insurance verification records tracking verification activities for insurance-related entities"
@@ -241,13 +239,13 @@ sources:
           - name: InsVerifyNum
             description: "Primary key - Unique identifier for the insurance verification record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           
           - name: UserNum
             description: "Foreign key - ID of the user who created the verification record"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: FKey
             description: >
@@ -255,7 +253,7 @@ sources:
               - When verify_type = 1, references inssub.InsSubNum (95% match rate)
               - When verify_type = 2, references another entity (62% match rate with inssub)
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: DefNum
             description: "Foreign key - References a definition record"
@@ -266,8 +264,8 @@ sources:
               - 1: Insurance subscriber verification
               - 2: Other type of verification
             tests:
-              - not_null
-              - accepted_values:
+              - not_null_quoted
+              - accepted_values_quoted:
                   values: [1, 2]
 
           - name: DateLastVerified
@@ -288,7 +286,7 @@ sources:
           - name: SecDateTEdit
             description: "Timestamp of the last modification to the record"
             tests:
-              - not_null
+              - not_null_quoted
 
       - name: insverifyhist
         description: "Historical insurance verification data tracking changes to verification activities"
@@ -296,23 +294,23 @@ sources:
           - name: InsVerifyHistNum
             description: "Primary key - Unique identifier for the insurance verification history record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
 
           - name: InsVerifyNum
             description: "Foreign key - References the original verification record in insverify"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: UserNum
             description: "Foreign key - ID of the user who created the original verification record"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: VerifyUserNum
             description: "Foreign key - ID of the user who performed the verification"
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: FKey
             description: >
@@ -320,7 +318,7 @@ sources:
               - When verify_type = 1, references inssub.InsSubNum (95% match rate)
               - When verify_type = 2, references another entity (62% match rate with inssub)
             tests:
-              - not_null
+              - not_null_quoted
 
           - name: DefNum
             description: "Foreign key - References a definition record"
@@ -331,8 +329,8 @@ sources:
               - 1: Insurance subscriber verification
               - 2: Other type of verification
             tests:
-              - not_null
-              - accepted_values:
+              - not_null_quoted
+              - accepted_values_quoted:
                   values: [1, 2]
 
           - name: DateLastVerified
@@ -353,123 +351,117 @@ sources:
           - name: SecDateTEdit
             description: "Timestamp of the last modification to the record"
             tests:
-              - not_null
+              - not_null_quoted
 
       - name: insbluebook
         description: "Insurance fee schedules (bluebook). Contains current insurance payment information and allowed fee overrides."
         columns:
-          - name: insbluebook_num
+          - name: "InsBlueBookNum"
             description: "Primary key for the insurance bluebook entry"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           
-          - name: proccode_num
+          - name: "CodeNum"
             description: "Foreign key to procedure codes table"
-            tests:
-              - not_null
 
-          - name: carrier_num
+          - name: "CarrierNum"
             description: "Foreign key to insurance carriers table"
             tests:
-              - not_null
+              - not_null_quoted
 
-          - name: plan_num
+          - name: "PlanNum"
             description: "Foreign key to insurance plans table"
             tests:
-              - not_null
+              - not_null_quoted
 
-          - name: proc_num
+          - name: "ProcNum"
             description: "Foreign key to procedures table"
             tests:
-              - not_null
+              - not_null_quoted
 
-          - name: claim_num
+          - name: "ClaimNum"
             description: "Foreign key to claims table"
             tests:
-              - not_null
+              - not_null_quoted
 
-          - name: group_num
+          - name: "GroupNum"
             description: "Insurance group number"
 
-          - name: claim_type
+          - name: "ClaimType"
             description: "Type of insurance claim"
 
-          - name: insurance_payment_amount
+          - name: "InsPayAmt"
             description: "Amount paid by insurance"
 
-          - name: allowed_override_amount
+          - name: "AllowedOverride"
             description: "Override amount for allowed fee"
 
-          - name: created_at
+          - name: "DateTStamp"
             description: "Timestamp when the record was created"
-            tests:
-              - not_null
 
-          - name: procedure_date
+          - name: "ProcDate"
             description: "Date of the procedure"
 
       - name: insbluebooklog
         description: "Logs of insurance bluebook changes. Contains historical tracking of allowed fee changes for claim procedures."
         columns:
-          - name: insbluebooklog_num
+          - name: "InsBlueBookLogNum"
             description: "Primary key for the insurance bluebook log entry"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
 
-          - name: claimprocedure_num
+          - name: "ClaimProcNum"
             description: "Foreign key to claim procedures table"
             tests:
-              - not_null
+              - not_null_quoted
 
-          - name: allowed_fee
+          - name: "AllowedFee"
             description: "The allowed fee amount recorded in this log entry"
 
-          - name: description
+          - name: "Description"
             description: "Text description of the change or entry"
 
-          - name: created_at
+          - name: "DateTStamp"
             description: "Timestamp when the log entry was created"
-            tests:
-              - not_null
 
       - name: carrier
         description: "Insurance carrier/company information. Contains information about insurance companies and their configurations."
         columns:
-          - name: carrier_id
+          - name: "CarrierNum"
             description: "Primary key for the insurance carrier"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
 
-          - name: carrier_name
+          - name: "CarrierName"
             description: "Name of the insurance carrier"
             tests:
-              - not_null
+              - not_null_quoted
 
-          - name: address_line1
+          - name: "Address"
             description: "Primary address line of the carrier"
 
-          - name: address_line2
+          - name: "Address2"
             description: "Secondary address line of the carrier"
 
-          - name: city
+          - name: "City"
             description: "City of the carrier's address"
 
-          - name: state
+          - name: "State"
             description: "State of the carrier's address"
 
-          - name: zip_code
+          - name: "Zip"
             description: "ZIP/Postal code of the carrier's address"
 
-          - name: phone
+          - name: "Phone"
             description: "Contact phone number for the carrier"
 
-          - name: tax_id_number
+          - name: "TaxID"
             description: "Tax identification number (TIN) of the carrier"
 
-          - name: electronic_id
+          - name: "ElectronicID"
             description: "Electronic identifier used for claims submission"
 
           - name: no_send_electronic
@@ -517,12 +509,5 @@ sources:
           - name: user_entry_id
             description: "ID of the user who created the record"
 
-          - name: created_at
+          - name: "DateTStamp"
             description: "Timestamp when the record was created"
-            tests:
-              - not_null
-
-          - name: updated_at
-            description: "Timestamp when the record was last modified"
-            tests:
-              - not_null

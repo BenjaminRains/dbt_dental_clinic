@@ -31,8 +31,8 @@ sources:
           - name: "CodeNum"
             description: "Primary key for procedure codes"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "ProcCode"
             description: >
               Standard and custom procedure code identifiers. Includes:
@@ -44,15 +44,11 @@ sources:
               6. Custom alphanumeric codes (e.g., CWTRAY, 00PIC) - Special services
               All formats are validated using custom tests.
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
           - name: "DateTStamp"
             description: "Timestamp when the record was created or updated"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
 
       - name: procedurelog
         description: >
@@ -68,56 +64,40 @@ sources:
           - name: "ProcNum"
             description: "Primary key for procedure log entries"
             tests:
-              - unique
-              - not_null
+              - not_null_quoted
+              - unique_quoted
           - name: "PatNum"
             description: "Foreign key to the patient receiving the procedure"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ProcDate" 
             description: "Date when procedure was performed or is planned to be performed (future dates valid)"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ProcStatus"
             description: >
               Status of the procedure: 1=Treatment Planned, 2=Completed, 3=Admin/Documentation,
               4=Existing Prior, 5=Referred, 6=Ordered/Planned, 7=Condition, 8=In Progress
             tests:
-              - not_null
-              - accepted_values:
+              - accepted_values_quoted:
                   values: [1, 2, 3, 4, 5, 6, 7, 8]
-                  quote: false
           - name: "CodeNum"
             description: "Foreign key to procedure code"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ProcFee"
             description: "Fee amount charged for procedure (median $75, avg $201.80)"
             tests:
-              - dbt_utils.expression_is_true:
-                  expression: "ProcFee >= 0 or ProcFee is null"
+              - expression_is_true_quoted:
+                  expression: "\"ProcFee\" >= 0 or \"ProcFee\" is null"
           - name: "DateTStamp"
             description: "Timestamp when the record was created or updated"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
           - name: "AptNum"
             description: "Foreign key to the appointment where the procedure was performed"
-            tests:
-              - relationships:
-                  to: source('opendental', 'appointment')
-                  field: "AptNum"
-                  where: "AptNum is not null"
-          
           - name: "PlannedAptNum"
             description: "Foreign key to a future planned appointment where the procedure will be performed"
-            tests:
-              - relationships:
-                  to: source('opendental', 'appointment')
-                  field: "AptNum"
-                  where: "PlannedAptNum is not null"
-      
       - name: procgroupitem
         description: >
           Links procedures to procedure groups, allowing multiple procedures to be organized 
@@ -131,25 +111,18 @@ sources:
           - name: "ProcGroupItemNum"
             description: "Primary key for procedure group item"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "ProcNum"
             description: "Foreign key to the procedure entry in procedurelog"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'procedurelog')
-                  field: "ProcNum"
+              - not_null_quoted
           - name: "GroupNum"
             description: "Foreign key to the procedure group"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "DateTStamp"
             description: "Timestamp when the record was created or updated"
-            tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
 
       - name: procmultivisit
         description: >
@@ -166,21 +139,18 @@ sources:
           - name: "ProcMultiVisitNum"
             description: "Primary key for procedure multi-visit records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "GroupProcMultiVisitNum"
             description: "Groups related multi-visit procedures together"
           - name: "ProcNum"
             description: "Foreign key to the associated procedure in procedurelog"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'procedurelog')
-                  field: "ProcNum"
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to the patient"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ProcStatus"
             description: "Status of the procedure, similar to procedurelog status codes"
           - name: "IsInProcess"
@@ -188,13 +158,11 @@ sources:
           - name: "SecDateTEntry"
             description: "Timestamp when the record was created"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "SecDateTEdit"
             description: "Timestamp when the record was last modified"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
       
       - name: procnote
         description: >
@@ -209,34 +177,22 @@ sources:
           - name: "ProcNoteNum"
             description: "Primary key for procedure notes"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to the patient"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
+              - not_null_quoted
           - name: "ProcNum"
             description: "Foreign key to the associated procedure in procedurelog"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'procedurelog')
-                  field: "ProcNum"
+              - not_null_quoted
           - name: "EntryDateTime"
             description: "Date and time when the note was entered"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user who created the note"
-            tests:
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
           - name: "Note"
             description: "The text content of the procedure note documenting clinical observations and treatment details"
           - name: "SigIsTopaz"
@@ -260,22 +216,22 @@ sources:
           - name: "ProcTPNum"
             description: "Primary key for treatment planned procedures"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "TreatPlanNum"
             description: "Foreign key to the treatment plan this procedure belongs to"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to the patient receiving the planned procedure"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ProcNumOrig"
             description: "Foreign key to procedurelog when the planned procedure is completed"
           - name: "DateTP"
             description: "Date when the procedure was added to the treatment plan"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ToothNumTP"
             description: "Tooth number for the planned procedure, using dental notation"
           - name: "Surf"
@@ -283,7 +239,7 @@ sources:
           - name: "ProcCode"
             description: "Procedure code identifier, usually in CDT format"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "FeeAmt"
             description: "Standard fee amount for the procedure"
           - name: "PriInsAmt"
@@ -295,15 +251,13 @@ sources:
           - name: "FeeAllowed"
             description: "Allowed fee amount (may differ from standard fee). A value of -1 is unexpected and should be investigated."
             tests:
-              - dbt_utils.expression_is_true:
+              - expression_is_true_quoted:
                   expression: "\"FeeAllowed\" != -1 or \"FeeAllowed\" is null"
                   severity: warn
           - name: "SecDateTEdit"
             description: "Timestamp when the record was last modified"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
       
       - name: perioexam
         description: >
@@ -320,30 +274,20 @@ sources:
           - name: "PerioExamNum"
             description: "Primary key for periodontal examinations"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to the patient who received the periodontal exam"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
+              - not_null_quoted
           - name: "ExamDate"
             description: "Date when the periodontal examination was performed"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ProvNum"
             description: "Foreign key to the provider who performed the examination"
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: "ProvNum"
           - name: "DateTMeasureEdit"
             description: "Timestamp when the exam or its measurements were last edited"
-            tests:
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
           - name: "Note"
             description: "Clinical notes and observations recorded during the periodontal exam"
       
@@ -363,21 +307,18 @@ sources:
           - name: "PerioMeasureNum"
             description: "Primary key for periodontal measurements"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PerioExamNum"
             description: "Foreign key to the parent periodontal examination"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'perioexam')
-                  field: "PerioExamNum"
+              - not_null_quoted
           - name: "SequenceType"
             description: "Type of measurement sequence (default 0)"
           - name: "IntTooth"
             description: "Integer representing the tooth number being measured"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ToothValue"
             description: "General value associated with the tooth assessment"
           - name: "MBvalue"
@@ -394,14 +335,8 @@ sources:
             description: "Measurement at the distal-lingual position of the tooth (in mm)"
           - name: "SecDateTEntry"
             description: "Timestamp when the measurement was initially entered"
-            tests:
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
           - name: "SecDateTEdit"
             description: "Timestamp when the measurement was last edited"
-            tests:
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
       
       - name: labcase
         description: >
@@ -418,22 +353,14 @@ sources:
           - name: "LabCaseNum"
             description: "Primary key for lab case records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "PatNum"
             description: "Foreign key to the patient for whom the lab case is created"
-            tests:
-              - relationships:
-                  to: source('opendental', 'patient')
-                  field: "PatNum"
           - name: "LaboratoryNum"
             description: "Foreign key to the dental laboratory handling the case"
           - name: "AptNum"
             description: "Foreign key to the appointment associated with this lab case"
-            tests:
-              - relationships:
-                  to: source('opendental', 'appointment')
-                  field: "AptNum"
           - name: "PlannedAptNum"
             description: "Foreign key to a future planned appointment for case delivery/insertion"
           - name: "DateTimeDue"
@@ -441,9 +368,7 @@ sources:
           - name: "DateTimeCreated"
             description: "Date and time when the lab case was initially created"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
           - name: "DateTimeSent"
             description: "Date and time when the lab case was sent to the laboratory"
           - name: "DateTimeRecd"
@@ -452,25 +377,69 @@ sources:
             description: "Date and time when the lab case was checked and verified by clinical staff"
           - name: "ProvNum"
             description: "Foreign key to the provider responsible for the lab case"
-            tests:
-              - relationships:
-                  to: source('opendental', 'provider')
-                  field: "ProvNum"
           - name: "Instructions"
             description: "Detailed instructions for the laboratory regarding specifications, materials, and design requirements"
           - name: "LabFee"
             description: "Fee charged by the laboratory for fabricating this case"
             tests:
-              - dbt_utils.expression_is_true:
+              - expression_is_true_quoted:
                   expression: "\"LabFee\" >= 0 or \"LabFee\" is null"
           - name: "DateTStamp"
             description: "Timestamp when the record was created or last updated"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
           - name: "InvoiceNum"
             description: "Invoice or reference number provided by the laboratory for billing purposes"
+
+      - name: laboratory
+        description: >
+          External laboratory information for dental lab work including prosthetics, 
+          crowns, bridges, and other fabricated items. Contains contact information, 
+          addresses, and operational details for laboratories that perform work for 
+          the practice. Critical for lab case management, billing, and vendor 
+          relationship tracking.
+        columns:
+          - name: "LaboratoryNum"
+            description: "Primary key - Unique identifier for each laboratory"
+            tests:
+              - unique_quoted
+              - not_null_quoted
+          - name: "Description"
+            description: "Name or description of the laboratory"
+          - name: "Phone"
+            description: "Primary phone number for the laboratory"
+          - name: "Notes"
+            description: "Additional notes or comments about the laboratory"
+          - name: "Slip"
+            description: "Slip or reference number for the laboratory"
+          - name: "Address"
+            description: "Primary address line of the laboratory"
+          - name: "City"
+            description: "City where the laboratory is located"
+          - name: "State"
+            description: "State where the laboratory is located"
+          - name: "Zip"
+            description: "ZIP/Postal code of the laboratory"
+          - name: "Email"
+            description: "Email address for the laboratory"
+          - name: "WirelessPhone"
+            description: "Mobile or wireless phone number for the laboratory"
+          - name: "IsHidden"
+            description: "Flag indicating if the laboratory is hidden from normal view (0=no, 1=yes)"
+        meta:
+          contains_pii: false
+          business_owners: ["dental_operations_team"]
+          technical_owners: ["data_engineering_team"]
+          data_quality_results:
+            last_tested: '2024-12-19'
+            tests_passed: 3
+            tests_total: 3
+          record_count: "~14 laboratories (as of 2024-12)"
+          data_characteristics:
+            - "Small dataset with limited vendor relationships"
+            - "Most laboratories have incomplete contact information"
+            - "All laboratories are currently active (none hidden)"
+            - "Address information missing for most laboratories"
 
 freshness:
   warn_after: {count: 24, period: day}

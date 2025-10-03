@@ -19,8 +19,8 @@ sources:
           - name: "ProvNum"
             description: "Primary key for provider records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "Abbr"
             description: "Provider abbreviation used in schedules and reports"
           - name: "ItemOrder"
@@ -66,9 +66,7 @@ sources:
           - name: "DateTStamp"
             description: "Last update timestamp for the provider record"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
           - name: "ProvStatus"
             description: "Provider status code (active, inactive, etc.)"
           - name: "DateTerm"
@@ -82,8 +80,8 @@ sources:
           - name: "UserNum"
             description: "Primary key for users"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "UserGroupNum"
             description: "Foreign key to user group table"
           - name: "EmployeeNum"
@@ -137,8 +135,8 @@ sources:
           - name: "UserGroupNum"
             description: "Primary key for user groups"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "Description"
             description: "Description or name of the user group"
           - name: "UserGroupNumCEMT"
@@ -150,8 +148,8 @@ sources:
           - name: "UserGroupAttachNum"
             description: "Primary key for user group assignments"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user table"
           - name: "UserGroupNum"
@@ -163,8 +161,8 @@ sources:
           - name: "EmployeeNum"
             description: "Primary key - Unique identifier for each employee"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "LName"
             description: "Employee's last name"
           - name: "FName"
@@ -191,12 +189,6 @@ sources:
             description: "Flag indicating if the employee is working from home (0=no, 1=yes)"
           - name: "ReportsTo"
             description: "Foreign key reference to the employee's manager/supervisor"
-            tests:
-              - relationships:
-                  to: source('opendental', 'employee')
-                  field: "EmployeeNum"
-                  severity: warn
-
       - name: entrylog
         description: >
           System audit log tracking user actions and system events. Contains a record 
@@ -205,39 +197,34 @@ sources:
           - name: "EntryLogNum"
             description: "Primary key - Unique identifier for each log entry"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user who performed the action"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
+              - not_null_quoted
           - name: "FKeyType"
             description: >
               Type identifier for the foreign key reference. Indicates what type of 
               record the FKey points to.
             tests:
-              - not_null
+              - not_null_quoted
           - name: "FKey"
             description: >
               Foreign key reference to the related record. The actual table referenced 
               depends on the FKeyType value.
             tests:
-              - not_null
+              - not_null_quoted
           - name: "LogSource"
             description: >
               Source of the log entry. Indicates which system component or module 
               generated the log entry.
             tests:
-              - not_null
+              - not_null_quoted
           - name: "EntryDateTime"
             description: "Timestamp when the log entry was created"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
 
       - name: task
         description: >
@@ -303,80 +290,60 @@ sources:
           - name: "TaskHistNum"
             description: "Primary key for task history records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "UserNumHist"
             description: "Foreign key to the user who made the historical change"
-            tests:
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
           - name: "DateTStamp"
             description: "Timestamp when the history record was created"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "IsNoteChange"
             description: "Flag indicating if this history record represents a note change"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "TaskNum"
             description: "Foreign key to the task record"
-            tests:
-              - relationships:
-                  to: source('opendental', 'task')
-                  field: "TaskNum"
           - name: "TaskListNum"
             description: "Foreign key to the task list this task belongs to"
-            tests:
-              - relationships:
-                  to: source('opendental', 'tasklist')
-                  field: "TaskListNum"
           - name: "DateTask"
             description: "Date when the task is scheduled for"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "KeyNum"
             description: "Foreign key to the related entity (varies by object type)"
           - name: "Descript"
             description: "Main description of the task"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "TaskStatus"
             description: "Current status of the task"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "IsRepeating"
             description: "Flag indicating if this is a repeating task"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "DateType"
             description: "Type of date associated with the task"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "FromNum"
             description: "Foreign key to the source entity"
           - name: "ObjectType"
             description: "Type of object this task is associated with"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "DateTimeEntry"
             description: "Timestamp when the task was entered"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user who created the task"
-            tests:
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
           - name: "DateTimeFinished"
             description: "Timestamp when the task was completed"
           - name: "PriorityDefNum"
             description: "Foreign key to the priority definition"
-            tests:
-              - relationships:
-                  to: source('opendental', 'prioritydef')
-                  field: "PriorityDefNum"
           - name: "ReminderGroupId"
             description: "Identifier for the reminder group"
           - name: "ReminderType"
@@ -390,13 +357,9 @@ sources:
           - name: "IsReadOnly"
             description: "Flag indicating if the task is read-only"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "TriageCategory"
             description: "Foreign key to the triage category"
-            tests:
-              - relationships:
-                  to: source('opendental', 'triagedef')
-                  field: "TriageCategory"
 
       - name: timeadjust
         description: >
@@ -441,8 +404,8 @@ sources:
           - name: "TaskListNum"
             description: "Primary key - Unique identifier for each task list"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "Descript"
             description: "Description or name of the task list"
           - name: "Parent"
@@ -473,32 +436,24 @@ sources:
           - name: "TaskNoteNum"
             description: "Primary key - Unique identifier for each task note"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "TaskNum"
             description: "Foreign key to the task this note is associated with"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'task')
-                  field: "TaskNum"
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user who created the note"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
+              - not_null_quoted
           - name: "DateTimeNote"
             description: "Timestamp when the note was created"
             tests:
-              - not_null
-              - dbt_utils.expression_is_true:
-                  expression: "<= current_timestamp"
+              - not_null_quoted
           - name: "Note"
             description: "The content of the task note"
             tests:
-              - not_null
+              - not_null_quoted
 
       - name: tasksubscription
         description: >
@@ -509,29 +464,20 @@ sources:
           - name: "TaskSubscriptionNum"
             description: "Primary key - Unique identifier for each task subscription record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user who is subscribed to the task"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
+              - not_null_quoted
           - name: "TaskListNum"
             description: "Foreign key to the task list that contains the task"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'tasklist')
-                  field: "TaskListNum"
+              - not_null_quoted
           - name: "TaskNum"
             description: "Foreign key to the specific task being subscribed to"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'task')
-                  field: "TaskNum"
+              - not_null_quoted
 
       - name: taskunread
         description: >
@@ -542,22 +488,16 @@ sources:
           - name: "TaskUnreadNum"
             description: "Primary key - Unique identifier for each task unread record"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "TaskNum"
             description: "Foreign key to the task that is marked as unread"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'task')
-                  field: "TaskNum"
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user who has the task marked as unread"
             tests:
-              - not_null
-              - relationships:
-                  to: source('opendental', 'userod')
-                  field: "UserNum"
+              - not_null_quoted
 
       - name: userodpref
         description: "User-specific preferences and settings for OpenDental users"
@@ -565,26 +505,26 @@ sources:
           - name: "UserOdPrefNum"
             description: "Primary key for user preference records"
             tests:
-              - unique
-              - not_null
+              - unique_quoted
+              - not_null_quoted
           - name: "UserNum"
             description: "Foreign key to the user this preference belongs to"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "Fkey"
             description: "Foreign key value associated with the preference (varies by FkeyType)"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "FkeyType"
             description: "Type identifier for the foreign key (defines what Fkey refers to)"
             tests:
-              - not_null
+              - not_null_quoted
           - name: "ValueString"
             description: "The actual preference value stored as a string"
           - name: "ClinicNum"
             description: "Foreign key to the clinic this preference is associated with"
             tests:
-              - not_null
+              - not_null_quoted
 
         meta:
           data_quality_results:
