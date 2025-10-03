@@ -164,7 +164,10 @@ payment_calculated as (
         case when sp.is_recurring_cc then true else false end as is_recurring_payment,
 
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='sp',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']
+        ) }}
 
     from source_payment sp
     left join payment_splits ps
