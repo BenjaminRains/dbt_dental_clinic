@@ -110,8 +110,8 @@ date_enhanced as (
         extract(month from date_day) as month,
         extract(day from date_day) as day,
         extract(dow from date_day) as day_of_week,
-        to_char(date_day, 'Month') as month_name,
-        to_char(date_day, 'Day') as day_name,
+        trim(to_char(date_day, 'Month')) as month_name,
+        trim(to_char(date_day, 'Day')) as day_name,
         extract(quarter from date_day) as quarter,
         
         -- Weekend/Weekday flags
