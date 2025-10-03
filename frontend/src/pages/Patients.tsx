@@ -17,38 +17,18 @@ import {
     Button,
     Pagination
 } from '@mui/material';
-import { Patient } from '../types/api';
+import { Patient, ApiResponse } from '../types/api';
 import { apiService } from '../services/api';
 
 const Patients: React.FC = () => {
-    const [patients, setPatients] = useState<Patient[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [patientsData, setPatientsData] = useState<ApiResponse<{ patients: Patient[], total: number }>>({ loading: true });
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
     const patientsPerPage = 20;
 
     const fetchPatients = async (page: number = 1) => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            const skip = (page - 1) * patientsPerPage;
-            const response = await apiService.patient.getPatients(skip, patientsPerPage);
-
-            if (response.error) {
-                setError(response.error);
-            } else if (response.data) {
-                setPatients(response.data);
-                // Estimate total pages (you might want to get this from API response)
-                setTotalPages(Math.max(1, Math.ceil(response.data.length / patientsPerPage)));
-            }
-        } catch (err) {
-            setError('Failed to fetch patients');
-            console.error('Error fetching patients:', err);
-        } finally {
-            setLoading(false);
-        }
+        const skip = (page - 1) * patientsPerPage;
+        const response = await apiService.patient.getPatients(skip, patientsPerPage);
+        setPatientsData(response);
     };
 
     useEffect(() => {
@@ -82,6 +62,10 @@ const Patients: React.FC = () => {
         }).format(amount);
     };
 
+    // Calculate total pages from backend response
+    const totalPages = patientsData.data ? Math.ceil(patientsData.data.total / patientsPerPage) : 1;
+    const patients = patientsData.data?.patients || [];
+
     return (
         <Box>
             <Typography variant="h4" component="h1" gutterBottom>
@@ -91,26 +75,26 @@ const Patients: React.FC = () => {
                 View and manage patient information from the dental clinic database
             </Typography>
 
-            {loading && (
+            {patientsData.loading && (
                 <Box display="flex" justifyContent="center" mt={3}>
                     <CircularProgress />
                 </Box>
             )}
 
-            {error && (
+            {patientsData.error && (
                 <Alert severity="error" sx={{ mt: 2 }}>
-                    {error}
+                    {patientsData.error}
                     <Button onClick={() => fetchPatients(currentPage)} sx={{ ml: 2 }}>
                         Retry
                     </Button>
                 </Alert>
             )}
 
-            {!loading && !error && (
+            {!patientsData.loading && !patientsData.error && (
                 <Card sx={{ mt: 3 }}>
                     <CardContent>
                         <Typography variant="h6" gutterBottom>
-                            Patient List ({patients.length} patients)
+                            Patient List ({patients.length} of {patientsData.data?.total || 0} patients)
                         </Typography>
 
                         <TableContainer component={Paper} sx={{ mt: 2 }}>
