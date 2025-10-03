@@ -26,7 +26,12 @@ WITH AppointmentMetrics AS (
         SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
         AVG(a.actual_length) as average_appointment_length,
         AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
+        SUM(CASE WHEN a.is_new_patient THEN 1 ELSE 0 END) as new_patient_appointments,
+        -- Preserve source metadata via aggregates
+        MAX(a._loaded_at) as _loaded_at,
+        MAX(a._updated_at) as _updated_at,
+        MAX(a._created_by) as _created_by,
+        MAX(a._transformed_at) as _transformed_at
     FROM {{ ref('int_appointment_details') }} a
     LEFT JOIN {{ ref('stg_opendental__provider') }} p
         ON a.provider_id = p.provider_id
@@ -46,7 +51,12 @@ WITH AppointmentMetrics AS (
         SUM(CASE WHEN a.appointment_status = 3 THEN 1 ELSE 0 END) as no_show_appointments,
         AVG(a.actual_length) as average_appointment_length,
         AVG(a.waiting_time) as average_wait_time,
-        SUM(CASE WHEN a.is_new_patient = 1 THEN 1 ELSE 0 END) as new_patient_appointments
+        SUM(CASE WHEN a.is_new_patient THEN 1 ELSE 0 END) as new_patient_appointments,
+        -- Preserve source metadata via aggregates
+        MAX(a._loaded_at) as _loaded_at,
+        MAX(a._updated_at) as _updated_at,
+        MAX(a._created_by) as _created_by,
+        MAX(a._transformed_at) as _transformed_at
     FROM {{ ref('int_appointment_details') }} a
     WHERE a.appointment_datetime >= CURRENT_DATE - INTERVAL '90 days'
     GROUP BY DATE(a.appointment_datetime)
@@ -73,7 +83,7 @@ schedule_with_dates AS (
         ON s.schedule_date = d.date_day::date
         AND s.provider_id = p.provider_id
     WHERE d.date_day::date >= CURRENT_DATE - INTERVAL '90 days'
-        AND p.is_hidden = 0  -- Only include active providers
+        AND NOT p.is_hidden  -- Only include active providers
 ),
 
 ScheduleUtilization AS (
@@ -245,11 +255,12 @@ SELECT
     am.average_wait_time,
     am.new_patient_appointments,
     
-    -- Metadata
-    current_timestamp as dbt_created_at,
-    '{{ invocation_id }}' as dbt_pipeline_id,
-    '{{ this.name }}' as dbt_model,
-    '{{ this.schema }}' as dbt_schema
+    -- Standardized metadata
+    {{ standardize_intermediate_metadata(
+        primary_source_alias='am',
+        preserve_source_metadata=true,
+        source_metadata_fields=['_loaded_at', '_updated_at', '_created_by', '_transformed_at']
+    ) }}
 
 FROM RollingMetrics am
 LEFT JOIN ScheduleUtilization su
