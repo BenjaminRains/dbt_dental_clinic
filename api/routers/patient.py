@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-from models.patient import Patient
+from models.patient import Patient, PaginatedPatients
 from services import patient_service
 from database import get_db
 
@@ -16,10 +16,10 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@router.get("/", response_model=List[Patient])
+@router.get("/", response_model=PaginatedPatients)
 def read_patients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    patients = patient_service.get_patients(db, skip=skip, limit=limit)
-    return patients
+    result = patient_service.get_patients(db, skip=skip, limit=limit)
+    return result
 
 @router.get("/{patient_id}", response_model=Patient)
 def read_patient(patient_id: int, db: Session = Depends(get_db)):
