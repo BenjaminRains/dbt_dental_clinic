@@ -240,12 +240,14 @@ ar_enhanced as (
         end as claim_recency,
         
         -- Collection Priority Scoring (0-100)
-        round((
-            case when total_balance > 1000 then 25 else total_balance / 40 end +
-            case when balance_over_90_days / nullif(total_balance, 0) >= 0.5 then 25 else 0 end +
-            case when last_payment_date < current_date - interval '90 days' then 25 else 0 end +
-            case when has_insurance_flag = false then 25 else 0 end
-        )::numeric, 0) as collection_priority_score,
+        greatest(0, least(100,
+            round((
+                case when total_balance > 1000 then 25 else total_balance / 40 end +
+                case when balance_over_90_days / nullif(total_balance, 0) >= 0.5 then 25 else 0 end +
+                case when last_payment_date < current_date - interval '90 days' then 25 else 0 end +
+                case when has_insurance_flag = false then 25 else 0 end
+            )::numeric, 0)
+        )) as collection_priority_score,
         
         -- Balance Categories
         case 
