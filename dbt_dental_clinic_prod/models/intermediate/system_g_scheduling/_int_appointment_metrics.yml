@@ -158,19 +158,19 @@ models:
               expression: ">= 0"
           - dbt_utils.expression_is_true:
               expression: "<= 100"
-      - name: dbt_created_at
-        description: Timestamp when this record was created in the dbt model
+      - name: _transformed_at
+        description: Timestamp when this intermediate model was built
         tests:
           - not_null
-      - name: dbt_pipeline_id
-        description: Unique identifier for the dbt pipeline run that created this record
+      - name: _loaded_at
+        description: ETL extraction timestamp preserved from primary source
+        tests:
+          - not_null  
+      - name: _updated_at
+        description: Business update timestamp preserved from primary source
         tests:
           - not_null
-      - name: dbt_model
-        description: Name of the dbt model that created this record
-        tests:
-          - not_null
-      - name: dbt_schema
-        description: Schema where this model is materialized
+      - name: _created_by
+        description: Source creator identifier preserved from primary source
         tests:
           - not_null
