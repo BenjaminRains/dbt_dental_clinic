@@ -12,6 +12,7 @@ import {
     TrendingDown,
     TrendingFlat,
 } from '@mui/icons-material';
+import InfoTooltip from '../common/InfoTooltip';
 
 interface KPICardProps {
     title: string;
@@ -25,6 +26,8 @@ interface KPICardProps {
     color?: 'primary' | 'secondary' | 'success' | 'error' | 'warning' | 'info';
     icon?: React.ReactNode;
     format?: 'currency' | 'percentage' | 'number';
+    metricName?: string; // For DBT lineage tooltip
+    showLineageTooltip?: boolean; // Whether to show the info tooltip
 }
 
 const KPICard: React.FC<KPICardProps> = ({
@@ -35,6 +38,8 @@ const KPICard: React.FC<KPICardProps> = ({
     color = 'primary',
     icon,
     format = 'number',
+    metricName,
+    showLineageTooltip = false,
 }) => {
     const theme = useTheme();
 
@@ -86,13 +91,18 @@ const KPICard: React.FC<KPICardProps> = ({
         >
             <CardContent sx={{ flexGrow: 1 }}>
                 <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-                    <Typography
-                        variant="h6"
-                        color="text.secondary"
-                        sx={{ fontSize: '0.875rem', fontWeight: 500 }}
-                    >
-                        {title}
-                    </Typography>
+                    <Box display="flex" alignItems="center">
+                        <Typography
+                            variant="h6"
+                            color="text.secondary"
+                            sx={{ fontSize: '0.875rem', fontWeight: 500 }}
+                        >
+                            {title}
+                        </Typography>
+                        {showLineageTooltip && metricName && (
+                            <InfoTooltip metricName={metricName} />
+                        )}
+                    </Box>
                     {icon && (
                         <Box
                             sx={{
