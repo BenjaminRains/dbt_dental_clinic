@@ -5,9 +5,11 @@
 with source_data as (
     select * 
     from {{ source('opendental', 'feesched') }}
-    where "SecDateEntry" >= '2023-01-01'::date
+    where ("SecDateEntry" >= '2023-01-01'::date
+           OR "SecDateEntry" = '0001-01-01'::date
+           OR "SecDateEntry" IS NULL)
         and "SecDateEntry" <= current_date
-        and "SecDateEntry" > '2000-01-01'::date
+        and ("SecDateEntry" > '2000-01-01'::date OR "SecDateEntry" = '0001-01-01'::date)
 ),
 
 renamed_columns as (
