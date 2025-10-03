@@ -81,6 +81,8 @@ const Dashboard: React.FC = () => {
                         format="currency"
                         color="error"
                         icon={<AttachMoney />}
+                        metricName="revenue_lost"
+                        showLineageTooltip={true}
                         trend={{
                             value: -5.2,
                             label: "vs last month",
@@ -95,6 +97,8 @@ const Dashboard: React.FC = () => {
                         format="currency"
                         color="success"
                         icon={<TrendingUp />}
+                        metricName="recovery_potential"
+                        showLineageTooltip={true}
                         trend={{
                             value: 12.5,
                             label: "vs last month",
@@ -109,6 +113,8 @@ const Dashboard: React.FC = () => {
                         format="number"
                         color="primary"
                         icon={<People />}
+                        metricName="active_providers"
+                        showLineageTooltip={true}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -118,6 +124,8 @@ const Dashboard: React.FC = () => {
                         format="percentage"
                         color="info"
                         icon={<Assessment />}
+                        metricName="collection_rate"
+                        showLineageTooltip={true}
                         trend={{
                             value: 2.1,
                             label: "vs last month",
