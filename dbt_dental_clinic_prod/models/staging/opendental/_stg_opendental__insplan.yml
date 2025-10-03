@@ -43,6 +43,11 @@ models:
           severity: "warn"
           identified_date: "2024-06-11"
           test: "relationships test on copay_fee_schedule_id"
+        
+        - description: "All insurance plans have empty PlanType values in source OpenDental system, indicating the field is not being populated during plan setup"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "data quality analysis of source OpenDental insplan table"
       
       business_rules:
         - rule: "Insurance plans can exist without assigned employers (employer_id can be null/0)"
@@ -169,7 +174,18 @@ models:
         description: "Additional notes about the insurance plan (maps to PlanNote in OpenDental)"
 
       - name: plan_type
-        description: "Type classification of the insurance plan (maps to PlanType in OpenDental)"
+        description: >
+          Type classification of the insurance plan (maps to PlanType in OpenDental)
+          
+          Data Quality Note:
+          - All records in source OpenDental insplan table have empty PlanType values
+          - This indicates the PlanType field is not being populated in the source system
+          - May require business process improvement to capture plan type information
+          
+          Business Impact:
+          - Limits plan categorization and analysis capabilities
+          - Affects downstream reporting and plan performance comparisons
+          - May indicate incomplete insurance plan setup workflows
 
       - name: division_number
         description: "Division number for the insurance plan (maps to DivisionNo in OpenDental)"
