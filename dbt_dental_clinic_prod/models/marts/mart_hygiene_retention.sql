@@ -2,7 +2,7 @@
     config(
         materialized='table',
         schema='marts',
-        unique_key=['date_id', 'patient_id', 'provider_id'],
+        unique_key=['date_id', 'patient_id', 'provider_id', 'hygienist_id'],
         on_schema_change='fail',
         indexes=[
             {'columns': ['date_id']},
@@ -333,7 +333,10 @@ final as (
             (current_date - pt.first_visit_date) / 365.0, 0), 2) as annual_hygiene_value,
         
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='pt',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+        ) }}
         
     from hygiene_categorized hc
     inner join date_dimension dd
