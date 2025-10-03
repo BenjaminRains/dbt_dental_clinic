@@ -147,8 +147,8 @@ SELECT
     -- Add program-specific counts
     dc.system_default_count,
     dc.legacy_system_count,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    -- Add standardized metadata
+    {{ standardize_intermediate_metadata(primary_source_alias='dc', preserve_source_metadata=false) }}
 FROM DailyCommunications dc
 LEFT JOIN ResponseMetrics rm
     ON dc.date = rm.date
