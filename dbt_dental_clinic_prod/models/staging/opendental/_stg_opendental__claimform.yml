@@ -1,0 +1,126 @@
+version: 2
+
+models:
+  - name: stg_opendental__claimform
+    description: >
+      Staging model for claim form templates from OpenDental. Contains claim form 
+      definitions and layout specifications used for insurance billing and claim 
+      generation. Each record represents a different claim form template with 
+      specific formatting, dimensions, font settings, and display options.
+      
+      This model serves as the foundation for claim form management and is referenced
+      by the claim table to determine which form template to use for insurance billing.
+      The model includes layout positioning, font specifications, and visibility 
+      controls for claim form generation and printing.
+      
+      Records include all claim form templates regardless of status, with visibility
+      controlled via is_hidden flag. Form templates are typically created once and
+      used repeatedly for claim generation across different insurance carriers.
+    
+    config:
+      tags: ['opendental', 'staging', 'claimform', 'reference', 'billing']
+    
+    meta:
+      record_count: "~14 claim form templates"
+      data_scope: "All claim form templates from OpenDental system, including active and inactive forms"
+      
+      business_rules:
+        - rule: "Claim forms with is_hidden = true are not displayed in user interfaces but may still be referenced by existing claims"
+          impact: "Hidden forms remain functional for historical claim data but are not available for new claim creation"
+        - rule: "Font size, positioning, and dimensions control the visual layout of printed claim forms"
+          impact: "Layout settings affect how claim information is displayed on insurance forms"
+        - rule: "Print images flag controls whether images are included when printing claim forms"
+          impact: "Image printing affects form size, processing time, and insurance carrier requirements"
+    
+    columns:
+      # Primary Key
+      - name: claim_form_id
+        description: "Primary key - Unique identifier for the claim form template (maps to ClaimFormNum in OpenDental)"
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Business Columns
+      - name: description
+        description: >
+          Human-readable name or description of the claim form template.
+          Used for identification and selection in user interfaces.
+          Empty strings are converted to null for data consistency.
+      
+      - name: font_name
+        description: >
+          Font family name used for text rendering on the claim form.
+          Controls the typography appearance of printed claim forms.
+          Empty strings are converted to null for data consistency.
+      
+      - name: font_size
+        description: >
+          Font size in points for text rendering on the claim form.
+          Controls the size of text elements on printed claim forms.
+          Default value is 0 if not specified.
+      
+      - name: unique_id
+        description: >
+          Unique identifier string for the claim form template.
+          May be used for external system integration or form identification.
+          Empty strings are converted to null for data consistency.
+      
+      # Boolean Flags
+      - name: is_hidden
+        description: >
+          Flag indicating whether the claim form template is hidden from user interfaces.
+          Hidden forms are not displayed in selection lists but may still be referenced
+          by existing claims. Defaults to false for unknown values.
+        tests:
+          - not_null
+      
+      - name: print_images
+        description: >
+          Flag indicating whether images should be included when printing claim forms.
+          Controls whether radiographic images, photos, or other attachments are
+          printed with the claim form. Defaults to false for unknown values.
+        tests:
+          - not_null
+      
+      # Layout and Positioning
+      - name: offset_x
+        description: >
+          Horizontal offset in pixels for form element positioning.
+          Controls the left-right positioning of form elements on the printed page.
+          Default value is 0 (no offset).
+      
+      - name: offset_y
+        description: >
+          Vertical offset in pixels for form element positioning.
+          Controls the up-down positioning of form elements on the printed page.
+          Default value is 0 (no offset).
+      
+      - name: width
+        description: >
+          Width of the claim form in pixels.
+          Controls the horizontal dimensions of the printed claim form.
+          Required field with no default value.
+        tests:
+          - not_null
+          - positive_values
+      
+      - name: height
+        description: >
+          Height of the claim form in pixels.
+          Controls the vertical dimensions of the printed claim form.
+          Required field with no default value.
+        tests:
+          - not_null
+          - positive_values
+      
+      # Metadata Columns
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when this staging model was built by dbt"
+        tests:
+          - not_null

@@ -1,0 +1,545 @@
+version: 2
+
+models:
+  - name: mart_ar_summary
+    description: >
+      Summary mart for comprehensive accounts receivable analysis and collection management.
+      This mart provides aggregated AR metrics, aging analysis, and collection performance
+      tracking to support financial management, collection prioritization, and payment
+      workflow optimization at patient-provider level by date.
+      
+      Part of System A: Financial Management workflow.
+      
+      Grain: One row per date + patient + provider combination (composite key: date_id, patient_id, provider_id)
+      
+      Key Features:
+      - AR aging analysis: Comprehensive aging buckets (0-30, 31-60, 61-90, 90+ days) with percentage calculations
+      - Collection rate tracking: Overall, patient, and insurance collection rate calculations and performance metrics
+      - Risk categorization: Automated risk assessment based on aging patterns and payment history
+      - Collection prioritization: Priority scoring system (0-100 scale) for workflow optimization
+      - Payment activity analysis: Recent payment tracking and recency categorization
+      
+      Data Sources:
+      - dim_patient: Patient balance information, demographic data, and insurance status
+      - fact_claim: Insurance billing data, payment amounts, and claim activity
+      - fact_payment: Payment transaction details and payment type classifications
+      - dim_provider: Provider information and specialty details
+      - dim_date: Date dimension for temporal analysis and reporting
+      
+      Aggregation Logic Features:
+      - AR aging calculations: Percentage distribution of balances across aging buckets
+      - Collection rate formulas: Payment amounts divided by billed amounts with null handling
+      - Risk scoring algorithm: Multi-factor scoring based on balance size, aging, payment recency, and insurance status
+      - Activity aggregation: 365-day rolling window for recent activity calculations
+      
+      Business Metrics:
+      - AR aging percentages: Distribution of outstanding balances by time buckets
+      - Collection rates: Overall, patient, and insurance payment collection performance
+      - Risk categories: High, Medium, Moderate, Low risk classifications for collection prioritization
+      - Priority scores: 0-100 scale for collection workflow optimization
+      - Payment recency: Recent, Moderate, Old, Very Old activity classifications
+      
+      Data Quality Notes:
+      - Payment plan functionality not used by clinic: All payment plan fields set to default values (0)
+      - Balance estimates: Balances may include estimates and pending insurance amounts requiring validation
+      - Historical data limitation: Recent activity calculations limited to 365 days for performance optimization
+      - Credit balance handling: Negative balances properly categorized as 'Credit Balance' risk category
+      
+      Business Rules:
+      - Aging risk categorization: Based on percentage of balance over 90 days with tiered thresholds
+      - Collection priority scoring: Multi-factor algorithm considering balance size, aging, payment recency, and insurance status
+      - Patient responsibility calculation: Total balance minus insurance estimate, minimum zero
+      - Activity recency classification: 30/90/180 day thresholds for payment and claim activity categorization
+      - Balance categorization: Tiered balance size categories for operational reporting and analysis
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: ['date_id', 'patient_id', 'provider_id']
+      on_schema_change: fail
+      indexes:
+        - columns: ['date_id']
+        - columns: ['patient_id']
+        - columns: ['provider_id']
+        - columns: ['clinic_id']
+      tags: ['summary', 'daily', 'financial']
+    
+    columns:
+      - name: date_id
+        description: >
+          Date dimension key - Links to dim_date for temporal analysis and reporting
+          
+          Business Context:
+          - Enables time-based AR analysis and trend reporting
+          - Critical for aging calculations and payment timing analysis
+          - Supports monthly, quarterly, and annual AR reporting
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+              config:
+                description: "Date dimension relationship critical for temporal AR analysis"
+      
+      - name: patient_id
+        description: >
+          Patient dimension key - Links to dim_patient for patient-specific AR analysis
+          
+          Business Context:
+          - Enables patient-level AR tracking and collection management
+          - Critical for patient payment history and balance analysis
+          - Supports patient-specific collection prioritization workflows
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+              config:
+                description: "Patient dimension relationship essential for AR patient management"
+      
+      - name: provider_id
+        description: >
+          Provider dimension key - Links to dim_provider for provider-specific AR analysis
+          
+          Business Context:
+          - Enables provider-level AR performance tracking
+          - Critical for provider collection rate analysis and performance metrics
+          - Supports provider-specific AR management and reporting
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+              config:
+                description: "Provider dimension relationship essential for provider AR performance tracking"
+      
+      - name: clinic_id
+        description: >
+          Clinic dimension key - Links to dim_clinic for clinic-level AR analysis
+          
+          Business Context:
+          - Enables clinic-level AR aggregation and comparison
+          - Critical for multi-location AR management and reporting
+          - Supports clinic-specific collection performance analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0]
+              config:
+                severity: error
+                description: "Clinic is not used; all rows must have clinic_id = 0"
+      
+      - name: snapshot_date
+        description: >
+          AR snapshot date - Date when the AR analysis was performed
+          
+          Business Context:
+          - Represents the point-in-time for AR balance calculations
+          - Critical for aging analysis and balance aging calculations
+          - Enables historical AR trend analysis and comparison
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                description: "AR snapshot date must be within reasonable business range"
+      
+      - name: total_balance
+        description: >
+          Total outstanding balance - Complete patient balance including all aging buckets
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Sum of all aging bucket balances (0-30, 31-60, 61-90, 90+ days)
+          - Business Rules: May include estimates and pending insurance amounts
+          
+          Accounting Impact:
+          - Primary AR balance for financial reporting and reconciliation
+          - Used for collection prioritization and risk assessment
+          - Critical for cash flow analysis and AR management
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 50000
+              severity: warn
+              config:
+                description: "AR balances should be within reasonable business range for dental practice"
+      
+      - name: balance_0_30_days
+        description: >
+          Current balance - Outstanding balance aged 0-30 days
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Balance from services provided within last 30 days
+          - Business Rules: Considered current and low risk for collection
+          
+          Collection Impact:
+          - Primary focus for routine collection activities
+          - Low priority for aggressive collection efforts
+          - Used for cash flow forecasting and planning
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+              config:
+                description: "Current balance should be non-negative and within reasonable range"
+      
+      - name: balance_31_60_days
+        description: >
+          Past due balance - Outstanding balance aged 31-60 days
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Balance from services provided 31-60 days ago
+          - Business Rules: Moderate risk for collection, requires attention
+          
+          Collection Impact:
+          - Moderate priority for collection activities
+          - May require follow-up calls or statements
+          - Used for collection workflow prioritization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+              config:
+                description: "31-60 day balance should be non-negative and within reasonable range"
+      
+      - name: balance_61_90_days
+        description: >
+          Overdue balance - Outstanding balance aged 61-90 days
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Balance from services provided 61-90 days ago
+          - Business Rules: High risk for collection, requires aggressive follow-up
+          
+          Collection Impact:
+          - High priority for collection activities
+          - Requires immediate attention and follow-up
+          - Used for risk assessment and collection prioritization
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+              config:
+                description: "61-90 day balance should be non-negative and within reasonable range"
+      
+      - name: balance_over_90_days
+        description: >
+          Seriously overdue balance - Outstanding balance aged over 90 days
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Calculation: Balance from services provided over 90 days ago
+          - Business Rules: Very high risk for collection, may require write-off consideration
+          
+          Collection Impact:
+          - Highest priority for collection activities
+          - May require collection agency or legal action
+          - Critical factor in risk categorization and priority scoring
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+              severity: warn
+              config:
+                description: "Over 90 day balance should be non-negative and within reasonable range"
+      
+      - name: pct_current
+        description: >
+          Current balance percentage - Percentage of total balance aged 0-30 days
+          
+          Calculation Method:
+          - Numerator: balance_0_30_days
+          - Denominator: total_balance
+          - Formula: (balance_0_30_days / total_balance) * 100
+          
+          Business Significance:
+          - Target Range: Higher percentages indicate healthier AR
+          - Benchmark: >50% current is considered good AR health
+          - Decision Impact: Used for AR health assessment and collection strategy
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+              config:
+                description: "Current percentage must be between 0-100% for valid AR analysis"
+      
+      - name: pct_over_90
+        description: >
+          Over 90 days percentage - Percentage of total balance aged over 90 days
+          
+          Calculation Method:
+          - Numerator: balance_over_90_days
+          - Denominator: total_balance
+          - Formula: (balance_over_90_days / total_balance) * 100
+          
+          Business Significance:
+          - Target Range: <25% over 90 days is considered acceptable
+          - Benchmark: >50% over 90 days indicates high risk
+          - Decision Impact: Primary factor in risk categorization and collection priority
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+              config:
+                description: "Over 90 percentage must be between 0-100% for valid AR analysis"
+      
+      - name: aging_risk_category
+        description: >
+          AR aging risk category - Risk assessment based on aging patterns and balance distribution
+          
+          Valid Values:
+          - 'No Balance': Total balance is zero
+          - 'Credit Balance': Total balance is negative (patient credit)
+          - 'High Risk': >50% of balance is over 90 days old
+          - 'Medium Risk': 25-50% of balance is over 90 days old
+          - 'Moderate Risk': >50% of balance is 61-90 days old
+          - 'Low Risk': <25% of balance is over 90 days old
+          
+          Business Rules:
+          - Risk assessment drives collection prioritization and workflow
+          - High risk accounts require immediate attention and aggressive collection
+          - Low risk accounts can be managed with routine collection activities
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['No Balance', 'Credit Balance', 'High Risk', 'Medium Risk', 'Moderate Risk', 'Low Risk']
+              config:
+                description: "Risk category must be one of the defined business categories"
+      
+      - name: collection_rate_last_year
+        description: >
+          Overall collection rate - Percentage of billed amounts collected in last 365 days
+          
+          Calculation Method:
+          - Numerator: total_payments_last_year
+          - Denominator: billed_last_year
+          - Formula: (total_payments_last_year / billed_last_year) * 100
+          
+          Business Significance:
+          - Target Range: >95% collection rate is considered excellent
+          - Benchmark: Industry standard is 90-95% for dental practices
+          - Decision Impact: Used for financial performance assessment and goal setting
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: warn
+              config:
+                description: "Collection rate should be between 0-100% for valid performance measurement"
+      
+      - name: collection_priority_score
+        description: >
+          Collection priority score - 0-100 scale for collection workflow prioritization
+          
+          Calculation Method:
+          - Balance factor: 25 points if balance >$1000, otherwise balance/40
+          - Aging factor: 25 points if >50% over 90 days
+          - Payment recency: 25 points if no payment in 90+ days
+          - Insurance factor: 25 points if no insurance
+          - Formula: Sum of all factors, rounded to nearest integer
+          
+          Business Significance:
+          - Target Range: 0-25 (Low), 26-50 (Medium), 51-75 (High), 76-100 (Critical)
+          - Benchmark: Scores >75 require immediate collection action
+          - Decision Impact: Drives collection workflow prioritization and resource allocation
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              severity: error
+              config:
+                description: "Priority score must be between 0-100 for valid collection prioritization"
+      
+      - name: has_outstanding_balance
+        description: >
+          Outstanding balance flag - Boolean indicating if patient has any outstanding balance
+          
+          Business Logic:
+          - True: total_balance > 0 (patient owes money)
+          - False: total_balance <= 0 (no balance or credit)
+          
+          Operational Impact:
+          - Used for filtering patients requiring collection activities
+          - Enables focused collection efforts on patients with balances
+          - Supports collection workflow automation and prioritization
+        
+      - name: has_aged_balance
+        description: >
+          Aged balance flag - Boolean indicating if patient has balance over 90 days old
+          
+          Business Logic:
+          - True: balance_over_90_days > 0 (has seriously overdue balance)
+          - False: balance_over_90_days = 0 (no seriously overdue balance)
+          
+          Operational Impact:
+          - Used for identifying high-risk collection accounts
+          - Enables aggressive collection strategies for aged balances
+          - Supports risk-based collection workflow management
+        
+      - name: payment_recency
+        description: >
+          Payment activity recency - Categorization of how recently patient made payments
+          
+          Valid Values:
+          - 'Recent': Last payment within 30 days
+          - 'Moderate': Last payment 31-90 days ago
+          - 'Old': Last payment 91-180 days ago
+          - 'Very Old': Last payment over 180 days ago
+          
+          Business Rules:
+          - Recency drives collection strategy and communication approach
+          - Recent payers may need gentle reminders
+          - Very old payers may require aggressive collection or write-off consideration
+        tests:
+          - accepted_values:
+              values: ['Recent', 'Moderate', 'Old', 'Very Old']
+              config:
+                description: "Payment recency must be one of the defined business categories"
+      
+      - name: days_since_last_payment
+        description: >
+          Days since last payment - Number of days since patient's most recent payment
+          
+          Business Context:
+          - Used for payment timing analysis and collection strategy
+          - Critical for determining payment recency and collection approach
+          - Enables time-based collection workflow automation
+          
+          Data Quality:
+          - Null values indicate no payment history in last 365 days
+          - Values represent actual days since last payment date
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+              severity: warn
+              config:
+                description: "Days since last payment should be within 365 day analysis window"
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ['date_id', 'patient_id', 'provider_id']
+          config:
+            severity: error
+            description: "AR summary must have unique records per date-patient-provider combination"
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1000000
+          config:
+            severity: warn
+            description: >
+              AR summary should have reasonable record count for operational scale
+              - Minimum: 1000 records for meaningful analysis
+              - Maximum: 1M records to prevent performance issues
+      
+      - dbt_utils.expression_is_true:
+          expression: "(total_balance > 0 AND abs(total_balance - (coalesce(balance_0_30_days,0) + coalesce(balance_31_60_days,0) + coalesce(balance_61_90_days,0) + coalesce(balance_over_90_days,0))) <= 0.01) OR (total_balance <= 0)"
+          config:
+            severity: error
+            description: "For positive balances, total must equal sum of buckets within $0.01; credit/no-balance rows are excluded"
+
+      - dbt_utils.expression_is_true:
+          expression: "(abs(pct_current - (balance_0_30_days / nullif(total_balance, 0) * 100)) < 0.01) OR total_balance = 0"
+          config:
+            severity: error
+            description: "pct_current must match aging bucket ratio when balance exists"
+
+      - dbt_utils.expression_is_true:
+          expression: "(abs(pct_over_90 - (balance_over_90_days / nullif(total_balance, 0) * 100)) < 0.01) OR total_balance = 0"
+          config:
+            severity: error
+            description: "pct_over_90 must match aging bucket ratio when balance exists"
+
+      - dbt_utils.expression_is_true:
+          expression: "(total_balance > 0 AND abs((pct_current + pct_31_60 + pct_61_90 + pct_over_90) - 100) <= 0.02) OR (total_balance <= 0)"
+          config:
+            severity: error
+            description: >
+              AR Aging Integrity: Aging percentages must sum to ~100% within rounding tolerance for positive balances
+              
+              Business Requirement: All aging buckets must account for total balance
+              Impact: Ensures AR aging analysis accuracy and financial integrity while permitting rounding and excluding credit/no-balance records
+              Enforcement: Validates aging bucket calculations are mathematically consistent
+      
+      - dbt_utils.expression_is_true:
+          expression: "collection_priority_score >= 0 AND collection_priority_score <= 100"
+          config:
+            severity: error
+            description: >
+              Collection Priority Scoring: Priority scores must be within valid range
+              
+              Business Requirement: Priority scores must be 0-100 for workflow processing
+              Impact: Ensures collection prioritization system functions correctly
+              Enforcement: Validates priority scoring algorithm produces valid results
+      
+      - dbt_utils.expression_is_true:
+          expression: "collection_priority_score = round(collection_priority_score)"
+          config:
+            severity: error
+            description: "Priority score must be rounded to integer for workflow processing"
+
+      - dbt_utils.expression_is_true:
+          expression: "(collection_rate_last_year = 0) OR (abs(collection_rate_last_year - (total_payments_last_year / nullif(billed_last_year, 0) * 100)) < 0.01)"
+          config:
+            severity: error
+            description: "Collection rate must match payments-to-billed ratio when billed > 0"
+
+      - dbt_utils.expression_is_true:
+          expression: "has_outstanding_balance = (total_balance > 0)"
+          config:
+            severity: error
+            description: "Outstanding balance flag must correctly reflect balance status"
+
+      - dbt_utils.expression_is_true:
+          expression: "has_aged_balance = (balance_over_90_days > 0)"
+          config:
+            severity: error
+            description: "Aged balance flag must correctly reflect over 90 day balance status"
+
+      - dbt_utils.expression_is_true:
+          expression: "aging_risk_category IN ('No Balance', 'Credit Balance', 'High Risk', 'Medium Risk', 'Moderate Risk', 'Low Risk')"
+          config:
+            severity: error
+            description: >
+              Risk Category Validation: Risk categories must be valid business values
+              
+              Business Requirement: Risk categories must match defined business rules
+              Impact: Ensures risk assessment drives correct collection strategies
+              Enforcement: Validates risk categorization logic produces expected results
+    
+    meta:
+      owner: "financial_management_team"
+      contains_pii: true
+      contains_phi: true
+      business_process: "Accounts Receivable Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + patient + provider combination"
+      primary_consumers: ["Financial Team", "Collection Team", "Management"]
+      system_integration: "System A: Financial Management"
+      data_quality_requirements:
+        - "AR aging percentages must sum to 100% when balance exists"
+        - "Collection rates must be between 0-100% for valid performance measurement"
+        - "Priority scores must be 0-100 for workflow processing"
+        - "Risk categories must match defined business rules"
+        - "Balance calculations must be mathematically consistent"
+        - "Payment recency must reflect actual payment timing"
+      performance_requirements:
+        - "Model must complete within 30 minutes for daily refresh"
+        - "Indexes must support common query patterns (date, patient, provider, clinic)"
+        - "Aggregations must be optimized for 365-day rolling windows"
+        - "Date dimension joins must be efficient for temporal analysis"

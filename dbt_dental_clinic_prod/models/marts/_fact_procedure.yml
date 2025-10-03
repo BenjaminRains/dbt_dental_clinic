@@ -1,0 +1,406 @@
+version: 2
+
+models:
+  - name: fact_procedure
+    description: >
+      Fact table for procedure execution events and performance metrics.
+      This model serves as the foundation for procedure-level analysis and reporting,
+      providing detailed information about each procedure performed, including
+      financial metrics, operational timing, and quality indicators.
+      
+      This fact table serves as the central repository for all procedure execution events
+      and provides key business value for clinical performance analysis, financial
+      reporting, and operational efficiency measurement.
+      Part of System A: Fee Processing and Procedure Management workflow.
+      
+      Key Features:
+      - Procedure Execution Facts: Core procedure details with financial metrics
+      - Fee Analysis: Actual vs standard fees with variance calculations
+      - Timing Metrics: Actual treatment duration from appointment data
+      - Quality Flags: Data quality indicators for downstream analysis
+      - Dimensional Integration: Links to all relevant dimension tables for comprehensive analysis
+      
+      Data Sources:
+      - int_procedure_complete: Complete procedure data with fee information and validation
+      - fact_appointment: Appointment timing data for treatment duration calculation
+      - dim_date: Date dimension for temporal analysis and reporting
+      
+      Business Logic Features:
+      - Procedure Execution Tracking: Records each procedure performed with complete context
+      - Fee Variance Analysis: Compares actual fees charged against standard fee schedules
+      - Treatment Duration Calculation: Integrates appointment timing for operational metrics
+      - Status Filtering: Includes only completed procedures (status 2) and existing prior procedures (status 4)
+      - Data Quality Integration: Preserves metadata for lineage tracking and quality monitoring
+      
+      Financial Calculations:
+      - Actual Fee Tracking: Records the fee actually charged for each procedure
+      - Standard Fee Comparison: Provides standard fee for variance analysis
+      - Fee Variance Analysis: Enables identification of pricing discrepancies and opportunities
+      
+      Data Quality Notes:
+      - Only includes procedures with valid procedure_id, procedure_date, patient_id, and provider_id
+      - Appointment timing data may be null for procedures not linked to appointments
+      - Fee data comes from int_procedure_complete which includes comprehensive fee validation
+      - Procedure status filtering ensures only business-relevant procedures are included
+      
+      Business Rules:
+      - Procedure Status Filtering: Only includes procedures with status 2 (Completed) or 4 (Existing Prior)
+      - Data Completeness: Requires non-null values for core identifying fields
+      - Fee Integration: Actual fees are sourced from procedure execution, standard fees from fee schedules
+      - Timing Integration: Treatment duration calculated from appointment data when available
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: procedure_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['procedure_id']
+          unique: true
+        - columns: ['date_id']
+        - columns: ['patient_id']
+        - columns: ['provider_id']
+        - columns: ['procedure_type_id']
+      tags: ['fact', 'daily']
+    
+    columns:
+      - name: procedure_id
+        description: >
+          Primary key - Unique identifier for each procedure execution event
+          
+          Source Transformation:
+          - OpenDental source: "ProcNum" (CamelCase as stored)
+          - Transformed to: procedure_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Uniquely identifies each procedure execution event
+          - Used as foreign key in multiple downstream models and reports
+          - Critical for procedure execution tracking and performance analysis
+          - Links to int_procedure_complete for complete procedure context
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+              config:
+                severity: error
+                description: "Procedure execution must exist in intermediate procedure data"
+      
+      - name: date_id
+        description: >
+          Foreign key to date dimension for temporal analysis
+          
+          Source Transformation:
+          - Derived from: procedure_date in int_procedure_complete
+          - Links to: dim_date.date_day for comprehensive date context
+          
+          Business Relationship:
+          - Enables time-based analysis of procedure performance
+          - Supports seasonal trends, monthly reporting, and temporal comparisons
+          - Critical for financial reporting periods and operational scheduling analysis
+          
+          Data Quality Considerations:
+          - Must match valid dates in dim_date dimension
+          - Enables temporal analysis across all procedure metrics
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              severity: error
+              config:
+                description: "Procedure date must exist in date dimension for temporal analysis"
+          - not_null
+      
+      - name: patient_id
+        description: >
+          Foreign key to patient dimension for demographic and clinical analysis
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedure execution to specific patient for clinical analysis
+          - Enables patient-level procedure history and treatment planning
+          - Critical for patient care coordination and clinical reporting
+          
+          Data Quality Considerations:
+          - Must reference valid patient in patient dimension
+          - Enables patient-level aggregations and clinical analysis
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+              config:
+                description: "Procedure must be linked to valid patient for clinical analysis"
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to provider dimension for performance and productivity analysis
+          
+          Source Transformation:
+          - OpenDental source: "ProvNum" (CamelCase as stored)
+          - Transformed to: provider_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links procedure execution to specific provider for performance analysis
+          - Enables provider productivity metrics and clinical performance tracking
+          - Critical for provider evaluation and resource allocation
+          
+          Data Quality Considerations:
+          - Must reference valid provider in provider dimension
+          - Enables provider-level aggregations and performance analysis
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+              config:
+                description: "Procedure must be linked to valid provider for performance analysis"
+          - not_null
+      
+      - name: procedure_type_id
+        description: >
+          Foreign key to procedure dimension for clinical categorization and analysis
+          
+          Source Transformation:
+          - OpenDental source: "CodeNum" (CamelCase as stored)
+          - Transformed to: procedure_type_id (snake_case per naming conventions)
+          - Maps to: dim_procedure.procedure_code_id for clinical context
+          
+          Business Relationship:
+          - Links procedure execution to procedure definition for clinical analysis
+          - Enables procedure-type performance analysis and clinical categorization
+          - Critical for clinical reporting and treatment planning insights
+          
+          Data Quality Considerations:
+          - Must reference valid procedure code in procedure dimension
+          - Enables procedure-type aggregations and clinical analysis
+        tests:
+          - relationships:
+              to: ref('dim_procedure')
+              field: procedure_code_id
+              severity: error
+              config:
+                description: "Procedure execution must reference valid procedure code for clinical analysis"
+          - not_null
+      
+      - name: actual_fee
+        description: >
+          Actual fee charged for the procedure execution
+          
+          Financial Context:
+          - Currency: USD with precision to cents
+          - Calculation: Fee actually charged to patient/insurance for this procedure
+          - Business Rules: Represents the actual revenue generated from procedure execution
+          
+          Accounting Impact:
+          - Direct impact on practice revenue and financial reporting
+          - Used for actual vs budget variance analysis
+          - Critical for fee schedule optimization and pricing analysis
+          
+          Common Values:
+          - Varies significantly by procedure type and complexity
+          - May differ from standard fee due to insurance adjustments, discounts, or fee schedule variations
+          - Zero values may indicate pro bono work or insurance write-offs
+        tests:
+          - not_null:
+              config:
+                description: "Actual fee must be recorded for financial tracking"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+              config:
+                description: "Actual fees should be within reasonable business range for dental procedures"
+          - dbt_utils.expression_is_true:
+              expression: "actual_fee >= 0"
+              config:
+                severity: error
+                description: "Actual fees cannot be negative for financial integrity"
+      
+      - name: standard_fee
+        description: >
+          Standard fee from fee schedule for comparison and variance analysis
+          
+          Financial Context:
+          - Currency: USD with precision to cents
+          - Calculation: Standard fee from fee schedule for this procedure type
+          - Business Rules: Used as baseline for fee variance analysis and pricing optimization
+          
+          Accounting Impact:
+          - Enables actual vs standard fee variance analysis
+          - Supports fee schedule optimization and pricing strategy
+          - Critical for identifying pricing opportunities and discrepancies
+          
+          Common Values:
+          - May be null for new procedures without established fee schedules
+          - Used as baseline for fee variance calculations
+          - Enables identification of procedures with significant fee variations
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000
+              severity: warn
+              where: "standard_fee is not null"
+              config:
+                description: "Standard fees should be within reasonable business range when available"
+          - dbt_utils.expression_is_true:
+              expression: "standard_fee is null or standard_fee >= 0"
+              config:
+                severity: error
+                description: "Standard fees cannot be negative when present"
+      
+      - name: duration_minutes
+        description: >
+          Actual treatment duration in minutes calculated from appointment timing
+          
+          Calculation Method:
+          - Numerator: Treatment time in minutes from appointment data
+          - Denominator: Single procedure execution
+          - Formula: Rounded to 2 decimal places for precision
+          
+          Business Significance:
+          - Target Range: Varies by procedure complexity (5-120 minutes typical)
+          - Benchmark: Used for provider efficiency analysis and scheduling optimization
+          - Decision Impact: Drives appointment scheduling and resource allocation decisions
+          
+          Data Quality:
+          - Accuracy: Calculated from appointment start/end times when available
+          - Timeliness: Real-time calculation from appointment data
+          - Completeness: May be null for procedures not linked to appointments
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 480
+              severity: warn
+              where: "duration_minutes is not null"
+              config:
+                description: "Treatment duration should be within reasonable range (0-8 hours)"
+          - dbt_utils.expression_is_true:
+              expression: "duration_minutes is null or duration_minutes >= 0"
+              config:
+                severity: error
+                description: "Treatment duration cannot be negative when present"
+      
+      - name: _loaded_at
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+      
+      - name: _created_at  
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the procedure record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this mart model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ['procedure_id']
+          config:
+            description: "Each procedure execution must be uniquely identified"
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1000000
+          config:
+            severity: warn
+            description: >
+              Performance Monitor: Procedure execution volume
+              
+              Baseline: Expected procedure volume for dental practice operations
+              Alert Threshold: Significant changes in procedure volume may indicate data issues
+              Action Required: Investigate if procedure count is outside normal operating range
+      
+      - dbt_utils.expression_is_true:
+          expression: "actual_fee >= 0"
+          config:
+            severity: error
+            description: >
+              Financial Integrity: Actual fees must be non-negative
+              
+              Accounting Requirement: Negative fees would indicate data quality issues
+              Audit Significance: Financial data integrity is critical for accurate reporting
+              Business Impact: Ensures accurate revenue tracking and financial analysis
+      
+      - dbt_utils.expression_is_true:
+          expression: "standard_fee is null or standard_fee >= 0"
+          config:
+            severity: error
+            description: >
+              Financial Integrity: Standard fees must be non-negative when present
+              
+              Accounting Requirement: Standard fees cannot be negative for pricing analysis
+              Audit Significance: Ensures accurate fee variance calculations
+              Business Impact: Maintains integrity of pricing analysis and optimization
+      
+      - dbt_utils.expression_is_true:
+          expression: "duration_minutes is null or duration_minutes >= 0"
+          config:
+            severity: error
+            description: >
+              Operational Integrity: Treatment duration must be non-negative when present
+              
+              Business Requirement: Negative duration would indicate data quality issues
+              Operational Impact: Ensures accurate efficiency analysis and scheduling
+              Business Impact: Maintains integrity of operational performance metrics
+    
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      contains_phi: true
+      business_process: "Procedure Execution and Performance Tracking"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per procedure execution event"
+      primary_consumers: ["Clinical Operations", "Financial Analysis", "Provider Performance"]
+      system_integration: "System A: Fee Processing and Procedure Management"
+      data_quality_requirements:
+        - "All procedure executions must have valid dimensional relationships"
+        - "Financial amounts must be non-negative for accurate revenue tracking"
+        - "Date fields must be valid and within business ranges"
+        - "Procedure status must follow business rules (completed or existing prior only)"
+        - "Primary key must be unique across all procedure executions"
+      performance_requirements:
+        - "Table must support efficient queries for procedure performance analysis"
+        - "Indexes must enable fast lookups by patient, provider, and procedure type"
+        - "Data must be refreshed daily to support operational reporting"

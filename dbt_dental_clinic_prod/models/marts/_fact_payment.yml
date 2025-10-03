@@ -1,0 +1,522 @@
+version: 2
+
+models:
+  - name: fact_payment
+    description: >
+      Comprehensive fact table for payment transactions and financial activity tracking.
+      
+      This fact table serves as the central repository for all payment-related financial activities and provides comprehensive analysis capabilities for revenue cycle management.
+      Part of System 2: Revenue Cycle Management workflow.
+      
+      Key Features:
+      - Complete payment transaction tracking with split payment allocation analysis
+      - Payment method and source categorization for operational insights and efficiency monitoring
+      - Financial categorization (Income/Refund/Zero) and size classification for trend analysis
+      - Timing analysis for payment processing efficiency and operational optimization
+      - Comprehensive validation flags for data quality assurance and financial integrity
+      
+      Data Sources:
+      - stg_opendental__payment: Primary source for payment transaction data including amounts, dates, and processing status
+      - stg_opendental__paysplit: Payment allocation and split information for detailed financial tracking
+      
+      Business Logic Features:
+      - Payment type categorization: Patient, Insurance, Partial, PrePayment, Adjustment, Refund classification
+      - Payment direction analysis: Income vs Refund identification for financial reporting
+      - Payment size categorization: Small ($0-50), Medium ($50-200), Large ($200-1000), Very Large ($1000+) classification
+      - Timing analysis: Same Day, Backdated, Future Dated payment processing efficiency tracking
+      - Split payment validation: Comprehensive tracking of payment splits against total payment amounts
+      
+      Financial Calculations:
+      - Payment amount validation: Ensures financial integrity and audit compliance
+      - Split amount reconciliation: Validates payment allocation accuracy and completeness
+      - Payment direction determination: Classifies payments as Income, Refund, or Zero for financial reporting
+      - Size categorization: Groups payments by amount ranges for operational analysis and trend identification
+      
+      Data Quality Notes:
+      - Payment plan functionality not used by clinic (payment_plan_id set to null as expected)
+      - Split amounts validated against payment amounts with mismatch flagging for data integrity monitoring
+      - Zero payments identified and flagged for operational analysis and process improvement
+      - Provider not directly associated with payment (provider_id set to null per business logic)
+      
+      Business Rules:
+      - Payment amounts must align with split allocations (validated through splits_match_payment flag)
+      - Payment timing must be tracked for operational efficiency analysis and process optimization
+      - Financial categorization follows standard accounting principles for Income vs Refund classification
+      - Payment type assignment follows OpenDental business rules and operational requirements
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: payment_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['payment_id']
+          unique: true
+        - columns: ['patient_id']
+        - columns: ['payment_date']
+        - columns: ['_updated_at']
+      tags: ['fact', 'daily', 'revenue_cycle']
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [payment_id]
+          config:
+            severity: error
+            description: "Each payment must have a unique identifier for financial integrity"
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000000
+          config:
+            severity: warn
+            description: "Payment records should be within expected operational range"
+      
+      - dbt_utils.expression_is_true:
+          expression: "payment_amount is not null"
+          config:
+            severity: error
+            description: "Payment amounts are required for financial tracking and reporting"
+      
+      - dbt_utils.expression_is_true:
+          expression: "payment_date is not null"
+          config:
+            severity: error
+            description: "Payment dates are required for financial reporting and audit compliance"
+      
+      - dbt_utils.expression_is_true:
+          expression: "payment_type in ('Patient', 'Insurance', 'Partial', 'PrePayment', 'Adjustment', 'Refund', 'Unknown')"
+          config:
+            severity: error
+            description: "Payment types must conform to business classification standards"
+    
+    meta:
+      owner: "finance_operations_team"
+      contains_pii: true
+      contains_phi: true
+      business_process: "Revenue Cycle Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per payment transaction"
+      primary_consumers: ["Finance Team", "Operations Team", "Analytics Team"]
+      system_integration: "System 2: Revenue Cycle Management"
+      data_quality_requirements:
+        - "All payment records must have valid amounts and dates"
+        - "Payment types must conform to business classification standards"
+        - "Split amounts must reconcile with total payment amounts"
+        - "Financial categorization must follow accounting principles"
+        - "Payment timing analysis must be accurate for operational insights"
+      performance_requirements:
+        - "Payment lookups must be optimized for financial reporting"
+        - "Date-based queries must be efficient for trend analysis"
+        - "Split payment aggregations must be performant for reconciliation"
+    
+    columns:
+      - name: payment_id
+        description: >
+          Primary key - Unique identifier for each payment transaction (maps from "PayNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PayNum" (CamelCase)
+          - Transformed to: payment_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all payment transactions
+          - Used as foreign key in multiple downstream models for financial analysis
+          - Critical for payment identification, reconciliation, and audit trail
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__payment')
+              field: payment_id
+              config:
+                severity: error
+                description: "Payment ID must reference valid source payment record for data integrity"
+      
+      - name: patient_id
+        description: >
+          Foreign key to patient dimension (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links payment to specific patient for financial tracking and billing analysis
+          - One-to-many relationship: One patient can have multiple payments
+          - Essential for patient financial history and payment trend analysis
+          
+          Data Quality Considerations:
+          - Required for all payment transactions to enable patient-level financial reporting
+          - Must reference valid patient record for data integrity
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+              config:
+                description: "Patient ID must reference valid patient for financial tracking and reporting"
+      
+      - name: provider_id
+        description: >
+          Provider identifier (set to null as providers are not directly associated with payments)
+          
+          Business Context:
+          - Providers are not directly associated with payments in the clinic's business model
+          - Payment allocation to providers is handled through paysplit records
+          - This field is maintained for dimensional model consistency
+          
+          Data Quality Considerations:
+          - Always null per business design - this is expected and correct
+          - Provider relationships are tracked through split_payment records instead
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "provider_id is null"
+              config:
+                severity: warn
+                description: "Provider ID should be null as providers are not directly associated with payments"
+      
+      - name: clinic_id
+        description: >
+          Foreign key to clinic dimension (maps from "ClinicNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClinicNum" (CamelCase as stored)
+          - Transformed to: clinic_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links payment to specific clinic location for multi-clinic financial analysis
+          - Enables clinic-level revenue tracking and performance comparison
+          - Essential for multi-location financial reporting and operations management
+        tests:
+          - relationships:
+              to: ref('dim_clinic')
+              field: clinic_id
+              severity: error
+              config:
+                description: "Clinic ID must reference valid clinic for multi-location financial tracking"
+      
+      - name: payment_type_id
+        description: >
+          Payment type identifier from OpenDental (maps from "PayType" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PayType" (CamelCase as stored)
+          - Transformed to: payment_type_id (snake_case per naming conventions)
+          
+          Business Context:
+          - Raw payment type code used for payment classification logic
+          - Maps to payment_type field for business-friendly categorization
+          - Essential for payment processing and financial categorization rules
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5
+              config:
+                severity: error
+                description: "Payment type ID must be valid OpenDental payment type code"
+      
+      - name: payment_date
+        description: >
+          Date when payment was processed (maps from "DatePay" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "DatePay" (CamelCase as stored)
+          - Represents: Actual date when payment was processed or received
+          - Usage: Financial reporting, trend analysis, and payment timing analysis
+          
+          Business Significance:
+          - Critical for financial reporting and revenue recognition
+          - Used for payment trend analysis and operational efficiency measurement
+          - Essential for audit trails and financial compliance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                severity: error
+                description: "Payment dates must be within reasonable business range for financial reporting"
+      
+      - name: entry_date
+        description: >
+          Date when payment record was entered into system (maps from "DateEntry" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the payment record was originally entered into OpenDental
+          - Usage: Data entry tracking and payment processing timeline analysis
+          
+          Business Context:
+          - Used for payment timing analysis and processing efficiency measurement
+          - Enables identification of backdated vs same-day vs future-dated payments
+          - Critical for operational process analysis and improvement
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date"
+              config:
+                severity: error
+                description: "Entry dates must be within reasonable business range for operational tracking"
+      
+      - name: payment_amount
+        description: >
+          Payment amount in dollars (maps from "PayAmt" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PayAmt" (CamelCase as stored)
+          - Currency: USD with standard precision
+          - Represents: Total payment amount including any adjustments
+          
+          Financial Context:
+          - Currency: USD with standard decimal precision
+          - Calculation: Direct from OpenDental payment amount field
+          - Business Rules: Can be positive (income), negative (refund), or zero
+          
+          Accounting Impact:
+          - Direct impact on revenue recognition and financial reporting
+          - Used for payment reconciliation and financial analysis
+          - Essential for audit trails and compliance reporting
+          
+          Common Values:
+          - Typical range varies by payment type and procedure complexity
+          - Negative values indicate refunds or adjustments
+          - Zero values are valid for certain payment types
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -10000
+              max_value: 10000
+              config:
+                severity: warn
+                description: "Payment amounts should be within reasonable business range for financial monitoring"
+      
+      - name: payment_type
+        description: >
+          Business-friendly payment type classification
+          
+          Valid Values:
+          - 'Patient': Direct patient payment for services rendered
+          - 'Insurance': Insurance company payment for covered services
+          - 'Partial': Partial payment toward total balance
+          - 'PrePayment': Advance payment for future services
+          - 'Adjustment': Financial adjustment to account balance
+          - 'Refund': Payment refund to patient or insurance
+          - 'Unknown': Payment type not recognized or classified
+          
+          Business Rules:
+          - Derived from payment_type_id using standardized mapping
+          - Used for payment categorization and financial reporting
+          - Essential for revenue analysis and payment trend identification
+          
+          Operational Impact:
+          - Determines payment processing workflow and approval requirements
+          - Affects financial reporting categorization and revenue recognition
+          - Used for payment method analysis and operational efficiency tracking
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Patient', 'Insurance', 'Partial', 'PrePayment', 'Adjustment', 'Refund', 'Unknown']
+              config:
+                description: "Payment types must conform to business classification standards"
+      
+      - name: payment_direction
+        description: >
+          Financial direction classification for payment analysis
+          
+          Valid Values:
+          - 'Income': Positive payment amount representing revenue
+          - 'Refund': Negative payment amount representing money returned
+          - 'Zero': Zero payment amount for adjustments or placeholders
+          
+          Business Rules:
+          - Derived from payment_amount: >0 = Income, <0 = Refund, =0 = Zero
+          - Used for financial reporting and revenue analysis
+          - Essential for cash flow analysis and financial trend identification
+          
+          Financial Impact:
+          - Determines impact on revenue recognition and cash flow
+          - Used for financial reporting categorization and analysis
+          - Critical for audit trails and financial compliance
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Income', 'Refund', 'Zero']
+              config:
+                description: "Payment direction must be valid financial classification for reporting"
+      
+      - name: payment_size_category
+        description: >
+          Payment size categorization for operational analysis and trend identification
+          
+          Valid Values:
+          - 'Small': $0-50 payments for small procedures or copays
+          - 'Medium': $50-200 payments for routine procedures
+          - 'Large': $200-1000 payments for major procedures
+          - 'Very Large': $1000+ payments for comprehensive treatments
+          - 'Negative': Negative amounts for refunds and adjustments
+          
+          Business Rules:
+          - Derived from payment_amount using predefined thresholds
+          - Used for payment trend analysis and operational planning
+          - Helps identify payment patterns and procedure complexity
+          
+          Operational Impact:
+          - Used for payment processing workflow optimization
+          - Helps identify high-value payment patterns and trends
+          - Essential for operational efficiency analysis and planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Small', 'Medium', 'Large', 'Very Large', 'Negative']
+              config:
+                description: "Payment size categories must be valid for operational analysis"
+      
+      - name: payment_timing
+        description: >
+          Payment timing classification for processing efficiency analysis
+          
+          Valid Values:
+          - 'Same Day': Payment processed on same day as entry
+          - 'Backdated': Payment date is before entry date
+          - 'Future Dated': Payment date is after entry date
+          
+          Business Rules:
+          - Derived from comparison of payment_date and entry_date
+          - Used for payment processing efficiency analysis
+          - Helps identify operational process improvements
+          
+          Operational Impact:
+          - Indicates payment processing efficiency and workflow optimization opportunities
+          - Used for operational performance measurement and improvement
+          - Essential for identifying process bottlenecks and optimization opportunities
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Same Day', 'Backdated', 'Future Dated']
+              config:
+                description: "Payment timing must be valid for operational efficiency analysis"
+      
+      - name: splits_match_payment
+        description: >
+          Validation flag indicating whether payment splits reconcile with total payment amount
+          
+          Business Context:
+          - True: Split amounts sum to total payment amount (expected condition)
+          - False: Split amounts do not match payment amount (requires investigation)
+          
+          Data Quality Significance:
+          - Critical for financial integrity and reconciliation accuracy
+          - Used for data quality monitoring and financial audit compliance
+          - Helps identify payment allocation discrepancies
+          
+          Business Impact:
+          - Ensures payment allocation accuracy for financial reporting
+          - Critical for audit trails and financial compliance
+          - Used for identifying and resolving payment allocation issues
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "splits_match_payment is true"
+              config:
+                severity: warn
+                description: "Payment splits should reconcile with total payment amount for financial integrity"
+      
+      - name: is_insurance_payment
+        description: >
+          Boolean flag indicating if payment is from insurance company
+          
+          Business Context:
+          - True: Payment from insurance company (payment_type_id = 1)
+          - False: Payment from other sources (patient, adjustments, etc.)
+          
+          Operational Impact:
+          - Used for insurance payment tracking and reconciliation
+          - Essential for revenue cycle management and insurance billing analysis
+          - Helps identify insurance payment patterns and trends
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "is_insurance_payment = (payment_type_id = 1)"
+              config:
+                severity: error
+                description: "Insurance payment flag must correctly reflect payment type for business logic"
+      
+      - name: is_patient_payment
+        description: >
+          Boolean flag indicating if payment is from patient
+          
+          Business Context:
+          - True: Payment from patient (payment_type_id = 0)
+          - False: Payment from other sources (insurance, adjustments, etc.)
+          
+          Operational Impact:
+          - Used for patient payment tracking and financial analysis
+          - Essential for patient billing and payment trend analysis
+          - Helps identify patient payment patterns and collection efficiency
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "is_patient_payment = (payment_type_id = 0)"
+              config:
+                severity: error
+                description: "Patient payment flag must correctly reflect payment type for business logic"
+      
+      - name: is_zero_payment
+        description: >
+          Boolean flag indicating if payment amount is zero
+          
+          Business Context:
+          - True: Payment amount equals zero (adjustments, placeholders)
+          - False: Payment has non-zero amount
+          
+          Data Quality Significance:
+          - Used for identifying zero-amount payments for analysis
+          - Helps distinguish between actual payments and accounting adjustments
+          - Essential for payment trend analysis and operational insights
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "is_zero_payment = (payment_amount = 0)"
+              config:
+                severity: error
+                description: "Zero payment flag must correctly reflect payment amount for business logic"
+      
+      - name: _loaded_at
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+      
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the payment record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null

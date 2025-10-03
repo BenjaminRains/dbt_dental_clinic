@@ -1,0 +1,172 @@
+version: 2
+
+models:
+  - name: stg_opendental__laboratory
+    description: >
+      Staging model for OpenDental laboratory information from external dental labs.
+      
+      This model contains essential information about external laboratories that 
+      perform dental lab work including prosthetics, crowns, bridges, and other 
+      fabricated items. Each record represents a single laboratory with its contact 
+      information, addresses, and operational details. Critical for lab case 
+      management, billing, and vendor relationship tracking.
+      
+      Records include all active and inactive laboratories with their current 
+      contact information and operational settings. Used for lab case workflow 
+      management and vendor performance analysis.
+    
+    config:
+      tags: ['opendental', 'staging', 'laboratory', 'procedures', 'vendors']
+    
+    meta:
+      # Data quality and business context
+      record_count: "~14 laboratories (as of 2024-12)"
+      data_scope: "All external laboratories used by the practice"
+      
+      known_issues:
+        - description: "Many laboratories have incomplete contact information (missing phone, email, or address)"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "contact_information_completeness"
+          impact: "Affects vendor communication and lab case coordination"
+        - description: "Address information is missing for most laboratories (only 2 of 14 have complete addresses)"
+          severity: "warn"
+          identified_date: "2024-12-19"
+          test: "address_information_currency"
+          impact: "May affect shipping coordination and vendor management"
+        - description: "Some laboratory names contain inconsistent formatting and capitalization"
+          severity: "low"
+          identified_date: "2024-12-19"
+          test: "name_formatting_consistency"
+          impact: "Minor impact on reporting and display consistency"
+      
+      business_rules:
+        - rule: "Laboratory names must be unique and descriptive"
+          impact: "Critical for lab case management and vendor identification"
+        - rule: "Hidden laboratories should not appear in active lab case workflows"
+          impact: "Affects lab case assignment and vendor selection"
+        - rule: "Contact information should be current for active laboratories"
+          impact: "Ensures effective communication with lab vendors"
+        - rule: "All laboratories are currently active (none are hidden)"
+          impact: "All laboratories are available for lab case assignment"
+      
+      usage_notes: >
+        Use this model for laboratory vendor analysis, lab case management, and 
+        vendor relationship tracking. Join with lab case models for comprehensive 
+        lab workflow analysis. For financial analysis, join with lab fee and 
+        payment models.
+        
+        IMPORTANT: This is a small dataset with only ~14 laboratories. Most 
+        laboratories have incomplete contact information, so be cautious when 
+        using contact fields for analysis or reporting. Focus on laboratory 
+        identification and lab case relationships rather than contact details.
+    
+    tests:
+      # Model-level validation tests
+      - dbt_utils.expression_is_true:
+          expression: "laboratory_name IS NOT NULL"
+          config:
+            severity: warn
+            name: check_laboratory_has_name
+      - dbt_utils.expression_is_true:
+          expression: "phone_number IS NOT NULL OR email_address IS NOT NULL"
+          config:
+            severity: warn
+            name: check_laboratory_has_contact_info
+    
+    columns:
+      # Primary Key
+      - name: laboratory_id
+        description: >
+          Primary key - Unique identifier for each laboratory 
+          (maps to LaboratoryNum in OpenDental). This ID is used to track 
+          laboratory information and is referenced by lab cases for 
+          vendor management and workflow coordination.
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Business Attribute Columns
+      - name: laboratory_name
+        description: >
+          The name or description of the laboratory (e.g., 'ABC Dental Lab', 
+          'Crown & Bridge Specialists'). Used for identification in lab case 
+          management and vendor selection. Critical for user interface and 
+          operational management.
+        tests:
+          - not_null
+      
+      - name: phone_number
+        description: >
+          Primary phone number for contacting the laboratory. Used for 
+          communication regarding lab cases, orders, and general inquiries. 
+          May be null if laboratory contact information is incomplete.
+      
+      - name: notes
+        description: >
+          Additional notes or comments about the laboratory including special 
+          instructions, capabilities, or relationship details. Used for 
+          vendor management and lab case coordination.
+      
+      - name: slip_number
+        description: >
+          Slip or reference number for the laboratory. Used for internal 
+          tracking and reference purposes. May be null if not assigned.
+      
+      # Address Information
+      - name: address
+        description: >
+          Primary address line of the laboratory location. Used for shipping 
+          lab cases and general correspondence. May be null if address 
+          information is incomplete.
+      
+      - name: city
+        description: >
+          City where the laboratory is located. Used for geographic analysis 
+          and shipping coordination. May be null if address information is incomplete.
+      
+      - name: state
+        description: >
+          State where the laboratory is located. Used for geographic analysis 
+          and shipping coordination. May be null if address information is incomplete.
+      
+      - name: zip_code
+        description: >
+          ZIP/Postal code of the laboratory location. Used for shipping 
+          coordination and geographic analysis. May be null if address 
+          information is incomplete.
+      
+      # Contact Information
+      - name: email_address
+        description: >
+          Email address for the laboratory. Used for electronic communication 
+          regarding lab cases, orders, and general inquiries. May be null if 
+          contact information is incomplete.
+      
+      - name: mobile_phone
+        description: >
+          Mobile or wireless phone number for the laboratory. Used for urgent 
+          communication and mobile contact. May be null if not provided.
+      
+      # Boolean Configuration Columns
+      - name: is_hidden
+        description: >
+          Flag indicating if the laboratory is hidden from normal view in 
+          lab case management interfaces. Hidden laboratories are typically 
+          inactive or no longer used by the practice.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Metadata columns (required for all staging models)
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when this staging model was built by dbt"
+        tests:
+          - not_null

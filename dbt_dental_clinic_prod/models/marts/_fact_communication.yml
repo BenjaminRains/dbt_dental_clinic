@@ -1,0 +1,1140 @@
+version: 2
+
+models:
+  - name: fact_communication
+    description: >
+      Fact table for patient communications and messaging activities. This model serves as the central
+      repository for all communication interactions between the clinic and patients, providing comprehensive
+      communication effectiveness analysis and engagement tracking capabilities.
+      
+      Part of System G: Scheduling and Communication Management workflow.
+      
+      Key Features:
+      - Complete communication lifecycle tracking with response metrics and engagement analysis
+      - Multi-channel communication analysis supporting Email, SMS, Phone, Letter, and In-Person interactions
+      - Communication direction classification enabling inbound/outbound communication analysis
+      - Business hours and weekend communication flagging for operational efficiency measurement
+      - Communication categorization supporting appointment, financial, insurance, clinical, and referral analysis
+      
+      Data Sources:
+      - stg_opendental__commlog: Primary source for communication log data and interaction details
+      
+      Business Logic Features:
+      - Communication direction mapping: Converts sent_or_received_raw values to Inbound/Outbound/System classifications
+      - Communication method classification: Maps mode values to human-readable communication channels
+      - Communication category assignment: Groups communication types into business-relevant categories
+      - Engagement level determination: Calculates communication effectiveness based on direction and method
+      - Timing analysis: Extracts day of week, time periods, and business hour indicators
+      - Boolean flag generation: Creates operational flags for appointment, financial, and system-generated communications
+      
+      Communication Categories:
+      - Appointment: Communications related to appointment scheduling, reminders, and confirmations
+      - Financial: Communications regarding billing, payments, and financial matters
+      - Insurance: Communications about insurance verification, claims, and coverage
+      - Clinical: Communications related to treatment plans, clinical notes, and medical information
+      - Referral: Communications for patient referrals and specialist coordination
+      - Treatment Plan: Communications about treatment planning and case management
+      - General: All other communication types not specifically categorized
+      
+      Data Quality Notes:
+      - Email and SMS message integration temporarily disabled due to missing staging models (stg_opendental__emailmessage, stg_opendental__smsmessage)
+      - Confirmation requests not tracked as clinic doesn't use appointment confirmation functionality
+      - Communication datetime filtering ensures only valid communications with timestamps are included
+      - System-generated communications may have null user_id values, which is expected behavior
+      - Some communication types may not have corresponding category mappings and default to 'General'
+      
+      Business Rules:
+      - All communications must have valid communication_datetime for inclusion in fact table
+      - Communication direction is determined by sent_or_received_raw field (0=Inbound, 1=Outbound, 2=System)
+      - Communication method is derived from mode field with specific numeric mappings
+      - Engagement level combines direction and method to determine communication effectiveness
+      - Weekend and business hours flags are calculated based on communication timing
+      - Patient-initiated communications are identified by sent_or_received_raw = 0
+      - System-generated communications are identified by null or zero user_id values
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: communication_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['communication_id']
+          unique: true
+        - columns: ['patient_id']
+        - columns: ['user_id']
+        - columns: ['communication_datetime']
+      tags: ['fact', 'daily']
+    
+    columns:
+      - name: communication_id
+        description: >
+          Primary key - Unique identifier for each communication record (maps from "CommLogNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "CommLogNum" (CamelCase)
+          - Transformed to: communication_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Uniquely identifies each communication interaction in the system
+          - Used as primary key for communication analysis and reporting
+          - Critical for communication tracking and audit trail maintenance
+        tests:
+          - unique
+          - not_null
+          - positive_values
+          - relationships:
+              to: ref('stg_opendental__commlog')
+              field: commlog_id
+              config:
+                severity: error
+                description: "Communication ID must reference valid commlog record for data integrity"
+      
+      - name: patient_id
+        description: >
+          Foreign key to patient dimension (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links communication to specific patient for patient communication analysis
+          - Enables patient-level communication tracking and engagement measurement
+          - Critical for patient communication history and relationship management
+          
+          Data Quality Considerations:
+          - May be null for system-generated communications not tied to specific patients
+          - Required for patient-specific communication analysis and reporting
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              where: "patient_id is not null"
+              config:
+                severity: warn
+                description: "Patient ID should reference valid patient when communication is patient-specific"
+      
+      - name: user_id
+        description: >
+          Foreign key to user dimension (maps from "UserNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "UserNum" (CamelCase as stored)
+          - Transformed to: user_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links communication to specific user/staff member who initiated or handled the communication
+          - Enables staff-level communication analysis and performance tracking
+          - Critical for communication accountability and staff productivity measurement
+          
+          Data Quality Considerations:
+          - May be null for system-generated communications or automated processes
+          - Zero values indicate system-generated communications
+        tests:
+          - relationships:
+              to: ref('dim_user')
+              field: user_id
+              where: "user_id is not null and user_id > 0"
+              config:
+                severity: warn
+                description: "User ID should reference valid user when communication is staff-initiated"
+      
+      - name: program_id
+        description: >
+          Foreign key to program dimension (maps from "ProgramNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProgramNum" (CamelCase as stored)
+          - Transformed to: program_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links communication to specific program or service line
+          - Enables program-level communication analysis and effectiveness measurement
+          - Critical for program-specific communication tracking and reporting
+          
+          Data Quality Considerations:
+          - May be null for communications not associated with specific programs
+          - Required for program-specific communication analysis
+        tests:
+          - relationships:
+              to: ref('dim_program')
+              field: program_id
+              where: "program_id is not null"
+              config:
+                severity: warn
+                description: "Program ID should reference valid program when communication is program-specific"
+      
+      - name: referral_id
+        description: >
+          Foreign key to referral dimension (maps from "ReferralNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ReferralNum" (CamelCase as stored)
+          - Transformed to: referral_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links communication to specific referral for referral communication tracking
+          - Enables referral-specific communication analysis and follow-up measurement
+          - Critical for referral relationship management and communication effectiveness
+          
+          Data Quality Considerations:
+          - May be null for communications not associated with specific referrals
+          - Required for referral-specific communication analysis
+        tests:
+          - relationships:
+              to: ref('dim_referral')
+              field: referral_id
+              where: "referral_id is not null"
+              config:
+                severity: warn
+                description: "Referral ID should reference valid referral when communication is referral-specific"
+      
+      - name: communication_datetime
+        description: >
+          Primary timestamp for communication occurrence
+          
+          Source Transformation:
+          - OpenDental source: "DateTimeEntry" (CamelCase as stored)
+          - Represents: When the communication actually occurred
+          - Usage: Primary time dimension for communication analysis and reporting
+          
+          Business Context:
+          - Critical for communication timing analysis and effectiveness measurement
+          - Used for business hours analysis and communication pattern identification
+          - Enables time-based communication reporting and trend analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+              config:
+                severity: error
+                description: "Communication datetime must be within reasonable business operating timeframe"
+      
+      - name: communication_end_datetime
+        description: >
+          End timestamp for communication duration tracking
+          
+          Source Transformation:
+          - OpenDental source: "DateTimeEnd" (CamelCase as stored)
+          - Represents: When the communication ended (for duration-based communications)
+          - Usage: Communication duration analysis and efficiency measurement
+          
+          Business Context:
+          - Used for communication duration analysis and efficiency measurement
+          - Critical for phone call and in-person communication tracking
+          - Enables communication productivity analysis and resource planning
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+              config:
+                severity: warn
+                description: "Communication end datetime must be within reasonable timeframe when present"
+      
+      - name: entry_datetime
+        description: >
+          System entry timestamp for communication record
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the communication record was entered into the system
+          - Usage: System audit trail and data entry timing analysis
+          
+          Data Quality Notes:
+          - Source field "DateTEntry" contains 170K+ placeholder values (0001-01-01) that are filtered to null
+          - Only ~14K records have valid entry timestamps
+          - Null values are expected and represent communications without explicit entry tracking
+          
+          Business Context:
+          - Critical for system audit trail and data entry tracking (when available)
+          - Used for communication record lifecycle analysis
+          - Enables data entry efficiency and system performance measurement
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Entry datetime may be null for some communication records"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+              config:
+                severity: error
+                description: "Entry datetime must be within reasonable system operating timeframe"
+      
+      - name: communication_year
+        description: >
+          Year extracted from communication_datetime for time-based analysis
+          
+          Calculation Method:
+          - Source: extract(year from communication_datetime)
+          - Purpose: Enables year-over-year communication analysis and reporting
+          - Usage: Annual communication trends and performance measurement
+          
+          Business Significance:
+          - Critical for annual communication reporting and trend analysis
+          - Enables year-over-year communication effectiveness comparison
+          - Used for annual communication planning and resource allocation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+              config:
+                severity: error
+                description: "Communication year must be within reasonable business operating timeframe"
+      
+      - name: communication_month
+        description: >
+          Month extracted from communication_datetime for seasonal analysis
+          
+          Calculation Method:
+          - Source: extract(month from communication_datetime)
+          - Purpose: Enables monthly communication analysis and seasonal pattern identification
+          - Usage: Monthly communication reporting and seasonal trend analysis
+          
+          Business Significance:
+          - Critical for monthly communication reporting and performance tracking
+          - Enables seasonal communication pattern identification
+          - Used for monthly communication planning and resource allocation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+              config:
+                severity: error
+                description: "Communication month must be valid calendar month (1-12)"
+      
+      - name: communication_quarter
+        description: >
+          Quarter extracted from communication_datetime for quarterly analysis
+          
+          Calculation Method:
+          - Source: extract(quarter from communication_datetime)
+          - Purpose: Enables quarterly communication analysis and business reporting
+          - Usage: Quarterly communication reporting and business performance measurement
+          
+          Business Significance:
+          - Critical for quarterly business reporting and performance tracking
+          - Enables quarterly communication effectiveness analysis
+          - Used for quarterly communication planning and strategic analysis
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+              config:
+                severity: error
+                description: "Communication quarter must be valid calendar quarter (1-4)"
+      
+      - name: communication_day_of_week
+        description: >
+          Day of week extracted from communication_datetime for weekly pattern analysis
+          
+          Calculation Method:
+          - Source: extract(dow from communication_datetime) where 0=Sunday, 6=Saturday
+          - Purpose: Enables weekly communication pattern analysis and scheduling optimization
+          - Usage: Weekly communication reporting and operational planning
+          
+          Business Significance:
+          - Critical for weekly communication pattern identification
+          - Enables communication scheduling optimization and resource planning
+          - Used for operational efficiency analysis and staff scheduling
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 6
+              config:
+                severity: error
+                description: "Communication day of week must be valid day (0=Sunday, 6=Saturday)"
+      
+      - name: communication_hour
+        description: >
+          Hour extracted from communication_datetime for hourly pattern analysis
+          
+          Calculation Method:
+          - Source: extract(hour from communication_datetime)
+          - Purpose: Enables hourly communication pattern analysis and timing optimization
+          - Usage: Hourly communication reporting and operational efficiency measurement
+          
+          Business Significance:
+          - Critical for hourly communication pattern identification
+          - Enables communication timing optimization and resource planning
+          - Used for operational efficiency analysis and staff scheduling
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+              config:
+                severity: error
+                description: "Communication hour must be valid hour (0-23)"
+      
+      - name: communication_type
+        description: >
+          Numeric communication type identifier from OpenDental
+          
+          Source Transformation:
+          - OpenDental source: "CommType" (CamelCase as stored)
+          - Represents: Specific type of communication as defined in OpenDental system
+          - Usage: Communication categorization and type-specific analysis
+          
+          Business Context:
+          - Critical for communication type analysis and categorization
+          - Used for communication effectiveness measurement by type
+          - Enables communication type-specific reporting and optimization
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1000
+              config:
+                severity: warn
+                description: "Communication type should be within expected OpenDental range"
+      
+      - name: communication_note
+        description: >
+          Text content of the communication
+          
+          Source Transformation:
+          - OpenDental source: "Note" (CamelCase as stored)
+          - Represents: Actual content or description of the communication
+          - Usage: Communication content analysis and documentation
+          
+          Business Context:
+          - Critical for communication content analysis and documentation
+          - Used for communication quality assessment and content analysis
+          - Enables communication content reporting and analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Communication note should not be null for content analysis"
+      
+      - name: communication_mode
+        description: >
+          Numeric communication mode identifier from OpenDental
+          
+          Source Transformation:
+          - OpenDental source: "Mode" (CamelCase as stored)
+          - Represents: Communication channel or method as defined in OpenDental
+          - Usage: Communication method analysis and channel effectiveness measurement
+          
+          Valid Values:
+          - 0: Email communication
+          - 1: SMS/Text message communication
+          - 2: Phone communication
+          - 3: Letter/Postal communication
+          - 4: In-Person communication
+          - 5: System-generated communication
+          - 6: Phone/Text communication (alternative)
+          - 8: Fax communication
+          
+          Business Context:
+          - Critical for communication method analysis and channel effectiveness
+          - Used for communication channel optimization and resource allocation
+          - Enables multi-channel communication analysis and reporting
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10
+              config:
+                severity: warn
+                description: "Communication mode must be valid OpenDental mode value (0-10)"
+      
+      - name: communication_source
+        description: >
+          Source or origin of the communication
+          
+          Source Transformation:
+          - OpenDental source: "CommSource" (CamelCase as stored)
+          - Represents: System or source that generated the communication
+          - Usage: Communication source analysis and system integration tracking
+          
+          Business Context:
+          - Critical for communication source analysis and system integration tracking
+          - Used for communication source effectiveness measurement
+          - Enables communication source optimization and system integration analysis
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Communication source should not be null for source analysis"
+      
+      - name: referral_behavior
+        description: >
+          Behavior or action associated with referral communications
+          
+          Source Transformation:
+          - OpenDental source: "ReferralBehavior" (CamelCase as stored)
+          - Represents: Specific behavior or action for referral-related communications
+          - Usage: Referral communication analysis and behavior tracking
+          
+          Business Context:
+          - Critical for referral communication analysis and behavior tracking
+          - Used for referral effectiveness measurement and follow-up analysis
+          - Enables referral communication optimization and relationship management
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Referral behavior should not be null for behavior analysis"
+      
+      - name: is_sent
+        description: >
+          Boolean flag indicating if communication was successfully sent
+          
+          Source Transformation:
+          - OpenDental source: "IsSent" (CamelCase as stored)
+          - Represents: Whether the communication was successfully transmitted
+          - Usage: Communication delivery analysis and success rate measurement
+          
+          Business Context:
+          - Critical for communication delivery analysis and success rate measurement
+          - Used for communication effectiveness assessment and delivery optimization
+          - Enables communication delivery reporting and performance tracking
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Is sent flag must be valid boolean value"
+      
+      - name: is_topaz_signature
+        description: >
+          Boolean flag indicating if communication includes Topaz signature
+          
+          Source Transformation:
+          - OpenDental source: "IsTopazSignature" (CamelCase as stored)
+          - Represents: Whether the communication includes Topaz electronic signature
+          - Usage: Electronic signature analysis and compliance tracking
+          
+          Business Context:
+          - Critical for electronic signature analysis and compliance tracking
+          - Used for signature compliance measurement and audit trail maintenance
+          - Enables electronic signature reporting and compliance analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Topaz signature flag must be valid boolean value"
+      
+      - name: communication_day_name
+        description: >
+          Human-readable day of week name for communication
+          
+          Calculation Method:
+          - Source: case statement mapping communication_day_of_week to day names
+          - Purpose: Enables human-readable day analysis and reporting
+          - Usage: Day-based communication analysis and reporting
+          
+          Valid Values:
+          - 'Sunday': Sunday communications
+          - 'Monday': Monday communications
+          - 'Tuesday': Tuesday communications
+          - 'Wednesday': Wednesday communications
+          - 'Thursday': Thursday communications
+          - 'Friday': Friday communications
+          - 'Saturday': Saturday communications
+          
+          Business Context:
+          - Critical for human-readable day analysis and reporting
+          - Used for day-based communication pattern identification
+          - Enables day-based communication reporting and operational planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+              config:
+                description: "Communication day name must be valid day of week"
+      
+      - name: communication_time_period
+        description: >
+          Time period classification for communication timing analysis
+          
+          Calculation Method:
+          - Source: case statement based on communication_hour
+          - Purpose: Enables time period analysis and operational planning
+          - Usage: Time-based communication analysis and resource planning
+          
+          Valid Values:
+          - 'Morning': Communications between 6 AM and 11 AM
+          - 'Afternoon': Communications between 12 PM and 5 PM
+          - 'Evening': Communications between 6 PM and 9 PM
+          - 'Night': Communications between 10 PM and 5 AM
+          
+          Business Context:
+          - Critical for time period analysis and operational planning
+          - Used for communication timing optimization and resource allocation
+          - Enables time-based communication reporting and efficiency measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Morning', 'Afternoon', 'Evening', 'Night']
+              config:
+                description: "Communication time period must be valid time classification"
+      
+      - name: communication_direction
+        description: >
+          Direction of communication flow for engagement analysis
+          
+          Calculation Method:
+          - Source: case statement based on sent_or_received_raw field
+          - Purpose: Enables communication direction analysis and engagement measurement
+          - Usage: Direction-based communication analysis and effectiveness measurement
+          
+          Valid Values:
+          - 'Inbound': Communications received from patients or external sources
+          - 'Outbound': Communications sent to patients or external parties
+          - 'System': System-generated communications and automated processes
+          - 'Unknown': Communications with unrecognized direction values
+          
+          Business Context:
+          - Critical for communication direction analysis and engagement measurement
+          - Used for communication effectiveness assessment and response analysis
+          - Enables direction-based communication reporting and optimization
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Inbound', 'Outbound', 'System', 'Unknown']
+              config:
+                description: "Communication direction must be valid direction classification"
+      
+      - name: communication_method
+        description: >
+          Human-readable communication method for channel analysis
+          
+          Calculation Method:
+          - Source: case statement based on communication_mode field
+          - Purpose: Enables communication method analysis and channel effectiveness measurement
+          - Usage: Method-based communication analysis and channel optimization
+          
+          Valid Values:
+          - 'Email': Electronic mail communications
+          - 'SMS': Text message communications
+          - 'Phone': Telephone communications
+          - 'Letter': Postal mail communications
+          - 'In-Person': Face-to-face communications
+          - 'System': System-generated communications
+          - 'Unknown': Communications with unrecognized method values
+          
+          Business Context:
+          - Critical for communication method analysis and channel effectiveness
+          - Used for communication channel optimization and resource allocation
+          - Enables method-based communication reporting and performance measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Email', 'SMS', 'Phone', 'Letter', 'In-Person', 'System', 'Unknown']
+              config:
+                description: "Communication method must be valid method classification"
+      
+      - name: communication_category
+        description: >
+          Business category classification for communication analysis
+          
+          Calculation Method:
+          - Source: case statement based on communication_type field
+          - Purpose: Enables business category analysis and communication effectiveness measurement
+          - Usage: Category-based communication analysis and business reporting
+          
+          Valid Values:
+          - 'Appointment': Communications related to appointment scheduling and management
+          - 'Financial': Communications regarding billing, payments, and financial matters
+          - 'Insurance': Communications about insurance verification, claims, and coverage
+          - 'Clinical': Communications related to treatment plans and clinical information
+          - 'Referral': Communications for patient referrals and specialist coordination
+          - 'Treatment Plan': Communications about treatment planning and case management
+          - 'General': All other communication types not specifically categorized
+          
+          Business Context:
+          - Critical for business category analysis and communication effectiveness
+          - Used for category-based communication reporting and optimization
+          - Enables business-specific communication analysis and performance measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Appointment', 'Financial', 'Insurance', 'Clinical', 'Referral', 'Treatment Plan', 'General']
+              config:
+                description: "Communication category must be valid business category"
+      
+      - name: engagement_level
+        description: >
+          Communication engagement level for effectiveness analysis
+          
+          Calculation Method:
+          - Source: case statement combining communication_direction and communication_method
+          - Purpose: Enables communication engagement analysis and effectiveness measurement
+          - Usage: Engagement-based communication analysis and performance tracking
+          
+          Valid Values:
+          - 'Received': Communications received from patients or external sources
+          - 'Completed': In-person communications that were completed
+          - 'Sent': Communications successfully sent to patients or external parties
+          - 'System Generated': System-generated communications and automated processes
+          - 'Unknown': Communications with unrecognized engagement patterns
+          
+          Business Context:
+          - Critical for communication engagement analysis and effectiveness measurement
+          - Used for communication success rate assessment and optimization
+          - Enables engagement-based communication reporting and performance tracking
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Received', 'Completed', 'Sent', 'System Generated', 'Unknown']
+              config:
+                description: "Engagement level must be valid engagement classification"
+      
+      - name: sent_on_weekend
+        description: >
+          Boolean flag indicating if communication was sent on weekend
+          
+          Calculation Method:
+          - Source: case statement checking if communication_day_of_week is 0 (Sunday) or 6 (Saturday)
+          - Purpose: Enables weekend communication analysis and operational planning
+          - Usage: Weekend communication reporting and resource planning
+          
+          Business Context:
+          - Critical for weekend communication analysis and operational planning
+          - Used for weekend communication pattern identification and resource allocation
+          - Enables weekend communication reporting and efficiency measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Weekend flag must be valid boolean value"
+      
+      - name: sent_during_business_hours
+        description: >
+          Boolean flag indicating if communication was sent during business hours
+          
+          Calculation Method:
+          - Source: case statement checking if communication_hour is between 9 and 17
+          - Purpose: Enables business hours communication analysis and operational planning
+          - Usage: Business hours communication reporting and resource planning
+          
+          Business Context:
+          - Critical for business hours communication analysis and operational planning
+          - Used for business hours communication pattern identification and resource allocation
+          - Enables business hours communication reporting and efficiency measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Business hours flag must be valid boolean value"
+      
+      - name: is_appointment_related
+        description: >
+          Boolean flag indicating if communication is appointment-related
+          
+          Calculation Method:
+          - Source: case statement checking if communication_type is 224 or 228
+          - Purpose: Enables appointment communication analysis and scheduling optimization
+          - Usage: Appointment communication reporting and scheduling analysis
+          
+          Business Context:
+          - Critical for appointment communication analysis and scheduling optimization
+          - Used for appointment communication pattern identification and scheduling efficiency
+          - Enables appointment communication reporting and scheduling performance measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Appointment related flag must be valid boolean value"
+      
+      - name: is_financial_related
+        description: >
+          Boolean flag indicating if communication is financial-related
+          
+          Calculation Method:
+          - Source: case statement checking if communication_type is 226
+          - Purpose: Enables financial communication analysis and billing optimization
+          - Usage: Financial communication reporting and billing analysis
+          
+          Business Context:
+          - Critical for financial communication analysis and billing optimization
+          - Used for financial communication pattern identification and billing efficiency
+          - Enables financial communication reporting and billing performance measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Financial related flag must be valid boolean value"
+      
+      - name: is_patient_initiated
+        description: >
+          Boolean flag indicating if communication was initiated by patient
+          
+          Calculation Method:
+          - Source: case statement checking if sent_or_received_raw is 0
+          - Purpose: Enables patient-initiated communication analysis and engagement measurement
+          - Usage: Patient-initiated communication reporting and engagement analysis
+          
+          Business Context:
+          - Critical for patient-initiated communication analysis and engagement measurement
+          - Used for patient engagement pattern identification and communication effectiveness
+          - Enables patient-initiated communication reporting and engagement performance measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Patient initiated flag must be valid boolean value"
+      
+      - name: is_system_generated
+        description: >
+          Boolean flag indicating if communication was system-generated
+          
+          Calculation Method:
+          - Source: case statement checking if user_id is null or 0
+          - Purpose: Enables system-generated communication analysis and automation tracking
+          - Usage: System-generated communication reporting and automation analysis
+          
+          Business Context:
+          - Critical for system-generated communication analysis and automation tracking
+          - Used for system communication pattern identification and automation effectiveness
+          - Enables system-generated communication reporting and automation performance measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "System generated flag must be valid boolean value"
+      
+      - name: _loaded_at
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null:
+              config:
+                severity: warn
+                description: "Created at timestamp may be null for some records"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+      
+      
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this mart model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [communication_id]
+      - dbt_utils.expression_is_true:
+          expression: "char_length(communication_note) <= 10000"
+          config:
+            severity: warn
+            description: "Communication note should be reasonable length for system performance"
+      - dbt_expectations.expect_column_values_to_be_between:
+          column_name: communication_source
+          min_value: 0
+          max_value: 10
+          config:
+            severity: warn
+            description: "Communication source should be within observed range (0-10)"
+      - dbt_utils.expression_is_true:
+          expression: "referral_behavior in (true, false)"
+          config:
+            severity: warn
+            description: "Referral behavior should be a valid boolean value"
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 1000000
+          config:
+            severity: warn
+            description: >
+              Communication table should contain reasonable number of records for operational scale.
+              Alert if count is unexpectedly low (data loading issue) or high (performance concern).
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_datetime <= current_timestamp"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication datetime cannot be in the future
+              
+              Requirement: All communications must have occurred in the past
+              Impact: Future timestamps indicate data quality issues or system clock problems
+              Enforcement: This test ensures temporal data integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_end_datetime is null or communication_end_datetime >= communication_datetime"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication end time must be after start time
+              
+              Requirement: End datetime must be null or after start datetime
+              Impact: Invalid time ranges indicate data quality issues
+              Enforcement: This test ensures temporal logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "entry_datetime <= current_timestamp"
+          config:
+            severity: error
+            description: >
+              Business Rule: Entry datetime cannot be in the future
+              
+              Requirement: All record entries must have occurred in the past
+              Impact: Future entry timestamps indicate system clock or data entry issues
+              Enforcement: This test ensures system temporal integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_year >= 2020 and communication_year <= 2030"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication year must be within reasonable business timeframe
+              
+              Requirement: Communications must be within expected business operating period
+              Impact: Out-of-range years indicate data quality issues or system problems
+              Enforcement: This test ensures business temporal integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_month >= 1 and communication_month <= 12"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication month must be valid calendar month
+              
+              Requirement: Month values must be between 1 and 12
+              Impact: Invalid months indicate data extraction or calculation errors
+              Enforcement: This test ensures calendar logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_quarter >= 1 and communication_quarter <= 4"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication quarter must be valid calendar quarter
+              
+              Requirement: Quarter values must be between 1 and 4
+              Impact: Invalid quarters indicate data extraction or calculation errors
+              Enforcement: This test ensures calendar logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_day_of_week >= 0 and communication_day_of_week <= 6"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication day of week must be valid day
+              
+              Requirement: Day values must be between 0 (Sunday) and 6 (Saturday)
+              Impact: Invalid days indicate data extraction or calculation errors
+              Enforcement: This test ensures calendar logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_hour >= 0 and communication_hour <= 23"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication hour must be valid hour
+              
+              Requirement: Hour values must be between 0 and 23
+              Impact: Invalid hours indicate data extraction or calculation errors
+              Enforcement: This test ensures time logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_mode >= 0 and communication_mode <= 10"
+          config:
+            severity: warn
+            description: >
+              Business Rule: Communication mode must be valid OpenDental mode
+              
+              Requirement: Mode values must be within observed range (0-10) based on actual data
+              Impact: Invalid modes indicate data quality issues or system integration problems
+              Enforcement: This test ensures OpenDental integration integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_type >= 0"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication type must be non-negative
+              
+              Requirement: Type values must be non-negative integers
+              Impact: Negative types indicate data quality issues or system problems
+              Enforcement: This test ensures data integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_sent is not null and is_sent in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Is sent flag must be valid boolean
+              
+              Requirement: Is sent must be true or false
+              Impact: Invalid boolean values indicate data quality issues
+              Enforcement: This test ensures boolean logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_topaz_signature is not null and is_topaz_signature in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Topaz signature flag must be valid boolean
+              
+              Requirement: Topaz signature must be true or false
+              Impact: Invalid boolean values indicate data quality issues
+              Enforcement: This test ensures boolean logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_direction in ('Inbound', 'Outbound', 'System', 'Unknown')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication direction must be valid classification
+              
+              Requirement: Direction must be one of the defined valid values
+              Impact: Invalid directions indicate business logic calculation errors
+              Enforcement: This test ensures business logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_method in ('Email', 'SMS', 'Phone', 'Letter', 'In-Person', 'System', 'Unknown')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication method must be valid classification
+              
+              Requirement: Method must be one of the defined valid values
+              Impact: Invalid methods indicate business logic calculation errors
+              Enforcement: This test ensures business logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "communication_category in ('Appointment', 'Financial', 'Insurance', 'Clinical', 'Referral', 'Treatment Plan', 'General')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Communication category must be valid business category
+              
+              Requirement: Category must be one of the defined business categories
+              Impact: Invalid categories indicate business logic calculation errors
+              Enforcement: This test ensures business logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "engagement_level in ('Received', 'Completed', 'Sent', 'System Generated', 'Unknown')"
+          config:
+            severity: error
+            description: >
+              Business Rule: Engagement level must be valid classification
+              
+              Requirement: Engagement level must be one of the defined valid values
+              Impact: Invalid engagement levels indicate business logic calculation errors
+              Enforcement: This test ensures business logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "sent_on_weekend is not null and sent_on_weekend in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Weekend flag must be valid boolean
+              
+              Requirement: Weekend flag must be true or false
+              Impact: Invalid boolean values indicate business logic calculation errors
+              Enforcement: This test ensures boolean logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "sent_during_business_hours is not null and sent_during_business_hours in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Business hours flag must be valid boolean
+              
+              Requirement: Business hours flag must be true or false
+              Impact: Invalid boolean values indicate business logic calculation errors
+              Enforcement: This test ensures boolean logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_appointment_related is not null and is_appointment_related in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Appointment related flag must be valid boolean
+              
+              Requirement: Appointment related flag must be true or false
+              Impact: Invalid boolean values indicate business logic calculation errors
+              Enforcement: This test ensures boolean logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_financial_related is not null and is_financial_related in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Financial related flag must be valid boolean
+              
+              Requirement: Financial related flag must be true or false
+              Impact: Invalid boolean values indicate business logic calculation errors
+              Enforcement: This test ensures boolean logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_patient_initiated is not null and is_patient_initiated in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: Patient initiated flag must be valid boolean
+              
+              Requirement: Patient initiated flag must be true or false
+              Impact: Invalid boolean values indicate business logic calculation errors
+              Enforcement: This test ensures boolean logic integrity
+      
+      - dbt_expectations.expression_is_true:
+          expression: "is_system_generated is not null and is_system_generated in (true, false)"
+          config:
+            severity: error
+            description: >
+              Business Rule: System generated flag must be valid boolean
+              
+              Requirement: System generated flag must be true or false
+              Impact: Invalid boolean values indicate business logic calculation errors
+              Enforcement: This test ensures boolean logic integrity
+    
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      contains_phi: true
+      business_process: "Patient Communication Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per communication record"
+      primary_consumers: ["Clinical Operations", "Patient Services", "Analytics Team"]
+      system_integration: "System G: Scheduling and Communication Management"
+      data_quality_requirements:
+        - "All communication records must have valid communication_datetime"
+        - "Communication direction must be properly classified"
+        - "Communication method must be valid OpenDental mode"
+        - "Communication category must be properly assigned"
+        - "Engagement level must be accurately calculated"
+        - "Boolean flags must be properly calculated"
+        - "Foreign key relationships must be valid when present"
+        - "Temporal fields must be within reasonable business timeframe"
+      performance_requirements:
+        - "Communication datetime indexing for time-based queries"
+        - "Patient ID indexing for patient-specific analysis"
+        - "User ID indexing for staff-specific analysis"
+        - "Communication method and category indexing for filtering"
+        - "Boolean flag indexing for operational analysis"

@@ -1,0 +1,714 @@
+version: 2
+
+models:
+  - name: fact_appointment
+    description: >
+      Fact table for appointment scheduling and tracking analytics. This model serves as the foundation for 
+      appointment-level analysis and reporting, providing comprehensive information about each appointment 
+      including scheduling details, timing metrics, status tracking, and operational outcomes.
+      
+      This fact table serves as the central hub for appointment analytics and provides critical insights 
+      into practice scheduling efficiency, patient flow, and operational performance.
+      Part of System G: Scheduling and Appointment Management workflow.
+      
+      Key Features:
+      - Complete appointment lifecycle tracking from scheduling to completion
+      - Provider and patient relationship management with timing metrics
+      - Scheduling efficiency metrics including wait times and treatment duration
+      - Appointment outcome categorization (completed, no-show, cancelled, etc.)
+      - Financial goal tracking and production planning support
+      
+      Data Sources:
+      - stg_opendental__appointment: Primary source data for appointment details, timing, and status information
+      
+      Business Logic Features:
+      - Appointment status categorization with business rule logic for operational outcomes
+      - Timing calculations with data quality validation to handle illogical time sequences
+      - Appointment duration categorization (Short, Standard, Long, Extended) based on business thresholds
+      - No-show detection logic based on arrival status and appointment date comparison
+      - Future appointment identification for scheduling analytics
+      
+      Financial Calculations:
+      - Production goal tracking (currently set to zero as not available at appointment level)
+      - Scheduled production amount calculations (currently set to zero as not available at appointment level)
+      - Procedure count and code tracking (currently null as not available at appointment level)
+      
+      Data Quality Notes:
+      - Appointment confirmation functionality is not currently used by the clinic (confirmation fields set to defaults)
+      - Procedure details are not available at appointment level (set to null/zero values)
+      - Some appointment types may have legacy or non-standard status codes
+      - Time calculations include data quality validation to handle illogical time sequences
+      - Negative time values are converted to NULL to prevent calculation errors in downstream models
+      - Appointment duration calculations require dismissed_datetime >= appointment_datetime for validity
+      
+      Business Rules:
+      - Appointment status transitions must follow valid business workflow states
+      - Timing calculations must maintain logical sequence (arrival <= seated <= dismissed)
+      - No-show determination requires both null arrival and past appointment date
+      - Appointment duration categories follow business-defined thresholds (30, 60, 120 minutes)
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: appointment_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['appointment_id']
+          unique: true
+        - columns: ['patient_id']
+        - columns: ['provider_id']
+        - columns: ['appointment_date']
+        - columns: ['_updated_at']
+      tags: ['fact', 'daily']
+    
+    columns:
+      - name: appointment_id
+        description: >
+          Primary key - Unique identifier for each appointment (maps from "AptNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "AptNum" (CamelCase)
+          - Transformed to: appointment_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all appointments in the system
+          - Used as foreign key in multiple downstream models and analytics
+          - Critical for appointment identification and record linking
+        tests:
+          - unique
+          - not_null
+          - positive_values
+          - relationships:
+              to: ref('stg_opendental__appointment')
+              field: appointment_id
+              config:
+                severity: error
+                description: "Appointment ID must maintain referential integrity with staging model"
+      
+      - name: patient_id
+        description: >
+          Foreign key to patient dimension (maps from "PatNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "PatNum" (CamelCase as stored)
+          - Transformed to: patient_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links appointment to specific patient for care coordination
+          - Enables patient-level appointment analytics and scheduling patterns
+          - Critical for patient care continuity and appointment history tracking
+          
+          Data Quality Considerations:
+          - Must reference valid patient record for appointment scheduling
+          - Null values would indicate data quality issues in appointment creation
+        tests:
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              severity: error
+              config:
+                description: "Appointment must be linked to valid patient for care coordination"
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to provider dimension (maps from "ProvNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ProvNum" (CamelCase as stored)
+          - Transformed to: provider_id (snake_case per naming conventions)
+          
+          Business Relationship:
+          - Links appointment to specific provider for scheduling and care delivery
+          - Enables provider-level performance analytics and scheduling efficiency
+          - Critical for provider workload analysis and appointment capacity planning
+          
+          Data Quality Considerations:
+          - Must reference valid provider record for appointment scheduling
+          - Null values would indicate data quality issues in appointment assignment
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: error
+              config:
+                description: "Appointment must be linked to valid provider for care delivery"
+          - not_null
+      
+      - name: operatory_id
+        description: >
+          Foreign key to operatory/location where appointment takes place (maps from "OpNum" in OpenDental)
+          
+          Business Relationship:
+          - Links appointment to specific operatory for resource planning
+          - Enables operatory utilization analytics and capacity management
+          - Critical for facility planning and resource optimization
+      
+      - name: appointment_type_id
+        description: >
+          Foreign key to appointment type dimension (maps from "AptStatus" in OpenDental)
+          
+          Business Relationship:
+          - Links appointment to specific type for scheduling and billing purposes
+          - Enables appointment type analytics and scheduling pattern analysis
+          - Critical for appointment categorization and workflow management
+      
+      - name: clinic_id
+        description: >
+          Foreign key to clinic dimension for multi-location practices (maps from "ClinicNum" in OpenDental)
+          
+          Business Relationship:
+          - Links appointment to specific clinic location for multi-site management
+          - Enables clinic-level performance analytics and resource allocation
+          - Critical for multi-location practice management and reporting
+        tests:
+          - relationships:
+              to: ref('dim_clinic')
+              field: clinic_id
+              severity: warn
+              config:
+                description: "Appointment should be linked to valid clinic for multi-location management"
+      
+      - name: hygienist_id
+        description: >
+          Foreign key to hygienist provider for hygiene appointments (maps from "HygienistNum" in OpenDental)
+          
+          Business Relationship:
+          - Links appointment to specific hygienist for hygiene care coordination
+          - Enables hygienist-level performance analytics and scheduling optimization
+          - Critical for hygiene appointment management and provider assignment
+        tests:
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              severity: warn
+              where: "hygienist_id is not null"
+              config:
+                description: "Hygienist appointment should be linked to valid hygienist provider"
+      
+      - name: appointment_date
+        description: >
+          Date of the appointment (extracted from appointment_datetime)
+          
+          Business Context:
+          - Primary date dimension for appointment scheduling and analytics
+          - Enables date-based appointment analysis and scheduling pattern identification
+          - Critical for appointment calendar management and capacity planning
+          
+          Data Quality:
+          - Extracted from appointment_datetime to ensure consistency
+          - Used for date-based filtering and aggregation in analytics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'::date"
+              max_value: "current_date + interval '2 years'"
+              config:
+                severity: error
+                description: "Appointment dates should be within reasonable business range"
+      
+      - name: appointment_datetime
+        description: >
+          Full timestamp of scheduled appointment start time
+          
+          Business Context:
+          - Primary scheduling timestamp for appointment coordination
+          - Enables precise timing analysis and scheduling optimization
+          - Critical for appointment calendar management and conflict detection
+          
+          Data Quality:
+          - Must be valid timestamp for appointment scheduling
+          - Used as baseline for all timing calculations and metrics
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp + interval '2 years'"
+              config:
+                severity: error
+                description: "Appointment datetime should be within reasonable business range"
+      
+      - name: appointment_length_minutes
+        description: >
+          Calculated appointment duration in minutes from scheduled start to dismissal
+          
+          Calculation Method:
+          - Numerator: Time difference between dismissed_datetime and appointment_datetime
+          - Formula: extract(epoch from (dismissed_datetime - appointment_datetime))/60
+          - Validation: Only calculated when dismissed_datetime >= appointment_datetime
+          
+          Business Significance:
+          - Target Range: 15-180 minutes for typical dental appointments
+          - Benchmark: Varies by appointment type and procedure complexity
+          - Decision Impact: Used for scheduling optimization and capacity planning
+          
+          Data Quality:
+          - Accuracy: Requires valid dismissed_datetime and logical time sequence
+          - Completeness: Only available for completed appointments with dismissal time
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 5
+              max_value: 480
+              config:
+                severity: warn
+                description: "Appointment length should be within reasonable dental procedure range"
+          - dbt_utils.expression_is_true:
+              expression: "appointment_length_minutes is null or appointment_length_minutes > 0"
+              config:
+                severity: error
+                description: "Appointment length must be positive when calculated"
+      
+      - name: appointment_hour
+        description: >
+          Hour of day when appointment is scheduled (0-23)
+          
+          Business Context:
+          - Enables time-of-day scheduling pattern analysis
+          - Critical for capacity planning and peak hour identification
+          - Used for scheduling optimization and patient preference analysis
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 6
+              max_value: 20
+              config:
+                severity: warn
+                description: "Appointments should be scheduled during business hours"
+      
+      - name: day_of_week
+        description: >
+          Day of week number (0=Sunday, 1=Monday, ..., 6=Saturday)
+          
+          Business Context:
+          - Enables day-of-week scheduling pattern analysis
+          - Critical for weekly capacity planning and scheduling optimization
+          - Used for identifying peak days and scheduling preferences
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 6
+              config:
+                severity: error
+                description: "Day of week must be valid (0-6)"
+      
+      - name: day_of_week_name
+        description: >
+          Human-readable day of week name (Sunday, Monday, etc.)
+          
+          Business Context:
+          - Provides user-friendly day identification for reporting
+          - Enables day-based scheduling analytics and pattern recognition
+          - Critical for operational reporting and scheduling analysis
+        tests:
+          - accepted_values:
+              values: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+              config:
+                description: "Day of week name must be valid day name"
+      
+      - name: appointment_status
+        description: >
+          Current status of the appointment with business meaning
+          
+          Valid Values:
+          - 'Scheduled': Appointment is confirmed and scheduled
+          - 'Complete': Appointment has been completed successfully
+          - 'ASAP': Urgent appointment requiring immediate attention
+          - 'UnschedList': Appointment on unscheduled list
+          - 'Planned': Appointment is planned but not yet scheduled
+          - 'PtNote': Patient note appointment
+          - 'PtNoteCompleted': Patient note appointment completed
+          - 'Broken': Appointment was cancelled or broken
+          - 'None': No specific status assigned
+          - 'Unknown': Status not recognized (data quality issue)
+          
+          Business Rules:
+          - Status transitions should follow logical appointment workflow
+          - 'Complete' and 'PtNoteCompleted' indicate successful appointment completion
+          - 'Broken' indicates appointment cancellation or no-show
+          - 'ASAP' indicates urgent scheduling requirement
+          
+          Operational Impact:
+          - Drives appointment workflow and patient communication
+          - Affects scheduling capacity and resource allocation
+          - Critical for appointment outcome tracking and analytics
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Scheduled', 'Complete', 'ASAP', 'UnschedList', 'Planned', 'PtNote', 'PtNoteCompleted', 'Broken', 'None', 'Unknown']
+              config:
+                description: "Appointment status must be valid business status"
+      
+      - name: appointment_type
+        description: >
+          Type of appointment with business categorization
+          
+          Valid Values:
+          - 'Patient': General patient appointment
+          - 'NewPatient': First-time patient appointment
+          - 'Hygiene': Hygiene/cleaning appointment
+          - 'Prophy': Prophylaxis appointment
+          - 'Perio': Periodontal appointment
+          - 'Restorative': Restorative procedure appointment
+          - 'Crown': Crown procedure appointment
+          - 'SRP': Scaling and root planing appointment
+          - 'Denture': Denture-related appointment
+          - 'Other': Other type of appointment
+          - 'Unknown': Type not recognized (data quality issue)
+          
+          Business Rules:
+          - Appointment type determines scheduling duration and resource requirements
+          - 'NewPatient' appointments typically require longer time allocation
+          - 'Hygiene' appointments are typically recurring and shorter duration
+          - Procedure types ('Crown', 'Restorative') require specific provider skills
+          
+          Operational Impact:
+          - Drives scheduling duration and resource allocation
+          - Affects billing and procedure planning
+          - Critical for appointment categorization and analytics
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Patient', 'NewPatient', 'Hygiene', 'Prophy', 'Perio', 'Restorative', 'Crown', 'SRP', 'Denture', 'Other', 'Unknown']
+              config:
+                description: "Appointment type must be valid business type"
+      
+      - name: arrival_delay_minutes
+        description: >
+          Minutes patient arrived late (positive) or early (negative) compared to scheduled time
+          
+          Calculation Method:
+          - Numerator: Time difference between arrival_datetime and appointment_datetime
+          - Formula: extract(epoch from (arrival_datetime - appointment_datetime))/60
+          - Positive values indicate late arrival, negative values indicate early arrival
+          
+          Business Significance:
+          - Target Range: -15 to +30 minutes for acceptable arrival timing
+          - Benchmark: Industry standard allows 15-minute grace period
+          - Decision Impact: Used for patient punctuality analysis and scheduling optimization
+          
+          Data Quality:
+          - Accuracy: Requires valid arrival_datetime and appointment_datetime
+          - Completeness: Only available for appointments where patient arrived
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -60
+              max_value: 120
+              config:
+                severity: warn
+                description: "Arrival delay should be within reasonable range (-60 to +120 minutes)"
+      
+      - name: wait_time_minutes
+        description: >
+          Minutes patient waited from arrival to being seated for treatment
+          
+          Calculation Method:
+          - Numerator: Time difference between seated_datetime and arrival_datetime
+          - Formula: extract(epoch from (seated_datetime - arrival_datetime))/60
+          - Validation: Only calculated when seated_datetime >= arrival_datetime
+          
+          Business Significance:
+          - Target Range: 0-15 minutes for optimal patient experience
+          - Benchmark: Industry standard is under 15 minutes wait time
+          - Decision Impact: Critical for patient satisfaction and operational efficiency
+          
+          Data Quality:
+          - Accuracy: Requires valid seated_datetime and arrival_datetime
+          - Completeness: Only available for appointments where patient was seated
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 60
+              config:
+                severity: warn
+                description: "Wait time should be reasonable (0-60 minutes)"
+          - dbt_utils.expression_is_true:
+              expression: "wait_time_minutes is null or wait_time_minutes >= 0"
+              config:
+                severity: error
+                description: "Wait time must be non-negative when calculated"
+      
+      - name: treatment_time_minutes
+        description: >
+          Minutes of actual treatment time from being seated to dismissal
+          
+          Calculation Method:
+          - Numerator: Time difference between dismissed_datetime and seated_datetime
+          - Formula: extract(epoch from (dismissed_datetime - seated_datetime))/60
+          - Validation: Only calculated when dismissed_datetime >= seated_datetime
+          
+          Business Significance:
+          - Target Range: 15-120 minutes depending on appointment type
+          - Benchmark: Varies by procedure complexity and appointment type
+          - Decision Impact: Used for provider productivity and scheduling optimization
+          
+          Data Quality:
+          - Accuracy: Requires valid dismissed_datetime and seated_datetime
+          - Completeness: Only available for completed appointments with full timing data
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 5
+              max_value: 240
+              config:
+                severity: warn
+                description: "Treatment time should be within reasonable range (5-240 minutes)"
+          - dbt_utils.expression_is_true:
+              expression: "treatment_time_minutes is null or treatment_time_minutes > 0"
+              config:
+                severity: error
+                description: "Treatment time must be positive when calculated"
+      
+      - name: appointment_outcome_status
+        description: >
+          Business-determined outcome status for appointment analytics
+          
+          Valid Values:
+          - 'Completed': Appointment was successfully completed
+          - 'Cancelled': Appointment was cancelled or broken
+          - 'ASAP': Urgent appointment requiring immediate attention
+          - 'No Show': Patient did not arrive for scheduled appointment
+          - 'Scheduled': Appointment is scheduled but not yet completed
+          
+          Business Rules:
+          - 'Completed' includes both 'Complete' and 'PtNoteCompleted' statuses
+          - 'No Show' determined by null arrival_datetime and past appointment date
+          - 'Cancelled' maps to 'Broken' appointment status
+          - 'ASAP' indicates urgent scheduling requirement
+          
+          Operational Impact:
+          - Drives appointment outcome analytics and reporting
+          - Affects no-show tracking and patient communication strategies
+          - Critical for operational performance measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Completed', 'Cancelled', 'ASAP', 'No Show', 'Scheduled']
+              config:
+                description: "Appointment outcome status must be valid business outcome"
+      
+      - name: appointment_duration_category
+        description: >
+          Business categorization of appointment duration for analytics
+          
+          Valid Values:
+          - 'Short': 30 minutes or less
+          - 'Standard': 31-60 minutes
+          - 'Long': 61-120 minutes
+          - 'Extended': More than 120 minutes
+          - 'Unknown': Duration could not be calculated
+          
+          Business Rules:
+          - Categories based on appointment_length_minutes calculation
+          - 'Short' appointments typically include quick procedures or consultations
+          - 'Standard' appointments are typical routine procedures
+          - 'Long' appointments include complex procedures or multiple treatments
+          - 'Extended' appointments are major procedures or surgical interventions
+          
+          Operational Impact:
+          - Drives scheduling optimization and capacity planning
+          - Affects resource allocation and provider scheduling
+          - Critical for appointment type analysis and efficiency measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Short', 'Standard', 'Long', 'Extended', 'Unknown']
+              config:
+                description: "Appointment duration category must be valid business category"
+      
+      - name: is_completed
+        description: >
+          Boolean flag indicating if appointment was successfully completed
+          
+          Business Logic:
+          - True when appointment_status is 'Complete' (2) or 'PtNoteCompleted' (7)
+          - False for all other statuses including cancelled, no-show, or scheduled
+          
+          Operational Impact:
+          - Drives completion rate analytics and performance measurement
+          - Critical for provider productivity and practice efficiency metrics
+          - Used for appointment outcome reporting and trend analysis
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Completion flag must be valid boolean value"
+      
+      - name: is_no_show
+        description: >
+          Boolean flag indicating if patient was a no-show for the appointment
+          
+          Business Logic:
+          - True when arrival_datetime is null AND appointment_date is in the past
+          - False for all other scenarios including future appointments or completed appointments
+          
+          Operational Impact:
+          - Drives no-show rate analytics and patient communication strategies
+          - Critical for scheduling optimization and patient retention efforts
+          - Used for identifying patterns in patient attendance behavior
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "No-show flag must be valid boolean value"
+      
+      - name: is_future_appointment
+        description: >
+          Boolean flag indicating if appointment is scheduled for a future date
+          
+          Business Logic:
+          - True when appointment_date is greater than current_date
+          - False for past or current date appointments
+          
+          Operational Impact:
+          - Drives future scheduling analytics and capacity planning
+          - Critical for appointment pipeline analysis and resource allocation
+          - Used for identifying upcoming appointment volumes and trends
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Future appointment flag must be valid boolean value"
+      
+      - name: _loaded_at
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+      
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the appointment was originally created in OpenDental
+          - Usage: Business timeline analysis and appointment lifecycle tracking
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry")
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this mart model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [appointment_id]
+          config:
+            description: "Each appointment must have unique identifier"
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1000000
+          config:
+            severity: warn
+            description: >
+              Performance Monitor: Appointment table size should be reasonable for practice scale
+              
+              Baseline: Typical dental practice has 10,000-100,000 appointments annually
+              Alert Threshold: Investigate if count is outside expected range
+              Action Required: Review data loading and retention policies if count is unusual
+      
+      - dbt_utils.expression_is_true:
+          expression: "appointment_datetime is not null and appointment_date is not null"
+          config:
+            severity: error
+            description: >
+              Business Rule: Appointment must have valid scheduling information
+              
+              Requirement: All appointments must have both datetime and date for scheduling
+              Impact: Missing scheduling data prevents appointment coordination
+              Enforcement: This test ensures critical scheduling data integrity
+      
+      - dbt_utils.expression_is_true:
+          expression: "patient_id is not null and provider_id is not null"
+          config:
+            severity: error
+            description: >
+              Business Rule: Appointment must be linked to patient and provider
+              
+              Requirement: All appointments must have valid patient and provider assignments
+              Impact: Missing assignments prevent care coordination and billing
+              Enforcement: This test ensures critical appointment relationship integrity
+      
+      - dbt_utils.expression_is_true:
+          expression: "case when is_completed then appointment_outcome_status = 'Completed' else true end"
+          config:
+            severity: error
+            description: >
+              Business Rule: Completion flag must align with outcome status
+              
+              Requirement: is_completed flag must be true when outcome is 'Completed'
+              Impact: Inconsistent flags cause incorrect completion rate calculations
+              Enforcement: This test ensures business logic consistency
+      
+      - dbt_utils.expression_is_true:
+          expression: "case when is_no_show then appointment_outcome_status = 'No Show' else true end"
+          config:
+            severity: error
+            description: >
+              Business Rule: No-show flag must align with outcome status
+              
+              Requirement: is_no_show flag must be true when outcome is 'No Show'
+              Impact: Inconsistent flags cause incorrect no-show rate calculations
+              Enforcement: This test ensures business logic consistency
+      
+      - dbt_utils.expression_is_true:
+          expression: "case when wait_time_minutes is not null and treatment_time_minutes is not null then wait_time_minutes >= 0 and treatment_time_minutes > 0 else true end"
+          config:
+            severity: error
+            description: >
+              Business Rule: Timing calculations must be logically valid
+              
+              Requirement: Wait time must be non-negative and treatment time must be positive
+              Impact: Invalid timing data causes incorrect operational metrics
+              Enforcement: This test ensures timing calculation integrity
+    
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: true
+      contains_phi: true
+      business_process: "Appointment Scheduling and Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "fact"
+      grain_description: "One row per appointment (unique key: appointment_id)"
+      primary_consumers: ["Clinical Operations", "Practice Management", "Analytics Team"]
+      system_integration: "System G: Scheduling and Appointment Management"
+      data_quality_requirements:
+        - "All appointment records must have valid patient and provider assignments"
+        - "Appointment timing data must maintain logical sequence"
+        - "Status transitions must follow valid business workflow"
+        - "Completion and outcome flags must be consistent"
+        - "Timing calculations must be non-negative where applicable"
+        - "Appointment dates must be within reasonable business range"
+      performance_requirements:
+        - "Appointment queries must complete within 5 seconds for typical filters"
+        - "Indexes must support common query patterns (patient, provider, date)"
+        - "Model must handle incremental updates efficiently"
+        - "Timing calculations must be optimized for large appointment volumes"

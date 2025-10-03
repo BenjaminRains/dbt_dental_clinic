@@ -1,0 +1,212 @@
+version: 2
+
+models:
+  - name: stg_opendental__operatory
+    description: >
+      Staging model for OpenDental operatory (dental chair/room) configuration data.
+      
+      This model contains essential information about each operatory including name, 
+      provider assignments, clinic location, and operational settings. Critical for 
+      appointment scheduling, provider workflow management, and resource utilization 
+      tracking. Each record represents a single operatory with its configuration 
+      and operational parameters.
+      
+      Records include all active and inactive operatories with their current 
+      configuration settings. Foreign key relationships connect to providers, 
+      clinics, and operatory types for comprehensive analysis.
+    
+    config:
+      tags: ['opendental', 'staging', 'operatory', 'scheduling', 'resources']
+    
+    meta:
+      # Data quality and business context
+      record_count: "~50 operatories across all clinics"
+      data_scope: "All operatories with current configuration settings"
+      
+      known_issues:
+        - description: "Some operatories may have null provider assignments when not actively assigned"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "provider_assignment_completeness"
+        - description: "Operatory type may be null for legacy operatories without type classification"
+          severity: "warn"
+          identified_date: "2024-01-15"
+          test: "operatory_type_completeness"
+      
+      business_rules:
+        - rule: "Operatory names must be unique within a clinic"
+          impact: "Critical for scheduling and resource management"
+        - rule: "Hidden operatories should not appear in scheduling interfaces"
+          impact: "Affects user interface and scheduling workflow"
+        - rule: "Hygiene operatories should only be used for hygiene appointments"
+          impact: "Ensures proper appointment type assignment"
+      
+      usage_notes: >
+        Use this model for operatory configuration analysis, scheduling resource management,
+        and provider assignment tracking. Join with provider and clinic models for 
+        comprehensive resource analysis. For scheduling analysis, join with appointment
+        and schedule models.
+    
+    tests:
+      # Model-level validation tests
+      - dbt_utils.expression_is_true:
+          expression: "operatory_name IS NOT NULL OR abbreviation IS NOT NULL"
+          config:
+            severity: warn
+            name: check_operatory_has_name_or_abbreviation
+      - dbt_utils.expression_is_true:
+          expression: "display_order >= 0"
+          config:
+            where: "display_order IS NOT NULL"
+            severity: warn
+            name: check_display_order_non_negative
+    
+    columns:
+      # Primary Key
+      - name: operatory_id
+        description: >
+          Primary key - Unique identifier for each operatory 
+          (maps to OperatoryNum in OpenDental). This ID is used to track 
+          operatory configuration and is referenced by appointments and 
+          schedules for resource management.
+        tests:
+          - unique
+          - not_null
+          - positive_values
+      
+      # Foreign Key Relationships
+      - name: primary_dentist_id
+        description: >
+          Foreign key to provider - Links operatory to the primary dentist 
+          assigned to this operatory. May be null if no dentist is currently 
+          assigned or for shared operatories.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "primary_dentist_id IS NOT NULL"
+      
+      - name: hygienist_id
+        description: >
+          Foreign key to provider - Links operatory to the hygienist 
+          assigned to this operatory. May be null if no hygienist is assigned 
+          or for non-hygiene operatories.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              where: "hygienist_id IS NOT NULL"
+      
+      - name: clinic_id
+        description: >
+          Foreign key to clinic - Links operatory to the clinic location 
+          where it is located. Required for multi-clinic practices and 
+          resource allocation.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              severity: warn
+              where: "clinic_id IS NOT NULL"
+      
+      - name: operatory_type_id
+        description: >
+          Foreign key to operatory type - Links operatory to its type 
+          classification. May be null for legacy operatories without 
+          type classification.
+        tests:
+          - not_null:
+              where: "operatory_type_id IS NOT NULL"
+      
+      # Business Attribute Columns
+      - name: operatory_name
+        description: >
+          The name or description of the operatory (e.g., 'Chair 1', 'Room A', 
+          'Surgical Suite'). Used for identification in scheduling interfaces 
+          and reports. Critical for user interface and operational management.
+        tests:
+          - not_null
+      
+      - name: abbreviation
+        description: >
+          Short abbreviation used for the operatory in schedules, reports, 
+          and compact displays. Used for space-constrained interfaces and 
+          quick identification.
+      
+      - name: display_order
+        description: >
+          Numeric value determining the display order of operatories in lists 
+          and dropdowns. Lower numbers appear first. Used for consistent 
+          operatory ordering in user interfaces.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              severity: warn
+              where: "display_order IS NOT NULL"
+      
+      # Boolean Configuration Columns
+      - name: is_hidden
+        description: >
+          Flag indicating if the operatory is hidden from normal view in 
+          scheduling interfaces. Hidden operatories are typically inactive 
+          or under maintenance.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_hygiene_operatory
+        description: >
+          Flag indicating if this operatory is designated specifically for 
+          hygiene appointments. Hygiene operatories have different scheduling 
+          rules and provider assignments.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_prospective_scheduling
+        description: >
+          Flag indicating if this operatory is set for prospective scheduling. 
+          Prospective scheduling allows advance booking beyond normal scheduling 
+          windows.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_web_scheduling_enabled
+        description: >
+          Flag indicating if this operatory is available for web-based 
+          patient scheduling. Controls patient self-scheduling capabilities.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_new_patient_appointment_enabled
+        description: >
+          Flag indicating if this operatory is available for new patient 
+          appointments. Some operatories may be restricted to existing patients only.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      # Metadata columns (required for all staging models)
+      - name: _loaded_at
+        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline"
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: "Timestamp when this staging model was built by dbt"
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: "Timestamp when the operatory record was last updated in OpenDental"
+        tests:
+          - not_null

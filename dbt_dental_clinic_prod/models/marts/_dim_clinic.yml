@@ -1,0 +1,669 @@
+version: 2
+
+models:
+  - name: dim_clinic
+    description: >
+      Dimension table containing standardized clinic/location information. This table serves as the central
+      reference for all clinic-related data, including contact information, billing details, configuration
+      settings, and operational preferences for each clinic location.
+      
+      This dimension table serves as the foundation for clinic-based analysis and provides comprehensive
+      clinic information for operational reporting and business intelligence. Part of System Foundation: 
+      Core Dimensions workflow.
+      
+      Key Features:
+      - Clinic Identification: Unique clinic identifiers with standardized display names and abbreviations
+      - Location Management: Complete address and contact information for operational and billing purposes
+      - Configuration Management: Operational settings and preferences that control clinic behavior
+      - Billing Configuration: Separate billing addresses and provider assignments for financial operations
+      - Status Management: Derived clinic status based on operational flags and business rules
+      
+      Data Sources:
+      - stg_opendental__clinic: Staged clinic data from OpenDental source system
+      
+      Business Logic Features:
+      - Clinic Status Derivation: Automatically categorizes clinics as Active, Hidden, or Medical Only
+      - Billing Address Type: Determines if clinic uses separate billing address or same as clinic address
+      - Abbreviation Generation: Creates clinic abbreviations from names when not provided
+      - Configuration Flag Management: Centralizes all operational and billing configuration settings
+      
+      Dimensional Relationships:
+      - Provider Relationships: Links to default providers and insurance billing providers
+      - Regional Relationships: Associates clinics with geographic regions
+      - Email Relationships: Connects clinics to email address configurations
+      
+      Data Quality Notes:
+      - Clinic ID filtering: Includes records where clinic_id >= 0 to support single-entity practices (clinic_id = 0)
+      - Abbreviation fallback: Uses first 10 characters of clinic name when abbreviation is missing
+      - Status consistency: Derived status ensures consistent categorization across all clinic records
+      - Address validation: Billing address type derivation helps identify data completeness issues
+      
+      Business Rules:
+      - Unique Clinic Identification: Each clinic must have a unique clinic_id across all records
+      - Single Entity Support: clinic_id = 0 represents the default clinic for single-entity practices
+      - Status Hierarchy: Hidden status takes precedence over Medical Only status in categorization
+      - Billing Address Logic: Separate billing address exists when billing_address_line_1 is populated
+      - Configuration Consistency: All boolean flags must have valid true/false values
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: clinic_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['clinic_id']
+          unique: true
+        - columns: ['clinic_name']
+        - columns: ['is_hidden']
+      tags: ['dimension', 'daily']
+    
+    columns:
+      - name: clinic_id
+        description: >
+          Primary key - Unique identifier for each clinic (maps from "ClinicNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "ClinicNum" (CamelCase)
+          - Transformed to: clinic_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all clinic records
+          - Used as foreign key in multiple downstream models
+          - Critical for clinic identification and record linking
+          - Foundation for all clinic-based analysis and reporting
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              config:
+                severity: error
+                description: "Clinic ID must maintain referential integrity with source staging table"
+
+      - name: clinic_name
+        description: >
+          Name or description of the clinic location
+          
+          Business Context:
+          - Primary display name for clinic identification
+          - Used in reports, dropdowns, and user interfaces
+          - Critical for operational staff identification of clinic locations
+          - Foundation for abbreviation generation when not explicitly provided
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+
+      - name: clinic_abbreviation
+        description: >
+          Abbreviation used for the clinic in reports and displays
+          
+          Business Logic:
+          - Uses provided abbreviation if available
+          - Falls back to first 10 characters of clinic_name if null
+          - Enables consistent short-form identification across systems
+          
+          Business Context:
+          - Used in space-constrained displays and reports
+          - Helps maintain consistent naming conventions
+          - Supports efficient data entry and selection processes
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string
+
+      - name: display_order
+        description: >
+          Display order for the clinic in lists and dropdowns
+          
+          Business Context:
+          - Controls sort order in user interface elements
+          - Enables consistent clinic presentation across applications
+          - Supports operational workflow preferences
+
+      - name: address_line_1
+        description: >
+          Primary address line of the clinic
+          
+          Business Context:
+          - Primary physical location identifier
+          - Used for patient directions and operational logistics
+          - Critical for insurance billing and regulatory compliance
+
+      - name: address_line_2
+        description: >
+          Secondary address line of the clinic
+          
+          Business Context:
+          - Additional location details (suite, floor, etc.)
+          - Supports complete address information for billing and logistics
+          - Optional field for enhanced location specificity
+
+      - name: city
+        description: >
+          City where the clinic is located
+          
+          Business Context:
+          - Geographic location identifier
+          - Used for regional analysis and reporting
+          - Required for insurance billing and regulatory compliance
+
+      - name: state
+        description: >
+          State where the clinic is located
+          
+          Business Context:
+          - Geographic location identifier
+          - Critical for insurance billing and regulatory compliance
+          - Used for regional analysis and state-specific reporting
+
+      - name: zip_code
+        description: >
+          ZIP/Postal code of the clinic
+          
+          Business Context:
+          - Geographic location identifier
+          - Required for insurance billing and regulatory compliance
+          - Used for regional analysis and demographic reporting
+
+      - name: phone_number
+        description: >
+          Contact phone number for the clinic
+          
+          Business Context:
+          - Primary contact method for patients and vendors
+          - Used in patient communications and appointment scheduling
+          - Critical for operational coordination and emergency contact
+
+      - name: fax_number
+        description: >
+          Fax number for the clinic
+          
+          Business Context:
+          - Alternative communication method for documents
+          - Used for insurance communications and document transmission
+          - Supports legacy communication requirements
+
+      - name: email_alias
+        description: >
+          Email alias for the clinic
+          
+          Business Context:
+          - Primary email contact for clinic communications
+          - Used for patient communications and operational coordination
+          - Supports digital communication workflows
+
+      - name: bank_number
+        description: >
+          Bank number associated with the clinic
+          
+          Business Context:
+          - Financial institution identifier for payment processing
+          - Used for revenue management and financial operations
+          - Critical for payment reconciliation and banking operations
+
+      - name: billing_address_line_1
+        description: >
+          Primary billing address line
+          
+          Business Context:
+          - Separate billing address for financial operations
+          - Used when billing address differs from clinic physical address
+          - Critical for insurance billing and financial compliance
+
+      - name: billing_address_line_2
+        description: >
+          Secondary billing address line
+          
+          Business Context:
+          - Additional billing address details
+          - Supports complete billing address information
+          - Used for enhanced billing address specificity
+
+      - name: billing_city
+        description: >
+          City for billing address
+          
+          Business Context:
+          - Geographic location for billing operations
+          - Used when billing location differs from clinic location
+          - Critical for insurance billing and financial compliance
+
+      - name: billing_state
+        description: >
+          State for billing address
+          
+          Business Context:
+          - Geographic location for billing operations
+          - Used for state-specific billing requirements
+          - Critical for insurance billing and regulatory compliance
+
+      - name: billing_zip
+        description: >
+          ZIP code for billing address
+          
+          Business Context:
+          - Geographic location for billing operations
+          - Required for insurance billing and financial compliance
+          - Used for billing address validation and processing
+
+      - name: pay_to_address_line_1
+        description: >
+          Primary pay-to address line
+          
+          Business Context:
+          - Address for payment processing and remittance
+          - Used for vendor payments and financial operations
+          - Critical for payment reconciliation and banking operations
+
+      - name: pay_to_address_line_2
+        description: >
+          Secondary pay-to address line
+          
+          Business Context:
+          - Additional pay-to address details
+          - Supports complete payment address information
+          - Used for enhanced payment address specificity
+
+      - name: pay_to_city
+        description: >
+          City for pay-to address
+          
+          Business Context:
+          - Geographic location for payment processing
+          - Used for payment routing and financial operations
+          - Critical for payment reconciliation and banking operations
+
+      - name: pay_to_state
+        description: >
+          State for pay-to address
+          
+          Business Context:
+          - Geographic location for payment processing
+          - Used for state-specific payment requirements
+          - Critical for payment reconciliation and regulatory compliance
+
+      - name: pay_to_zip
+        description: >
+          ZIP code for pay-to address
+          
+          Business Context:
+          - Geographic location for payment processing
+          - Required for payment routing and financial compliance
+          - Used for payment address validation and processing
+
+      - name: default_place_of_service
+        description: >
+          Flag indicating if this is the default place of service
+          
+          Business Context:
+          - Controls default service location selection
+          - Used in appointment scheduling and service delivery
+          - Affects billing and insurance processing workflows
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Default place of service flag must be true or false"
+
+      - name: is_medical_only
+        description: >
+          Flag indicating if clinic is medical-only
+          
+          Business Context:
+          - Identifies clinics that provide only medical services
+          - Affects appointment scheduling and service availability
+          - Used for service categorization and reporting
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Medical-only flag must be true or false"
+
+      - name: use_billing_address_on_claims
+        description: >
+          Flag indicating if billing address should be used on claims
+          
+          Business Context:
+          - Controls address selection for insurance claims
+          - Affects billing accuracy and insurance processing
+          - Critical for financial operations and compliance
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Billing address on claims flag must be true or false"
+
+      - name: is_insurance_verification_excluded
+        description: >
+          Flag indicating if clinic is excluded from insurance verification
+          
+          Business Context:
+          - Controls insurance verification workflow participation
+          - Affects patient registration and appointment scheduling
+          - Used for operational workflow customization
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Insurance verification exclusion flag must be true or false"
+
+      - name: is_confirmation_enabled
+        description: >
+          Flag indicating if appointment confirmation is enabled
+          
+          Business Context:
+          - Controls appointment confirmation workflow
+          - Affects patient communication and scheduling processes
+          - Used for operational workflow customization
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Confirmation enabled flag must be true or false"
+
+      - name: is_confirmation_default
+        description: >
+          Flag indicating if this is the default confirmation setting
+          
+          Business Context:
+          - Controls default confirmation behavior for new appointments
+          - Affects appointment scheduling workflow
+          - Used for operational workflow standardization
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Confirmation default flag must be true or false"
+
+      - name: is_new_patient_appointment_excluded
+        description: >
+          Flag indicating if new patient appointments are excluded
+          
+          Business Context:
+          - Controls new patient appointment availability
+          - Affects patient registration and scheduling processes
+          - Used for operational capacity management
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "New patient appointment exclusion flag must be true or false"
+
+      - name: is_hidden
+        description: >
+          Flag indicating if clinic is hidden from displays
+          
+          Business Context:
+          - Controls clinic visibility in user interfaces
+          - Affects appointment scheduling and operational workflows
+          - Used for clinic lifecycle management and deactivation
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Hidden flag must be true or false"
+
+      - name: has_procedure_on_prescription
+        description: >
+          Flag indicating if procedures can be added to prescriptions
+          
+          Business Context:
+          - Controls prescription workflow capabilities
+          - Affects clinical workflow and documentation processes
+          - Used for operational workflow customization
+        tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Procedure on prescription flag must be true or false"
+
+      - name: timezone
+        description: >
+          Timezone for the clinic
+          
+          Business Context:
+          - Controls time-based operations and scheduling
+          - Affects appointment scheduling and reporting
+          - Critical for multi-location operations and time-sensitive processes
+
+      - name: scheduling_note
+        description: >
+          Notes for scheduling at this clinic
+          
+          Business Context:
+          - Provides operational guidance for scheduling staff
+          - Contains clinic-specific scheduling requirements or restrictions
+          - Used for operational workflow documentation and training
+
+      - name: medical_lab_account_number
+        description: >
+          Medical lab account number for the clinic
+          
+          Business Context:
+          - Links clinic to laboratory services and billing
+          - Used for lab order processing and result management
+          - Critical for clinical workflow and billing operations
+
+      - name: sms_contract_date
+        description: >
+          Date of SMS contract for the clinic
+          
+          Business Context:
+          - Tracks SMS service contract initiation
+          - Used for service management and billing
+          - Affects patient communication capabilities
+
+      - name: sms_monthly_limit
+        description: >
+          Monthly SMS limit for the clinic
+          
+          Business Context:
+          - Controls SMS usage and billing
+          - Used for service management and cost control
+          - Affects patient communication capacity
+
+      - name: email_address_id
+        description: >
+          Foreign key to email address record
+          
+          Business Context:
+          - Links clinic to email configuration and management
+          - Used for email communication setup and routing
+          - Affects patient communication and operational coordination
+
+      - name: default_provider_id
+        description: >
+          Foreign key to default provider for the clinic
+          
+          Business Context:
+          - Links clinic to primary provider assignment
+          - Used for appointment scheduling and provider assignment
+          - Affects clinical workflow and provider management
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              config:
+                description: "Default provider ID should reference valid provider record"
+
+      - name: insurance_billing_provider_id
+        description: >
+          Foreign key to insurance billing provider
+          
+          Business Context:
+          - Links clinic to insurance billing provider
+          - Used for insurance claims processing and billing
+          - Critical for financial operations and insurance compliance
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              severity: warn
+              config:
+                description: "Insurance billing provider ID should reference valid provider record"
+
+      - name: region_id
+        description: >
+          Foreign key to region
+          
+          Business Context:
+          - Links clinic to geographic region
+          - Used for regional analysis and reporting
+          - Affects operational management and resource allocation
+        # Note: stg_opendental__region model does not exist
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_opendental__region')
+        #       field: region_id
+        #       severity: warn
+        #       config:
+        #         description: "Region ID should reference valid region record"
+
+      - name: external_id
+        description: >
+          External system identifier
+          
+          Business Context:
+          - Links clinic to external system records
+          - Used for system integration and data synchronization
+          - Supports multi-system operations and data consistency
+
+      - name: clinic_status
+        description: >
+          Derived status of the clinic (Active, Hidden, Medical Only)
+          
+          Business Logic:
+          - 'Hidden': When is_hidden = true (highest priority)
+          - 'Medical Only': When is_medical_only = true and is_hidden = false
+          - 'Active': When both is_hidden = false and is_medical_only = false
+          
+          Business Context:
+          - Provides standardized clinic status for reporting and analysis
+          - Used for operational workflow decisions and capacity management
+          - Critical for clinic lifecycle management and operational planning
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Hidden', 'Medical Only']
+              config:
+                description: "Clinic status must be one of the valid derived status values"
+
+      - name: billing_address_type
+        description: >
+          Type of billing address (Same as Clinic, Separate Billing)
+          
+          Business Logic:
+          - 'Separate Billing': When billing_address_line_1 is not null
+          - 'Same as Clinic': When billing_address_line_1 is null
+          
+          Business Context:
+          - Indicates whether clinic uses separate billing address
+          - Used for billing workflow decisions and address validation
+          - Critical for financial operations and billing accuracy
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Same as Clinic', 'Separate Billing']
+              config:
+                description: "Billing address type must be one of the valid derived types"
+
+      - name: _loaded_at
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+          
+          Note: This column is not currently available in the clinic staging model
+          as the OpenDental clinic table does not contain DateEntry/DateTStamp columns.
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+          
+          Note: This column is not currently available in the clinic staging model
+          as the OpenDental clinic table does not contain DateEntry/DateTStamp columns.
+
+      - name: _transformed_at
+        description: >
+          dbt model processing timestamp - when this mart model was last run
+          
+          Source: current_timestamp at dbt model execution
+          Purpose: Model execution tracking and debugging
+          Usage: Understanding data processing timeline
+        tests:
+          - not_null
+
+      - name: _mart_refreshed_at
+        description: >
+          Mart-specific refresh timestamp - when this mart was last refreshed
+          
+          Source: current_timestamp at mart refresh
+          Purpose: Mart refresh tracking and monitoring
+          Usage: Understanding mart refresh timeline and dependencies
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - clinic_id
+            - _loaded_at
+          config:
+            description: "Clinic ID and load timestamp combination must be unique for data integrity"
+      
+      - dbt_utils.expression_is_true:
+          expression: "clinic_id IS NULL"
+          config:
+            severity: error
+            description: >
+              Placeholder Model: Clinic dimension should be empty
+              
+              Expected: 0 clinic records as this is a placeholder model
+              Alert Threshold: Any records indicate unexpected data in placeholder model
+              Action Required: Review if clinic data should be populated or if this is expected
+
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: false
+      contains_phi: false
+      business_process: "Clinic and Location Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per clinic"
+      primary_consumers: ["Clinical Operations", "Finance", "Analytics"]
+      system_integration: "System Foundation: Core Dimensions"
+      data_quality_requirements:
+        - "All clinic records must have unique clinic_id"
+        - "Primary keys must be non-null and positive"
+        - "Foreign key relationships must be valid where applicable"
+        - "Status fields must have valid derived values"
+        - "Configuration flags must be boolean values"
+        - "Address information must be complete for billing operations"
+      performance_requirements:
+        - "Clinic dimension must support fast lookups for operational queries"
+        - "Indexes must be optimized for common filtering patterns"
+        - "Table materialization must support daily refresh requirements"

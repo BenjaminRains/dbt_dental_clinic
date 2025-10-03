@@ -1,0 +1,319 @@
+version: 2
+
+models:
+  - name: dim_fee_schedule
+    description: >
+      Dimension table containing standardized fee schedule information. This table serves as the central
+      reference for all fee schedule-related data, including schedule types, descriptions, configuration
+      settings, and operational preferences for fee management.
+      
+      This dimension table serves as the foundation for fee schedule analysis and provides standardized
+      fee schedule information across the organization. Part of System Foundation: Core Dimensions workflow.
+      
+      **Important Business Context**: This clinic operates primarily as an out-of-network practice, 
+      meaning fee schedules are minimally used in the actual billing workflow. Most patients (99.99%) 
+      use the default fee schedule (ID: 0) for cash-pay pricing rather than insurance-specific schedules.
+      
+      Key Features:
+      - Fee Schedule Identification: Unique fee schedule identifiers with standardized descriptions
+      - Type Classification: Fee schedule types and operational categories for business analysis
+      - Configuration Management: Operational flags and visibility controls for fee schedule management
+      - Display Management: Ordering and display preferences for user interface consistency
+      - Data Integration: Centralized fee schedule reference for all downstream models
+      
+      Data Sources:
+      - stg_opendental__feesched: Staged fee schedule data from OpenDental with standardized transformations
+      
+      Business Logic Features:
+      - Status Derivation: Automatic classification of fee schedules as Standard, Hidden, or Global
+      - Category Assignment: Business categorization into Local or Global Fee Schedule types
+      - Configuration Flags: Operational settings for visibility and global scope management
+      - Display Ordering: User interface ordering preferences for consistent presentation
+      
+      Dimensional Relationships:
+      - Fee Schedule Type: Links to fee schedule type dimension for detailed classification
+      - Procedure Codes: Referenced by procedure code fee schedules for pricing analysis
+      - Provider Assignments: Used in provider fee schedule assignments and performance analysis
+      
+      Data Quality Notes:
+      - Fee schedule descriptions are required for business operations and user interface display
+      - Hidden fee schedules may not appear in standard user interfaces but remain in data warehouse
+      - Global fee schedules apply across multiple clinics and require special handling in analysis
+      - Display order values should be unique within each fee schedule type for proper UI ordering
+      
+      Known Data Issues:
+      - **Empty Source Data**: The staging table (stg_opendental__feesched) contains no records, indicating fee schedules are not being loaded from OpenDental
+      - **Out-of-Network Practice Model**: This clinic operates primarily out-of-network, so complex fee schedule logic is not used
+      - **Default Fee Schedule Usage**: 33,314 patients reference fee_schedule_id 0 (default/cash-pay schedule), 3 patients reference ID 55
+      - **Missing Default Schedules**: The default fee schedules (0, 55) used by patients are not present in the source data
+      - **Business Context**: Fee schedules exist in OpenDental for system compatibility but are not actively used in billing workflow
+      - **Data Model Alignment**: The current model reflects insurance-specific fee schedules (8285-8293) that aren't relevant to this practice model
+      
+      Business Rules:
+      - All fee schedules must have unique identifiers and non-null descriptions
+      - Fee schedule status is derived from hidden and global flags with specific business logic
+      - Global fee schedules take precedence over local schedules in fee determination
+      - Hidden fee schedules are excluded from standard user interface displays but available for analysis
+    
+    config:
+      materialized: table
+      schema: marts
+      unique_key: fee_schedule_id
+      on_schema_change: fail
+      indexes:
+        - columns: ['fee_schedule_id']
+          unique: true
+        - columns: ['fee_schedule_description']
+        - columns: ['is_hidden']
+      tags: ['dimension', 'daily']
+    
+    columns:
+      - name: fee_schedule_id
+        description: >
+          Primary key - Unique identifier for each fee schedule (maps from "FeeSchedNum" in OpenDental)
+          
+          Source Transformation:
+          - OpenDental source: "FeeSchedNum" (CamelCase)
+          - Transformed to: fee_schedule_id (snake_case with _id suffix)
+          - Transformation rule: All columns ending in "Num" become "_id" fields
+          
+          Business Context:
+          - Must be unique across all fee schedules in the system
+          - Used as foreign key in procedure code fee schedules and provider assignments
+          - Critical for fee schedule identification and pricing analysis
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__feesched')
+              field: fee_schedule_id
+              config:
+                severity: error
+                description: "Fee schedule must exist in source staging table for data integrity"
+
+      - name: fee_schedule_description
+        description: >
+          Human-readable description of the fee schedule for business operations
+          
+          Business Context:
+          - Required for user interface display and business identification
+          - Used in dropdowns, reports, and fee schedule selection interfaces
+          - Critical for fee schedule management and operational workflows
+          
+          Data Quality:
+          - Must be non-null for all active fee schedules
+          - Should be descriptive and meaningful for business users
+        tests:
+          - not_null
+          - dbt_utils.not_empty_string:
+              config:
+                description: "Fee schedule description must not be empty for business operations"
+
+      - name: display_order
+        description: >
+          Display order for the fee schedule in user interface lists and dropdowns
+          
+          Business Context:
+          - Controls the order in which fee schedules appear in user interfaces
+          - Lower numbers appear first in sorted lists
+          - Used for consistent user experience across the application
+          
+          Data Quality:
+          - Should be unique within each fee schedule type for proper ordering
+          - Null values are acceptable and will sort last in display order
+
+      - name: fee_schedule_type_id
+        description: >
+          Foreign key to fee schedule type dimension for detailed classification
+          
+          Business Relationship:
+          - Links to fee schedule type dimension for hierarchical classification
+          - Used for grouping and filtering fee schedules by type
+          - Enables type-specific business rules and analysis
+          
+          Data Quality Considerations:
+          - May be null for fee schedules without specific type assignment
+          - Should reference valid fee schedule types when populated
+
+      - name: is_hidden
+        description: >
+          Flag indicating if fee schedule is hidden from standard user interface displays
+          
+          Business Rules:
+          - true: Fee schedule is hidden from standard UI displays but available for analysis
+          - false: Fee schedule appears in normal user interface displays
+          
+          Operational Impact:
+          - Hidden fee schedules may be used for special pricing or historical analysis
+          - Affects user interface behavior and fee schedule selection workflows
+          - Used in conjunction with global flag for complete fee schedule classification
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Hidden flag must be explicitly true or false for business logic"
+
+      - name: is_global_flag
+        description: >
+          Flag indicating if this is a global fee schedule that applies across multiple clinics
+          
+          Business Rules:
+          - true: Fee schedule applies globally across all clinics in the system
+          - false: Fee schedule is local to specific clinic or context
+          
+          Operational Impact:
+          - Global fee schedules take precedence in fee determination logic
+          - Used for standardized pricing across multiple clinic locations
+          - Affects fee calculation and provider assignment workflows
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                description: "Global flag must be explicitly true or false for business logic"
+
+      - name: date_created
+        description: >
+          Date when the fee schedule was originally created in OpenDental
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the fee schedule was first created in the system
+          - Usage: Business timeline analysis and fee schedule lifecycle tracking
+          
+          Business Context:
+          - Used for historical analysis and fee schedule evolution tracking
+          - Important for understanding fee schedule implementation timeline
+
+      - name: date_updated
+        description: >
+          Date when the fee schedule was last updated in OpenDental
+          
+          Source Transformation:
+          - OpenDental source: "DateTStamp" (CamelCase as stored)
+          - Represents: When the fee schedule was last modified
+          - Usage: Change tracking and incremental loading optimization
+          
+          Business Context:
+          - Used for identifying recently changed fee schedules
+          - Important for fee schedule change management and audit trails
+
+      - name: fee_schedule_status
+        description: >
+          Derived status of the fee schedule based on configuration flags (Standard, Hidden, Global)
+          
+          Business Logic:
+          - 'Hidden': When is_hidden = true (regardless of global flag)
+          - 'Global': When is_global_flag = true and is_hidden = false
+          - 'Standard': When both flags are false (default operational status)
+          
+          Business Significance:
+          - Determines fee schedule visibility and usage in business processes
+          - Used for fee schedule filtering and business rule application
+          - Critical for fee determination logic and user interface behavior
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Standard', 'Hidden', 'Global']
+              config:
+                description: "Fee schedule status must be one of the three valid business states"
+
+      - name: fee_schedule_category
+        description: >
+          Category of the fee schedule based on global scope (Local Fee Schedule, Global Fee Schedule)
+          
+          Business Logic:
+          - 'Global Fee Schedule': When is_global_flag = true
+          - 'Local Fee Schedule': When is_global_flag = false
+          
+          Business Significance:
+          - Determines fee schedule scope and applicability across clinics
+          - Used for fee schedule management and pricing analysis
+          - Critical for understanding fee schedule hierarchy and business rules
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Local Fee Schedule', 'Global Fee Schedule']
+              config:
+                description: "Fee schedule category must be either Local or Global based on scope"
+
+      - name: _loaded_at
+        description: >
+          ETL pipeline loading timestamp - when the record was loaded into the data warehouse
+          
+          Source: ETL pipeline metadata (added during loading process)
+          Purpose: Data lineage tracking and pipeline monitoring
+          Usage: ETL debugging and data freshness validation
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01 00:00:00'::timestamp"
+              max_value: "current_timestamp"
+
+      - name: _created_at
+        description: >
+          Original creation timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: "DateEntry" (CamelCase as stored)
+          - Represents: When the record was originally created in OpenDental
+          - Usage: Business timeline analysis and record lifecycle tracking
+        tests:
+          - not_null
+
+      - name: _updated_at
+        description: >
+          Last update timestamp from OpenDental source system
+          
+          Source Transformation:
+          - OpenDental source: COALESCE("DateTStamp", "DateEntry") 
+          - Logic: Uses DateTStamp if available, falls back to DateEntry
+          - Purpose: Change tracking and incremental loading
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - fee_schedule_id
+            - _loaded_at
+          config:
+            description: "Fee schedule ID must be unique per load timestamp for data integrity"
+      - dbt_expectations.expression_is_true:
+          expression: "fee_schedule_status is not null and fee_schedule_category is not null"
+          config:
+            severity: error
+            description: "All fee schedules must have derived status and category for business operations"
+      
+      # Note: Relationship test with dim_patient will fail due to business model:
+      # - 33,317 patients reference fee_schedule_id values (0, 55) - default/cash-pay schedules
+      # - Source staging table is empty - fee schedules not loaded from OpenDental
+      # - This is expected for out-of-network practice model
+      # - Consider making this relationship test a warning or excluding default IDs
+
+    meta:
+      owner: "clinical_operations_team"
+      contains_pii: false
+      contains_phi: false
+      business_process: "Fee Schedule Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "dimension"
+      grain_description: "One row per fee schedule"
+      primary_consumers: ["Clinical Operations", "Billing Team", "Analytics Team"]
+      system_integration: "System Foundation: Core Dimensions"
+      data_quality_requirements:
+        - "All fee schedule records must be unique"
+        - "Primary keys must be non-null and positive"
+        - "Fee schedule descriptions must be non-empty"
+        - "Derived status and category fields must be accurate"
+        - "Configuration flags must be explicitly true or false"
+        - "Known issue: Source staging table is empty - fee schedules not loaded from OpenDental"
+        - "Known issue: Patient data references default fee schedule IDs (0, 55) not present in source"
+        - "Business model: Out-of-network practice uses minimal fee schedule logic"
+        - "Expected behavior: Most patients use default/cash-pay pricing rather than insurance schedules"
+      performance_requirements:
+        - "Fast lookup performance for fee schedule identification"
+        - "Efficient filtering by status and category"
+        - "Optimized joins with procedure code and provider models"
