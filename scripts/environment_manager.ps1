@@ -98,6 +98,10 @@ function Initialize-DBTEnvironment {
         return
     }
 
+    # Set DBT_PROFILES_DIR to point to the dbt project directory
+    [Environment]::SetEnvironmentVariable('DBT_PROFILES_DIR', $dbtProjectPath, 'Process')
+    Write-Host "🔧 Set DBT_PROFILES_DIR to: $dbtProjectPath" -ForegroundColor Green
+
     # Load environment variables from both project root and dbt project directory
     @(".env_production", ".dbt-env") | ForEach-Object {
         # Try dbt project directory first, then project root
@@ -129,6 +133,10 @@ function Stop-DBTEnvironment {
     }
 
     Write-Host "🔄 Deactivating dbt pipenv shell..." -ForegroundColor Yellow
+
+    # Clean up dbt environment variables
+    [Environment]::SetEnvironmentVariable('DBT_PROFILES_DIR', $null, 'Process')
+    Write-Host "🔧 Cleared DBT_PROFILES_DIR" -ForegroundColor Green
 
     # Clean up pipenv shell environment
     if ($script:VenvPath) {
