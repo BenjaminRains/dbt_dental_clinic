@@ -49,7 +49,7 @@ Performance Considerations:
 
 Dependencies:
 - mart_production_summary: Core production and scheduling data
-- mart_appt_summary: Appointment efficiency and timing metrics
+- mart_appointment_summary: Appointment efficiency and timing metrics
 - fact_claim: Claims and billing performance data
 - fact_appointment: Patient relationship and demographic data
 - dim_date: Date dimension for temporal analysis
@@ -100,7 +100,7 @@ provider_dimensions as (
         max(aps.schedule_span_hours) as working_hours,
         avg(aps.appointments_per_hour) as appointments_per_hour
         
-    from {{ ref('mart_appt_summary') }} aps
+    from {{ ref('mart_appointment_summary') }} aps
     group by aps.appointment_date, aps.provider_id
 ),
 
@@ -130,7 +130,7 @@ provider_aggregated as (
         pp.avg_completion_rate,
         pp.avg_utilization_rate,
         
-        -- Appointment metrics (from mart_appt_summary - already aggregated)
+        -- Appointment metrics (from mart_appointment_summary - already aggregated)
         coalesce(pa.daily_appointments, 0) as daily_appointments,
         coalesce(pa.new_patient_count, 0) as new_patient_count,
         pa.avg_patient_delay,
