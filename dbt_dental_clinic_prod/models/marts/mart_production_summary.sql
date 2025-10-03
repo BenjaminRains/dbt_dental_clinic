@@ -74,7 +74,12 @@ with production_base as (
         pl.procedure_code_id,
         dp.procedure_category_id,
         dp.is_hygiene,
-        dp.base_units
+        dp.base_units,
+        
+        -- Metadata from fact_appointment
+        fa._loaded_at,
+        fa._created_at,
+        fa._updated_at
         
     from {{ ref('fact_appointment') }} fa
     left join {{ ref('stg_opendental__procedurelog') }} pl
@@ -192,7 +197,12 @@ production_aggregated as (
         
         -- Patient Flow
         count(distinct pb.patient_id) as unique_patients,
-        count(distinct pb.procedure_code_id)::numeric / nullif(count(distinct pb.patient_id)::numeric, 0) as procedures_per_patient
+        count(distinct pb.procedure_code_id)::numeric / nullif(count(distinct pb.patient_id)::numeric, 0) as procedures_per_patient,
+        
+        -- Metadata (use most recent values for aggregated data)
+        max(pb._loaded_at) as _loaded_at,
+        max(pb._created_at) as _created_at,
+        max(pb._updated_at) as _updated_at
         
     from production_base pb
     group by pb.appointment_date, pb.provider_id, pb.clinic_id
@@ -286,7 +296,10 @@ final as (
         round((pe.actual_production::numeric / nullif(pe.actual_production::numeric, 0)) * 100, 2) as goal_achievement, -- Placeholder
         
         -- Metadata
-        {{ standardize_mart_metadata() }}
+        {{ standardize_mart_metadata(
+            primary_source_alias='pe',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+        ) }}
         
     from production_enhanced pe
     inner join date_dimension dd
