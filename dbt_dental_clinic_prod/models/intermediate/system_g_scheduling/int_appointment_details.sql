@@ -96,7 +96,12 @@ WITH AppointmentBase AS (
             )
             ELSE NULL
         END AS actual_length,
-        apt.entry_datetime as created_at
+        
+        -- Metadata fields from staging model
+        apt._created_at as created_at,
+        apt._loaded_at,
+        apt._updated_at,
+        apt._created_by
     FROM {{ ref('stg_opendental__appointment') }} apt
     
     {% if is_incremental() %}
@@ -220,11 +225,14 @@ SELECT
     pat.patient_status,
     pat.first_visit_date,
     
-    -- Metadata
+    -- Business timestamps (from source data)
     ab.created_at,
-    CURRENT_TIMESTAMP AS updated_at,
-    CURRENT_TIMESTAMP AS model_created_at,
-    CURRENT_TIMESTAMP AS model_updated_at
+    
+    -- Standardized pipeline metadata fields
+    {{ standardize_intermediate_metadata(
+        primary_source_alias='ab',
+        source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
+    ) }}
 FROM AppointmentBase ab
 LEFT JOIN AppointmentTypes at
     ON ab.appointment_type_id = at.appointment_type_id
