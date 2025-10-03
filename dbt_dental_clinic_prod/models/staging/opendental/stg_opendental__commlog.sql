@@ -26,6 +26,7 @@ renamed_columns as (
         -- Date/Timestamp Fields
         {{ clean_opendental_date('"CommDateTime"') }} as communication_datetime,
         {{ clean_opendental_date('"DateTimeEnd"') }} as communication_end_datetime,
+        -- Note: DateTEntry has 170K+ placeholder values (0001-01-01) that are filtered to null
         {{ clean_opendental_date('"DateTEntry"') }} as entry_datetime,
         
         -- Attributes
@@ -38,6 +39,7 @@ renamed_columns as (
         
         -- Boolean Fields
         {{ convert_opendental_boolean('"SentOrReceived"') }} as is_sent,
+        "SentOrReceived" as sent_or_received_raw,
         {{ convert_opendental_boolean('"SigIsTopaz"') }} as is_topaz_signature,
         
         -- Metadata columns
