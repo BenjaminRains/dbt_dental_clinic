@@ -24,29 +24,15 @@ import {
 } from '@mui/icons-material';
 import KPICard from '../components/charts/KPICard';
 import { apiService } from '../services/api';
-import { ProviderSummary } from '../types/api';
+import { ProviderSummary, ApiResponse } from '../types/api';
 
 const Providers: React.FC = () => {
-    const [providers, setProviders] = useState<ProviderSummary[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [providersData, setProvidersData] = useState<ApiResponse<ProviderSummary[]>>({ loading: true });
 
     useEffect(() => {
         const fetchProviders = async () => {
-            try {
-                setLoading(true);
-                const response = await apiService.provider.getSummary();
-                if (response.data) {
-                    setProviders(response.data);
-                } else {
-                    setError(response.error || 'Failed to fetch provider data');
-                }
-            } catch (err) {
-                setError('An error occurred while fetching provider data');
-                console.error('Error fetching providers:', err);
-            } finally {
-                setLoading(false);
-            }
+            const response = await apiService.provider.getSummary();
+            setProvidersData(response);
         };
 
         fetchProviders();
@@ -71,7 +57,7 @@ const Providers: React.FC = () => {
         return 'error';
     };
 
-    if (loading) {
+    if (providersData.loading) {
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
                 <CircularProgress />
@@ -79,18 +65,20 @@ const Providers: React.FC = () => {
         );
     }
 
-    if (error) {
+    if (providersData.error) {
         return (
             <Box>
                 <Typography variant="h4" component="h1" gutterBottom>
                     Provider Performance
                 </Typography>
                 <Alert severity="error" sx={{ mt: 2 }}>
-                    {error}
+                    {providersData.error}
                 </Alert>
             </Box>
         );
     }
+
+    const providers = providersData.data || [];
 
     // Calculate aggregate metrics
     const totalAppointments = providers.reduce((sum, p) => sum + p.total_appointments, 0);
@@ -124,6 +112,8 @@ const Providers: React.FC = () => {
                         value={totalAppointments.toLocaleString()}
                         color="info"
                         icon={<CalendarToday />}
+                        metricName="total_appointments"
+                        showLineageTooltip={true}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -132,6 +122,8 @@ const Providers: React.FC = () => {
                         value={`${avgCompletionRate.toFixed(1)}%`}
                         color={getCompletionRateColor(avgCompletionRate)}
                         icon={<CheckCircle />}
+                        metricName="completion_rate"
+                        showLineageTooltip={true}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -140,6 +132,8 @@ const Providers: React.FC = () => {
                         value={`${avgNoShowRate.toFixed(1)}%`}
                         color={getNoShowRateColor(avgNoShowRate)}
                         icon={<Cancel />}
+                        metricName="no_show_rate"
+                        showLineageTooltip={true}
                     />
                 </Grid>
             </Grid>
