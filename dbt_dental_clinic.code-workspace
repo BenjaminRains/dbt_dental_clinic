@@ -25,10 +25,10 @@
         // DBT Power User specific settings can be added here as well
         "dbt.enableModelHover": true,
         "dbt.enableSyntaxHighlighting": true,
-        "dbt.profilesDir": "./dbt_dental_clinic_prod",
-        "dbt.projectDir": "./dbt_dental_clinic_prod",
+        "dbt.profilesDir": "./dbt_dental_models",
+        "dbt.projectDir": "./dbt_dental_models",
         "terminal.integrated.env.windows": {
-            "DBT_PROFILES_DIR": "${workspaceFolder}/dbt_dental_clinic_prod"
+            "DBT_PROFILES_DIR": "${workspaceFolder}/dbt_dental_models"
         }
     }
 }

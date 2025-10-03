@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_project.json
-name: 'dbt_dental_clinic_prod'
+name: 'dbt_dental_models'
 version: '1.0.0'
 config-version: 2
 
 # Make sure this matches exactly what's in your profiles.yml
-profile: 'dbt_dental_clinic_prod'
+profile: 'dbt_dental_models'
 
 # Configure quote policy for case-sensitive identifiers
 quoting:
@@ -19,8 +19,7 @@ macro-paths: ["macros"]
 seed-paths: ["seeds"]
 docs-paths: ["dbt_docs"]
 
-# Build artifacts location
-target-path: "target"
+# Build artifacts location (using default target directory)
 clean-targets:
     - "target"
     - "dbt_packages"
@@ -41,7 +40,7 @@ on-run-end:
 
 # Database/schema configuration
 models:
-  dbt_dental_clinic_prod  :
+  dbt_dental_models  :
     # Enable tests now that we've fixed the case sensitivity issue
     +tests:
       +enabled: true

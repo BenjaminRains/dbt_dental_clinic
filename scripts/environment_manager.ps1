@@ -35,13 +35,13 @@ function Initialize-DBTEnvironment {
 
     # Verify dbt project - check both current directory and dbt_dental_clinic_prod subdirectory
     $dbtProjectPath = $ProjectPath
-    if (Test-Path "$ProjectPath\dbt_dental_clinic_prod\dbt_project.yml") {
-        $dbtProjectPath = "$ProjectPath\dbt_dental_clinic_prod"
-        Write-Host "📁 Found dbt project in: dbt_dental_clinic_prod/" -ForegroundColor Green
+    if (Test-Path "$ProjectPath\dbt_dental_models\dbt_project.yml") {
+        $dbtProjectPath = "$ProjectPath\dbt_dental_models"
+        Write-Host "📁 Found dbt project in: dbt_dental_models/" -ForegroundColor Green
     } elseif (Test-Path "$ProjectPath\dbt_project.yml") {
         Write-Host "📁 Found dbt project in: current directory" -ForegroundColor Green
     } else {
-        Write-Host "❌ No dbt_project.yml found in current directory or dbt_dental_clinic_prod/" -ForegroundColor Red
+        Write-Host "❌ No dbt_project.yml found in current directory or dbt_dental_models/" -ForegroundColor Red
         return
     }
 
@@ -533,8 +533,8 @@ function Invoke-DBT {
     # FIXED: Use pipenv run to avoid infinite recursion with dbt alias
     # Also change to dbt project directory before running commands
     $currentLocation = Get-Location
-    if (Test-Path "dbt_dental_clinic_prod") {
-        Push-Location "dbt_dental_clinic_prod"
+    if (Test-Path "dbt_dental_models") {
+        Push-Location "dbt_dental_models"
         try {
             pipenv run dbt $args
         } finally {
@@ -966,7 +966,7 @@ Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
 # Auto-detect project type
 $cwd = Get-Location
-if ((Test-Path "$cwd\dbt_project.yml") -or (Test-Path "$cwd\dbt_dental_clinic_prod\dbt_project.yml")) {
+if ((Test-Path "$cwd\dbt_project.yml") -or (Test-Path "$cwd\dbt_dental_models\dbt_project.yml")) {
     Write-Host "`n🏗️  dbt project detected. Run 'dbt-init' to start." -ForegroundColor Green
 }
 if (Test-Path "$cwd\etl_pipeline\Pipfile") {

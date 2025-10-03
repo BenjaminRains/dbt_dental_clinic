@@ -151,7 +151,7 @@ dbt_dental_clinic/
 │   ├── scripts/              # Configuration generation & testing
 │   ├── config/tables.yaml    # 432-table intelligent configuration
 │   └── logs/                 # Dedicated run-specific logging
-├── dbt_dental_clinic_prod/   # DBT Analytics Models (150+ models - All Running)
+├── dbt_dental_models/        # DBT Analytics Models (150+ models - All Running)
 │   ├── models/staging/       # Source data standardization (88 models)
 │   ├── models/intermediate/  # Business process models (50+ models)
 │   └── models/marts/         # Analytics-ready business views (17 models)
