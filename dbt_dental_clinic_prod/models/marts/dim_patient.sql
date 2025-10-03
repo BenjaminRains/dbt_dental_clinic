@@ -200,9 +200,15 @@ patient_enhanced as (
         end as balance_status,
         
         -- Important Dates
-        s.first_visit_date,  -- Date of patient's first visit
+        case 
+            when s.first_visit_date = '0001-01-01' then null  -- Convert placeholder date to null
+            else s.first_visit_date
+        end as first_visit_date,  -- Date of patient's first visit
         s.deceased_datetime,  -- Date and time of death if applicable
-        s.admit_date,  -- Date patient was admitted
+        case 
+            when s.admit_date = '0001-01-01' then null  -- Convert placeholder date to null
+            else s.admit_date
+        end as admit_date,  -- Date patient was admitted
         
         -- Relationships
         s.guarantor_id,  -- ID of the guarantor
