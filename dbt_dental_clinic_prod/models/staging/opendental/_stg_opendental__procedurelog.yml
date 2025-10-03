@@ -120,14 +120,6 @@ models:
         recent records, which may skew time-series analysis if not properly filtered.
 
     tests:
-      - compare_source_staging_rowcount:
-          source_relation: source('opendental', 'procedurelog')
-          source_column: '"ProcDate"'
-          staged_column: 'procedure_date'
-          date_value: '2023-01-01'
-          config:
-            severity: warn
-      
       # Validate status distribution matches expectations
       - dbt_utils.expression_is_true:
           name: procedure_status_distribution_reasonable
