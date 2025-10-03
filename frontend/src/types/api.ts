@@ -1,6 +1,36 @@
 // TypeScript interfaces for API responses
 // These match the Pydantic models in the backend
 
+// DBT Lineage and Metadata Types
+export interface MetricLineageInfo {
+    metric_name: string;
+    source_model: string;
+    source_schema: string;
+    calculation_description: string;
+    data_freshness: string;
+    business_definition: string;
+    dependencies: string[];
+    last_updated: string;
+}
+
+export interface DBTModelMetadata {
+    model_name: string;
+    model_type: string;
+    schema_name: string;
+    description?: string;
+    business_context?: string;
+    technical_specs?: string;
+    dependencies?: string[];
+    downstream_models?: string[];
+    data_quality_notes?: string;
+    refresh_frequency?: string;
+    grain_definition?: string;
+    source_tables?: string[];
+    created_at?: string;
+    updated_at?: string;
+    is_active: boolean;
+}
+
 // Patient interface matching the API Patient model
 export interface Patient {
     // Primary identification
