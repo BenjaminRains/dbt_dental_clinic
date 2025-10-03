@@ -44,10 +44,30 @@ with task_base as (
             AND finished_timestamp IS NULL
             THEN true
             ELSE false
-        END as is_due_soon
+        END as is_due_soon,
+        
+        -- Add completed flag
+        CASE
+            WHEN finished_timestamp IS NOT NULL THEN true
+            ELSE false
+        END as is_completed,
+        
+        -- Add overdue flag (tasks past due date and not completed)
+        CASE
+            WHEN task_date < CURRENT_TIMESTAMP
+            AND finished_timestamp IS NULL
+            THEN true
+            ELSE false
+        END as is_overdue,
+        
+        -- Include metadata columns from staging table
+        _loaded_at,
+        _transformed_at,
+        _created_at,
+        _updated_at
     from {{ ref('stg_opendental__task') }}
     {% if is_incremental() %}
-    where last_edit_timestamp > (select max(last_edit_timestamp) from {{ this }})
+    where last_edit_timestamp > (select coalesce(max(_loaded_at), '1900-01-01'::timestamp) from {{ this }})
     {% endif %}
 ),
 
@@ -68,7 +88,7 @@ appointment_tasks as (
 
 task_list as (
     select
-        task_id as task_list_id,
+        task_list_id,
         description as task_list_description,
         parent_id as parent_task_list_id,
         task_date as task_list_date,
@@ -156,6 +176,8 @@ select
     t.last_edit_timestamp,
     t.task_type,
     t.is_due_soon,
+    t.is_completed,
+    t.is_overdue,
     
     -- Appointment Task Information (if applicable)
     at.appointment_id,
@@ -197,6 +219,7 @@ select
     tn.task_note_id as latest_note_id,
     tn.note_datetime as latest_note_datetime,
     tn.note as latest_note,
+    tn.note_user_id as latest_note_user_id,
     
     -- Subscription Information
     ts.task_subscription_id,
@@ -206,9 +229,12 @@ select
     tu.task_unread_ids,
     tu.unread_user_ids,
     
-    -- Metadata
-    CURRENT_TIMESTAMP as model_created_at,
-    CURRENT_TIMESTAMP as model_updated_at
+    -- Standardized metadata using macro
+    {{ standardize_intermediate_metadata(
+        primary_source_alias='t',
+        preserve_source_metadata=true,
+        source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+    ) }}
 
 from task_base t
 left join appointment_tasks at
