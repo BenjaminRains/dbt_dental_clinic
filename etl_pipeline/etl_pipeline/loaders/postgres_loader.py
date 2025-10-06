@@ -486,6 +486,30 @@ class PostgresLoader:
         """
         try:
             with self.analytics_engine.connect() as conn:
+                # Ensure primary_column_name is always populated from config when available
+                if not primary_column_name:
+                    try:
+                        table_config = self.get_table_config(table_name)
+                        primary_column_from_config = self._get_primary_incremental_column(table_config) if table_config else None
+                        if primary_column_from_config:
+                            primary_column_name = primary_column_from_config
+                            logger.debug(f"Using primary_column_name from config for {table_name}: {primary_column_name}")
+                    except Exception as cfg_err:
+                        logger.warning(f"Could not resolve primary_column_name from config for {table_name}: {str(cfg_err)}")
+
+                # Optional write-time fallback: if 0 rows loaded and last_primary_value is NULL but analytics has data,
+                # compute MAX(primary_column) now to persist a correct high-water mark immediately
+                if rows_loaded == 0 and last_primary_value is None and primary_column_name:
+                    try:
+                        computed_max = conn.execute(text(f"""
+                            SELECT MAX("{primary_column_name}")
+                            FROM {self.analytics_schema}.{table_name}
+                        """)).scalar()
+                        if computed_max is not None:
+                            last_primary_value = str(computed_max)
+                            logger.info(f"Write-time computed last_primary_value for {table_name}: {last_primary_value}")
+                    except Exception as compute_err:
+                        logger.warning(f"Could not compute write-time MAX({primary_column_name}) for {table_name}: {str(compute_err)}")
                 # Use simplified schema - audit columns are not needed
                 if rows_loaded > 0:
                     # Only update timestamp when rows are actually loaded
@@ -1882,8 +1906,13 @@ class PostgresLoader:
                                 converted_row = self._convert_data_types_for_test_environment(table_name, row)
                             converted_chunk.append(converted_row)
                         
-                        # Insert chunk with strategy-based approach
-                        use_upsert = (insert_strategy == 'optimized_upsert')
+                        # Determine upsert based on table structure, not strategy
+                        primary_key = table_config.get('primary_key')
+                        has_real_primary_key = bool(primary_key) and primary_key != 'id'
+                        use_upsert = (not force_full) and has_real_primary_key
+                        
+                        logger.debug(f"Using {'UPSERT' if use_upsert else 'INSERT'} for {table_name} (force_full={force_full}, has_pk={has_real_primary_key})")
+                        
                         if self.bulk_insert_optimized(table_name, converted_chunk, use_upsert=use_upsert):
                             rows_loaded += len(converted_chunk)
                             chunk_count += 1
@@ -1933,8 +1962,13 @@ class PostgresLoader:
                                         converted_row = self._convert_data_types_for_test_environment(table_name, row)
                                     converted_chunk.append(converted_row)
                                 
-                                # Insert chunk with strategy-based approach
-                                use_upsert = (insert_strategy == 'optimized_upsert')
+                                # Determine upsert based on table structure, not strategy
+                                primary_key = table_config.get('primary_key')
+                                has_real_primary_key = bool(primary_key) and primary_key != 'id'
+                                use_upsert = (not force_full) and has_real_primary_key
+                                
+                                logger.debug(f"Using {'UPSERT' if use_upsert else 'INSERT'} for {table_name} (force_full={force_full}, has_pk={has_real_primary_key})")
+                                
                                 if self.bulk_insert_optimized(table_name, converted_chunk, use_upsert=use_upsert):
                                     rows_loaded += len(converted_chunk)
                                     chunk_count += 1
@@ -2982,6 +3016,21 @@ class PostgresLoader:
                     last_primary_value, primary_column_name = result
                     logger.debug(f"Retrieved last primary value for {table_name}: {last_primary_value} (column: {primary_column_name})")
                     
+                    # NEW: If tracking has NULL but we know the primary column, compute from analytics data
+                    if last_primary_value is None and primary_column_name:
+                        try:
+                            computed_max = conn.execute(text(f"""
+                                SELECT MAX("{primary_column_name}")
+                                FROM {self.analytics_schema}.{table_name}
+                            """)).scalar()
+                            if computed_max is not None:
+                                last_primary_value = str(computed_max)
+                                logger.info(f"Computed last_primary_value for {table_name} from analytics data: {last_primary_value}")
+                            else:
+                                logger.info(f"Analytics table {self.analytics_schema}.{table_name} is empty; leaving last_primary_value as NULL")
+                        except Exception as compute_err:
+                            logger.warning(f"Could not compute MAX({primary_column_name}) for {table_name}: {str(compute_err)}")
+
                     # If this is an integer column, ensure we return a proper integer value
                     if primary_column_name and self._is_integer_column(table_name, primary_column_name):
                         try:
