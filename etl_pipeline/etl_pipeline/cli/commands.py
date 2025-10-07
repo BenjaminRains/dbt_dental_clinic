@@ -38,6 +38,7 @@ import logging
 import click
 import sys
 import time
+import shutil
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import json
@@ -458,3 +459,252 @@ def test_connections() -> None:
         logger.error(f"Connection test failed: {str(e)}")
         click.echo(f"❌ Unexpected Error: {str(e)}")
         raise click.ClickException(str(e))
+
+@click.command()
+@click.option('--backup', is_flag=True, default=True, help='Create backup of current configuration (default: true)')
+@click.option('--force', is_flag=True, default=False, help='Force update even if errors detected (default: false)')
+@click.option('--output-dir', type=click.Path(), default='etl_pipeline/config', help='Output directory for configuration (default: etl_pipeline/config)')
+@click.option('--log-level', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']), default='INFO', help='Set logging level (default: INFO)')
+def update_schema(backup: bool, force: bool, output_dir: str, log_level: str):
+    """Update ETL schema configuration by running analyze_opendental_schema.py."""
+    try:
+        # Set logging level
+        logging.getLogger().setLevel(getattr(logging, log_level))
+        
+        click.echo("ETL Schema Update")
+        click.echo("=" * 17)
+        click.echo()
+        
+        # Get settings for environment info
+        settings = get_settings()
+        environment = getattr(settings, 'environment', 'unknown')
+        source_db = os.getenv('OPENDENTAL_SOURCE_DB', 'unknown')
+        
+        click.echo(f"Environment: {environment}")
+        click.echo(f"Database: {source_db}")
+        click.echo(f"Configuration: {output_dir}/tables.yml")
+        click.echo()
+        
+        # Pre-flight checks
+        logger.info("Performing pre-flight checks...")
+        
+        # Test database connectivity
+        try:
+            source_engine = ConnectionFactory.get_source_connection(settings)
+            with source_engine.connect() as conn:
+                pass
+            source_engine.dispose()
+            logger.info("Database connectivity verified")
+        except Exception as e:
+            error_msg = f"Database connection failed: {str(e)}"
+            logger.error(error_msg)
+            click.echo(f"[ERROR] {error_msg}")
+            click.echo("[ERROR] Cannot proceed with schema analysis")
+            click.echo()
+            click.echo("Troubleshooting:")
+            click.echo("1. Check database connectivity")
+            click.echo("2. Verify environment variables")
+            click.echo("3. Ensure database permissions")
+            click.echo()
+            click.echo("Configuration unchanged.")
+            raise click.ClickException("Database connection failed")
+        
+        # Create backup if requested
+        backup_path = None
+        if backup:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_dir = Path("logs/schema_analysis")
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup_path = backup_dir / f"tables.yml.backup.{timestamp}"
+            
+            current_config = Path(output_dir) / "tables.yml"
+            if current_config.exists():
+                shutil.copy2(current_config, backup_path)
+                logger.info(f"Created backup: {backup_path}")
+                click.echo(f"[INFO] Creating backup: {backup_path}")
+            else:
+                logger.warning(f"No existing configuration found at {current_config}")
+                click.echo(f"[WARNING] No existing configuration found at {current_config}")
+        
+        # Run schema analysis
+        click.echo("[INFO] Running schema analysis...")
+        logger.info("Executing analyze_opendental_schema.py script")
+        
+        # Get the script path
+        script_path = Path(__file__).parent.parent.parent / "scripts" / "analyze_opendental_schema.py"
+        if not script_path.exists():
+            error_msg = f"Schema analysis script not found: {script_path}"
+            logger.error(error_msg)
+            click.echo(f"[ERROR] {error_msg}")
+            raise click.ClickException("Schema analysis script not found")
+        
+        # Execute the script directly (no subprocess)
+        click.echo()
+        click.echo("=" * 60)
+        click.echo("EXECUTING SCHEMA ANALYSIS SCRIPT")
+        click.echo("=" * 60)
+        click.echo()
+        click.echo(f"Script: {script_path}")
+        click.echo(f"Working Directory: {project_root}")
+        click.echo()
+        click.echo("The schema analysis script will now run directly.")
+        click.echo("Follow the prompts and wait for completion.")
+        click.echo()
+        
+        # Check if schema analysis is needed
+        current_config = Path(output_dir) / "tables.yml"
+        if current_config.exists() and not force:
+            click.echo("Checking if schema analysis is needed...")
+            try:
+                with open(current_config, 'r') as f:
+                    existing_config = yaml.safe_load(f)
+                existing_hash = existing_config.get('metadata', {}).get('schema_hash', '')
+                if existing_hash:
+                    click.echo(f"Existing schema hash found: {existing_hash[:8]}...")
+                    click.echo("Schema analysis may not be needed if no changes detected.")
+                    click.echo("Use --force to run analysis anyway.")
+                    click.echo()
+            except Exception as e:
+                logger.warning(f"Could not check existing configuration: {e}")
+        
+        # Run the script as a subprocess
+        click.echo("Executing schema analysis script...")
+        click.echo("This may take 4-5 minutes to complete...")
+        click.echo()
+        
+        try:
+            import subprocess
+            # Run the script as a subprocess
+            result = subprocess.run(
+                [sys.executable, str(script_path)],
+                cwd=project_root,
+                capture_output=False,  # Show output in real-time
+                text=True,
+                check=True
+            )
+            logger.info("Schema analysis completed successfully")
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Schema analysis failed with exit code {e.returncode}"
+            logger.error(error_msg)
+            click.echo(f"[ERROR] {error_msg}")
+            if not force:
+                raise click.ClickException("Schema analysis failed")
+            else:
+                click.echo("[WARNING] Proceeding with --force despite errors")
+        except Exception as e:
+            error_msg = f"Schema analysis failed: {str(e)}"
+            logger.error(error_msg)
+            click.echo(f"[ERROR] {error_msg}")
+            if not force:
+                raise click.ClickException("Schema analysis failed")
+            else:
+                click.echo("[WARNING] Proceeding with --force despite errors")
+        
+        # Validate new configuration
+        new_config_path = Path(output_dir) / "tables.yml"
+        if not new_config_path.exists():
+            error_msg = f"New configuration not found: {new_config_path}"
+            logger.error(error_msg)
+            click.echo(f"[ERROR] {error_msg}")
+            raise click.ClickException("New configuration not generated")
+        
+        # Validate YAML syntax
+        try:
+            with open(new_config_path, 'r') as f:
+                yaml.safe_load(f)
+            logger.info("New configuration YAML syntax validated")
+        except yaml.YAMLError as e:
+            error_msg = f"Invalid YAML syntax in new configuration: {str(e)}"
+            logger.error(error_msg)
+            click.echo(f"[ERROR] {error_msg}")
+            raise click.ClickException("New configuration has invalid YAML syntax")
+        
+        # Detect changes (simplified version)
+        changes_detected = _detect_schema_changes(backup_path, new_config_path)
+        
+        # Display results
+        click.echo()
+        if changes_detected:
+            click.echo("Schema Changes Detected:")
+            for change in changes_detected:
+                click.echo(f"- {change}")
+        else:
+            click.echo("No significant schema changes detected")
+        
+        click.echo()
+        click.echo("Configuration updated successfully!")
+        if backup_path:
+            click.echo(f"Backup saved: {backup_path}")
+        
+        click.echo()
+        click.echo("Next steps:")
+        click.echo("1. Test ETL with updated configuration: etl-run --tables appointment,statement,document")
+        click.echo("2. Monitor for any remaining issues")
+        click.echo("3. Run full ETL pipeline when ready")
+        
+        logger.info("Schema update completed successfully")
+        
+    except click.ClickException:
+        raise
+    except Exception as e:
+        logger.error(f"Schema update failed: {str(e)}")
+        click.echo(f"❌ Unexpected Error: {str(e)}")
+        raise click.ClickException(str(e))
+
+def _detect_schema_changes(backup_path: Optional[Path], new_config_path: Path) -> List[str]:
+    """Detect schema changes between backup and new configuration."""
+    changes = []
+    
+    if not backup_path or not backup_path.exists():
+        changes.append("New configuration generated (no previous configuration found)")
+        return changes
+    
+    try:
+        # Load both configurations
+        with open(backup_path, 'r') as f:
+            old_config = yaml.safe_load(f)
+        with open(new_config_path, 'r') as f:
+            new_config = yaml.safe_load(f)
+        
+        old_tables = old_config.get('tables', {})
+        new_tables = new_config.get('tables', {})
+        
+        # Count changes
+        old_table_count = len(old_tables)
+        new_table_count = len(new_tables)
+        
+        if new_table_count != old_table_count:
+            changes.append(f"Table count changed: {old_table_count} -> {new_table_count}")
+        
+        # Check for strategy changes
+        strategy_changes = 0
+        for table_name, new_table_config in new_tables.items():
+            if table_name in old_tables:
+                old_strategy = old_tables[table_name].get('extraction_strategy', 'unknown')
+                new_strategy = new_table_config.get('extraction_strategy', 'unknown')
+                if old_strategy != new_strategy:
+                    strategy_changes += 1
+        
+        if strategy_changes > 0:
+            changes.append(f"Tables with strategy changes: {strategy_changes}")
+        
+        # Check for column changes (simplified)
+        column_changes = 0
+        for table_name, new_table_config in new_tables.items():
+            if table_name in old_tables:
+                old_columns = old_tables[table_name].get('incremental_columns', [])
+                new_columns = new_table_config.get('incremental_columns', [])
+                if old_columns != new_columns:
+                    column_changes += 1
+        
+        if column_changes > 0:
+            changes.append(f"Tables with column changes: {column_changes}")
+        
+        if not changes:
+            changes.append("Configuration updated with no significant changes detected")
+        
+    except Exception as e:
+        logger.warning(f"Could not detect schema changes: {str(e)}")
+        changes.append("Configuration updated (change detection failed)")
+    
+    return changes
