@@ -139,6 +139,12 @@ from ..exceptions.database import DatabaseConnectionError, DatabaseTransactionEr
 from ..exceptions.data import DataLoadingError
 from ..exceptions.configuration import ConfigurationError
 
+# Method usage tracking imports
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent / "scripts"))
+from method_tracker import track_method, save_tracking_report, print_tracking_report
+
 logger = get_logger(__name__)
 
 class SchemaCache:
@@ -692,6 +698,7 @@ class PostgresLoader:
                     except Exception as e:
                         logger.debug(f"Error closing result: {e}")
 
+    @track_method
     def load_table_streaming(self, table_name: str, force_full: bool = False) -> Tuple[bool, Dict]:
         """Streaming version of load_table for memory-efficient processing.
         
@@ -1344,6 +1351,7 @@ class PostgresLoader:
             logger.error(f"Error getting incremental cutoff time for {table_name}: {str(e)}")
             return None
     
+    @track_method
     def load_table(self, table_name: str, force_full: bool = False) -> Tuple[bool, Dict]:
         """
         Load table from MySQL replication to PostgreSQL analytics using pure SQLAlchemy.
@@ -1479,6 +1487,7 @@ class PostgresLoader:
                 'error': str(e)
             }
 
+    @track_method
     def load_table_standard(self, table_name: str, force_full: bool = False) -> Tuple[bool, Dict]:
         """
         Standard table loading method (original implementation).
@@ -1735,6 +1744,7 @@ class PostgresLoader:
                 'error': str(e)
             }
     
+    @track_method
     def load_table_chunked(self, table_name: str, force_full: bool = False, 
                           chunk_size: int = 25000) -> Tuple[bool, Dict]:  # Further reduced from 50000 to 25000 to prevent timeouts
         """
@@ -2102,6 +2112,7 @@ class PostgresLoader:
                 'error': str(e)
             }
     
+    @track_method
     def verify_load(self, table_name: str) -> bool:
         """
         Verify that the load was successful.
@@ -2278,6 +2289,7 @@ class PostgresLoader:
         
         return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
     
+    @track_method
     def _build_load_query(self, table_name: str, incremental_columns: List[str], force_full: bool = False) -> str:
         """
         Build query to get data from MySQL.
@@ -2503,6 +2515,7 @@ class PostgresLoader:
         logger.info(f"Data completeness validated for {table_name}: {actual_count} records")
         return True
  
+    @track_method
     def load_table_copy_csv(self, table_name: str, force_full: bool = False) -> Tuple[bool, Dict]:
         """
         Load table using PostgreSQL COPY command for maximum performance.
@@ -2724,6 +2737,7 @@ class PostgresLoader:
                 'error': str(e)
             }
  
+    @track_method
     def load_table_parallel(self, table_name: str, force_full: bool = False) -> Tuple[bool, Dict]:
         """
         Parallel loading method for massive tables.

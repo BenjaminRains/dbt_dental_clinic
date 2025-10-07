@@ -52,11 +52,18 @@ from sqlalchemy.exc import SQLAlchemyError
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# Add scripts directory to path for method tracking
+scripts_path = Path(__file__).parent.parent.parent / "scripts"
+sys.path.insert(0, str(scripts_path))
+
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config import get_settings
 from etl_pipeline.orchestration import PipelineOrchestrator
+
+# Method usage tracking imports
+from method_tracker import save_tracking_report, print_tracking_report
 
 # Import custom exceptions for structured error handling
 from etl_pipeline.exceptions.database import DatabaseConnectionError, DatabaseTransactionError
@@ -144,6 +151,12 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
             
         finally:
             orchestrator.cleanup()
+            # Save method usage tracking report
+            try:
+                save_tracking_report()
+                print_tracking_report()
+            except Exception as e:
+                logger.warning(f"Failed to save method tracking report: {e}")
             
     except ConfigurationError as e:
         logger.error(f"Configuration error in pipeline: {e}")
