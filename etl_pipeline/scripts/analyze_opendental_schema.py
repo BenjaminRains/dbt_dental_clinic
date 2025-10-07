@@ -1000,6 +1000,112 @@ class OpenDentalSchemaAnalyzer:
             logger.warning(f"Failed to generate schema hash: {e}")
             return "unknown"
     
+    def compare_with_previous_schema(self, current_config: Dict, previous_config_path: str) -> Dict:
+        """
+        Compare current schema with previous configuration to detect changes.
+        
+        This is critical for handling OpenDental's slowly changing dimensions.
+        
+        Returns:
+            Dict with added_tables, removed_tables, added_columns, removed_columns, modified_columns
+        """
+        changes = {
+            'added_tables': [],
+            'removed_tables': [],
+            'added_columns': {},  # table_name: [column_names]
+            'removed_columns': {},  # table_name: [column_names]
+            'modified_columns': {},  # table_name: [(column_name, old_type, new_type)]
+            'schema_hash_changed': False,
+            'breaking_changes': []  # Critical changes that require attention
+        }
+        
+        try:
+            # Load previous configuration
+            if not os.path.exists(previous_config_path):
+                logger.warning(f"Previous config not found at {previous_config_path}, skipping comparison")
+                return changes
+            
+            with open(previous_config_path, 'r') as f:
+                previous_config = yaml.safe_load(f)
+            
+            # Compare schema hashes
+            current_hash = current_config.get('metadata', {}).get('schema_hash', '')
+            previous_hash = previous_config.get('metadata', {}).get('schema_hash', '')
+            changes['schema_hash_changed'] = current_hash != previous_hash
+            
+            # Get table lists
+            current_tables = set(current_config.get('tables', {}).keys())
+            previous_tables = set(previous_config.get('tables', {}).keys())
+            
+            # Detect table changes
+            changes['added_tables'] = list(current_tables - previous_tables)
+            changes['removed_tables'] = list(previous_tables - current_tables)
+            
+            # Detect column changes in common tables
+            common_tables = current_tables & previous_tables
+            
+            for table_name in common_tables:
+                current_table = current_config['tables'][table_name]
+                previous_table = previous_config['tables'][table_name]
+                
+                # Skip tables with errors
+                if 'error' in current_table or 'error' in previous_table:
+                    continue
+                
+                # Compare incremental columns (these are the columns we actually use)
+                current_columns = set(current_table.get('incremental_columns', []))
+                previous_columns = set(previous_table.get('incremental_columns', []))
+                
+                added = current_columns - previous_columns
+                removed = previous_columns - current_columns
+                
+                if added:
+                    changes['added_columns'][table_name] = list(added)
+                
+                if removed:
+                    changes['removed_columns'][table_name] = list(removed)
+                    # Removed columns are breaking changes
+                    changes['breaking_changes'].append({
+                        'type': 'removed_columns',
+                        'table': table_name,
+                        'columns': list(removed),
+                        'severity': 'high',
+                        'impact': 'ETL extraction will fail if these columns are referenced'
+                    })
+                
+                # Check for primary key changes (breaking change)
+                current_pk = current_table.get('primary_key')
+                previous_pk = previous_table.get('primary_key')
+                
+                if current_pk != previous_pk:
+                    changes['breaking_changes'].append({
+                        'type': 'primary_key_changed',
+                        'table': table_name,
+                        'old_pk': previous_pk,
+                        'new_pk': current_pk,
+                        'severity': 'critical',
+                        'impact': 'Incremental loading and deduplication logic will break'
+                    })
+            
+            # New tables are informational
+            if changes['added_tables']:
+                logger.info(f"Detected {len(changes['added_tables'])} new tables: {', '.join(changes['added_tables'][:5])}")
+            
+            # Removed tables are breaking changes
+            if changes['removed_tables']:
+                changes['breaking_changes'].append({
+                    'type': 'removed_tables',
+                    'tables': changes['removed_tables'],
+                    'severity': 'high',
+                    'impact': 'ETL will fail for these tables'
+                })
+            
+            return changes
+            
+        except Exception as e:
+            logger.error(f"Failed to compare schemas: {e}")
+            return changes
+    
     def generate_schema_hash(self, table_name: str) -> str:
         """Generate a hash for a single table's schema (public interface)."""
         return self._generate_schema_hash([table_name])
@@ -1231,9 +1337,11 @@ class OpenDentalSchemaAnalyzer:
             logs_base = Path('logs')
             schema_analysis_logs = logs_base / 'schema_analysis' / 'logs'
             schema_analysis_reports = logs_base / 'schema_analysis' / 'reports'
+            schema_backups = logs_base / 'schema_analysis' / 'backups'
             
             schema_analysis_logs.mkdir(parents=True, exist_ok=True)
             schema_analysis_reports.mkdir(parents=True, exist_ok=True)
+            schema_backups.mkdir(parents=True, exist_ok=True)
             
             # Create timestamped log file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1250,27 +1358,81 @@ class OpenDentalSchemaAnalyzer:
             logger.info("OpenDental Schema Analysis Started")
             logger.info("=" * 60)
             
+            # BACKUP EXISTING CONFIGURATION (for slowly changing dimension tracking)
+            tables_yml_path = os.path.join(output_dir, 'tables.yml')
+            backup_path = None
+            if os.path.exists(tables_yml_path):
+                backup_path = schema_backups / f'tables.yml.backup.{timestamp}'
+                shutil.copy2(tables_yml_path, backup_path)
+                logger.info(f"📦 Backed up existing configuration to: {backup_path}")
+            
             # Stage 1: Generate complete configuration
-            logger.info("Stage 1/3: Generating table configuration...")
+            logger.info("Stage 1/4: Generating table configuration...")
             config = self.generate_complete_configuration(output_dir)
             stage1_time = time.time() - start_time
             logger.info(f"Stage 1 completed in {stage1_time:.1f}s")
             
-            # Stage 2: Save configuration
-            logger.info("Stage 2/3: Saving configuration files...")
-            tables_yml_path = os.path.join(output_dir, 'tables.yml')
+            # Stage 2: Compare with previous schema (detect slowly changing dimensions)
+            logger.info("Stage 2/4: Detecting schema changes...")
+            schema_changes = None
+            if backup_path and os.path.exists(backup_path):
+                schema_changes = self.compare_with_previous_schema(config, str(backup_path))
+                
+                # Log schema changes
+                if schema_changes['schema_hash_changed']:
+                    logger.warning("🔄 SCHEMA CHANGES DETECTED!")
+                    
+                    if schema_changes['added_tables']:
+                        logger.info(f"  ✅ Added tables ({len(schema_changes['added_tables'])}): {', '.join(schema_changes['added_tables'][:10])}")
+                    
+                    if schema_changes['removed_tables']:
+                        logger.warning(f"  ❌ Removed tables ({len(schema_changes['removed_tables'])}): {', '.join(schema_changes['removed_tables'])}")
+                    
+                    if schema_changes['added_columns']:
+                        logger.info(f"  ✅ Added columns in {len(schema_changes['added_columns'])} tables")
+                        for table, cols in list(schema_changes['added_columns'].items())[:5]:
+                            logger.info(f"     - {table}: {', '.join(cols)}")
+                    
+                    if schema_changes['removed_columns']:
+                        logger.warning(f"  ❌ Removed columns in {len(schema_changes['removed_columns'])} tables")
+                        for table, cols in schema_changes['removed_columns'].items():
+                            logger.warning(f"     - {table}: {', '.join(cols)}")
+                    
+                    if schema_changes['breaking_changes']:
+                        logger.error(f"  ⚠️  BREAKING CHANGES DETECTED ({len(schema_changes['breaking_changes'])})")
+                        for change in schema_changes['breaking_changes']:
+                            logger.error(f"     - {change['type']}: {change.get('table', change.get('tables', 'multiple'))}")
+                            logger.error(f"       Impact: {change['impact']}")
+                
+                else:
+                    logger.info("✅ No schema changes detected")
+            
+            stage2_time = time.time() - start_time
+            logger.info(f"Stage 2 completed in {stage2_time - stage1_time:.1f}s")
+            
+            # Stage 3: Save configuration
+            logger.info("Stage 3/4: Saving configuration files...")
             with open(tables_yml_path, 'w') as f:
                 yaml.dump(config, f, default_flow_style=False, sort_keys=False)
             logger.info(f"Configuration saved to: {tables_yml_path}")
             
-            # Stage 3: Generate detailed analysis report
-            logger.info("Stage 3/3: Generating detailed analysis report...")
+            # Stage 4: Generate detailed analysis report (including schema changes)
+            logger.info("Stage 4/4: Generating detailed analysis report...")
             analysis_report = self._generate_detailed_analysis_report(config)
+            
+            # Add schema changes to report
+            if schema_changes:
+                analysis_report['schema_changes'] = schema_changes
             
             # Save detailed analysis in organized reports directory
             analysis_path = schema_analysis_reports / f'schema_analysis_{timestamp}.json'
             with open(analysis_path, 'w') as f:
                 json.dump(analysis_report, f, indent=2, default=str)
+            
+            # Save schema changelog (human-readable)
+            if schema_changes and schema_changes['schema_hash_changed']:
+                changelog_path = schema_analysis_reports / f'schema_changelog_{timestamp}.md'
+                self._generate_schema_changelog(schema_changes, changelog_path, timestamp)
             
             # Generate enhanced performance summary
             self._generate_performance_summary(config, tables_yml_path, timestamp)
@@ -1285,6 +1447,8 @@ class OpenDentalSchemaAnalyzer:
                 'tables_config': tables_yml_path,
                 'analysis_report': str(analysis_path),
                 'analysis_log': str(log_file),
+                'backup_path': str(backup_path) if backup_path else None,
+                'schema_changes': schema_changes,
                 'total_time': total_time
             }
             
@@ -1544,6 +1708,131 @@ Ready for OptimizedSimpleMySQLReplicator!
             return '25k'
         else:
             return '10k'
+    
+    def _generate_schema_changelog(self, changes: Dict, output_path: Path, timestamp: str):
+        """Generate human-readable schema changelog for slowly changing dimension tracking."""
+        changelog = f"""# OpenDental Schema Changelog - {timestamp}
+
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Summary
+
+"""
+        
+        # Summary statistics
+        total_changes = (
+            len(changes.get('added_tables', [])) +
+            len(changes.get('removed_tables', [])) +
+            len(changes.get('added_columns', {})) +
+            len(changes.get('removed_columns', {}))
+        )
+        
+        changelog += f"- **Total Changes**: {total_changes}\n"
+        changelog += f"- **Schema Hash Changed**: {'Yes ⚠️' if changes['schema_hash_changed'] else 'No ✅'}\n"
+        changelog += f"- **Breaking Changes**: {len(changes.get('breaking_changes', []))}\n\n"
+        
+        # Breaking changes (critical section)
+        if changes.get('breaking_changes'):
+            changelog += "## ⚠️ BREAKING CHANGES (Action Required)\n\n"
+            
+            for i, change in enumerate(changes['breaking_changes'], 1):
+                changelog += f"### {i}. {change['type'].replace('_', ' ').title()}\n\n"
+                changelog += f"- **Severity**: {change['severity'].upper()}\n"
+                changelog += f"- **Impact**: {change['impact']}\n"
+                
+                if change['type'] == 'removed_columns':
+                    changelog += f"- **Table**: `{change['table']}`\n"
+                    changelog += f"- **Removed Columns**: {', '.join(f'`{c}`' for c in change['columns'])}\n"
+                elif change['type'] == 'primary_key_changed':
+                    changelog += f"- **Table**: `{change['table']}`\n"
+                    changelog += f"- **Old Primary Key**: `{change['old_pk']}`\n"
+                    changelog += f"- **New Primary Key**: `{change['new_pk']}`\n"
+                elif change['type'] == 'removed_tables':
+                    changelog += f"- **Removed Tables**: {', '.join(f'`{t}`' for t in change['tables'])}\n"
+                
+                changelog += "\n"
+        
+        # Added tables
+        if changes.get('added_tables'):
+            changelog += f"## ✅ Added Tables ({len(changes['added_tables'])})\n\n"
+            changelog += "New tables detected in OpenDental source database:\n\n"
+            for table in sorted(changes['added_tables']):
+                changelog += f"- `{table}`\n"
+            changelog += "\n"
+        
+        # Removed tables
+        if changes.get('removed_tables'):
+            changelog += f"## ❌ Removed Tables ({len(changes['removed_tables'])})\n\n"
+            changelog += "Tables that existed in previous config but not in current schema:\n\n"
+            for table in sorted(changes['removed_tables']):
+                changelog += f"- `{table}`\n"
+            changelog += "\n"
+        
+        # Added columns
+        if changes.get('added_columns'):
+            changelog += f"## ✅ Added Columns ({len(changes['added_columns'])} tables)\n\n"
+            changelog += "New columns detected in existing tables:\n\n"
+            for table in sorted(changes['added_columns'].keys()):
+                cols = changes['added_columns'][table]
+                changelog += f"### `{table}`\n"
+                for col in sorted(cols):
+                    changelog += f"- `{col}`\n"
+                changelog += "\n"
+        
+        # Removed columns
+        if changes.get('removed_columns'):
+            changelog += f"## ❌ Removed Columns ({len(changes['removed_columns'])} tables)\n\n"
+            changelog += "Columns that existed in previous config but not in current schema:\n\n"
+            for table in sorted(changes['removed_columns'].keys()):
+                cols = changes['removed_columns'][table]
+                changelog += f"### `{table}` ⚠️\n"
+                for col in sorted(cols):
+                    changelog += f"- `{col}` (will cause extraction errors if referenced)\n"
+                changelog += "\n"
+        
+        # Recommendations
+        changelog += "## 📋 Recommended Actions\n\n"
+        
+        if changes.get('breaking_changes'):
+            changelog += "### Immediate (Critical)\n\n"
+            changelog += "1. **Review breaking changes** listed above\n"
+            changelog += "2. **Test ETL pipeline** with updated configuration\n"
+            changelog += "3. **Update dbt models** if columns/tables are referenced\n"
+            changelog += "4. **Verify data quality** for affected tables\n\n"
+        
+        if changes.get('added_tables'):
+            changelog += "### High Priority\n\n"
+            changelog += "1. **Initialize new tables** in PostgreSQL analytics database\n"
+            changelog += "2. **Run initial load** for new tables\n"
+            changelog += "3. **Consider dbt models** for business-critical tables\n\n"
+        
+        if changes.get('added_columns'):
+            changelog += "### Medium Priority\n\n"
+            changelog += "1. **Review new columns** for business value\n"
+            changelog += "2. **Update dbt staging models** to expose new columns\n"
+            changelog += "3. **Document column purposes** in data dictionary\n\n"
+        
+        # Footer
+        changelog += "---\n\n"
+        changelog += f"*Generated by OpenDental Schema Analyzer v4.0*\n"
+        changelog += f"*Backup configuration: `logs/schema_analysis/backups/tables.yml.backup.{timestamp}`*\n"
+        
+        # Write changelog
+        with open(output_path, 'w') as f:
+            f.write(changelog)
+        
+        logger.info(f"Schema changelog saved to: {output_path}")
+        
+        # Also print critical changes to console
+        if changes.get('breaking_changes'):
+            print("\n" + "=" * 60)
+            print("⚠️  BREAKING SCHEMA CHANGES DETECTED")
+            print("=" * 60)
+            for change in changes['breaking_changes']:
+                print(f"\n{change['type'].upper()}: {change.get('table', change.get('tables', 'multiple'))}")
+                print(f"Impact: {change['impact']}")
+            print(f"\nSee full changelog: {output_path}")
+            print("=" * 60 + "\n")
 
 def main():
     """Main function - generate complete schema analysis and configuration."""
@@ -1561,10 +1850,29 @@ def main():
         print(f"\n" + "=" * 60)
         print(f"PERFORMANCE-ENHANCED ANALYSIS COMPLETE!")
         print(f"=" * 60)
-        print(f"Files generated:")
+        
+        # Show schema changes if detected
+        schema_changes = results.get('schema_changes')
+        if schema_changes and schema_changes.get('schema_hash_changed'):
+            print(f"\n🔄 SCHEMA CHANGES DETECTED:")
+            if schema_changes.get('added_tables'):
+                print(f"   ✅ {len(schema_changes['added_tables'])} new tables")
+            if schema_changes.get('removed_tables'):
+                print(f"   ❌ {len(schema_changes['removed_tables'])} removed tables")
+            if schema_changes.get('added_columns'):
+                print(f"   ✅ {len(schema_changes['added_columns'])} tables with new columns")
+            if schema_changes.get('removed_columns'):
+                print(f"   ❌ {len(schema_changes['removed_columns'])} tables with removed columns")
+            if schema_changes.get('breaking_changes'):
+                print(f"   ⚠️  {len(schema_changes['breaking_changes'])} BREAKING CHANGES")
+        else:
+            print(f"\n✅ No schema changes detected")
+        
+        print(f"\nFiles generated:")
         for name, path in results.items():
-            if name != 'total_time':
-                print(f"   {name}: {path}")
+            if name not in ['total_time', 'schema_changes']:
+                if path:  # Only print if path exists
+                    print(f"   {name}: {path}")
         print(f"\nTiming:")
         print(f"   Analysis time: {results.get('total_time', 0):.1f}s")
         print(f"   Total script time: {total_script_time:.1f}s")
@@ -1575,11 +1883,13 @@ def main():
         print(f"  ✓ Intelligent batch sizing")
         print(f"  ✓ Optimal extraction strategies")
         print(f"  ✓ Performance monitoring")
+        print(f"  ✓ Slowly changing dimension tracking")
         print(f"")
         print(f"Next steps:")
-        print(f"  1. Use OptimizedSimpleMySQLReplicator")
-        print(f"  2. Monitor performance metrics")
-        print(f"  3. Adjust MySQL configuration if needed")
+        print(f"  1. Review schema changelog (if changes detected)")
+        print(f"  2. Run ETL pipeline with updated configuration")
+        print(f"  3. Monitor performance metrics")
+        print(f"  4. Update dbt models if needed")
         print(f"=" * 60)
             
         logger.info("Performance-enhanced schema analysis completed successfully!")
