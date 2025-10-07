@@ -75,6 +75,19 @@ models:
                 severity: warn
                 where: "_created_at >= '2023-01-01'"
       
+      - name: claim_preauth_id
+        description: >
+          Foreign key to pre-authorization claim associated with this EOB attachment.
+          Links EOB documentation to pre-authorization claims for insurance verification
+          and approval workflows (maps to ClaimNumPreAuth in OpenDental). May be null
+          for EOB attachments not related to pre-authorizations.
+        tests:
+          - relationships:
+              to: ref('stg_opendental__claim')
+              field: claim_id
+              config:
+                severity: warn
+      
       - name: file_name
         description: >
           Name of the attached file including extension. Typically contains EOB PDFs,

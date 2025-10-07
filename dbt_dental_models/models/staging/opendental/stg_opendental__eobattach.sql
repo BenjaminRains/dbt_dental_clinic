@@ -15,7 +15,8 @@ renamed_columns as (
         -- Primary Key and Foreign Keys
         {{ transform_id_columns([
             {'source': '"EobAttachNum"', 'target': 'eob_attach_id'},
-            {'source': '"ClaimPaymentNum"', 'target': 'claim_payment_id'}
+            {'source': '"ClaimPaymentNum"', 'target': 'claim_payment_id'},
+            {'source': '"ClaimNumPreAuth"', 'target': 'claim_preauth_id'}
         ]) }},
 
         -- Attributes

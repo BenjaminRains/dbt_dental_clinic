@@ -422,6 +422,8 @@ sources:
               - not_null_quoted
           - name: "ClaimPaymentNum"
             description: "Foreign key to the claim payment this attachment is associated with"
+          - name: "ClaimNumPreAuth"
+            description: "Foreign key to pre-authorization claim associated with this EOB attachment"
           - name: "DateTCreated"
             description: "Timestamp when the EOB attachment was created"
             tests:
