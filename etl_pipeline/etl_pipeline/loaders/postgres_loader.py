@@ -126,6 +126,9 @@ import os
 import yaml
 import time
 import psutil
+import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.postgres_schema import PostgresSchema
@@ -142,8 +145,10 @@ from ..exceptions.configuration import ConfigurationError
 # Method usage tracking imports
 import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent.parent / "scripts"))
-from method_tracker import track_method, save_tracking_report, print_tracking_report
+scripts_path = Path(__file__).parent.parent.parent / "scripts"
+if str(scripts_path) not in sys.path:
+    sys.path.insert(0, str(scripts_path))
+from method_tracker import track_method, save_tracking_report, print_tracking_report # type: ignore
 
 logger = get_logger(__name__)
 
@@ -705,9 +710,6 @@ class PostgresLoader:
         Returns:
             Tuple[bool, Dict]: (success, metadata_dict)
         """
-        import psutil
-        import time
-        
         start_time = time.time()
         initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         
@@ -1379,9 +1381,6 @@ class PostgresLoader:
                 - last_primary_value: Optional[str]
                 - memory_used_mb: float
         """
-        import time
-        import psutil
-        
         start_time = time.time()
         initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         
@@ -1496,9 +1495,6 @@ class PostgresLoader:
         Returns:
             Tuple[bool, Dict]: (success, metadata_dict)
         """
-        import time
-        import psutil
-        
         start_time = time.time()
         initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         
@@ -1759,9 +1755,6 @@ class PostgresLoader:
         Returns:
             Tuple[bool, Dict]: (success, metadata_dict)
         """
-        import time
-        import psutil
-        
         start_time = time.time()
         initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         
@@ -2523,11 +2516,6 @@ class PostgresLoader:
         Returns:
             Tuple[bool, Dict]: (success, metadata_dict)
         """
-        import time
-        import psutil
-        import tempfile
-        import os
-        
         start_time = time.time()
         initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         
@@ -2745,11 +2733,6 @@ class PostgresLoader:
         Returns:
             Tuple[bool, Dict]: (success, metadata_dict)
         """
-        import time
-        import psutil
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        import threading
-        
         start_time = time.time()
         initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         
