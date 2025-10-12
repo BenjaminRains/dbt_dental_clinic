@@ -89,6 +89,10 @@ scripts/run_dbt.sh
 # Documentation with sensitive business info
 # (add specific paths here)
 
+# Personal migration documents (desktop-specific setup)
+docs/DESKTOP_TO_LAPTOP_MIGRATION_PLAN.md
+docs/MIGRATION_QUICK_CHECKLIST.md
+
 # Build and temp files
 dist/
 build/
