@@ -1,0 +1,25 @@
+# Dental Practice Synthetic Data Generator
+# Python Dependencies
+
+# Database connectivity
+psycopg2-binary==2.9.9  # PostgreSQL adapter
+
+# Fake data generation
+Faker==22.0.0  # Realistic fake data (names, addresses, etc.)
+
+# Date/time utilities
+python-dateutil==2.8.2  # Date manipulation utilities
+
+# Optional: Data validation
+# great-expectations==0.18.8  # Uncomment for data quality validation
+
+# Development dependencies (optional)
+# pytest==7.4.3  # Unit testing
+# pytest-cov==4.1.0  # Code coverage
+# black==23.12.1  # Code formatting
+# flake8==7.0.0  # Linting
+# mypy==1.8.0  # Type checking
+
+# Documentation (optional)
+# sphinx==7.2.6  # Documentation generation
+# sphinx-rtd-theme==2.0.0  # Read The Docs theme
