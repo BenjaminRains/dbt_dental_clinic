@@ -520,6 +520,8 @@ class PostgresLoader:
                             last_primary_value = str(computed_max)
                             logger.info(f"Write-time computed last_primary_value for {table_name}: {last_primary_value}")
                     except Exception as compute_err:
+                        # Rollback the transaction to clear the error state
+                        conn.rollback()
                         logger.warning(f"Could not compute write-time MAX({primary_column_name}) for {table_name}: {str(compute_err)}")
                 # Use simplified schema - audit columns are not needed
                 if rows_loaded > 0:
