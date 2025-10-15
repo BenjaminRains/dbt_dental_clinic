@@ -61,6 +61,12 @@ desktop.ini
 *.sqlite*
 *.html
 
+# SQL backup/dump files (may contain PHI)
+converted_backup.sql
+schema.sql
+*_backup.sql
+*_dump.sql
+
 # Database data directory
 database_data/
 
