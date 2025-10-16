@@ -1,0 +1,261 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/selectors.json
+# dbt Model Selectors for OpenDental Analytics Pipeline
+# 
+# This file defines reusable selection patterns for running subsets of the dbt project.
+# Usage: dbt run --selector <selector_name>
+#
+# Documentation: https://docs.getdbt.com/reference/node-selection/yaml-selectors
+
+selectors:
+  # ============================================================================
+  # DAILY OPERATIONS - Models requiring daily refresh
+  # ============================================================================
+  
+  - name: daily_refresh
+    description: "All models tagged for daily updates (insurance, AR, appointments)"
+    definition:
+      tag: daily
+  
+  - name: incremental_only
+    description: "Only incremental models for efficient daily updates"
+    definition:
+      config.materialized: incremental
+  
+  - name: daily_critical
+    description: "Critical daily models: insurance verification, AR aging, and appointments"
+    definition:
+      union:
+        - tag: daily
+        - method: fqn
+          value: "marts.mart_ar_summary"
+        - method: fqn
+          value: "marts.fact_appointment"
+  
+  # ============================================================================
+  # DOMAIN-SPECIFIC WORKFLOWS - Run by business area
+  # ============================================================================
+  
+  - name: insurance_workflow
+    description: "All insurance-related models (verification, claims, benefits)"
+    definition:
+      union:
+        - tag: insurance
+        - method: fqn
+          value: "*insplan*"
+        - method: fqn
+          value: "*inssub*"
+        - method: fqn
+          value: "*claim*"
+        - method: fqn
+          value: "*benefit*"
+  
+  - name: clinical_workflow
+    description: "Clinical and treatment models (procedures, periodontal, lab work)"
+    definition:
+      union:
+        - tag: clinical
+        - tag: periodontal
+        - tag: laboratory
+        - method: fqn
+          value: "*procedure*"
+        - method: fqn
+          value: "*treatment*"
+  
+  - name: financial_workflow
+    description: "Financial models (payments, adjustments, AR, production)"
+    definition:
+      union:
+        - tag: financial
+        - method: fqn
+          value: "*payment*"
+        - method: fqn
+          value: "*adjustment*"
+        - method: fqn
+          value: "*production*"
+        - method: fqn
+          value: "marts.mart_ar_summary"
+  
+  - name: scheduling_workflow
+    description: "Scheduling and appointment models"
+    definition:
+      union:
+        - tag: scheduling
+        - method: fqn
+          value: "*appointment*"
+        - method: fqn
+          value: "*schedule*"
+        - method: fqn
+          value: "*operatory*"
+  
+  - name: pharmacy_workflow
+    description: "Pharmacy and prescription models"
+    definition:
+      union:
+        - tag: pharmacy
+        - method: fqn
+          value: "*pharmacy*"
+        - method: fqn
+          value: "*rx*"
+        - method: fqn
+          value: "*medication*"
+  
+  # ============================================================================
+  # LAYER-BASED BUILDS - Run by architectural layer
+  # ============================================================================
+  
+  - name: staging_only
+    description: "Only staging models (initial data ingestion from OpenDental)"
+    definition:
+      method: fqn
+      value: "staging.*"
+  
+  - name: intermediate_only
+    description: "Only intermediate models (business logic layer)"
+    definition:
+      method: fqn
+      value: "intermediate.*"
+  
+  - name: marts_only
+    description: "Only marts models (reporting layer)"
+    definition:
+      method: fqn
+      value: "marts.*"
+  
+  - name: staging_to_intermediate
+    description: "Staging models and all their downstream intermediate dependencies"
+    definition:
+      union:
+        - method: fqn
+          value: "staging.*"
+        - method: fqn
+          value: "staging.*+,intermediate.*"
+  
+  - name: marts_with_dependencies
+    description: "Marts with all upstream dependencies (full refresh)"
+    definition:
+      method: fqn
+      value: "+marts.*"
+  
+  # ============================================================================
+  # SYSTEM-BASED SELECTIONS - Based on your documented system workflows
+  # ============================================================================
+  
+  - name: system_a_fee_processing
+    description: "System A: Fee Processing and Procedure Management"
+    definition:
+      union:
+        - method: fqn
+          value: "intermediate.system_a_fee_processing.*"
+        - method: fqn
+          value: "marts.dim_procedure"
+        - method: fqn
+          value: "marts.dim_fee"
+  
+  - name: system_b_insurance
+    description: "System B: Insurance and Benefits Management"
+    definition:
+      method: fqn
+      value: "intermediate.system_b_insurance.*"
+  
+  - name: system_c_appointments
+    description: "System C: Appointment and Scheduling"
+    definition:
+      method: fqn
+      value: "intermediate.system_c_appointments.*"
+  
+  - name: system_d_claims
+    description: "System D: Claims Processing"
+    definition:
+      method: fqn
+      value: "intermediate.system_d_claims.*"
+  
+  - name: system_e_financial
+    description: "System E: Financial Transactions"
+    definition:
+      method: fqn
+      value: "intermediate.system_e_financial.*"
+  
+  - name: system_f_communications
+    description: "System F: Communications and Outreach"
+    definition:
+      method: fqn
+      value: "intermediate.system_f_communications.*"
+  
+  # ============================================================================
+  # DEVELOPMENT & TESTING - For local development and CI/CD
+  # ============================================================================
+  
+  - name: quick_dev
+    description: "Fast-running models for development testing (views only, use --exclude tag:large_table to filter)"
+    definition:
+      config.materialized: view
+  
+  - name: dimension_tables
+    description: "All dimension tables for data warehouse"
+    definition:
+      method: fqn
+      value: "marts.dim_*"
+  
+  - name: fact_tables
+    description: "All fact tables for data warehouse"
+    definition:
+      method: fqn
+      value: "marts.fact_*"
+  
+  - name: patient_data
+    description: "All patient-related models (HIPAA-sensitive)"
+    definition:
+      union:
+        - method: fqn
+          value: "*patient*"
+        - method: fqn
+          value: "marts.dim_patient"
+  
+  # ============================================================================
+  # CI/CD PATTERNS - For automated deployments
+  # ============================================================================
+  
+  - name: production_critical
+    description: "Production-critical models (daily + marts). Use --exclude tag:experimental,tag:dev_only to filter"
+    definition:
+      union:
+        - tag: daily
+        - method: fqn
+          value: "marts.*"
+  
+  - name: smoke_test
+    description: "Minimal set for smoke testing deployment (dimensions + one fact)"
+    definition:
+      union:
+        - method: fqn
+          value: "marts.dim_patient"
+        - method: fqn
+          value: "marts.dim_provider"
+        - method: fqn
+          value: "marts.dim_date"
+        - method: fqn
+          value: "marts.fact_appointment"
+  
+  # ============================================================================
+  # REFERENCE DATA - Slow-changing lookup tables
+  # ============================================================================
+  
+  - name: reference_data
+    description: "Reference and lookup tables (infrequent updates)"
+    definition:
+      union:
+        - tag: reference
+        - method: fqn
+          value: "*def"  # OpenDental definition tables
+        - method: fqn
+          value: "*code*"  # Procedure codes, CPT codes, etc.
+  
+  # ============================================================================
+  # PERFORMANCE OPTIMIZATION
+  # ============================================================================
+  
+  - name: large_tables
+    description: "Large tables requiring special handling"
+    definition:
+      tag: large_table
+
