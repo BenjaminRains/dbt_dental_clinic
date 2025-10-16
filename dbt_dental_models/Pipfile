@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pymysql = "==1.1.0"
+pymysql = ">=1.1.1"
 sqlalchemy = "==2.0.27"
 mysqlclient = "==2.2.4"
 pandas = "==2.2.0"
