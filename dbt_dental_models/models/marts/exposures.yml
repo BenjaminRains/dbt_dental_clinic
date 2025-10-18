@@ -1,0 +1,456 @@
+version: 2
+
+exposures:
+  # ============================================================================
+  # EXECUTIVE DASHBOARDS
+  # ============================================================================
+  
+  - name: executive_dashboard
+    label: "Executive Dashboard - KPI Overview"
+    type: dashboard
+    maturity: high
+    owner:
+      name: Executive Leadership
+      email: executive@dentalclinic.com
+    
+    depends_on:
+      - ref('mart_revenue_lost')
+      - ref('mart_provider_performance')
+    
+    url: http://localhost:3000/
+    
+    description: >
+      **Executive Dashboard - High-Level KPI Overview**
+      
+      Primary landing page providing at-a-glance visibility into the most critical
+      business metrics for executive decision making. Displays revenue lost, recovery
+      potential, provider activity, and collection performance with trend indicators.
+      
+      ## Key Metrics Displayed:
+      - **Revenue Lost**: Total revenue from missed appointments, no-shows, and cancellations
+      - **Recovery Potential**: Estimated recoverable revenue based on opportunity analysis
+      - **Active Providers**: Count of providers with scheduled appointments
+      - **Collection Rate**: Average collection rate across all providers
+      - **Revenue Trend Chart**: 30-day revenue lost vs recovery potential trending
+      - **Quick Statistics**: Total production, collection, and recovery rate summaries
+      
+      ## Data Sources:
+      - `/reports/dashboard/kpis` - Aggregated KPIs from revenue and provider marts
+      - `/revenue/trends` - Daily revenue trending data
+      
+      ## Primary Users:
+      - Executive Leadership: Strategic oversight and high-level monitoring
+      - Practice Managers: Daily operations performance tracking
+      - Finance Team: Financial health quick-check
+      
+      ## Data Refresh:
+      - **Current State**: Manual refresh (user-initiated dbt runs)
+      - **Planned**: Automated daily refresh at 6:00 AM via Airflow (project goal)
+      - Latency: T+1 day for complete financial data
+      - API Cache: 5 minutes for dashboard responsiveness
+      
+      ## Business Impact:
+      - Enables rapid identification of revenue leakage
+      - Supports daily stand-up meetings and executive briefings
+      - Provides early warning indicators for operational issues
+      
+      ## Technical Implementation:
+      - Frontend Route: `/` (Dashboard.tsx)
+      - API Endpoints: dashboardApi.getKPIs(), revenueApi.getTrends()
+      - Charts: KPICard components with lineage tooltips, RevenueTrendChart (Recharts)
+
+  # ============================================================================
+  # REVENUE & FINANCIAL ANALYTICS
+  # ============================================================================
+
+  - name: revenue_analytics_dashboard
+    label: "Revenue Analytics - Opportunities & Recovery"
+    type: dashboard
+    maturity: high
+    owner:
+      name: Finance Team
+      email: finance@dentalclinic.com
+    
+    depends_on:
+      - ref('mart_revenue_lost')
+      - ref('dim_provider')
+      - ref('dim_date')
+    
+    url: http://localhost:3000/revenue
+    
+    description: >
+      **Revenue Analytics Dashboard - Comprehensive Revenue Opportunity Management**
+      
+      Detailed financial analytics dashboard focused on identifying, prioritizing, and
+      recovering lost revenue from missed appointments, claim rejections, treatment delays,
+      and write-offs. Provides actionable recovery plans with prioritization scoring.
+      
+      ## Key Features:
+      
+      ### KPI Summary Cards:
+      - Total Revenue Lost across all opportunity types
+      - Total Recovery Potential (estimated recoverable amounts)
+      - Total Opportunities count
+      - Affected Patients count
+      
+      ### Revenue Opportunities Table:
+      - Date, Type, Provider, Lost Revenue, Recovery Potential
+      - Priority Score with color-coded severity (High: 80+, Medium: 60-79, Low: <60)
+      - Recovery Timeline estimates (Immediate, Short-term, Medium-term, Long-term)
+      - Filterable by: Provider, Opportunity Type, Minimum Priority Score
+      - Supported Types: Missed Appointment, Claim Rejection, Treatment Plan Delay, Write Off
+      
+      ### Recovery Plan Table:
+      - Actionable recovery recommendations per opportunity
+      - Provider assignments and patient identification
+      - Recommended Actions as filterable chips (Reschedule, Contact Patient, Resubmit Claim, etc.)
+      - Priority-sorted for workflow optimization
+      
+      ## Data Sources:
+      - `/revenue/kpi-summary` - Aggregated revenue metrics
+      - `/revenue/opportunities` - Detailed opportunity records with pagination
+      - `/revenue/recovery-plan` - Prioritized action items for recovery
+      
+      ## Primary Users:
+      - Finance Team: Revenue recovery strategy and execution
+      - Billing Team: Claim follow-up and patient billing
+      - Practice Managers: Operational improvements to reduce revenue leakage
+      - Front Desk Staff: Patient outreach and rescheduling
+      
+      ## Data Refresh:
+      - **Current State**: Manual refresh (user-initiated dbt runs)
+      - **Planned**: Automated daily refresh at 6:00 AM via Airflow (project goal)
+      - Latency: T+1 day for complete opportunity analysis
+      - Updates: API queries return current data state when filters are applied
+      
+      ## Business Impact:
+      - **Primary Goal**: Recover 15-25% of lost revenue through systematic follow-up
+      - Reduces no-show rates through proactive patient engagement
+      - Improves claim approval rates via targeted resubmission
+      - Informs scheduling policy improvements
+      - Supports monthly financial close and forecasting
+      
+      ## Technical Implementation:
+      - Frontend Route: `/revenue` (Revenue.tsx)
+      - API Endpoints: revenueApi (getKPISummary, getOpportunities, getRecoveryPlan)
+      - Filters: Provider dropdown, Opportunity Type dropdown, Priority Score slider
+      - Components: Material-UI Cards, Tables with Chips for status indicators
+
+  # ============================================================================
+  # PROVIDER PERFORMANCE & OPERATIONS
+  # ============================================================================
+
+  - name: provider_performance_dashboard
+    label: "Provider Performance Scorecard"
+    type: dashboard
+    maturity: high
+    owner:
+      name: Operations Team
+      email: operations@dentalclinic.com
+    
+    depends_on:
+      - ref('mart_provider_performance')
+      - ref('mart_appointment_summary')
+      - ref('dim_provider')
+    
+    url: http://localhost:3000/providers
+    
+    description: >
+      **Provider Performance Dashboard - Individual Performance Tracking & Benchmarking**
+      
+      Comprehensive provider performance analytics with comparative benchmarking across
+      multiple operational and financial dimensions. Displays appointment metrics, completion
+      rates, production efficiency, and patient flow statistics for all active providers.
+      
+      ## Key Metrics Displayed:
+      
+      ### Aggregate KPIs:
+      - **Total Providers**: Count of active providers in the system
+      - **Total Appointments**: Aggregate scheduled appointments across all providers
+      - **Completion Rate**: Percentage of appointments completed (Target: >80%)
+      - **No-Show Rate**: Percentage of missed appointments (Target: <10%)
+      
+      ### Provider Performance Table:
+      - Provider Name with drill-down capability
+      - Total Appointments (scheduled count)
+      - Completed Appointments count and completion rate %
+      - No-Show Rate % with color-coded alerts (Green: ≤5%, Yellow: 5-10%, Red: >10%)
+      - Unique Patients served
+      - Average Production per Appointment ($)
+      
+      ## Performance Indicators:
+      - **Completion Rate**: Color-coded chips (Green ≥80%, Yellow 60-79%, Red <60%)
+      - **No-Show Rate**: Color-coded chips (Green ≤5%, Yellow 5-10%, Red >10%)
+      - Comparative rankings visible through table sorting
+      
+      ## Data Sources:
+      - `/providers/summary` - Provider-level aggregated metrics
+      - Includes date range filtering for performance period analysis
+      
+      ## Primary Users:
+      - **Operations Team**: Daily performance monitoring and workflow optimization
+      - **Practice Managers**: Provider coaching, scheduling, and capacity planning
+      - **Provider Development Team**: Performance reviews and improvement planning
+      - **Individual Providers**: Self-service performance tracking and goal monitoring
+      - **HR/Compensation**: Performance-based compensation calculations
+      
+      ## Data Refresh:
+      - **Current State**: Manual refresh (user-initiated dbt runs)
+      - **Planned**: Automated daily refresh at 6:00 AM via Airflow (project goal)
+      - Latency: T+1 day for completed appointment data
+      
+      ## Business Impact:
+      - Identifies high-performing providers for best practice sharing
+      - Surfaces providers needing additional support or training
+      - Supports capacity planning and scheduling optimization
+      - Informs provider compensation and bonus calculations
+      - Enables data-driven provider development conversations
+      
+      ## Technical Implementation:
+      - Frontend Route: `/providers` (Providers.tsx)
+      - API Endpoints: providerApi.getSummary()
+      - Components: KPICard components, Material-UI Table with Chip status indicators
+      - Sorting: Client-side table sorting for comparative analysis
+
+  # ============================================================================
+  # APPOINTMENT & SCHEDULING ANALYTICS
+  # ============================================================================
+
+  - name: appointment_analytics_dashboard
+    label: "Appointment Analytics - Scheduling & Utilization"
+    type: dashboard
+    maturity: medium
+    owner:
+      name: Scheduling Team
+      email: scheduling@dentalclinic.com
+    
+    depends_on:
+      - ref('mart_appointment_summary')
+      - ref('dim_provider')
+      - ref('dim_date')
+    
+    url: http://localhost:3000/appointments
+    
+    description: >
+      **Appointment Analytics Dashboard - Scheduling Efficiency & Capacity Planning**
+      
+      Operational dashboard for appointment scheduling analysis, capacity utilization,
+      and daily schedule management. Provides three views: Summary Analytics, Today's
+      Schedule, and Upcoming Appointments for proactive schedule management.
+      
+      ## Dashboard Tabs:
+      
+      ### 1. Summary Analytics:
+      - **Date Range Selector**: Configurable analysis period (default: last 30 days)
+      - **Provider Filter**: View specific provider or all providers
+      - **Per-Provider Summary Cards** showing:
+        - Total, Completed, No-Show, Cancelled appointment counts
+        - Completion Rate, No-Show Rate, Cancellation Rate percentages
+        - Unique Patients served
+        - Scheduled vs Completed Production amounts ($)
+        - Utilization Rate (time-based capacity usage)
+      
+      ### 2. Today's Appointments:
+      - **Real-time Schedule View** of all appointments for current day
+      - Columns: Time, Patient ID, Provider, Type, Status, Production, Duration
+      - Status Chips: Scheduled (blue), Completed (green), No Show (red), Cancelled (orange)
+      - Sortable and filterable by provider
+      - Production tracking for daily revenue monitoring
+      
+      ### 3. Upcoming Appointments (Next 7 Days):
+      - **Forward-looking Schedule** for capacity and preparation planning
+      - Same detail level as Today's view with date column added
+      - Enables proactive patient outreach and confirmation
+      - Supports pre-appointment preparation and resource allocation
+      
+      ## Key Metrics:
+      - Appointment completion rates and patterns
+      - No-show and cancellation trends by provider and time period
+      - Production scheduling and capacity utilization
+      - Patient flow and appointment duration analysis
+      - New patient vs returning patient appointment mix
+      - Hygiene appointment scheduling patterns
+      
+      ## Data Sources:
+      - `/appointments/summary` - Aggregated appointment metrics with date ranges
+      - `/appointments/today` - Today's appointment schedule (refreshed hourly)
+      - `/appointments/upcoming` - Next 7 days appointments (refreshed daily)
+      
+      ## Primary Users:
+      - **Scheduling Team**: Daily schedule management and appointment booking
+      - **Front Desk Staff**: Check-in coordination and patient flow
+      - **Practice Managers**: Capacity planning and schedule optimization
+      - **Providers**: Personal schedule review and preparation
+      - **Operations Team**: Utilization analysis and efficiency improvements
+      
+      ## Data Refresh:
+      - **Current State**: Manual refresh (user-initiated dbt runs)
+      - **Planned**: Automated daily refresh at 6:00 AM via Airflow (project goal)
+      - Latency: T+1 day for historical appointment data
+      
+      ## Business Impact:
+      - Optimizes provider time utilization and reduces idle time
+      - Reduces no-shows through proactive confirmation workflows
+      - Improves patient experience via better schedule management
+      - Supports revenue forecasting through scheduled production visibility
+      - Enables data-driven scheduling policy decisions
+      
+      ## Technical Implementation:
+      - Frontend Route: `/appointments` (Appointments.tsx)
+      - API Endpoints: appointmentApi (getSummary, getTodayAppointments, getUpcomingAppointments)
+      - Components: Material-UI Tabs, Cards, Tables with status Chips
+      - Filters: Date range picker, Provider dropdown
+      - Features: Tab-based navigation for different time horizons
+
+  # ============================================================================
+  # PATIENT MANAGEMENT
+  # ============================================================================
+
+  - name: patient_management_dashboard
+    label: "Patient Management - Directory & Demographics"
+    type: application
+    maturity: medium
+    owner:
+      name: Clinical Operations Team
+      email: clinical@dentalclinic.com
+    
+    depends_on:
+      - ref('dim_patient')
+    
+    url: http://localhost:3000/patients
+    
+    description: >
+      **Patient Management Dashboard - Patient Directory & Information Access**
+      
+      Operational patient directory providing quick access to patient demographics,
+      status, insurance information, and financial balances. Supports patient lookup,
+      verification, and basic information review for clinical and administrative staff.
+      
+      ## Key Features:
+      
+      ### Patient List Table:
+      - **Pagination**: 20 patients per page with page navigation
+      - **Patient Identification**: Patient ID and Preferred Name
+      - **Status Tracking**: Patient status chips (Active, Inactive, Deceased, Deleted)
+      - **Demographics**: Age, Age Category (Minor/Adult/Senior), Gender
+      - **Visit History**: First Visit Date for patient tenure tracking
+      - **Financial Summary**: Total Balance with currency formatting
+      - **Insurance Status**: Has Insurance flag (Yes/No indicator)
+      
+      ### Patient Status Categories:
+      - **Active (Green)**: Current patients with regular visits
+      - **Inactive (Yellow)**: No recent visits but not deleted
+      - **Deceased (Red)**: Deceased patients (historical records)
+      - **Deleted (Red)**: Archived/deleted patient records
+      
+      ## Patient Information Displayed:
+      - Patient ID (primary key)
+      - Preferred Name or Patient ID as identifier
+      - Patient Status with color coding
+      - Age and Age Category
+      - Gender (Male/Female/Other/Unknown)
+      - First Visit Date
+      - Total Balance (financial obligation)
+      - Insurance Coverage Status
+      
+      ## Data Sources:
+      - `/patients/` - Paginated patient records (20 per page)
+      - Returns: Patient list + total count for pagination
+      
+      ## Primary Users:
+      - **Front Desk Staff**: Patient check-in and verification
+      - **Clinical Staff**: Patient lookup and basic information review
+      - **Billing Team**: Financial status and insurance verification
+      - **Administrative Staff**: Patient record management
+      
+      ## Use Cases:
+      - Patient identification during check-in
+      - Insurance verification before appointments
+      - Financial status review before treatment
+      - Patient status confirmation
+      - Basic demographic lookup
+      
+      ## Data Refresh:
+      - **Current State**: Manual refresh (user-initiated dbt runs)
+      - **Planned**: Automated daily refresh at 6:00 AM via Airflow (project goal)
+      - Latency: T+1 day for demographic updates
+      
+      ## Business Impact:
+      - Streamlines patient check-in and verification process
+      - Reduces errors in patient identification
+      - Supports insurance verification workflows
+      - Enables quick financial status assessment
+      - Provides centralized patient information access
+      
+      ## Future Enhancements (Planned):
+      - Patient search and filtering capabilities
+      - Patient detail drill-down with full treatment history
+      - Appointment history and upcoming appointments
+      - Document access and management
+      - Medical alerts and treatment notes
+      - Family/guarantor relationship visualization
+      
+      ## Technical Implementation:
+      - Frontend Route: `/patients` (Patients.tsx)
+      - API Endpoints: patientApi.getPatients(skip, limit)
+      - Components: Material-UI Table, Pagination, Status Chips
+      - Features: Server-side pagination (20 records per page)
+      - Performance: Paginated loading for large patient databases
+
+  # ============================================================================
+  # PLANNED EXPOSURES (Not Yet Implemented)
+  # ============================================================================
+
+  - name: accounts_receivable_aging_dashboard
+    label: "Accounts Receivable Aging - Collections Management"
+    type: dashboard  
+    maturity: low
+    owner:
+      name: Billing Team
+      email: billing@dentalclinic.com
+    
+    depends_on:
+      - ref('mart_ar_summary')
+      - ref('dim_patient')
+      - ref('dim_insurance')
+    
+    url: http://localhost:3000/ar-aging
+    
+    description: >
+      **[PLANNED] Accounts Receivable Aging Dashboard for Collection Management**
+      
+      ⚠️ **STATUS: PLANNED - NOT YET IMPLEMENTED**
+      
+      This exposure documents a planned dashboard for detailed AR aging analysis with
+      drill-down capabilities by patient, insurance carrier, and aging bucket. Will
+      support proactive collection activities and bad debt management when implemented.
+      
+      ## Planned Key Metrics:
+      - AR aging buckets: Current, 30-60, 61-90, 90+ days
+      - Collection trends and write-off analysis
+      - Insurance vs patient AR breakdowns  
+      - High-risk account identification
+      - Days Sales Outstanding (DSO) tracking
+      - Collection efficiency metrics
+      
+      ## Planned Users:
+      - Billing Team: Daily collection prioritization
+      - Finance Team: Cash flow forecasting
+      - Practice Manager: Financial health monitoring
+      
+      ## Expected Data Sources:
+      - mart_ar_summary: Aggregated AR metrics by aging bucket
+      - dim_patient: Patient identification and contact information
+      - dim_insurance: Insurance carrier and plan details
+      
+      ## Implementation Priority:
+      - **HIGH** - Critical for billing team operations
+      - Required for optimal cash flow management
+      - Supports monthly financial close process
+      
+      ## Business Impact (When Implemented):
+      - Reduces days sales outstanding (DSO)
+      - Improves cash flow predictability
+      - Minimizes bad debt write-offs
+      - Enables proactive collection workflows
+
