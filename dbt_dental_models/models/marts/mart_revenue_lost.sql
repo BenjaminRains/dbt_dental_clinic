@@ -113,7 +113,7 @@ date_dimension as (
 ),
 
 -- 3. Opportunity identification and calculations
-MissedAppointments as (
+missed_appointments as (
     select 
         fa.appointment_date,
         fa.provider_id,
@@ -156,7 +156,7 @@ MissedAppointments as (
 -- the slot_time, slot_minutes, or production_goal columns needed for this analysis
 -- This functionality would need to be implemented differently based on actual data availability
 
-ClaimRejections as (
+claim_rejections as (
     select 
         fc.claim_date as appointment_date,
         null::integer as provider_id,  -- No provider_id available in claim data
@@ -188,7 +188,7 @@ ClaimRejections as (
     from claim_base fc
 ),
 
-TreatmentPlanDelays as (
+treatment_plan_delays as (
     select 
         tp.treatment_plan_date as appointment_date,
         null::integer as provider_id,  -- No provider_id available in treatplan table
@@ -220,7 +220,7 @@ TreatmentPlanDelays as (
     from treatment_base tp
 ),
 
-WriteOffs as (
+write_offs as (
     select 
         adj.adjustment_date as appointment_date,
         adj.provider_id,
@@ -350,13 +350,13 @@ opportunities_enhanced as (
         
     from (
         -- Union all opportunity sources
-        select * from MissedAppointments
+        select * from missed_appointments
         union all
-        select * from ClaimRejections
+        select * from claim_rejections
         union all
-        select * from TreatmentPlanDelays
+        select * from treatment_plan_delays
         union all
-        select * from WriteOffs
+        select * from write_offs
     ) all_opportunities
     where lost_revenue > 0 or lost_time_minutes > 0
 ),
