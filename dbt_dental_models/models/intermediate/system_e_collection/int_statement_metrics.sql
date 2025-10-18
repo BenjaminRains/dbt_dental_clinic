@@ -39,7 +39,7 @@
 
 WITH 
 -- Get base metrics for statements, grouped by various dimensions
-StatementMetrics AS (
+statement_metrics AS (
     -- Overall metrics
     SELECT
         CURRENT_DATE AS snapshot_date,
@@ -107,7 +107,7 @@ StatementMetrics AS (
 ),
 
 -- Calculate derived metrics
-DerivedMetrics AS (
+derived_metrics AS (
     SELECT
         snapshot_date,
         metric_type,
@@ -161,7 +161,7 @@ DerivedMetrics AS (
             THEN ROUND((payment_amount_7days::numeric / payment_amount_30days::numeric), 4)
             ELSE 0 
         END AS day7_response_ratio
-    FROM StatementMetrics
+    FROM statement_metrics
 )
 
 -- Final selection
@@ -200,7 +200,7 @@ SELECT
     day7_response_ratio,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM DerivedMetrics
+FROM derived_metrics
 
 {% if is_incremental() %}
     WHERE snapshot_date > (SELECT MAX(snapshot_date) FROM {{ this }})

@@ -16,7 +16,7 @@
     5. Serves as the base for other communication models
 */
 
-WITH CommunicationBase AS (
+WITH communication_base AS (
     SELECT
         cl.commlog_id AS communication_id,
         cl.patient_id,
@@ -100,7 +100,7 @@ WITH CommunicationBase AS (
 ),
 
 -- Get information about last completed visit from appointment data
-LastCompletedAppointment AS (
+last_completed_appointment AS (
     SELECT
         patient_id,
         MAX(appointment_datetime) AS last_appointment_date
@@ -110,7 +110,7 @@ LastCompletedAppointment AS (
 ),
 
 -- Get information about completed visits from historical appointment data
-LastHistoricalVisit AS (
+last_historical_visit AS (
     SELECT
         patient_id,
         MAX(history_timestamp) AS last_historical_date
@@ -120,22 +120,22 @@ LastHistoricalVisit AS (
 ),
 
 -- Combine both sources to get the most accurate last visit date
-LastCompletedVisit AS (
+last_completed_visit AS (
     SELECT
         COALESCE(lca.patient_id, lhv.patient_id) AS patient_id,
         GREATEST(
             COALESCE(lca.last_appointment_date, '1900-01-01'::timestamp),
             COALESCE(lhv.last_historical_date, '1900-01-01'::timestamp)
         ) AS last_visit_date
-    FROM LastCompletedAppointment lca
-    FULL OUTER JOIN LastHistoricalVisit lhv
+    FROM last_completed_appointment lca
+    FULL OUTER JOIN last_historical_visit lhv
         ON lca.patient_id = lhv.patient_id
     WHERE
         lca.last_appointment_date IS NOT NULL
         OR lhv.last_historical_date IS NOT NULL
 ),
 
-PatientInfo AS (
+patient_info AS (
     SELECT
         p.patient_id,
         p.preferred_name,
@@ -144,10 +144,10 @@ PatientInfo AS (
         p.first_visit_date,
         lcv.last_visit_date
     FROM {{ ref('int_patient_profile') }} p
-    LEFT JOIN LastCompletedVisit lcv ON p.patient_id = lcv.patient_id
+    LEFT JOIN last_completed_visit lcv ON p.patient_id = lcv.patient_id
 ),
 
-UserInfo AS (
+user_info AS (
     SELECT
         u.user_id,
         u.username AS user_name,
@@ -193,8 +193,8 @@ SELECT
     cb.updated_at,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM CommunicationBase cb
-LEFT JOIN PatientInfo pi
+FROM communication_base cb
+LEFT JOIN patient_info pi
     ON cb.patient_id = pi.patient_id
-LEFT JOIN UserInfo ui
+LEFT JOIN user_info ui
     ON cb.user_id = ui.user_id 

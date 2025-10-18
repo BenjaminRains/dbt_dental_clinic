@@ -40,7 +40,7 @@
     ======================================================
 */
 
-WITH CampaignDefinitions AS (
+WITH campaign_definitions AS (
     -- Campaigns with dates aligned to historical task data
     SELECT
         1 AS campaign_id,
@@ -89,7 +89,7 @@ WITH CampaignDefinitions AS (
         49 AS assigned_user_id  -- Based on common user_id in tasks
 ),
 
-CampaignAccounts AS (
+campaign_accounts AS (
     -- Match patients to campaigns based on criteria
     SELECT
         cd.campaign_id,
@@ -104,7 +104,7 @@ CampaignAccounts AS (
         ar.pending_claims_count,
         ar.denied_claims_count
     FROM {{ ref('int_ar_analysis') }} ar
-    CROSS JOIN CampaignDefinitions cd
+    CROSS JOIN campaign_definitions cd
     WHERE (
         -- Match balance criteria with explicit casting using larger precision
         (ar.total_ar_balance >= CAST(cd.target_ar_balance_min AS NUMERIC) OR cd.target_ar_balance_min IS NULL)
@@ -120,7 +120,7 @@ CampaignAccounts AS (
     AND cd.campaign_status IN ('active', 'planned')
 ),
 
-CampaignMetrics AS (
+campaign_metrics AS (
     -- Calculate metrics for each campaign
     SELECT
         campaign_id,
@@ -128,7 +128,7 @@ CampaignMetrics AS (
         COALESCE(SUM(total_ar_balance), 0)::NUMERIC AS total_ar_amount,
         0.00::NUMERIC AS collected_amount, -- This would be updated with actual data
         0.00::NUMERIC AS collection_rate  -- This would be calculated from actual data
-    FROM CampaignAccounts
+    FROM campaign_accounts
     GROUP BY campaign_id
 )
 
@@ -162,6 +162,6 @@ SELECT
     CURRENT_TIMESTAMP AS updated_at,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM CampaignDefinitions cd
-LEFT JOIN CampaignMetrics cm
+FROM campaign_definitions cd
+LEFT JOIN campaign_metrics cm
     ON cd.campaign_id = cm.campaign_id

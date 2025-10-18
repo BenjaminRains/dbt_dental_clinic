@@ -14,7 +14,7 @@
     Part of System G: Scheduling
 */
 
-WITH AppointmentMetrics AS (
+WITH appointment_metrics AS (
     -- Provider-level metrics
     SELECT
         'provider' as metric_level,
@@ -86,7 +86,7 @@ schedule_with_dates AS (
         AND NOT p.is_hidden  -- Only include active providers
 ),
 
-ScheduleUtilization AS (
+schedule_utilization AS (
     -- Provider-level utilization
     SELECT
         s.provider_id,
@@ -116,7 +116,7 @@ ScheduleUtilization AS (
     GROUP BY s.spine_date
 ),
 
-ChairTimeUtilization AS (
+chair_time_utilization AS (
     SELECT
         a.provider_id,
         DATE(a.appointment_datetime) as date,
@@ -133,7 +133,7 @@ ChairTimeUtilization AS (
 ),
 
 -- Add rolling averages
-RollingMetrics AS (
+rolling_metrics AS (
     SELECT
         *,
         -- 7-day rolling averages
@@ -188,7 +188,7 @@ RollingMetrics AS (
             DATE_TRUNC('month', date)
             ORDER BY date
         ) as mtd_no_show_appointments
-    FROM AppointmentMetrics
+    FROM appointment_metrics
 )
 
 SELECT
@@ -262,11 +262,11 @@ SELECT
         source_metadata_fields=['_loaded_at', '_updated_at', '_created_by', '_transformed_at']
     ) }}
 
-FROM RollingMetrics am
-LEFT JOIN ScheduleUtilization su
+FROM rolling_metrics am
+LEFT JOIN schedule_utilization su
     ON COALESCE(am.provider_id, -1) = COALESCE(su.provider_id, -1)
     AND am.date = su.date
-LEFT JOIN ChairTimeUtilization ctu
+LEFT JOIN chair_time_utilization ctu
     ON COALESCE(am.provider_id, -1) = COALESCE(ctu.provider_id, -1)
     AND am.date = ctu.date
 

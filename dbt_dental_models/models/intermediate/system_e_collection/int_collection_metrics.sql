@@ -37,7 +37,7 @@
     4. Enables data-driven optimization of collection strategies
 */
 
-WITH MetricsBase AS (
+WITH metrics_base AS (
     -- Base metrics calculations at different levels
     
     -- Campaign-level metrics
@@ -228,7 +228,7 @@ WITH MetricsBase AS (
     GROUP BY 1, 2, 3, 4
 ),
 
-FinalMetrics AS (
+final_metrics AS (
     -- Calculate derived metrics
     SELECT
         mb.snapshot_date,
@@ -287,7 +287,7 @@ FinalMetrics AS (
         mb.communications_received,
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
-    FROM MetricsBase mb
+    FROM metrics_base mb
 )
 
 SELECT
@@ -323,7 +323,7 @@ SELECT
     communications_received,
     model_created_at,
     model_updated_at
-FROM FinalMetrics
+FROM final_metrics
 
 {% if is_incremental() %}
     WHERE snapshot_date > (SELECT MAX(snapshot_date) FROM {{ this }})

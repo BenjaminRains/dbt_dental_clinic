@@ -15,7 +15,7 @@
     4. Standardizes status descriptions
 */
 
-WITH AppointmentBase AS (
+WITH appointment_base AS (
     SELECT
         apt.appointment_id,
         apt.patient_id,
@@ -109,7 +109,7 @@ WITH AppointmentBase AS (
     {% endif %}
 ),
 
-AppointmentTypes AS (
+appointment_types AS (
     SELECT
         at.appointment_type_id,
         at.appointment_type_name,
@@ -118,7 +118,7 @@ AppointmentTypes AS (
     FROM {{ ref('stg_opendental__appointmenttype') }} at
 ),
 
-ProviderInfo AS (
+provider_info AS (
     SELECT
         p.provider_id,
         p.provider_abbreviation as provider_abbr,
@@ -128,7 +128,7 @@ ProviderInfo AS (
     FROM {{ ref('stg_opendental__provider') }} p
 ),
 
-PatientInfo AS (
+patient_info AS (
     SELECT
         pt.patient_id,
         pt.preferred_name,
@@ -137,7 +137,7 @@ PatientInfo AS (
     FROM {{ ref('stg_opendental__patient') }} pt
 ),
 
-HistoricalAppointments AS (
+historical_appointments AS (
     SELECT
         patient_id,
         appointment_id,
@@ -233,14 +233,14 @@ SELECT
         primary_source_alias='ab',
         source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
     ) }}
-FROM AppointmentBase ab
-LEFT JOIN AppointmentTypes at
+FROM appointment_base ab
+LEFT JOIN appointment_types at
     ON ab.appointment_type_id = at.appointment_type_id
-LEFT JOIN ProviderInfo pi
+LEFT JOIN provider_info pi
     ON ab.provider_id = pi.provider_id
-LEFT JOIN PatientInfo pat
+LEFT JOIN patient_info pat
     ON ab.patient_id = pat.patient_id
-LEFT JOIN HistoricalAppointments ha
+LEFT JOIN historical_appointments ha
     ON ab.appointment_id = ha.appointment_id
     AND ha.history_rank = 1  -- Only get the latest history record
     AND ha.action_type IN (1, 4) -- Rescheduled or Cancelled

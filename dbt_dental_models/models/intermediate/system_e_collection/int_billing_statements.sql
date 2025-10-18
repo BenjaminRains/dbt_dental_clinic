@@ -25,7 +25,7 @@
     4. Enhances AR analysis with statement history
 */
 
-WITH StatementBase AS (
+WITH statement_base AS (
     SELECT
         s.statement_id,
         s.patient_id,
@@ -63,7 +63,7 @@ WITH StatementBase AS (
     {% endif %}
 ),
 
-PatientInfo AS (
+patient_info AS (
     SELECT
         patient_id,
         preferred_name,
@@ -75,7 +75,7 @@ PatientInfo AS (
     FROM {{ ref('int_ar_analysis') }}
 ),
 
-StatementItems AS (
+statement_items AS (
     SELECT
         statement_id,
         COUNT(DISTINCT statement_prod_id) AS item_count,
@@ -88,7 +88,7 @@ StatementItems AS (
 ),
 
 -- Join to collection campaigns if this statement is for a patient in a collection campaign
-CollectionCampaignMatch AS (
+collection_campaign_match AS (
     SELECT
         sb.statement_id,
         cc.campaign_id,
@@ -98,7 +98,7 @@ CollectionCampaignMatch AS (
             WHEN sb.date_sent > cc.start_date THEN TRUE
             ELSE FALSE
         END AS sent_during_campaign
-    FROM StatementBase sb
+    FROM statement_base sb
     INNER JOIN {{ ref('int_collection_tasks') }} ct
         ON sb.patient_id = ct.patient_id
     INNER JOIN {{ ref('int_collection_campaigns') }} cc
@@ -106,7 +106,7 @@ CollectionCampaignMatch AS (
 ),
 
 -- Identify if payments were made after statement was sent
-PaymentActivity AS (
+payment_activity AS (
     SELECT
         s.statement_id,
         s.patient_id,
@@ -142,7 +142,7 @@ PaymentActivity AS (
 ),
 
 -- Flag for if this is a collection statement (part of collection effort)
-CollectionFlag AS (
+collection_flag AS (
     SELECT
         s.statement_id,
         CASE
@@ -161,12 +161,12 @@ CollectionFlag AS (
             WHEN pa.payment_amount_30days > 0 THEN 'partial_payment'
             ELSE 'no_payment'
         END AS payment_result
-    FROM StatementBase s
-    LEFT JOIN PatientInfo p
+    FROM statement_base s
+    LEFT JOIN patient_info p
         ON s.patient_id = p.patient_id
-    LEFT JOIN CollectionCampaignMatch ccm
+    LEFT JOIN collection_campaign_match ccm
         ON s.statement_id = ccm.statement_id
-    LEFT JOIN PaymentActivity pa
+    LEFT JOIN payment_activity pa
         ON s.statement_id = pa.statement_id
 )
 
@@ -232,14 +232,14 @@ SELECT
     -- Metadata
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM StatementBase sb
-LEFT JOIN PatientInfo pi
+FROM statement_base sb
+LEFT JOIN patient_info pi
     ON sb.patient_id = pi.patient_id
-LEFT JOIN StatementItems si
+LEFT JOIN statement_items si
     ON sb.statement_id = si.statement_id
-LEFT JOIN CollectionCampaignMatch ccm
+LEFT JOIN collection_campaign_match ccm
     ON sb.statement_id = ccm.statement_id
-LEFT JOIN PaymentActivity pa
+LEFT JOIN payment_activity pa
     ON sb.statement_id = pa.statement_id
-LEFT JOIN CollectionFlag cf
+LEFT JOIN collection_flag cf
     ON sb.statement_id = cf.statement_id

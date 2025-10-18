@@ -23,7 +23,7 @@
     6. Implements transfer payment rules
 */
 
-WITH SplitDefinitions AS (
+WITH split_definitions AS (
     SELECT DISTINCT
         definition_id,
         item_name,
@@ -33,7 +33,7 @@ WITH SplitDefinitions AS (
 ),
 
 -- Get payment information for split validation
-PaymentInfo AS MATERIALIZED (
+payment_info AS MATERIALIZED (
     SELECT DISTINCT
         p.payment_id,
         p.payment_type_id,
@@ -65,7 +65,7 @@ PaymentInfo AS MATERIALIZED (
 ),
 
 -- Get split counts for validation
-SplitCounts AS MATERIALIZED (
+split_counts AS MATERIALIZED (
     SELECT 
         ps.payment_id,
         COUNT(*) as total_splits,
@@ -82,7 +82,7 @@ SplitCounts AS MATERIALIZED (
     GROUP BY ps.payment_id
 ),
 
-BaseSplits AS (
+base_splits AS (
     SELECT
         -- Primary key and relationships
         ps.paysplit_id,
@@ -148,18 +148,18 @@ BaseSplits AS (
         sc.discount_splits
         
     FROM {{ ref('stg_opendental__paysplit') }} ps
-    LEFT JOIN PaymentInfo p
+    LEFT JOIN payment_info p
         ON ps.payment_id = p.payment_id
     LEFT JOIN {{ ref('int_procedure_complete') }} pc
         ON ps.procedure_id = pc.procedure_id
     LEFT JOIN {{ ref('int_adjustments') }} adj
         ON ps.adjustment_id = adj.adjustment_id
-    LEFT JOIN SplitCounts sc
+    LEFT JOIN split_counts sc
         ON ps.payment_id = sc.payment_id
     WHERE p.payment_date >= '2023-01-01'
 ),
 
-SplitCategorization AS (
+split_categorization AS (
     SELECT
         *,
         
@@ -257,7 +257,7 @@ SplitCategorization AS (
             ELSE NULL
         END as discount_source_type
         
-    FROM BaseSplits
+    FROM base_splits
 )
 
 SELECT 
@@ -265,7 +265,7 @@ SELECT
     -- dbt intermediate model build timestamp (model-specific tracking)
     current_timestamp as _transformed_at
     
-FROM SplitCategorization
+FROM split_categorization
 WHERE 
     -- Exclude invalid high-split payments
     (NOT is_high_split_payment OR is_valid_split_count)

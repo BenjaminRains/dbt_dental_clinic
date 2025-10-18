@@ -26,7 +26,7 @@ Note: Employer table does not have business timestamps (_created_at, _updated_at
       Only pipeline metadata (_loaded_at, _transformed_at) is available
 */
 
-with Employer as (
+with employer as (
     select
         -- Primary Key
         employer_id,
@@ -45,7 +45,7 @@ with Employer as (
     from {{ ref('stg_opendental__employer') }}
 ),
 
-InsurancePlan as (
+insurance_plan as (
     select
         insurance_plan_id,
         employer_id,
@@ -57,16 +57,16 @@ InsurancePlan as (
 ),
 
 -- Get counts of how many plans each employer has
-EmployerPlanCount as (
+employer_plan_count as (
     select
         employer_id,
         count(insurance_plan_id) as plan_count
-    from InsurancePlan
+    from insurance_plan
     group by employer_id
 ),
 
 -- Get plan information for reporting
-EmployerPlans as (
+employer_plans as (
     select
         employer_id,
         json_agg(
@@ -77,11 +77,11 @@ EmployerPlans as (
                 'group_number', group_number
             )
         ) as insurance_plans
-    from InsurancePlan
+    from insurance_plan
     group by employer_id
 ),
 
-Final as (
+final as (
     select
         -- Primary Key
         e.employer_id,
@@ -105,11 +105,11 @@ Final as (
             source_metadata_fields=['_loaded_at']
         ) }}
         
-    from Employer e
-    left join EmployerPlanCount epc
+    from employer e
+    left join employer_plan_count epc
         on e.employer_id = epc.employer_id
-    left join EmployerPlans ep
+    left join employer_plans ep
         on e.employer_id = ep.employer_id
 )
 
-select * from Final
+select * from final

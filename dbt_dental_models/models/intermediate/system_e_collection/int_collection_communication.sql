@@ -26,7 +26,7 @@
     4. Enables follow-up tracking
 */
 
-WITH CollectionCommunications AS (
+WITH collection_communications AS (
     -- Get communications that are related to collections
     SELECT
         -- Create a stable numeric ID based on the source commlog_id
@@ -134,4 +134,4 @@ WITH CollectionCommunications AS (
     {% endif %}
 )
 
-SELECT * FROM CollectionCommunications
+SELECT * FROM collection_communications

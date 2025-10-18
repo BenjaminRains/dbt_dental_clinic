@@ -28,7 +28,7 @@
 
 WITH
 -- Get payment definitions with materialization
-PaymentDefinitions AS MATERIALIZED (
+payment_definitions AS MATERIALIZED (
     SELECT DISTINCT
         definition_id,
         item_name,
@@ -57,7 +57,7 @@ PaymentDefinitions AS MATERIALIZED (
 ),
 
 -- Get insurance payments with materialization and filtering
-InsurancePayments AS MATERIALIZED (
+insurance_payments AS MATERIALIZED (
     SELECT DISTINCT
         ip.claim_payment_id,
         ip.check_date,
@@ -83,7 +83,7 @@ InsurancePayments AS MATERIALIZED (
 ),
 
 -- Get claim procedures with materialization and filtering
-ClaimProcedures AS MATERIALIZED (
+claim_procedures AS MATERIALIZED (
     SELECT DISTINCT
         claim_procedure_id,
         procedure_id,
@@ -126,7 +126,7 @@ ClaimProcedures AS MATERIALIZED (
 ),
 
 -- Get bluebook information for payment validation
-BluebookInfo AS MATERIALIZED (
+bluebook_info AS MATERIALIZED (
     SELECT
         ib.procedure_id,
         ib.claim_id,
@@ -226,12 +226,12 @@ SELECT DISTINCT
     ip.payment_updated_at,
     ip.payment_created_by
     
-FROM ClaimProcedures cp
-INNER JOIN InsurancePayments ip 
+FROM claim_procedures cp
+INNER JOIN insurance_payments ip 
     ON cp.claim_payment_id = ip.claim_payment_id
-LEFT JOIN PaymentDefinitions pd
+LEFT JOIN payment_definitions pd
     ON ip.payment_type_id = pd.definition_id
-LEFT JOIN BluebookInfo bb
+LEFT JOIN bluebook_info bb
     ON cp.procedure_id = bb.procedure_id
     AND cp.claim_id = bb.claim_id
     AND cp.plan_id = bb.plan_id 

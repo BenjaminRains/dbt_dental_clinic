@@ -15,7 +15,7 @@
     4. Tracks performance by user, type, and category
 */
 
-WITH DailyCommunications AS (
+WITH daily_communications AS (
     SELECT
         communication_datetime::date AS date,
         user_id,
@@ -79,7 +79,7 @@ WITH DailyCommunications AS (
 ),
 
 -- Calculate response rates for outbound communications
-ResponseMetrics AS (
+response_metrics AS (
     SELECT
         communication_datetime::date AS date,
         user_id,
@@ -149,8 +149,8 @@ SELECT
     dc.legacy_system_count,
     -- Add standardized metadata
     {{ standardize_intermediate_metadata(primary_source_alias='dc', preserve_source_metadata=false) }}
-FROM DailyCommunications dc
-LEFT JOIN ResponseMetrics rm
+FROM daily_communications dc
+LEFT JOIN response_metrics rm
     ON dc.date = rm.date
     AND dc.user_id = rm.user_id
     AND dc.communication_type = rm.communication_type
