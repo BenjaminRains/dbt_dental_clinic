@@ -10,6 +10,11 @@ models:
       processing status, and merchant information for financial reporting and analysis.
     
     meta:
+      # Owner and PII information
+      owner: "finance@mdc-analytics.com"
+      contains_pii: true
+      pii_fields: ["patient_id", "check_number", "bank_branch"]
+      
       # Data quality and business context
       record_count: ~11,766
       data_scope: "2023-01-01 to current date"

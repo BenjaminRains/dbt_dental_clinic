@@ -52,6 +52,10 @@ models:
          - Can be hidden from account view
          - Common for payment plans and future procedures
       
+      ## Owner and PII Information
+      This model contains personally identifiable information (PII) related to patient
+      financial transactions and must be handled in accordance with HIPAA guidelines.
+      
       Split Patterns:
       - Most payments have 1-2 splits (median = 2)
       - Some administrative entries (payment_type_id = 0) can have hundreds of splits
@@ -92,6 +96,13 @@ models:
       materialized: incremental
       unique_key: paysplit_id
       schema: intermediate
+    
+    meta:
+      owner: "billing-team@mdc-analytics.com"
+      contains_pii: true
+      pii_fields: ["patient_id", "provider_id"]
+      contains_phi: true
+      phi_justification: "Contains patient payment allocation data linked to procedures"
     
     columns:
       - name: paysplit_id
