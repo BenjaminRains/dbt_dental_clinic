@@ -1,6 +1,5 @@
 {{ config(
     materialized='table',
-    
     unique_key='campaign_id'
 ) }}
 

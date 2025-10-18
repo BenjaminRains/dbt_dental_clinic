@@ -30,7 +30,6 @@ with Employer as (
     select
         -- Primary Key
         employer_id,
-        
         -- Attributes
         employer_name,
         address,

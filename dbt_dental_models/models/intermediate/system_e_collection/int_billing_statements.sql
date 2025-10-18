@@ -1,6 +1,5 @@
 {{ config(
     materialized='incremental',
-    
     unique_key='billing_statement_id'
 ) }}
 

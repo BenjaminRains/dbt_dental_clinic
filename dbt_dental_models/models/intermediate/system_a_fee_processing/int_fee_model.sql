@@ -1,4 +1,5 @@
-{{ config(        materialized='incremental',
+{{ config(        
+        materialized='incremental',
         schema='intermediate',
         unique_key='procedure_id',
         on_schema_change='fail',
