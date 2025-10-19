@@ -25,6 +25,7 @@ WITH communication_base AS (
         cl.communication_end_datetime,
         cl.communication_type,
         cl.mode AS communication_mode,
+        cl.sent_or_received_raw,
         CASE 
             WHEN cl.sent_or_received_raw = 2 THEN 'outbound'
             WHEN cl.sent_or_received_raw = 1 THEN 'inbound'
@@ -33,6 +34,12 @@ WITH communication_base AS (
         END AS direction,
         NULL AS subject,
         cl.note AS content,
+        cl.referral_id,
+        cl.communication_source,
+        cl.referral_behavior,
+        cl.is_sent,
+        cl.is_topaz_signature,
+        cl.entry_datetime,
         -- Extract appointment ID if present in the note
         CASE
             WHEN cl.note ~* '(appt|appointment)\\s+#\\s*([0-9]{1,7})\\b'
@@ -165,9 +172,16 @@ SELECT
     cb.communication_end_datetime,
     cb.communication_type,
     cb.communication_mode,
+    cb.sent_or_received_raw,
     cb.direction,
     cb.subject,
     cb.content,
+    cb.referral_id,
+    cb.communication_source,
+    cb.referral_behavior,
+    cb.is_sent,
+    cb.is_topaz_signature,
+    cb.entry_datetime,
     cb.linked_appointment_id,
     cb.linked_claim_id,
     cb.linked_procedure_id,
