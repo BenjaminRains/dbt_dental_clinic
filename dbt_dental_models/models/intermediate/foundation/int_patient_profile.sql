@@ -99,19 +99,21 @@ patient_demographics_enhanced as (
         
         -- Patient status categorization
         case 
-            when patient_status = 0 then 'Active'
-            when patient_status = 1 then 'Archived'
-            when patient_status = 2 then 'Deceased'
-            when patient_status = 3 then 'Prospective'
+            when patient_status = 0 then 'Patient'
+            when patient_status = 1 then 'NonPatient'
+            when patient_status = 2 then 'Inactive'
+            when patient_status = 3 then 'Archived'
+            when patient_status = 4 then 'Deceased'
+            when patient_status = 5 then 'Deleted'
             else 'Unknown'
         end as patient_status_description,
         
         -- Position code categorization
         case 
-            when position_code = 0 then 'Regular Patient'
-            when position_code = 1 then 'House Account'
-            when position_code = 2 then 'Staff Member'
-            when position_code = 3 then 'VIP Patient'
+            when position_code = 0 then 'Default'
+            when position_code = 1 then 'House'
+            when position_code = 2 then 'Staff'
+            when position_code = 3 then 'VIP'
             when position_code = 4 then 'Other'
             else 'Unknown'
         end as patient_category,
