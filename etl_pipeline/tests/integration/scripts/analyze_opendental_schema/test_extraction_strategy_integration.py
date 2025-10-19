@@ -121,8 +121,11 @@ class TestExtractionStrategyIntegration:
             schema_info = analyzer.get_table_schema('patient')
             size_info = analyzer.get_table_size_info('patient')
             
-            # Act: Call determine_extraction_strategy() method with production data
-            strategy = analyzer.determine_extraction_strategy('patient', schema_info, size_info)
+            # Get performance characteristics (required for determine_extraction_strategy)
+            performance_chars = analyzer.get_table_performance_profile('patient', schema_info, size_info)
+            
+            # Act: Call determine_extraction_strategy() method with production data and performance_chars
+            strategy = analyzer.determine_extraction_strategy('patient', schema_info, size_info, performance_chars)
             
             # Assert: Verify strategy is correctly determined for production tables
             assert strategy in ['full_table', 'incremental', 'incremental_chunked']

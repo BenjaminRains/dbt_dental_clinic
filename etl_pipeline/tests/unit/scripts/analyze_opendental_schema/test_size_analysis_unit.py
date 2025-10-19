@@ -106,8 +106,8 @@ class TestOpenDentalSchemaAnalyzerSizeAnalysis:
             assert size_info['estimated_row_count'] == 50000  # Reverted to match fixture
             assert size_info['size_mb'] == 25.5
             
-            # Verify ConnectionManager was used
-            assert mock_conn_manager.call_count == 2
+            # Verify ConnectionManager was used (refactored to single query via _query_table_metrics)
+            assert mock_conn_manager.call_count == 1  # Changed from 2: query consolidation benefit
             mock_conn_manager.assert_any_call(mock_engine)
             assert mock_conn_manager_instance.__enter__.called
             assert mock_conn_manager_instance.__exit__.called 

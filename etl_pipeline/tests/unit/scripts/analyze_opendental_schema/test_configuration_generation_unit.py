@@ -193,8 +193,8 @@ class TestOpenDentalSchemaAnalyzerConfigurationGeneration:
             
             analyzer = OpenDentalSchemaAnalyzer()
             
-            # Act: Call generate_schema_hash() method
-            schema_hash = analyzer.generate_schema_hash(test_table)
+            # Act: Call _generate_schema_hash() method (private, takes list of tables)
+            schema_hash = analyzer._generate_schema_hash([test_table])
             
             # Assert: Verify schema hash generation works correctly
             assert isinstance(schema_hash, str)
@@ -236,8 +236,8 @@ class TestOpenDentalSchemaAnalyzerConfigurationGeneration:
             analyzer = OpenDentalSchemaAnalyzer()
             analyzer.get_table_schema = mock_get_table_schema
             
-            # Act: Call generate_schema_hash() method
-            schema_hash = analyzer.generate_schema_hash(test_table)
+            # Act: Call _generate_schema_hash() method (private, takes list of tables)
+            schema_hash = analyzer._generate_schema_hash([test_table])
             
             # Assert: Verify error handling works correctly by checking for "unknown" hash
             assert isinstance(schema_hash, str)
