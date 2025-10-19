@@ -20,6 +20,7 @@
     2. Applies comprehensive business rules for provider status and classification  
     3. Creates derived fields for provider capabilities and restrictions
     4. Establishes foundation for all provider-related downstream models
+    5. Enriches with definition lookups for specialty, status, and anesthesia type descriptions
     
     Business Logic Features:
     - Provider Status Classification: Active, hidden, terminated, system providers
@@ -27,20 +28,24 @@
     - Professional Validation: DEA numbers, state licenses, professional IDs
     - UI/Display Properties: Colors, scheduling notes, web descriptions
     - Financial Goals: Hourly production targets
+    - Definition Lookups: Specialty, provider status, and anesthesia provider type descriptions
     
     Data Sources:
     - stg_opendental__provider: Primary provider data with professional identifiers
+    - stg_opendental__definition: Coded value lookups (specialty, status, anesthesia type)
     
     Data Quality Notes:
     - System provider (ID=0) handled as special case
     - Non-person providers (labs, facilities) properly classified
     - Terminated providers identified by termination_date
     - Empty/null professional identifiers handled gracefully
+    - Definition lookups use LEFT JOIN to handle missing/unmapped codes
     
     Performance Considerations:
     - Incremental materialization with _updated_at filtering
     - Indexed on provider_id, is_active_provider, and _updated_at
     - Efficient boolean flag calculations using CASE statements
+    - Definition lookups optimized with filtered CTEs
     
     Systems Integration:
     - Foundation for System A: Fee Processing (provider fee schedules)
@@ -57,7 +62,44 @@ with source_providers as (
     {% endif %}
 ),
 
--- 2. Business logic transformation - basic provider flags and classifications
+-- 2. Definition lookups for coded fields
+definition_lookup as (
+    select
+        definition_id,
+        category_id,
+        item_name,
+        item_value,
+        item_order,
+        item_color
+    from {{ ref('stg_opendental__definition') }}
+),
+
+specialty_definitions as (
+    select
+        item_value::integer as specialty_id,
+        item_name as specialty_description,
+        item_color as specialty_color
+    from definition_lookup
+    where category_id = 3  -- Provider specialties
+),
+
+status_definitions as (
+    select
+        item_value::integer as status_id,
+        item_name as status_description
+    from definition_lookup
+    where category_id = 2  -- Provider status
+),
+
+anesthesia_definitions as (
+    select
+        item_value::integer as anesthesia_type_id,
+        item_name as anesthesia_type_description
+    from definition_lookup
+    where category_id = 7  -- Anesthesia provider types
+),
+
+-- 3. Business logic transformation - basic provider flags and classifications
 provider_enhanced as (
     select
         -- Core identifiers
@@ -165,7 +207,7 @@ provider_enhanced as (
     from source_providers
 ),
 
--- 3. Advanced capability flags - derived from basic flags
+-- 4. Advanced capability flags - derived from basic flags
 provider_capabilities as (
     select
         *,
@@ -186,7 +228,7 @@ provider_capabilities as (
     from provider_enhanced
 ),
 
--- 4. Final integration with standardized metadata
+-- 5. Final integration with standardized metadata and definition lookups
 provider_integrated as (
     select
         -- Core provider fields
@@ -218,13 +260,17 @@ provider_integrated as (
         -- Classification and relationships
         pc.fee_schedule_id,
         pc.specialty_id,
+        sd.specialty_description,
+        sd.specialty_color,
         pc.school_class_id,
         pc.billing_override_provider_id,
         pc.email_address_id,
         
         -- Status and type fields
         pc.provider_status,
+        st.status_description as provider_status_description,
         pc.anesthesia_provider_type,
+        ad.anesthesia_type_description,
         pc.ehr_mu_stage,
         
         -- UI and display properties
@@ -268,6 +314,12 @@ provider_integrated as (
         {{ standardize_intermediate_metadata(primary_source_alias='pc', source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']) }}
         
     from provider_capabilities pc
+    left join specialty_definitions sd
+        on pc.specialty_id = sd.specialty_id
+    left join status_definitions st
+        on pc.provider_status = st.status_id
+    left join anesthesia_definitions ad
+        on pc.anesthesia_provider_type = ad.anesthesia_type_id
 )
 
 select * from provider_integrated
