@@ -45,27 +45,15 @@
     - Availability calculations limited to 90-day window for optimal performance
     
     Dependencies:
-    - stg_opendental__provider: Primary source for provider data
-    - stg_opendental__definition: Lookup tables for specialty and status descriptions
+    - int_provider_profile: Intermediate model with provider data, business logic flags, and definition lookups
     - int_provider_availability: Provider scheduling and availability metrics
 */
 
--- 1. Source data retrieval
+-- 1. Source data retrieval from intermediate layer
 with source_provider as (
-    select * from {{ ref('stg_opendental__provider') }}
+    select * from {{ ref('int_provider_profile') }}
 ),
 
--- 2. Lookup/reference data
-provider_lookup as (
-    select
-        definition_id,
-        category_id,
-        item_name,
-        item_value,
-        item_order,
-        item_color
-    from {{ ref('stg_opendental__definition') }}
-),
 
 -- 3. Provider availability metrics
 provider_availability as (
@@ -98,11 +86,12 @@ provider_enhanced as (
         -- Provider classifications
         p.fee_schedule_id,
         p.specialty_id,
-        def_specialty.item_name as specialty_description,
+        p.specialty_description,
+        p.specialty_color,
         p.provider_status,
-        def_status.item_name as provider_status_description,
+        p.provider_status_description,
         p.anesthesia_provider_type,
-        def_anesth.item_name as anesthesia_provider_type_description,
+        p.anesthesia_type_description,
         
         -- Provider credentials
         p.state_license_number as state_license,
@@ -212,15 +201,6 @@ provider_enhanced as (
     from source_provider p
     left join provider_availability pa
         on p.provider_id = pa.provider_id
-    left join provider_lookup def_specialty
-        on def_specialty.category_id = 3  -- Specialty definitions
-        and def_specialty.item_value = p.specialty_id::text
-    left join provider_lookup def_status
-        on def_status.category_id = 2  -- Provider status definitions
-        and def_status.item_value = p.provider_status::text
-    left join provider_lookup def_anesth
-        on def_anesth.category_id = 7  -- Anesthesia provider type definitions
-        and def_anesth.item_value = p.anesthesia_provider_type::text
 ),
 
 -- 5. Final validation and filtering
