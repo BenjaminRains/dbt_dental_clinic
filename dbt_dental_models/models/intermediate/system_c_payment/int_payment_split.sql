@@ -54,6 +54,10 @@ payment_info AS MATERIALIZED (
         p.is_cc_completed,
         p.recurring_charge_date,
         p.receipt_text,
+        p.clinic_id,
+        p.check_number,
+        p.bank_branch,
+        p.payment_source,
         -- Metadata fields for standardize_intermediate_metadata macro
         p._loaded_at,
         p._transformed_at,
@@ -88,7 +92,7 @@ base_splits AS (
         ps.paysplit_id,
         ps.payment_id,
         ps.patient_id,
-        ps.clinic_id,
+        coalesce(ps.clinic_id, p.clinic_id) as clinic_id,
         ps.provider_id,
         ps.procedure_id,
         ps.adjustment_id,
@@ -98,6 +102,15 @@ base_splits AS (
         ps.split_amount,
         ps.payment_date,
         ps.procedure_date,
+        
+        -- Payment header fields (from payment_info)
+        p.deposit_id,
+        p.payment_amount,
+        p.check_number,
+        p.bank_branch,
+        p.external_id as payment_external_id,
+        p.payment_source,
+        p.entry_date as payment_entry_date,
         
         -- Flags and types
         ps.is_discount,
