@@ -18,8 +18,9 @@
     This model:
     1. Combines core patient demographics from staging models
     2. Integrates family relationships and emergency contacts
-    3. Provides comprehensive patient profile for downstream analytics
-    4. Serves as foundation for all patient-related intermediate models
+    3. Aggregates patient diseases and document tracking
+    4. Provides comprehensive patient profile for downstream analytics
+    5. Serves as foundation for all patient-related intermediate models
     
     Business Logic Features:
     - Patient demographics and status categorization
@@ -27,16 +28,28 @@
     - Emergency contact integration from patient notes
     - Medical and treatment notes consolidation
     - Patient preferences and consent tracking
+    - Active disease tracking (count, IDs, statuses)
+    - Document management tracking (count, categories)
+    
+    Data Sources:
+    - stg_opendental__patient: Core patient demographics
+    - stg_opendental__patientnote: Emergency contacts and medical notes
+    - stg_opendental__patientlink: Family relationships
+    - stg_opendental__disease: Active disease conditions
+    - stg_opendental__document: Patient document tracking
     
     Data Quality Notes:
     - Geographic data (city, state, zipcode) pending investigation of patient-zipcode relationships
     - Consider checking for additional patient address/location tables in source system
     - Family relationships are aggregated to prevent duplicate patient records
+    - Disease data filtered to active only (date_stop is null)
+    - Document and disease aggregations use LEFT JOIN to handle patients with no records
     
     Performance Considerations:
     - Foundation model materialized as table for downstream performance
     - Indexed on primary relationships for efficient joins
     - Weekly refresh cycle appropriate for demographic data
+    - Disease and document aggregations pre-calculated for mart efficiency
 */
 
 -- 1. Source data retrieval with deduplication
@@ -73,7 +86,29 @@ patient_notes_lookup as (
     from {{ ref('stg_opendental__patientnote') }}
 ),
 
--- 3. Business logic transformation
+-- 3. Patient disease tracking (active diseases only)
+patient_diseases as (
+    select 
+        patient_id,
+        count(*) as disease_count,
+        array_agg(disease_def_id::text) as disease_ids,
+        array_agg(problem_status::text) as disease_statuses
+    from {{ ref('stg_opendental__disease') }}
+    where date_stop is null  -- Only active diseases
+    group by patient_id
+),
+
+-- 4. Patient document tracking
+patient_documents as (
+    select 
+        patient_id,
+        count(*) as document_count,
+        array_agg(document_category_id::text) as document_categories
+    from {{ ref('stg_opendental__document') }}
+    group by patient_id
+),
+
+-- 5. Business logic transformation
 patient_demographics_enhanced as (
     select
         -- Primary identification
@@ -140,7 +175,7 @@ patient_demographics_enhanced as (
     from source_patient
 ),
 
--- 4. Integration CTE (joins everything together)
+-- 6. Integration CTE (joins everything together)
 patient_integrated as (
     select
         -- Core patient fields
@@ -195,6 +230,15 @@ patient_integrated as (
         pnl.notes_created_at,
         pnl.notes_updated_at,
         
+        -- Patient diseases (active diseases only)
+        pd.disease_count,
+        pd.disease_ids,
+        pd.disease_statuses,
+        
+        -- Patient documents
+        doc.document_count,
+        doc.document_categories,
+        
         -- Metadata fields (standardized pattern)
         {{ standardize_intermediate_metadata(
             primary_source_alias='pde',
@@ -206,6 +250,10 @@ patient_integrated as (
         on pde.patient_id = pfl.patient_id
     left join patient_notes_lookup pnl
         on pde.patient_id = pnl.patient_id
+    left join patient_diseases pd
+        on pde.patient_id = pd.patient_id
+    left join patient_documents doc
+        on pde.patient_id = doc.patient_id
 )
 
 select * from patient_integrated 
