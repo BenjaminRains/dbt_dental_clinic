@@ -46,9 +46,8 @@ Performance Considerations:
 Dependencies:
 - fact_appointment: Core appointment and scheduling data
 - fact_claim: Insurance and billing transaction data
-- stg_opendental__schedule: Provider availability and capacity data
-- stg_opendental__treatplan: Treatment plan and acceptance data
-- stg_opendental__adjustment: Write-off and adjustment data
+- int_treatment_plan: Treatment plan with procedure aggregations and business logic
+- int_adjustments: Write-off and adjustment data with categorization
 - dim_date: Date dimension for temporal analysis
 - dim_provider: Provider information and attributes
 - dim_patient: Patient information for demographic analysis
@@ -74,14 +73,14 @@ claim_base as (
 -- which required columns not available in the actual schedule table
 
 treatment_base as (
-    select * from {{ ref('stg_opendental__treatplan') }}
-    where treatment_plan_status = 0  -- All treatment plans are currently Active (status = 0)
+    select * from {{ ref('int_treatment_plan') }}
+    where treatment_plan_status = 0  -- Active treatment plans only
         and treatment_plan_date >= current_date - interval '2 years'
-        and current_date - treatment_plan_date > 90  -- Only include delayed treatment plans
+        and days_since_last_activity > 90  -- Only include delayed treatment plans
 ),
 
 adjustment_base as (
-    select * from {{ ref('stg_opendental__adjustment') }}
+    select * from {{ ref('int_adjustments') }}
     where adjustment_date >= current_date - interval '1 year'
         and adjustment_amount > 0
         and adjustment_direction in ('positive', 'negative')  -- Exclude zero adjustments
@@ -191,26 +190,18 @@ claim_rejections as (
 treatment_plan_delays as (
     select 
         tp.treatment_plan_date as appointment_date,
-        null::integer as provider_id,  -- No provider_id available in treatplan table
-        0::integer as clinic_id,
+        tp.primary_provider_id as provider_id,  -- From int_treatment_plan aggregation
+        coalesce(tp.primary_clinic_id, 0) as clinic_id,  -- From int_treatment_plan aggregation
         tp.patient_id,
-        tp.treatment_plan_id as appointment_id,  -- Already integer from transform_id_columns
+        tp.treatment_plan_id as appointment_id,
         'Treatment Plan Delay' as opportunity_type,
-        case 
-            when current_date - tp.treatment_plan_date > 180 then 'Very Delayed'
-            when current_date - tp.treatment_plan_date > 90 then 'Delayed Start'
-            else 'In Progress'
-        end as opportunity_subtype,
-        null::numeric as lost_revenue,  -- No total amount column available in treatplan
+        tp.timeline_status as opportunity_subtype,  -- From int_treatment_plan (Current, Recent, Delayed, Very Delayed)
+        tp.remaining_amount as lost_revenue,  -- Calculated in int_treatment_plan
         null::integer as lost_time_minutes,
-        null::text[] as missed_procedures,  -- No planned procedures column available
+        tp.procedure_codes as missed_procedures,  -- From int_treatment_plan aggregation
         tp.treatment_plan_date as opportunity_datetime,
         null::numeric as cancellation_notice_hours,  -- Not applicable for treatment plan delays
-        case 
-            when current_date - tp.treatment_plan_date > 180 then 'Low'
-            when current_date - tp.treatment_plan_date > 90 then 'Medium'
-            else 'High'
-        end as recovery_potential,
+        tp.recovery_potential,  -- From int_treatment_plan business logic
         
         -- Metadata fields
         tp._loaded_at,
