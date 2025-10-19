@@ -49,33 +49,12 @@
     - Status and date indexes for analytical queries
     
     Dependencies:
-    - int_patient_profile: Intermediate model with patient demographics, notes, and family links
-    - stg_opendental__disease: Active disease conditions (TODO: move to intermediate)
-    - stg_opendental__document: Patient document management (TODO: move to intermediate)
+    - int_patient_profile: Comprehensive intermediate model with patient demographics, notes, 
+      family links, disease tracking, and document management
 */
 
 with source_patient as (
     select * from {{ ref('int_patient_profile') }}
-),
-
-patient_diseases as (
-    select 
-        patient_id,
-        count(*) as disease_count,
-        array_agg(disease_def_id::text) as disease_ids,
-        array_agg(problem_status::text) as disease_statuses
-    from {{ ref('stg_opendental__disease') }}
-    where date_stop is null  -- Only active diseases
-    group by patient_id
-),
-
-patient_documents as (
-    select 
-        patient_id,
-        count(*) as document_count,
-        array_agg(document_category_id::text) as document_categories
-    from {{ ref('stg_opendental__document') }}
-    group by patient_id
 ),
 
 patient_enhanced as (
@@ -175,14 +154,14 @@ patient_enhanced as (
         array_to_string(s.family_ids, ',') as linked_patient_ids,  -- Convert array to text for compatibility
         array_to_string(s.family_link_types::text[], ',') as link_types,  -- Convert array to text for compatibility
         
-        -- Patient Diseases (from staging aggregation - TODO: move to intermediate)
-        pd.disease_count,  -- Count of active diseases
-        pd.disease_ids,  -- Array of disease definition IDs
-        pd.disease_statuses,  -- Array of disease statuses
+        -- Patient Diseases (from intermediate model - active diseases aggregated)
+        s.disease_count,  -- Count of active diseases
+        s.disease_ids,  -- Array of disease definition IDs
+        s.disease_statuses,  -- Array of disease statuses
         
-        -- Patient Documents (from staging aggregation - TODO: move to intermediate)
-        doc.document_count,  -- Count of documents
-        doc.document_categories,  -- Array of document category IDs
+        -- Patient Documents (from intermediate model - documents aggregated)
+        s.document_count,  -- Count of documents
+        s.document_categories,  -- Array of document category IDs
         
         -- Metadata (from intermediate model)
         s._loaded_at,  -- When ETL pipeline loaded the data
@@ -192,10 +171,6 @@ patient_enhanced as (
         current_timestamp as _mart_refreshed_at  -- Mart refresh time
 
     from source_patient s
-    left join patient_diseases pd
-        on s.patient_id = pd.patient_id
-    left join patient_documents doc
-        on s.patient_id = doc.patient_id
 ),
 
 final as (
