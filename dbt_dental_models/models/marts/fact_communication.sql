@@ -49,15 +49,15 @@ Performance Considerations:
 - Communication direction and engagement level calculations optimized
 
 Dependencies:
-- stg_opendental__commlog: Primary source for communication log data
-- dim_patient: Patient dimension for patient-related analysis
-- dim_user: User dimension for user-related analysis
+- int_patient_communications_base: Intermediate model with all communication data including referral, source, 
+  behavior, sent status, signature status, and entry datetime fields
 */
 
--- 1. Source data retrieval
+-- 1. Source data retrieval from intermediate layer
 with source_communication as (
-    select * from {{ ref('stg_opendental__commlog') }}
+    select * from {{ ref('int_patient_communications_base') }}
 ),
+
 
 /*
 TODO - EMAIL MESSAGE INTEGRATION:
@@ -101,22 +101,11 @@ When implementing SMS message integration, restore the following structure:
 - User tracking for sent messages
 */
 
--- 2. Related dimension lookups
-communication_dimensions as (
-    select 
-        patient_id,
-        user_id,
-        program_id,
-        referral_id
-    from source_communication
-    where communication_datetime is not null
-),
-
--- 3. Business logic and calculations
+-- 2. Business logic and calculations using intermediate data
 communication_calculated as (
     select
         -- Primary key
-        sc.commlog_id as communication_id,
+        sc.communication_id,
 
         -- Foreign keys
         sc.patient_id,
@@ -136,8 +125,8 @@ communication_calculated as (
 
         -- Communication details
         sc.communication_type,
-        sc.note as communication_note,
-        sc.mode as communication_mode,
+        sc.content as communication_note,
+        sc.communication_mode,
         sc.communication_source,
         sc.referral_behavior,
 
@@ -163,50 +152,43 @@ communication_calculated as (
             else 'Night'
         end as communication_time_period,
 
-        -- Communication direction
+        -- Communication direction (using intermediate model's direction field)
         case 
-            when sc.sent_or_received_raw = 0 then 'Inbound'
-            when sc.sent_or_received_raw = 1 then 'Outbound'
-            when sc.sent_or_received_raw = 2 then 'System'
+            when sc.direction = 'inbound' then 'Inbound'
+            when sc.direction = 'outbound' then 'Outbound'
+            when sc.direction = 'system' then 'System'
             else 'Unknown'
         end as communication_direction,
 
         -- Communication method based on mode
         case 
-            when sc.mode = 0 then 'Email'
-            when sc.mode = 1 then 'SMS'
-            when sc.mode = 2 then 'Phone'
-            when sc.mode = 3 then 'Letter'
-            when sc.mode = 4 then 'In-Person'
-            when sc.mode = 5 then 'System'
-            when sc.mode = 6 then 'System'  -- Additional system mode
-            when sc.mode = 8 then 'System'  -- Additional system mode
+            when sc.communication_mode = 0 then 'Email'
+            when sc.communication_mode = 1 then 'SMS'
+            when sc.communication_mode = 2 then 'Phone'
+            when sc.communication_mode = 3 then 'Letter'
+            when sc.communication_mode = 4 then 'In-Person'
+            when sc.communication_mode = 5 then 'System'
+            when sc.communication_mode = 6 then 'System'  -- Additional system mode
+            when sc.communication_mode = 8 then 'System'  -- Additional system mode
             else 'Unknown'
         end as communication_method,
 
-        -- Communication category based on type
+        -- Communication category (using intermediate model's categorization, mapping to fact format)
         case 
-            when sc.communication_type = 0 then 'General'      -- Default/legacy communication type
-            when sc.communication_type = 224 then 'Appointment'
-            when sc.communication_type = 228 then 'Appointment'
-            when sc.communication_type = 226 then 'Financial'
-            when sc.communication_type = 225 then 'Insurance'
-            when sc.communication_type = 571 then 'Insurance'
-            when sc.communication_type = 432 then 'Clinical'
-            when sc.communication_type = 509 then 'Clinical'
-            when sc.communication_type = 510 then 'Clinical'
-            when sc.communication_type = 614 then 'Referral'
-            when sc.communication_type = 615 then 'Referral'
-            when sc.communication_type = 636 then 'Treatment Plan'
+            when sc.communication_category = 'appointment' then 'Appointment'
+            when sc.communication_category = 'billing' then 'Financial'
+            when sc.communication_category = 'insurance' then 'Insurance'
+            when sc.communication_category = 'clinical' then 'Clinical'
+            when sc.communication_category = 'follow_up' then 'Follow Up'
             else 'General'
         end as communication_category,
 
-        -- Effectiveness indicators
+        -- Effectiveness indicators (using intermediate model's outcome and direction)
         case 
-            when sc.sent_or_received_raw = 0 then 'Received'
-            when sc.sent_or_received_raw = 1 and sc.mode = 4 then 'Completed'
-            when sc.sent_or_received_raw = 1 then 'Sent'
-            when sc.sent_or_received_raw = 2 then 'System Generated'
+            when sc.direction = 'inbound' then 'Received'
+            when sc.direction = 'outbound' and sc.communication_mode = 4 then 'Completed'
+            when sc.direction = 'outbound' then 'Sent'
+            when sc.direction = 'system' then 'System Generated'
             else 'Unknown'
         end as engagement_level,
 
@@ -214,15 +196,15 @@ communication_calculated as (
         case when extract(dow from sc.communication_datetime) in (0, 6) then true else false end as sent_on_weekend,
         case when extract(hour from sc.communication_datetime) between 9 and 17 then true else false end as sent_during_business_hours,
         case 
-            when sc.communication_type = 224 or sc.communication_type = 228 then true 
+            when sc.communication_category = 'appointment' then true 
             else false 
         end as is_appointment_related,
         case 
-            when sc.communication_type = 226 then true 
+            when sc.communication_category = 'billing' then true 
             else false 
         end as is_financial_related,
         case 
-            when sc.sent_or_received_raw = 0 then true
+            when sc.direction = 'inbound' then true
             else false
         end as is_patient_initiated,
         case 
@@ -230,10 +212,10 @@ communication_calculated as (
             else false
         end as is_system_generated,
 
-        -- Metadata
+        -- Metadata (using intermediate metadata)
         {{ standardize_mart_metadata(
             primary_source_alias='sc',
-            source_metadata_fields=['_loaded_at']
+            source_metadata_fields=['_created_at', 'updated_at']
         ) }}
 
     from source_communication sc
