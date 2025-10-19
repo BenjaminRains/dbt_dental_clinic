@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: int_clinic_profile
+    description: |
+      Intermediate model for clinic/location profile with business logic and derived attributes.
+      Provides comprehensive clinic information for all downstream mart models.
+    columns:
+      - name: clinic_id
+        description: Unique identifier for the clinic/location
+        tests:
+          - unique
+          - not_null
+      
+      - name: clinic_name
+        description: Full name of the clinic/location
+        tests:
+          - not_null
+      
+      - name: clinic_abbreviation
+        description: Abbreviated clinic name (defaults to first 10 chars if not set)
+      
+      - name: full_address
+        description: Complete physical address as concatenated string
+      
+      - name: full_billing_address
+        description: Complete billing address as concatenated string
+      
+      - name: full_payto_address
+        description: Complete pay-to address as concatenated string
+      
+      - name: is_active_clinic
+        description: Boolean flag indicating if clinic is active (not hidden)
+      
+      - name: has_separate_billing_address
+        description: Boolean flag indicating if clinic has separate billing address
+      
+      - name: has_separate_payto_address
+        description: Boolean flag indicating if clinic has separate pay-to address
+      
+      - name: uses_appointment_confirmations
+        description: Boolean flag indicating if clinic uses appointment confirmation system
+      
+      - name: has_sms_enabled
+        description: Boolean flag indicating if clinic has SMS messaging enabled
+      
+      - name: clinic_status
+        description: Clinic operational status (Active, Hidden, Medical Only, Existing Patients Only)
+      
+      - name: clinic_type
+        description: Type of clinic (Dental, Medical)
+      
+      - name: default_provider_id
+        description: Default provider assigned to clinic
+      
+      - name: insurance_billing_provider_id
+        description: Provider used for insurance billing
+      
+      - name: _loaded_at
+        description: Timestamp when record was loaded from source
+      
+      - name: _transformed_at
+        description: Timestamp when record was transformed in dbt
+
