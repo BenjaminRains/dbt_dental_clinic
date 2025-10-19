@@ -24,33 +24,20 @@
     - Display Management: Ordering and display preferences
     
     Data Sources:
-    - stg_opendental__feesched: Staged fee schedule data from OpenDental
+    - int_fee_schedule: Intermediate model with fee schedule data and business logic
     
     Performance Considerations:
     - Table materialization for optimal query performance
     - Indexed on key lookup columns
-    - Includes only essential attributes for analysis
+    - Business logic centralized in intermediate layer
+    - Includes comprehensive fee schedule attributes
 */
 
 with fee_schedule_data as (
-    select
-        fee_schedule_id,
-        fee_schedule_type_id,
-        fee_schedule_description,
-        display_order,
-        is_hidden,
-        is_global_flag,
-        date_created,
-        date_updated,
-        _loaded_at,
-        _created_at,
-        _updated_at
-        
-    from {{ ref('stg_opendental__feesched') }}
-    where fee_schedule_id is not null
+    select * from {{ ref('int_fee_schedule') }}
 ),
 
--- Add business logic and derived fields
+-- Final mart selection (business logic already in intermediate)
 final as (
     select
         -- Primary key
@@ -71,24 +58,20 @@ final as (
         date_created,
         date_updated,
         
-        -- Derived Fields
-        case 
-            when is_hidden = true then 'Hidden'
-            when is_global_flag = true then 'Global'
-            else 'Standard'
-        end as fee_schedule_status,
+        -- Business Logic Flags (from intermediate)
+        is_active_schedule,
         
-        case 
-            when is_global_flag = true then 'Global Fee Schedule'
-            else 'Local Fee Schedule'
-        end as fee_schedule_category,
+        -- Derived Fields (from intermediate)
+        fee_schedule_status,
+        fee_schedule_category,
         
         -- Metadata
-        _loaded_at,
-        _created_at,
-        _updated_at
+        {{ standardize_mart_metadata(
+            primary_source_alias='fsd',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_transformed_at']
+        ) }}
         
-    from fee_schedule_data
+    from fee_schedule_data fsd
 )
 
 select * from final
