@@ -59,17 +59,27 @@ with source_payment_splits as (
 payment_splits as (
     select 
         payment_id,
-        patient_id,
-        payment_date,
-        payment_type_id,
-        payment_notes,
-        payment_status,
-        process_status,
-        is_split,
-        is_recurring_cc,
-        merchant_fee,
-        is_cc_completed,
-        recurring_charge_date,
+        
+        -- Payment header fields (use MAX to handle any inconsistencies)
+        max(patient_id) as patient_id,
+        max(clinic_id) as clinic_id,
+        max(deposit_id) as deposit_id,
+        max(payment_date) as payment_date,
+        max(payment_entry_date) as payment_entry_date,
+        max(payment_amount) as payment_amount,
+        max(payment_type_id) as payment_type_id,
+        max(check_number) as check_number,
+        max(bank_branch) as bank_branch,
+        max(payment_external_id) as payment_external_id,
+        bool_or(payment_source) as payment_source,  -- Boolean field
+        max(payment_notes) as payment_notes,
+        bool_or(payment_status) as payment_status,  -- Boolean field
+        bool_or(process_status) as process_status,  -- Boolean field
+        bool_or(is_split) as is_split,  -- Boolean field
+        bool_or(is_recurring_cc) as is_recurring_cc,  -- Boolean field
+        max(merchant_fee) as merchant_fee,
+        bool_or(is_cc_completed) as is_cc_completed,  -- Boolean field
+        max(recurring_charge_date) as recurring_charge_date,
         
         -- Aggregated split information
         count(*) as split_count,
@@ -91,19 +101,7 @@ payment_splits as (
         max(_created_by) as _created_by
         
     from source_payment_splits
-    group by 
-        payment_id,
-        patient_id,
-        payment_date,
-        payment_type_id,
-        payment_notes,
-        payment_status,
-        process_status,
-        is_split,
-        is_recurring_cc,
-        merchant_fee,
-        is_cc_completed,
-        recurring_charge_date
+    group by payment_id
 ),
 
 
