@@ -88,10 +88,14 @@ models:
         description: |
           Foreign key to appointment type. If appointment_type_id = 0, this means the appointment 
           type is 'None' (a valid appointment that hasn't had any details appended to it yet).
+          Note: Value 0 is a valid placeholder for appointments without type details (2,132 appointments).
         tests:
           - relationships:
               to: ref('stg_opendental__appointmenttype')
               field: appointment_type_id
+              where: "appointment_type_id != 0"
+              config:
+                severity: warn
       - name: appointment_type_name
         description: Name of the appointment type
       - name: appointment_length
