@@ -60,9 +60,7 @@ recall_type_enhanced as (
         time_pattern,
         
         -- Metadata
-        _loaded_at,
-        _created_at,
-        _updated_at
+        _loaded_at
         
     from source_recalltype
 ),
@@ -71,7 +69,7 @@ recall_type_enhanced as (
 recall_trigger_enhanced as (
     select
         recall_type_id,
-        array_agg(procedure_code order by procedure_code) as trigger_procedure_codes,
+        array_agg(code_id order by code_id) as trigger_procedure_code_ids,
         count(*) as trigger_count
     from source_recalltrigger
     group by recall_type_id
@@ -93,7 +91,7 @@ recall_enhanced as (
         rt.time_pattern,
         
         -- Trigger information
-        rtt.trigger_procedure_codes,
+        rtt.trigger_procedure_code_ids,
         rtt.trigger_count,
         
         -- Status and timing
@@ -180,13 +178,7 @@ recall_enhanced as (
             when r.date_scheduled is not null 
             then true 
             else false 
-        end as has_scheduled_appointment,
-        
-        -- Metadata
-        r._loaded_at,
-        r._created_at,
-        r._updated_at,
-        current_timestamp as _transformed_at
+        end as has_scheduled_appointment
         
     from source_recall r
     left join recall_type_enhanced rt
@@ -195,10 +187,21 @@ recall_enhanced as (
         on r.recall_type_id = rtt.recall_type_id
 ),
 
--- 5. Final validation and filtering
+-- 5. Final validation and filtering with standardized metadata
 final as (
-    select * from recall_enhanced
-    where is_valid_recall = true  -- Only include valid recalls
+    select 
+        re.*,
+        
+        -- Standardized intermediate metadata
+        {{ standardize_intermediate_metadata(
+            primary_source_alias='sr',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+        ) }}
+        
+    from recall_enhanced re
+    inner join source_recall sr
+        on re.recall_id = sr.recall_id
+    where re.is_valid_recall = true  -- Only include valid recalls
 )
 
 select * from final
