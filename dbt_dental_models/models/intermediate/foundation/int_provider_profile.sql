@@ -76,7 +76,11 @@ definition_lookup as (
 
 specialty_definitions as (
     select
-        item_value::integer as specialty_id,
+        -- Safe cast: only convert numeric values, handle non-numeric gracefully
+        case 
+            when item_value ~ '^[0-9]+$' then item_value::integer
+            else null
+        end as specialty_id,
         item_name as specialty_description,
         item_color as specialty_color
     from definition_lookup
@@ -85,7 +89,11 @@ specialty_definitions as (
 
 status_definitions as (
     select
-        item_value::integer as status_id,
+        -- Safe cast: only convert numeric values, handle non-numeric gracefully
+        case 
+            when item_value ~ '^[0-9]+$' then item_value::integer
+            else null
+        end as status_id,
         item_name as status_description
     from definition_lookup
     where category_id = 2  -- Provider status
@@ -93,7 +101,11 @@ status_definitions as (
 
 anesthesia_definitions as (
     select
-        item_value::integer as anesthesia_type_id,
+        -- Safe cast: only convert numeric values, handle non-numeric gracefully
+        case 
+            when item_value ~ '^[0-9]+$' then item_value::integer
+            else null
+        end as anesthesia_type_id,
         item_name as anesthesia_type_description
     from definition_lookup
     where category_id = 7  -- Anesthesia provider types
