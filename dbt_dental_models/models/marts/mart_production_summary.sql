@@ -80,8 +80,8 @@ with production_base as (
         
         -- Metadata from fact_appointment
         fa._loaded_at,
-        fa._created_at,
-        fa._updated_at
+        fa._updated_at,
+        fa._created_by
         
     from {{ ref('fact_appointment') }} fa
     left join {{ ref('int_procedure_complete') }} pc
@@ -199,8 +199,8 @@ production_aggregated as (
         
         -- Metadata (use most recent values for aggregated data)
         max(pb._loaded_at) as _loaded_at,
-        max(pb._created_at) as _created_at,
-        max(pb._updated_at) as _updated_at
+        max(pb._updated_at) as _updated_at,
+        max(pb._created_by) as _created_by
         
     from production_base pb
     group by pb.appointment_date, pb.provider_id, pb.clinic_id
@@ -296,7 +296,7 @@ final as (
         -- Metadata
         {{ standardize_mart_metadata(
             primary_source_alias='pe',
-            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+            source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
         ) }}
         
     from production_enhanced pe
