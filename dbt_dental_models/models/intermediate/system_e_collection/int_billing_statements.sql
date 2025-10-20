@@ -134,7 +134,7 @@ payment_activity AS (
             WHEN p.payment_date > s.date_sent AND p.payment_date <= s.date_sent + INTERVAL '30 days'
             THEN p.payment_id
         END) AS payment_count_30days
-    FROM StatementBase s
+    FROM statement_base s
     LEFT JOIN {{ ref('stg_opendental__payment') }} p
         ON s.patient_id = p.patient_id
         AND p.payment_date >= s.date_sent
